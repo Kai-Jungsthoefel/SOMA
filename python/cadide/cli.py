@@ -95,6 +95,19 @@ def cmd_export(args):
     return 0
 
 
+def cmd_glb(args):
+    """STEP -> GLB im Basismodus (Vorschau alter Staende, fremde Dateien)."""
+    from . import preview
+    try:
+        parts = preview.step_to_glb(args.step, args.out)
+    except Exception as e:
+        print(f"Umwandlung fehlgeschlagen: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(dict(status="ok", parts=[p["name"] for p in parts]), ensure_ascii=False) if args.json
+          else f"{len(parts)} Bauteil(e) nach {args.out}")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="cadide", description="CAD-IDE Hilfsprogramm (Arbeitsname)")
     ap.add_argument("--version", action="version", version=f"cadide {__version__}")
@@ -113,6 +126,12 @@ def main(argv=None):
     e.add_argument("--out", help="Zielordner relativ zum Projekt (Standard: exports)")
     e.add_argument("--project", default=".")
     e.set_defaults(func=cmd_export)
+
+    g = sub.add_parser("glb", help="STEP-Datei in GLB fuer den Viewer umwandeln (Basismodus)")
+    g.add_argument("step", help="STEP-Datei")
+    g.add_argument("--out", required=True, help="Zielordner (model.glb und model.map.json)")
+    g.add_argument("--json", action="store_true")
+    g.set_defaults(func=cmd_glb)
 
     args = ap.parse_args(argv)
     return args.func(args)
