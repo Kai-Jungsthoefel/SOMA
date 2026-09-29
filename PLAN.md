@@ -1,6 +1,6 @@
 # Plan: CAD-IDE mit KI-Agenten
 
-> Stand: 2026-09-29 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 begonnen** (Schritt 1 läuft, siehe Abschnitt 10 und [app/README.md](app/README.md))
+> Stand: 2026-09-29 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 und 2 erledigt, siehe Abschnitt 10 und [app/README.md](app/README.md))
 > Ursprung: [IDEA.md](IDEA.md) · Begründungen und Historie: [DECISIONS.md](DECISIONS.md)
 > Zahlen in Klammern, z. B. (E12), verweisen auf Entscheidungen im Log.
 
@@ -81,6 +81,7 @@ Einfacher Fall: alles steht in `model.py`. Bei wachsender Komplexität lagert de
 - Jedes Projekt bekommt ein Git-Repo, das in der ZIP mitwandert. Das Git-Binary wird mitgeliefert (E31).
 - Der **Agent committet selbst** nach sinnvollen Iterationen (Anweisung in `AGENTS.md`). Beim Speichern legt die App verbliebene Änderungen als **Auto-Snapshot** an.
 - **Getrackt:** Skripte, `inputs/`, `output/model.step`, `requirements.txt`, `project.json`, `skills/`. **Nicht getrackt:** GLB-Cache, Mapping, `feedback/`.
+- **Umsetzung und Befund:** Die App nutzt das mitgelieferte Git (dugite, Git 2.53, rund 115 MB) und stellt es auch den Terminals vorn im PATH bereit. **STEP-Dateien sind nicht byte-stabil** (jeder Build ändert den Zeitstempel, manchmal die Reihenfolge einzelner Zeilen). Deshalb zählt `output/` nicht als ungespeicherte Änderung, wird aber mitcommittet, damit alte Stände als Vorschau anzeigbar bleiben. Der Startcommit entsteht nach einem ersten Build und enthält bereits eine STEP.
 - **Versions-Schieber:** Leiste unter dem Viewer, Commits als Punkte, letzter Punkt ist der aktuelle Arbeitsstand. Alte Stände sind **Vorschau** (STEP per `git show`, Arbeitsordner bleibt unberührt). Der Knopf **„Stand wiederherstellen"** kopiert die Dateien und legt einen **neuen Commit** an. Es gibt keinen Checkout oder Reset und keine Branches.
 
 **Projektzustand (E27):** ID und Einstellungen liegen doppelt: in `.cadide/project.json` (ZIP) und als Kopie in den App-Daten. Bei Verlust dient die jeweils andere Quelle als Rückfall.
@@ -181,7 +182,18 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Terminal:** Echte Shell (node-pty) im Projektordner mit `python`, `pip` und `cadide` der Basisumgebung im PATH. Startbuttons für erkannte Agenten (Claude Code, OpenCode, Codex, Gemini CLI).
 - **Vorlage:** `model.py`, erste `AGENTS.md`, `CLAUDE.md` (Verweis), `NOTES.md`, `.gitignore`.
 
-*Offen in Phase 1:* ZIP speichern und öffnen mit Nachfrage bei Abweichung und Absturz-Wiederherstellung, Git (mitgeliefert, Auto-Snapshot), Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Editor, Screenshot mit Markup, Auto-Start des Agenten ohne Resume, Agent-Test, Bündelung von Python und Installer, macOS und Linux.
+*Erster Agent-Test (informell, vom Nutzer):* Claude Code hat mit dieser Vorlage eine Wanduhr gebaut, 6 Bauteile mit deutschen Namen, Parameter als Konstanten, kein `.venv`, `AGENTS.md`, `CLAUDE.md`, `NOTES.md` und `.gitignore` unverändert. Das ist ein Datenpunkt, kein vollständiger Agent-Test. Damals gab es noch kein Git, das Committen des Agenten ist deshalb noch ungeprüft.
+
+*Schritt 2, Git und ZIP (erledigt, 46 Prüfungen in `app/test/versions.mjs`):*
+
+- **Git pro Projekt:** Repository mit Startcommit, Identität und `core.autocrlf=false` gesetzt, damit auch der Agent committen kann. Die `AGENTS.md` verlangt Commits nach gebauten Iterationen und verbietet Umschreiben des Verlaufs.
+- **Speichern (E8, E21):** Strg+S baut bei Bedarf zuerst neu, legt einen Auto-Snapshot an (nur bei Änderungen an Quelltext, Eingaben oder Einstellungen) und schreibt die ZIP atomar (erst `.part`, dann umbenennen). Sie enthält `.git`, aber keine Umgebungen und Caches. Ein Marker `.cadide/zip-info.json` hält den gespeicherten Stand fest. Der Modellname folgt dem Dateinamen. Ohne `.git` klappt Speichern weiter, mit Warnung.
+- **Öffnen (E21):** Fehlt der Arbeitsordner (anderer Rechner), wird die ZIP entpackt. Ist er identisch, wird er einfach geöffnet. Weicht er ab, fragt die App: *Arbeitsstand behalten* oder *ZIP laden*, dabei wandert der alte Arbeitsordner nach `workspace-backups/`, nichts wird gelöscht. Entpacken ist gegen bösartige Pfade abgesichert (zwei Schichten).
+- **Absturz-Wiederherstellung:** Der Arbeitsordner liegt fest in den App-Daten, die App öffnet beim Start das letzte Projekt. Ungespeicherte Änderungen überleben einen harten Abbruch (getestet). Beim Schließen mit ungespeicherten Änderungen fragt die App (nicht automatisch getestet).
+- **Verlauf (E35):** Leiste unter dem Viewer, jeder Commit ein Punkt plus der Arbeitsstand, Schieber und Klick. Alte Stände sind eine schreibgeschützte Vorschau (STEP per `git show`, Basismodus). *Stand wiederherstellen* legt einen neuen Commit an und sichert vorher ungesicherte Änderungen als eigenen Stand. Kein Checkout, kein Reset, keine Branches.
+- **Robustheit (E28):** App-eigene Git-Schreibvorgänge laufen nacheinander und wiederholen sich bei `index.lock`, lesende Aufrufe nehmen keine Sperren. Ohne `.git` meldet der Verlauf das verständlich und bietet **keine** automatische Reparatur an.
+
+*Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Editor, Screenshot mit Markup, Auto-Start des Agenten ohne Resume, vollständiger Agent-Test (mit Git-Commits), Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Messen, Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
 
@@ -191,7 +203,11 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 
 - `AGENTS.md` und die Kommentare der Vorlage sind **auf Englisch** (Agenten befolgen englische Anweisungen zuverlässiger), die Oberfläche ist deutsch
 - App-Daten liegen unter Windows in `%LOCALAPPDATA%\cadide`, nicht im Roaming-Profil (Arbeitsordner und Caches gehören nicht ins Netz)
-- Beim Öffnen eines Projekts wird sofort gebaut, damit der Viewer nicht leer ist
+- Beim Öffnen eines Projekts wird sofort gebaut, damit der Viewer nicht leer ist. Beim Anlegen läuft vor dem Startcommit ein Build (rund 2 s Wartezeit bei „Neu“)
+- Der Modellname folgt dem Dateinamen der ZIP
+- Speichern baut vorher neu, wenn der Quelltext neuer ist als das letzte Ergebnis, und wartet auf laufende Builds
+- Die ZIP enthält `.git` und Feedback-Bilder, aber weder Umgebungen noch GLB-Cache, Mapping und `build.json`
+- Ohne `.git` gibt es **keinen** Knopf „Verlauf neu anlegen“, nur die Meldung (sonst widerspricht es E28). Offene Frage: Für Nicht-Programmierer wäre ein ausdrücklicher Knopf freundlicher
 - Änderung während eines Builds: laufenden Build fertig laufen lassen, danach genau ein weiterer (statt abbrechen und neu starten)
 
 - Rolle `reference` und ihre Standardwerte (E34)
@@ -206,8 +222,8 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Lizenz** der Software und Prüfung aller Komponenten
 - **Mittelbereich:** Tab-Umschaltung oder geteilte Ansicht zwischen Viewer und Sketch (E15)
 - **Build:** Auto-Build standardmäßig an oder aus, Statusanzeige, Fehlerpanel, Verhalten bei erneuter Änderung während des Builds (E20)
-- **Speichern/Öffnen:** Erkennung von Abweichungen (Zeitstempel oder Git), mehrere Projekte parallel, Aufräumen alter Workspaces, ZIP auf Netzlaufwerk (E21)
-- **Git:** Agent und App committen gleichzeitig, Sperre beim Wiederherstellen, Beschriftung der Punkte, Einbettung und Updates des Git-Binaries (E31, E35)
+- **Speichern/Öffnen:** mehrere Projekte parallel (bisher eines pro Fenster), Aufräumen alter Workspaces und Sicherungen, ZIP auf Netzlaufwerk (Speichern dorthin geht, Verhalten bei Verbindungsverlust ungetestet), ZIP-Größe bei langen Verläufen (E21)
+- **Git:** Einbettung und Updates des Git-Binaries (E31), Verhalten bei sehr langen Verläufen (die Leiste zeigt bisher bis zu 500 Stände), Umschreiben des Verlaufs durch den Agenten trotz Verbot (die Leiste bleibt tolerant, es gibt nur eine Meldung bei fehlendem Repository, losem HEAD oder anderem Branch)
 - **Pakete:** Offline-Fall, Paketcache, Verhalten ohne Internet beim Öffnen (E25). Versionen fest pinnen (ein ungepinnter Install zieht inkompatible OCP- und multimethod-Versionen)
 - **Plattformen:** Phase 0 lief nur unter Windows. Python-Bundling, Bibliothekspfade und Wheels auf macOS und Linux sind ungetestet (E2)
 - **Echte Fremddateien:** Herstellerplatinen und große Baugruppen mit Stückliste in Phase 1 testen
@@ -231,4 +247,4 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 | Nur Windows getestet | Bundling und Bibliotheken auf macOS und Linux ungeprüft, E2 verlangt alle drei | Früh in Phase 1 auf macOS und Linux nachziehen |
 | Modellgröße und Buildzeit | Große Teile brauchen 8 bis 10 s (Meshen in OCC), feine Toleranz bis 30 s | Auto-Build abschaltbar (E20), Toleranz nach Bauteilgröße |
 | Chats bei ZIP-Weitergabe | Agenten speichern Historie außerhalb des Projekts | Bewusst akzeptiert (E5) |
-| Git für Nicht-Programmierer | Agent und App teilen sich ein Repo | Nur Vorschau und Wiederherstellen als neuer Commit (E35) |
+| Git für Nicht-Programmierer | Agent und App teilen sich ein Repo | Nur Vorschau und Wiederherstellen als neuer Commit (E35), App-Schreibvorgänge serialisiert, Sicherung vor Wiederherstellung. **Umgesetzt und getestet**, der Agent-Test mit echten Commits steht aus |
