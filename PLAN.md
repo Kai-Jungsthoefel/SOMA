@@ -1,6 +1,6 @@
 # Plan: CAD-IDE mit KI-Agenten
 
-> Stand: 2026-09-29 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 und 2 erledigt, siehe Abschnitt 10 und [app/README.md](app/README.md))
+> Stand: 2026-09-29 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 3 erledigt, siehe Abschnitt 10 und [app/README.md](app/README.md))
 > Ursprung: [IDEA.md](IDEA.md) · Begründungen und Historie: [DECISIONS.md](DECISIONS.md)
 > Zahlen in Klammern, z. B. (E12), verweisen auf Entscheidungen im Log.
 
@@ -24,7 +24,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
 
 ```
 +---------------------- Electron-App (TypeScript) ----------------------+
-| Oberfläche: Tree | Editor | 3D-Viewer / Sketch | Terminal-Tabs        |
+| Oberfläche: Panels (Dateien, Code) | 3D-Viewer / Sketch | Agent-Tabs  |
 | Hauptprozess: Projekte, ZIP, Git, Dateiüberwachung, Prozessverwaltung |
 +-----------+-------------------------------+---------------------------+
             |                               |
@@ -110,7 +110,7 @@ Das Paket `cadide` liegt in der mitgelieferten **Basisumgebung**, nicht im Proje
 
 ## 7. Oberfläche und Viewer
 
-**Layout (E15):** Von links nach rechts **Tree** (Reiter *Modell* mit Bauteilbaum und *Dateien*), optionaler **Editor**, **3D-Viewer / 2D-Sketch** im Mittelbereich, **Terminal** rechts mit Tabs. Oben eine **Top Bar** für Optionen und Operationen. Der **Versions-Schieber** sitzt unter dem Viewer.
+**Layout (E15, E38, Entwurf in [design/ui-entwurf.html](design/ui-entwurf.html)):** Das Modell ist die Hauptsache, der Viewer bekommt die größte Fläche. Die **Bauteilliste schwebt als Karte** oben links im Viewer, daneben die Werkzeuge, rechts der Ansichtswürfel, unten links die Auswahl mit Codeausschnitt. Eine schmale **Leiste links** klappt die Panels *Dateien* und *Code* aus (immer nur eins). Rechts der **Agent-Bereich** mit Tabs, einklappbar, darunter die **Übergabeleiste** (Auswahl, Markierung, Build-Fehler in die Eingabe des Agenten). Die **Kopfzeile** zeigt Zustände: Modellname als Dokumentmenü, Speicherstand, Build-Anzeige mit Auto-Build, dazu Exportieren und Speichern. Die **Verlaufsleiste** sitzt unter dem Viewer. Eine Startseite zeigt Modelle, erkannte Agenten und den Hinweis auf die Rechte des Agenten.
 
 **Viewer (E22, E33):**
 
@@ -193,7 +193,18 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Verlauf (E35):** Leiste unter dem Viewer, jeder Commit ein Punkt plus der Arbeitsstand, Schieber und Klick. Alte Stände sind eine schreibgeschützte Vorschau (STEP per `git show`, Basismodus). *Stand wiederherstellen* legt einen neuen Commit an und sichert vorher ungesicherte Änderungen als eigenen Stand. Kein Checkout, kein Reset, keine Branches.
 - **Robustheit (E28):** App-eigene Git-Schreibvorgänge laufen nacheinander und wiederholen sich bei `index.lock`, lesende Aufrufe nehmen keine Sperren. Ohne `.git` meldet der Verlauf das verständlich und bietet **keine** automatische Reparatur an.
 
-*Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Editor, Screenshot mit Markup, Auto-Start des Agenten ohne Resume, vollständiger Agent-Test (mit Git-Commits), Bündelung von Python und Installer, macOS und Linux.
+*Schritt 3, Oberfläche nach Entwurf (erledigt, E38; 31 Prüfungen im Smoke-Test, 50 im Verlaufstest, 4 Einheitentests in `app/test/unit.mjs`):*
+
+- **Kopfzeile:** Dokumentmenü (Neu, Öffnen, zuletzt geöffnete Modelle, Speichern unter, im Explorer zeigen, Startseite), Speicherstand („Nicht gespeichert · zuletzt 13:41“), Build-Anzeige in den Zuständen gebaut, baut (mit Abbrechen), fehlgeschlagen (mit Zeile) und „Code geändert“ bei ausgeschaltetem Auto-Build. Schaltet man Auto-Build wieder ein, baut die App den veralteten Stand gleich nach. Kurzbefehle Strg+S, Strg+Umschalt+S, Strg+O, Strg+N, Strg+B (nicht im Terminal).
+- **Viewer:** schwebende Bauteilkarte mit Auge, Suche, Referenzen-Abschnitt und Kontextmenü (Isolieren, Ausblenden, Kamera, Code zeigen, An Agent geben, Exportieren). Auswahlkarte mit Flächenart und Codeausschnitt. Fehlerkarte mit Meldung, Codezeile und Ablauf, das Modell bleibt gedimmt sichtbar. Ansichtswürfel (Oben, Vorne, Rechts), Einpassen, Standardansicht, Darstellungsmenü.
+- **Export (E34):** Menü mit allen 12 Formaten, für alle Bauteile oder die Auswahl, über `cadide export` nach `exports/`.
+- **Dateien und Code:** Dateibaum mit eingeklappten App-Dateien. Dateien, die man ins Fenster zieht, landen in `inputs/`, Vorhandenes wird nie überschrieben (E33). Code-Panel zum Lesen mit Hervorhebung, der Auswahl im Viewer folgend.
+- **Verlauf:** Punkte unterscheiden Stände der App (Commit-Trailer `Erstellt-von: CAD-IDE`) und des Agenten, der gespeicherte Stand ist grün, die Vorschau violett mit Rahmen um den Viewer.
+- **Agent-Bereich:** Tabs mit Laufanzeige, „+“ startet erkannte Agenten oder ein leeres Terminal, einklappbar. Die Übergabeleiste fügt Text in die Eingabe ein (als Einfügen, ohne Enter, E11).
+- **Startseite** beim allerersten Start und über das Logo: Neu, Öffnen, zuletzt geöffnete Modelle mit Vorschaubild, erkannte Agenten, Hinweis auf die Rechte des Agenten (E29).
+- **Schrift:** IBM Plex Sans und Mono liegen lokal bei (SIL Open Font License).
+
+*Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Editor zum Bearbeiten (bisher nur Lesen), Screenshot mit Markup (Knopf „Markieren“ und „Markierung einfügen“ sind schon da, aber noch ausgegraut), Auto-Start des Agenten ohne Resume, vollständiger Agent-Test (mit Git-Commits), Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Messen, Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
 
@@ -209,6 +220,11 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - Die ZIP enthält `.git` und Feedback-Bilder, aber weder Umgebungen noch GLB-Cache, Mapping und `build.json`
 - Ohne `.git` gibt es **keinen** Knopf „Verlauf neu anlegen“, nur die Meldung (sonst widerspricht es E28). Offene Frage: Für Nicht-Programmierer wäre ein ausdrücklicher Knopf freundlicher
 - Änderung während eines Builds: laufenden Build fertig laufen lassen, danach genau ein weiterer (statt abbrechen und neu starten)
+- Oberfläche (E38): Funktionen, die noch fehlen (Messen, Schnitt, Markieren, Skills, Pakete, Hilfe, Optionen), stehen schon ausgegraut mit Hinweis da. Nur dunkles Farbschema. Das „⋯“-Menü aus dem Entwurf entfällt (alles steht im Dokumentmenü)
+- Dateien, die man irgendwo ins Fenster zieht, landen in `inputs/` (Electron würde sie sonst als Seite öffnen). Bei gleichem Namen „name (2).ext“
+- Die Startseite erscheint nur beim allerersten Start und über das Logo. Sonst öffnet die App wie bisher das letzte Modell
+- „An Agent geben“ fügt eine Zeile wie `[Auswahl: Bauteil "Lid", model.py Zeile 31, angeklickte Fläche: eben, …]` ein. Zahlen mit Punkt, damit der Agent sie eindeutig liest
+- `exports/` ist nicht in der `.gitignore` der Vorlage und zählt damit als Änderung (Ort und Tracking sind noch offen, siehe unten)
 
 - Rolle `reference` und ihre Standardwerte (E34)
 - Hinweis beim ersten Start, dass der Agent mit den Rechten des Nutzers läuft (E29)

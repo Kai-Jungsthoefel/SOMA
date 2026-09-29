@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAD-IDE Oberflächenentwurf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#121417; --s1:#16181c; --s2:#1b1e23; --s3:#232830; --line:#262a31; --line2:#2d323a;
+  --tx:#e6e8eb; --tx2:#a3acb6; --tx3:#7f8994; --term:#0f1114;
+  --acc:#f29a38; --acc-tx:#f6b46a; --acc-tint:rgba(242,154,56,.14);
+  --vio:#9aa6ff; --vio-tint:rgba(154,166,255,.14);
+  --ok:#5cc98b; --warn:#e8c547; --err:#f07470;
+  --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif; --mono:'IBM Plex Mono',Consolas,monospace;
+  --k:1;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#0b0c0e;color:var(--tx);font:13px/1.4 var(--sans)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+svg{display:block;flex-shrink:0}
+b{font-weight:600}
+
+/* Präsentation */
+.deck-top{position:sticky;top:0;z-index:5;background:#0b0c0e;border-bottom:1px solid #1d2025}
+.deck-head{display:flex;align-items:center;gap:18px;padding:10px 24px}
+.deck-title{font-weight:600;font-size:14px;white-space:nowrap}
+.deck-tabs{display:flex;gap:2px;flex-wrap:wrap}
+.deck-tab{height:30px;padding:0 11px;border-radius:6px;color:var(--tx2);white-space:nowrap}
+.deck-tab .n{color:var(--tx3);margin-right:6px}
+.deck-tab[aria-selected=true]{background:var(--s3);color:var(--tx)}
+.deck-tab[aria-selected=true] .n{color:var(--acc-tx)}
+.deck-tools{margin-left:auto;display:flex;align-items:center;gap:12px;color:var(--tx3);font-size:12px;white-space:nowrap}
+.deck-cap{display:flex;gap:28px;align-items:baseline;padding:4px 24px 12px}
+.deck-cap h2{margin:0;font-size:17px;font-weight:600;white-space:nowrap}
+.deck-cap ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:4px 22px;color:var(--tx2)}
+.deck-cap li{display:flex;gap:8px}
+.deck-cap li::before{content:"";width:5px;height:5px;margin-top:7px;border-radius:50%;background:var(--acc);flex-shrink:0}
+.stage{padding:16px 24px 40px;display:flex;justify-content:center}
+.frame{width:calc(1440px * var(--k));height:calc(900px * var(--k));flex-shrink:0}
+.screen{width:1440px;height:900px;transform:scale(var(--k));transform-origin:0 0;border-radius:10px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px #262a31}
+body.solo .deck-top{display:none}
+body.solo .stage{padding:0}
+body.solo .screen{border-radius:0;box-shadow:none}
+
+/* App */
+.app{width:1440px;height:900px;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;position:relative}
+.top{height:44px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding-right:12px;background:var(--s1);border-bottom:1px solid var(--line)}
+.logo{width:60px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--acc);flex-shrink:0}
+.docname{display:flex;align-items:center;gap:6px;height:30px;padding:0 8px;margin-left:-8px;border-radius:6px;color:var(--tx2)}
+.docname b{font-size:14px;color:var(--tx)}
+.savestate{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--tx2);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.grow{flex-grow:1}
+.c2{color:var(--tx2)} .c3{color:var(--tx3)}
+.pill{display:flex;align-items:center;height:30px;border:1px solid var(--line2);border-radius:15px;background:var(--s2);white-space:nowrap}
+.pill.err{border-color:rgba(240,116,112,.5);background:rgba(240,116,112,.08)}
+.pill .main{display:flex;align-items:center;gap:8px;height:28px;padding:0 12px;border-radius:15px 0 0 15px}
+.pill .sep{width:1px;height:16px;background:var(--line2)}
+.pill .auto{display:flex;align-items:center;gap:6px;height:28px;padding:0 12px 0 10px;color:var(--tx2);border-radius:0 15px 15px 0}
+.pill .inner{height:22px;padding:0 8px;border-radius:11px;font-size:12px;border:1px solid var(--line2);display:flex;align-items:center}
+.btn{display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;border:1px solid var(--line2);border-radius:6px;white-space:nowrap}
+.btn.sm{height:28px;padding:0 9px;font-size:12px;gap:6px}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#1b1206;font-weight:600;gap:10px;padding:0 12px}
+.btn.primary .kbd{font-size:11px;font-weight:500;color:#5a3a12}
+.btn.acc{background:var(--acc-tint);border-color:rgba(242,154,56,.45);color:var(--acc-tx);font-weight:500}
+.btn.vio{background:var(--vio);border-color:var(--vio);color:#141733;font-weight:600}
+.btn.ghost{border-color:transparent}
+.btn[disabled]{color:#5d6671;border-color:var(--line);cursor:default}
+.ibtn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:var(--tx2);flex-shrink:0}
+.ibtn.s{width:26px;height:26px}
+.body{flex-grow:1;display:flex;min-height:0}
+.rail{width:60px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:var(--s1);border-right:1px solid var(--line)}
+.rail button{width:50px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:8px;color:var(--tx2)}
+.rail button span{font-size:10.5px}
+.rail button.on{background:var(--s3);color:var(--acc-tx)}
+.center{flex-grow:1;min-width:0;display:flex;flex-direction:column}
+.vp{flex-grow:1;position:relative;overflow:hidden;background:radial-gradient(ellipse at 52% 44%,#272c34 0%,#1b1e23 60%,#16181c 100%)}
+.float{position:absolute;background:rgba(24,27,31,.95);border:1px solid var(--line2);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.parts{left:12px;top:12px;width:228px;overflow:hidden}
+.parts .hd{height:36px;display:flex;align-items:center;gap:6px;padding:0 6px 0 12px}
+.parts .list{padding:4px 0 6px;border-top:1px solid var(--line)}
+.row{display:flex;align-items:center;height:28px;padding:0 6px 0 4px}
+.row .nm{flex-grow:1;display:flex;align-items:center;gap:9px;height:28px;padding:0 8px;border-radius:6px;text-align:left}
+.row.sel .nm{background:var(--acc-tint);color:var(--acc-tx);font-weight:500}
+.row.off .nm{color:var(--tx3)}
+.sw{width:10px;height:10px;border-radius:3px;flex-shrink:0;display:inline-block}
+.eye{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:var(--tx3)}
+.grp{padding:10px 12px 4px;font-size:11px;letter-spacing:.06em;color:var(--tx3)}
+.dock{top:12px;left:256px;display:flex;align-items:center;gap:2px;padding:4px}
+.dock button{display:flex;align-items:center;gap:7px;height:32px;padding:0 10px;border-radius:7px;white-space:nowrap}
+.dock.icons button{padding:0 8px;gap:3px}
+.dock button.hot{background:var(--acc-tint);color:var(--acc-tx);font-weight:500}
+.vsep{width:1px;height:20px;background:var(--line2);margin:0 3px;flex-shrink:0}
+.cube{position:absolute;top:12px;right:14px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.vbtns{display:flex;flex-direction:column;gap:2px;padding:3px;background:rgba(24,27,31,.95);border:1px solid var(--line2);border-radius:9px}
+.vbtns button{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:#c9ced4}
+.selcard{left:12px;bottom:12px;width:356px;overflow:hidden}
+.selcard .code{font-size:11px}
+.code{font-family:var(--mono);font-size:11.5px;line-height:1.65}
+.cl{display:flex;gap:12px;padding:0 10px;white-space:pre}
+.cl .ln{color:#5d6671;min-width:18px;text-align:right;flex-shrink:0}
+.cl.hl{background:rgba(242,154,56,.11)}
+.cl.er{background:rgba(240,116,112,.15)}
+.k-fn{color:#7fb4ff}.k-str{color:#9fd28a}.k-num{color:#e0b36a}.k-cm{color:#7f8994}.k-kw{color:#c69cf5}
+.tl{height:44px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--s1);border-top:1px solid var(--line)}
+.tl .lbl{width:84px;flex-shrink:0;display:flex;align-items:center;gap:7px;color:var(--tx2);font-size:12px;font-weight:500}
+.track{position:relative;height:44px;flex-grow:1}
+.track .line{position:absolute;left:8px;right:60px;top:21px;height:2px;background:var(--line2);border-radius:1px}
+.vd{position:absolute;top:15px;width:14px;height:14px;margin-left:-7px;display:flex;align-items:center;justify-content:center}
+.vd i{width:8px;height:8px;border-radius:50%;background:var(--tx2)}
+.vd.app i{background:var(--s1);box-shadow:inset 0 0 0 2px var(--tx2)}
+.vd.saved i{background:var(--ok);width:9px;height:9px}
+.vd.pv i{width:12px;height:12px;background:var(--vio);box-shadow:0 0 0 4px rgba(154,166,255,.28)}
+.now{position:absolute;top:13px;margin-left:-7px;height:18px;display:flex;align-items:center;gap:8px}
+.now i{width:14px;height:14px;border-radius:50%;background:var(--bg);box-shadow:inset 0 0 0 2px var(--acc);display:flex;align-items:center;justify-content:center}
+.now i::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--acc)}
+.now span{font-size:12px;font-weight:500;color:var(--acc-tx)}
+.agent{width:460px;flex-shrink:0;display:flex;flex-direction:column;background:var(--term);border-left:1px solid var(--line);position:relative}
+.agent.collapsed{width:44px;align-items:center;background:var(--s1)}
+.tabs{height:40px;flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:0 6px 0 8px;background:var(--s1);border-bottom:1px solid var(--line)}
+.tab{height:33px;display:flex;align-items:center;gap:2px;padding:0 4px 0 6px;border-radius:7px 7px 0 0;color:var(--tx2);border:1px solid transparent}
+.tab.on{background:var(--term);border-color:var(--line);border-bottom-color:var(--term);margin-bottom:-1px;color:var(--tx)}
+.tab .t{display:flex;align-items:center;gap:8px;height:28px;padding:0 6px}
+.tab.on .t{font-weight:500}
+.term{flex-grow:1;min-height:0;display:flex;flex-direction:column;padding:14px 16px;font-family:var(--mono);font-size:12.5px;line-height:1.62;color:#c9ced4;overflow:hidden}
+.term .l{white-space:pre-wrap}
+.term .pre{white-space:pre}
+.term .gap{height:14px;flex-shrink:0}
+.term .u{color:var(--tx)}
+.term .p{color:var(--acc-tx)}
+.term .cmd{color:#7fb4ff}
+.term .ok{color:var(--ok)}
+.term .mut{color:var(--tx3)}
+.input{padding:10px 12px;border:1px solid var(--line2);border-radius:8px;white-space:pre-wrap;color:var(--tx)}
+.cursor{display:inline-block;width:7px;height:15px;margin-left:2px;background:var(--tx);vertical-align:-3px}
+.handoff{height:44px;flex-shrink:0;display:flex;align-items:center;gap:6px;padding:0 10px;background:var(--s1);border-top:1px solid var(--line)}
+.toast{position:absolute;left:12px;right:12px;bottom:136px;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--s2);border:1px solid var(--line2);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.45);font-size:12.5px}
+.side{flex-shrink:0;display:flex;flex-direction:column;background:var(--s1);border-right:1px solid var(--line);min-height:0}
+.side-hd{height:40px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 6px 0 14px;border-bottom:1px solid var(--line)}
+.frow{display:flex;align-items:center;gap:8px;height:26px;padding:0 8px;margin:0 6px;border-radius:6px;width:calc(100% - 12px);text-align:left;color:var(--tx)}
+.frow .tag{margin-left:auto;font-size:11px;color:var(--tx3)}
+.frow.dim{color:var(--tx2)}
+.frow.hov{background:var(--s3)}
+.ctab{height:33px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:7px 7px 0 0;color:var(--tx2);font-family:var(--mono);font-size:12px;align-self:flex-end;border:1px solid transparent}
+.ctab.on{background:var(--term);border-color:var(--line);border-bottom-color:var(--term);margin-bottom:-1px;color:var(--tx)}
+
+/* Menüs */
+.menu{background:var(--s2);border:1px solid var(--line2);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.45);padding:6px;width:300px}
+.mi{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:6px;width:100%;text-align:left;white-space:nowrap}
+.mi .k{margin-left:auto;color:var(--tx3);font-size:12px}
+.mi.on{background:var(--s3)}
+.mi.dim{color:var(--tx3)}
+.msep{height:1px;background:var(--line);margin:6px 4px}
+.mh{padding:8px 10px 4px;font-size:11px;letter-spacing:.06em;color:var(--tx3)}
+.cap{font-size:11px;letter-spacing:.06em;color:var(--tx3);margin-bottom:10px}
+.chip{height:28px;padding:0 10px;border:1px solid var(--line2);border-radius:6px;font-size:12px;display:flex;align-items:center;gap:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 10px 8px}
+.switch{width:32px;height:18px;border-radius:9px;background:var(--acc);position:relative;flex-shrink:0;margin-left:auto}
+.switch::after{content:"";position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#1b1206}
+.seg{display:flex;margin:2px 10px 8px;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+.seg button{flex:1;height:28px;font-size:12px;color:var(--tx2)}
+.seg button.on{background:var(--s3);color:var(--tx);font-weight:500}
+
+/* Startseite */
+.bigcard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:20px;border:1px solid var(--line2);border-radius:12px;background:var(--s2);text-align:left}
+.bigcard .ico{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.recent{display:flex;flex-direction:column;border:1px solid var(--line2);border-radius:10px;background:var(--s2);overflow:hidden;text-align:left}
+.recent .th{height:120px;background:radial-gradient(ellipse at 50% 45%,#272c34 0%,#1b1e23 70%);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--line)}
+.recent .meta{padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.panel{border:1px solid var(--line2);border-radius:12px;background:var(--s2);overflow:hidden}
+.agrow{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="deck-top">
+  <div class="deck-head">
+    <span class="deck-title">CAD-IDE · Oberflächenentwurf</span>
+    <nav class="deck-tabs" id="tabs" aria-label="Ansichten"></nav>
+    <span class="deck-tools"><span>Pfeiltasten blättern · einige Knöpfe sind klickbar</span><button class="btn sm" id="zoom">Originalgröße</button></span>
+  </div>
+  <div class="deck-cap"><h2 id="cap-title"></h2><ul id="cap-list"></ul></div>
+</div>
+<div class="stage"><div class="frame"><div class="screen" id="screen"></div></div></div>
+
+<script>
+// ---------- Symbole ----------
+const I = {
+  cube:'<path d="M12 2.5 20.5 7.2v9.6L12 21.5l-8.5-4.7V7.2z"/><path d="M3.5 7.2 12 12l8.5-4.8M12 12v9.5"/>',
+  down:'<path d="m6 9 6 6 6-6"/>', up:'<path d="m6 15 6-6 6 6"/>', right:'<path d="m9 6 6 6-6 6"/>',
+  refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/>',
+  export:'<path d="M12 15V4M7 9l5-5 5 5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  code:'<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+  book:'<path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"/><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"/>',
+  pkg:'<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
+  sliders:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  eye:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff:'<path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  ruler:'<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>',
+  section:'<path d="M5 9 12 5l7 4v8l-7 4-7-4z"/><path d="M2 13h20"/>',
+  camera:'<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
+  fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', home:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>', plus:'<path d="M12 5v14M5 12h14"/>', send:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+  history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  term:'<path d="m5 8 4 4-4 4M12 16h7"/>', panel:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  target:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5L5 20"/>',
+  alert:'<path d="M12 4 2 20h20z"/><path d="M12 10v4M12 17v.01"/>',
+  pen:'<path d="M4 20h4L19 9l-4-4L4 16z"/>', arrow:'<path d="M5 19 19 5M9 5h10v10"/>',
+  square:'<rect x="4" y="4" width="16" height="16" rx="1.5"/>', circle:'<circle cx="12" cy="12" r="8"/>',
+  text:'<path d="M5 6V4h14v2M12 4v16M9 20h6"/>', undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  file:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
+  lock:'<rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  upload:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
+  openext:'<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>', spin:'<path d="M12 3a9 9 0 1 1-9 9"/>',
+};
+const ic = (n, s = 16, sw = 1.8) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+const MORE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>';
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// ---------- Kopfzeile ----------
+function topbar(o = {}) {
+  const err = o.build === 'err';
+  const status = err
+    ? `<span class="dot" style="background:var(--err)"></span><span style="font-weight:500;color:#ffb8b3">Build fehlgeschlagen</span><span class="c2">model.py, Zeile 47</span>`
+    : `<span class="dot" style="background:var(--ok)"></span><span style="font-weight:500">Gebaut</span><span class="c2">6 Bauteile · 0,9 s</span>`;
+  return `<header class="top">
+    <button class="logo" data-go="7" title="Startseite" aria-label="Startseite">${ic('cube', 22)}</button>
+    <button class="docname" data-go="8" title="Neu, Öffnen, Zuletzt geöffnet, Speichern unter"><b>Wanduhr</b>${ic('down', 14, 2)}</button>
+    <span class="savestate"><span class="dot" style="width:7px;height:7px;background:var(--warn)"></span>Nicht gespeichert · zuletzt 13:41</span>
+    <span class="grow"></span>
+    <div class="pill ${err ? 'err' : ''}"><button class="main" data-go="${err ? 3 : 8}" title="Build-Details">${status}</button><span class="sep"></span><button class="auto" data-go="8" title="Automatisch bauen, wenn sich der Code ändert">${ic('refresh', 14, 2)}Auto an</button></div>
+    <span class="grow"></span>
+    <button class="btn" data-go="8">${ic('export', 15)}Exportieren${ic('down', 13, 2)}</button>
+    <button class="btn primary">Speichern <span class="kbd">Strg S</span></button>
+    <button class="ibtn" aria-label="Weitere Befehle" data-go="8">${MORE}</button>
+  </header>`;
+}
+
+// ---------- Linke Leiste ----------
+function rail(on) {
+  const it = (k, icon, label, go) => `<button class="${on === k ? 'on' : ''}" data-go="${on === k ? 1 : go}" aria-pressed="${on === k}">${ic(icon, 20, 1.7)}<span>${label}</span></button>`;
+  return `<nav class="rail" aria-label="Seitenleisten">${it('files', 'folder', 'Dateien', 5)}${it('code', 'code', 'Code', 6)}${it('skills', 'book', 'Skills', '')}${it('pkg', 'pkg', 'Pakete', '')}<span class="grow"></span>${it('help', 'help', 'Hilfe', '')}${it('opt', 'sliders', 'Optionen', '')}</nav>`;
+}
+
+// ---------- 3D-Modell (Platzhalter für den three.js-Viewer) ----------
+const TICKS = [[0,-134.9,0,-118,5],[48.45,-116.8,43.86,-105.8,3],[83.92,-67.45,75.97,-61.06,3],[96.9,0,84,0,5],[83.92,67.45,75.97,61.06,3],[48.45,116.8,43.86,105.8,3],[0,134.9,0,118,5],[-48.45,116.8,-43.86,105.8,3],[-83.92,67.45,-75.97,61.06,3],[-96.9,0,-84,0,5],[-83.92,-67.45,-75.97,-61.06,3],[-48.45,-116.8,-43.86,-105.8,3]];
+function clock(o = {}) {
+  const W = o.W || 920, H = 812, s = o.s || 1, w = 420 * s, h = 460 * s;
+  const x = Math.round(W / 2 - w / 2 + 12 * s), y = Math.round(H / 2 - h / 2);
+  const ticks = TICKS.map((t) => `<path d="M${t[0]} ${t[1]} L${t[2]} ${t[3]}" stroke-width="${t[4]}"/>`).join('');
+  const minute = o.sel === 'minute'
+    ? '<path d="M0 0 L70.7 -56.8" stroke="#f29a38" stroke-opacity=".35" stroke-width="11"/><path d="M0 0 L70.7 -56.8" stroke="#f6b46a" stroke-width="4.5"/>'
+    : '<path d="M0 0 L70.7 -56.8" stroke-width="4.5"/>';
+  const hands = o.hands === false ? '' : `<path d="M0 0 L-44.2 -35.5" stroke-width="7"/>${minute}<path d="M7.4 -28.4 L-29.65 113.5" stroke="#d64541" stroke-width="2"/><circle r="7" fill="#2a2f36" stroke="none"/><circle r="2.5" fill="#d64541" stroke="none"/>`;
+  return `<svg width="${w}" height="${h}" viewBox="-210 -230 420 460" role="img" aria-label="3D-Modell der Wanduhr" style="position:absolute;left:${x}px;top:${y}px;${o.dim ? 'opacity:.32;filter:grayscale(.6)' : ''}">
+    <g transform="rotate(-6)">
+      <rect x="14" y="-202" width="40" height="34" rx="6" fill="#7b848f" stroke="#0e141c" stroke-width="1.2"/>
+      <ellipse cx="34" cy="-10" rx="120" ry="165" fill="#1f447f" stroke="#0e141c" stroke-width="1.2"/>
+      <path d="M0 -165 L34 -175 L34 155 L0 165 Z" fill="#23508f"/>
+      <path d="M0 -165 L34 -175 M0 165 L34 155" stroke="#0e141c" stroke-width="1.2"/>
+      <ellipse cx="0" cy="0" rx="120" ry="165" fill="#2f63b5" stroke="#0e141c" stroke-width="1.2"/>
+      <ellipse cx="3" cy="-1" rx="107" ry="148" fill="#264f93" stroke="#0e141c" stroke-width=".8"/>
+      <ellipse cx="5" cy="-2" rx="102" ry="142" fill="#e9ecef" stroke="#0e141c" stroke-width="1"/>
+      <g transform="translate(5 -2)" stroke="#2a2f36" stroke-linecap="round">${ticks}${hands}</g>
+    </g></svg>`;
+}
+
+// ---------- Bauteilkarte ----------
+const PARTS = [['Gehäuse', '#2f63b5'], ['Zifferblatt', '#e9ecef'], ['Stundenzeiger', '#2a2f36', 1], ['Minutenzeiger', '#2a2f36', 1], ['Sekundenzeiger', '#d64541'], ['Aufhängung', '#7b848f']];
+function prow(name, color, o = {}) {
+  const sw = color ? `background:${color};${o.dark ? 'box-shadow:inset 0 0 0 1px ' + (o.sel ? '#f6b46a' : '#5a626d') : ''}` : 'border:1px dashed var(--tx3)';
+  return `<div class="row ${o.sel ? 'sel' : ''} ${o.off ? 'off' : ''}">
+    <button class="nm" ${o.go ? `data-go="${o.go}"` : ''}><span class="sw" style="${sw}"></span><span>${name}</span></button>
+    <button class="eye" aria-label="${name} ${o.off ? 'einblenden' : 'ausblenden'}">${ic(o.off ? 'eyeoff' : 'eye', 15)}</button></div>`;
+}
+function parts(o = {}) {
+  if (o.collapsed) {
+    return `<button class="float parts" data-go="1" style="width:auto;display:flex;align-items:center;gap:8px;height:38px;padding:0 10px 0 12px"><b>Bauteile</b><span class="c3" style="font-size:12px">7</span><span class="c2">${ic('down', 15, 2)}</span></button>`;
+  }
+  const list = o.list || PARTS;
+  const rows = list.map((p) => prow(p[0], p[1], { dark: p[2], sel: o.sel === p[0] })).join('');
+  const ref = o.noRef ? '' : `<div class="grp">REFERENZEN</div>${prow('Uhrwerk', null, { off: true })}`;
+  const note = o.note ? `<div style="margin:6px 10px 4px;padding:8px 10px;border-radius:6px;background:var(--vio-tint);color:#cdd2ff;font-size:12px">${o.note}</div>` : '';
+  return `<div class="float parts">
+    <div class="hd"><b>Bauteile</b><span class="c3" style="font-size:12px">${o.count || 7}</span><span class="grow"></span>
+      <button class="ibtn s" aria-label="Bauteile suchen">${ic('search', 15, 1.9)}</button>
+      <button class="ibtn s" aria-label="Liste einklappen" data-go="5">${ic('up', 15, 2)}</button></div>
+    <div class="list">${rows}${ref}${note}</div></div>`;
+}
+
+// ---------- Werkzeuge, Ansichtswürfel ----------
+function dock(o = {}) {
+  const b = (icon, label, extra = '', cls = '') => `<button class="${cls}" ${extra} ${o.icons ? `aria-label="${label}" title="${label}"` : ''}>${ic(icon)}${o.icons ? '' : label}</button>`;
+  return `<div class="float dock ${o.icons ? 'icons' : ''}">
+    <button ${o.icons ? 'aria-label="Darstellung" title="Darstellung"' : ''}>${ic('layers')}${o.icons ? '' : 'Darstellung'}<span class="c2">${ic('down', 13, 2)}</span></button>
+    <span class="vsep"></span>${b('ruler', 'Messen')}${b('section', 'Schnitt')}<span class="vsep"></span>${b('camera', 'Markieren', 'data-go="4"', 'hot')}</div>`;
+}
+const CUBE = `<div class="cube">
+  <svg width="100" height="96" viewBox="0 0 100 96" role="img" aria-label="Ansichtswürfel">
+    <polygon points="50,6 90,24 50,42 10,24" fill="#2b3139" stroke="#56606c"/>
+    <polygon points="10,24 50,42 50,88 10,70" fill="#232830" stroke="#56606c"/>
+    <polygon points="50,42 90,24 90,70 50,88" fill="#1e2228" stroke="#56606c"/>
+    <g font-size="7.5" font-weight="600" fill="#c9ced4" font-family="IBM Plex Sans, sans-serif" letter-spacing=".3" text-anchor="middle">
+      <text x="50" y="27">OBEN</text><text x="30" y="59">VORNE</text><text x="70" y="59">RECHTS</text></g>
+  </svg>
+  <div class="vbtns"><button aria-label="Alles einpassen" title="Alles einpassen">${ic('fit')}</button><button aria-label="Standardansicht" title="Standardansicht (isometrisch)">${ic('home')}</button></div>
+</div>`;
+
+// ---------- Code ----------
+function hl(src) {
+  return esc(src).replace(/(#.*$)|("""[^"]*"""|"[^"]*")|\b(def|return|import|from|as|for|in)\b|\b([A-Z][A-Z_]{2,})\b|\b(\d+(?:\.\d+)?)\b|\b([A-Za-z_]\w*)(?=\()/g,
+    (m, cm, str, kw, cn, num, fn) => cm ? `<span class="k-cm">${cm}</span>` : str ? `<span class="k-str">${str}</span>` : kw ? `<span class="k-kw">${kw}</span>` : (cn || num) ? `<span class="k-num">${m}</span>` : `<span class="k-fn">${fn}</span>`);
+}
+const codeLines = (from, lines, mark = {}) => lines.map((l, i) => `<div class="cl ${mark[from + i] || ''}"><span class="ln">${from + i}</span><span>${hl(l) || ' '}</span></div>`).join('');
+const MODEL = [
+  'HOUR_LEN = 55.0', 'MINUTE_LEN = 80.0', 'SECOND_LEN = 88.0', 'HAND_WIDTH = 2.5', 'HAND_COLOR = "#2a2f36"', '', '',
+  'def make_hand(length, width, thickness=1.2):', '    """Flat hand, pointing to 12 o\'clock."""', '    return (', '        cq.Workplane("XZ")',
+  '        .center(0, length / 2 - 8)', '        .rect(width, length)', '        .extrude(thickness)', '    )', '', '',
+  'hour = make_hand(HOUR_LEN, HAND_WIDTH)', 'minute = make_hand(MINUTE_LEN, HAND_WIDTH)', 'add_part("Minutenzeiger", minute,', '         color=HAND_COLOR)',
+  'add_part("Stundenzeiger", hour,', '         color=HAND_COLOR)', '', 'second = make_hand(SECOND_LEN, 1.0, thickness=0.8)', 'add_part("Sekundenzeiger", second, color="red")', '', '',
+  '# Hanger on the back, printed separately', 'hanger = (', '    cq.Workplane("XY")', '    .box(40, 6, 30)', '    .edges("|Y").fillet(4)', ')', 'add_part("Aufhängung", hanger.translate((0, -24, 150)))',
+];
+
+function selcard() {
+  return `<div class="float selcard">
+    <div style="padding:12px 10px 8px 14px;display:flex;flex-direction:column;gap:3px">
+      <div style="display:flex;align-items:center;gap:8px"><span class="sw" style="background:#2a2f36;box-shadow:inset 0 0 0 1px #f6b46a"></span><b style="font-size:14px">Minutenzeiger</b><span class="grow"></span>
+        <button class="ibtn s" aria-label="Auswahl aufheben" style="width:24px;height:24px">${ic('x', 14, 2)}</button></div>
+      <div class="c2" style="font-size:12px">Fläche · eben · 41,2 mm²</div>
+    </div>
+    <div class="code" style="margin:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--term);padding:6px 0 7px">
+      <div class="c3" style="display:flex;justify-content:space-between;padding:0 10px 3px;font-size:11px"><span>model.py</span><span>Zeile 48–50</span></div>
+      ${codeLines(48, MODEL.slice(18, 21), { 48: 'hl', 49: 'hl', 50: 'hl' })}
+    </div>
+    <div style="display:flex;gap:8px;padding:10px">
+      <button class="btn sm" data-go="6" style="flex:1;justify-content:center">${ic('code', 14, 1.9)}Code öffnen</button>
+      <button class="btn sm acc" style="flex:1;justify-content:center">${ic('send', 14, 1.9)}An Agent geben</button>
+    </div></div>`;
+}
+
+// ---------- Verlauf ----------
+const COMMITS = [
+  ['Neues Modell angelegt', 'App', '11:20', 'app'], ['Gehäuse als runde Scheibe', 'Claude Code', '11:34'], ['Aufhängung ergänzt', 'Claude Code', '11:52'],
+  ['Zifferblatt eingesetzt', 'Claude Code', '12:10'], ['Stundenstriche auf dem Zifferblatt', 'Claude Code', '13:12'], ['Gespeichert als Wanduhr.zip', 'App', '13:41', 'saved'],
+  ['Drei Zeiger ergänzt', 'Claude Code', '13:55'], ['Zeiger schmaler, Sekundenzeiger rot', 'Claude Code', '14:02'],
+];
+function timeline(pv = -1) {
+  const pos = (i) => `left:calc(8px + (100% - 68px) * ${i / 8})`;
+  const dots = COMMITS.map((c, i) => `<button class="vd ${c[3] || ''} ${i === pv ? 'pv' : ''}" style="${pos(i)}" data-go="${i === pv ? 1 : 2}" aria-label="${c[0]}, ${c[2]}" title="${c[0]} · ${c[1]} · heute ${c[2]}"><i></i></button>`).join('');
+  return `<div class="tl"><span class="lbl">${ic('history', 15)}Verlauf</span>
+    <div class="track"><div class="line"></div>${dots}<button class="now" style="${pos(8)}" data-go="1" aria-label="Jetzt, Arbeitsstand" title="Jetzt · Arbeitsstand, noch nicht gespeichert"><i></i><span>Jetzt</span></button></div></div>`;
+}
+
+// ---------- Agent ----------
+const CONVO = `
+  <div class="l mut">Wanduhr&gt; claude</div><div class="gap"></div>
+  <div class="l u"><span class="p">›</span> Mach die Zeiger schmaler und den Sekundenzeiger rot.</div><div class="gap"></div>
+  <div class="l">Ich ändere in model.py:</div>
+  <div class="l pre">  HAND_WIDTH       4,0 → 2,5 mm</div>
+  <div class="l pre">  Sekundenzeiger   Farbe → rot</div><div class="gap"></div>
+  <div class="l cmd">$ cadide build</div>
+  <div class="l pre ok">  ✓ 6 Bauteile gebaut (0,9 s)</div><div class="gap"></div>
+  <div class="l cmd">$ git commit -m "Zeiger schmaler, Sekundenzeiger rot"</div>
+  <div class="l pre mut">  [main 3f2a91c] 1 file changed</div><div class="gap"></div>
+  <div class="l">Fertig. Die Zeiger sind jetzt 2,5 mm breit, der Sekundenzeiger ist rot.</div>`;
+function agent(v = 'main') {
+  if (v === 'collapsed') {
+    return `<aside class="agent collapsed" aria-label="Agent, eingeklappt">
+      <button class="ibtn" style="margin-top:6px" data-go="1" aria-label="Agent-Bereich ausklappen" title="Agent-Bereich ausklappen">${ic('panel')}</button>
+      <button data-go="1" style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:14px;padding:10px 0;width:36px;border-radius:8px;background:var(--s3)">
+        <span class="dot" style="width:7px;height:7px;background:var(--ok)"></span><span style="writing-mode:vertical-rl;font-weight:500">Claude Code</span></button>
+      <button data-go="1" style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:6px;padding:10px 0;width:36px;border-radius:8px;color:var(--tx2)">
+        ${ic('term', 14, 2)}<span style="writing-mode:vertical-rl">Terminal</span></button>
+    </aside>`;
+  }
+  const input = {
+    main: `<span class="p">›</span> Der Minutenzeiger soll vorne spitz zulaufen, siehe <span class="p">.cadide/feedback/markierung-1405.png</span><span class="cursor"></span>`,
+    err: `<span class="p">›</span> Der Build ist fehlgeschlagen: model.py, Zeile 47: NameError: name 'HAND_WIDHT' is not defined<span class="cursor"></span>`,
+    idle: `<span class="p">›</span><span class="cursor"></span>`,
+  }[v];
+  const toast = v === 'err' ? `<div class="toast"><span style="color:var(--ok)">${ic('check', 16, 2.2)}</span>In die Eingabe von Claude Code eingefügt. Enter schickt ab.</div>` : '';
+  return `<aside class="agent" aria-label="Agent">
+    <div class="tabs">
+      <div class="tab on"><button class="t"><span class="dot" style="width:7px;height:7px;background:var(--ok)"></span>Claude Code</button><button class="ibtn" style="width:22px;height:22px;color:var(--tx3)" aria-label="Claude Code schließen">${ic('x', 12, 2.2)}</button></div>
+      <div class="tab"><button class="t">${ic('term', 14, 2)}Terminal</button></div>
+      <button class="ibtn" data-go="8" style="width:auto;height:28px;padding:0 6px;margin-bottom:3px;gap:3px" aria-label="Neuer Tab: Agent oder Terminal" title="Neuer Tab: Agent oder Terminal">${ic('plus', 15, 2)}${ic('down', 12, 2)}</button>
+      <span class="grow"></span>
+      <button class="ibtn" data-go="6" style="width:28px;height:28px;margin-bottom:3px" aria-label="Agent-Bereich einklappen" title="Agent-Bereich einklappen">${ic('panel')}</button>
+    </div>
+    <div class="term">${CONVO}<span class="grow"></span><div class="input">${input}</div></div>
+    ${toast}
+    <div class="handoff"><span class="c3" style="font-size:12px;margin-right:2px">Einfügen:</span>
+      <button class="btn sm" title="Bauteil, Datei und Zeilen der Auswahl einfügen">${ic('target', 13, 2)}Auswahl</button>
+      <button class="btn sm" data-go="4" title="Screenshot markieren und den Pfad einfügen">${ic('image', 13, 2)}Markierung</button>
+      <button class="btn sm ${v === 'err' ? 'acc' : ''}" ${v === 'err' ? '' : 'disabled'} title="Meldung des letzten Builds einfügen">${ic('alert', 13, 2)}Build-Fehler</button>
+    </div>
+  </aside>`;
+}
+
+const app = (o) => `<div class="app">${o.top || topbar()}<div class="body">${rail(o.rail)}${o.side || ''}<main class="center"><section class="vp" aria-label="3D-Ansicht" style="${o.vpStyle || ''}">${o.vp}</section>${o.tl || timeline()}</main>${o.agent || agent()}</div></div>`;
+
+// ---------- Ansichten ----------
+const S = {};
+
+S[1] = () => app({ vp: clock({ sel: 'minute' }) + parts({ sel: 'Minutenzeiger' }) + dock() + CUBE + selcard() });
+
+S[2] = () => app({
+  vpStyle: 'box-shadow:inset 0 0 0 2px var(--vio)',
+  vp: clock({ hands: false }) + parts({ list: [PARTS[0], PARTS[5], PARTS[1]], count: 3, noRef: true, note: 'Vorschau: Anzeige ohne Codeverweise' }) + dock() + CUBE +
+    `<div class="float" style="left:50%;bottom:14px;transform:translateX(-50%);width:840px;padding:14px 16px;display:flex;align-items:center;gap:14px;border-color:rgba(154,166,255,.55);background:rgba(26,28,42,.97)">
+      <span style="width:36px;height:36px;border-radius:9px;background:var(--vio-tint);color:var(--vio);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ic('history', 18)}</span>
+      <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:14px">Vorschau · Stand 5 von 9</b><span style="font-size:11px;padding:1px 7px;border-radius:9px;background:var(--vio-tint);color:#cdd2ff">nur ansehen</span></div>
+        <span class="c2" style="font-size:12px">Stundenstriche auf dem Zifferblatt · Claude Code · heute 13:12</span>
+        <span class="c3" style="font-size:12px">Wiederherstellen legt einen neuen Stand an. Nichts geht verloren.</span>
+      </div><span class="grow"></span>
+      <button class="btn" data-go="1">Zurück zu Jetzt</button><button class="btn vio" title="Diesen Stand als neuen Stand übernehmen">Wiederherstellen</button></div>`,
+  tl: timeline(4), agent: agent('idle'),
+});
+
+S[3] = () => app({
+  top: topbar({ build: 'err' }),
+  vp: clock({ dim: true }) + parts({}) + dock() + CUBE +
+    `<div class="float" style="left:50%;bottom:16px;transform:translateX(-50%);padding:6px 12px;border-radius:14px;font-size:12px;color:var(--tx2)">Letzter guter Stand · 14:02</div>
+    <div class="float" style="left:256px;top:66px;width:540px;overflow:hidden;border-color:rgba(240,116,112,.45)">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 10px 10px 14px">
+        <span style="color:var(--err)">${ic('alert', 18)}</span>
+        <div style="display:flex;flex-direction:column"><b style="font-size:14px">Build fehlgeschlagen</b><span class="c2" style="font-size:12px">model.py, Zeile 47 · 14:07</span></div>
+        <span class="grow"></span><button class="ibtn s" aria-label="Meldung einklappen">${ic('up', 15, 2)}</button></div>
+      <div style="margin:0 12px;padding:8px 10px;border-radius:6px;background:rgba(240,116,112,.10);font-family:var(--mono);font-size:12px;color:#ffc4c0">NameError: name 'HAND_WIDHT' is not defined</div>
+      <div class="code" style="margin:8px 12px 0;padding:6px 0;border:1px solid var(--line);border-radius:6px;background:var(--term)">
+        ${codeLines(47, ['hour = make_hand(HOUR_LEN, HAND_WIDHT)', 'minute = make_hand(MINUTE_LEN, HAND_WIDTH)', 'add_part("Minutenzeiger", minute,', '         color=HAND_COLOR)'], { 47: 'er' })}</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:12px">
+        <span class="grow"></span>
+        <button class="btn sm">Details</button><button class="btn sm" data-go="6">${ic('code', 14, 1.9)}Code öffnen</button><button class="btn sm acc">${ic('send', 14, 1.9)}An Agent geben</button></div>
+    </div>`,
+  agent: agent('err'),
+});
+
+S[4] = () => app({
+  vp: clock({}) +
+    `<div style="position:absolute;inset:6px;border:2px dashed rgba(242,154,56,.5);border-radius:8px;pointer-events:none"></div>
+    <svg width="920" height="812" style="position:absolute;left:0;top:0" aria-hidden="true">
+      <path d="M516 332 C512 311 548 304 565 321 C580 337 567 363 540 365 C517 367 507 349 519 330" fill="none" stroke="#f29a38" stroke-width="3.5" stroke-linecap="round"/>
+      <path d="M704 236 C660 246 612 276 576 314" fill="none" stroke="#f29a38" stroke-width="3" stroke-linecap="round"/>
+      <path d="M576 314 L579 298 M576 314 L591 309" fill="none" stroke="#f29a38" stroke-width="3" stroke-linecap="round"/>
+      <text x="712" y="226" fill="#f6b46a" font-family="IBM Plex Sans, sans-serif" font-size="19" font-weight="600">vorne spitz zulaufen</text>
+      <text x="712" y="250" fill="#f6b46a" font-family="IBM Plex Sans, sans-serif" font-size="16">Spitze etwa 1 mm</text>
+    </svg>
+    <div class="float dock" style="top:14px;left:14px">
+      <span style="display:flex;align-items:center;gap:7px;padding:0 10px 0 8px;color:var(--acc-tx)">${ic('camera', 15)}<b>Markieren</b></span><span class="vsep"></span>
+      <button class="hot" aria-label="Stift" title="Stift">${ic('pen')}</button><button aria-label="Pfeil" title="Pfeil">${ic('arrow')}</button>
+      <button aria-label="Rechteck" title="Rechteck">${ic('square')}</button><button aria-label="Kreis" title="Kreis">${ic('circle')}</button><button aria-label="Text" title="Text">${ic('text')}</button>
+      <span class="vsep"></span>
+      <button aria-label="Farbe Orange" title="Orange"><span style="width:16px;height:16px;border-radius:50%;background:#f29a38;box-shadow:0 0 0 2px #1b1e23,0 0 0 4px #f6b46a"></span></button>
+      <button aria-label="Farbe Weiß" title="Weiß"><span style="width:16px;height:16px;border-radius:50%;background:#f4f5f6"></span></button>
+      <button aria-label="Farbe Blau" title="Blau"><span style="width:16px;height:16px;border-radius:50%;background:#5ea8ff"></span></button>
+      <span class="vsep"></span><button aria-label="Rückgängig" title="Rückgängig">${ic('undo')}</button>
+      <span class="vsep"></span><button title="Auf leerer Fläche zeichnen statt auf dem Viewer-Bild">${ic('image')}Leere Fläche</button>
+    </div>
+    <div class="float" style="left:14px;bottom:14px;padding:8px 12px;font-size:12px;color:var(--tx2)">Bild des Viewers von 14:05. Es landet in <span style="font-family:var(--mono)">.cadide/feedback/</span>, der Pfad in der Eingabe des Agenten.</div>
+    <div style="position:absolute;right:14px;bottom:14px;display:flex;gap:8px"><button class="btn" data-go="1" style="background:var(--s2)">Abbrechen</button><button class="btn primary">${ic('send', 15, 2)}An Agent geben</button></div>`,
+  agent: agent('idle'),
+});
+
+const frow = (icon, name, o = {}) => `<button class="frow ${o.cls || ''}" style="padding-left:${8 + (o.ind || 0) * 18}px">
+  <span class="c3" style="width:12px">${o.fold ? ic(o.fold, 12, 2.2) : ''}</span><span class="${icon === 'folder' ? 'c2' : 'c3'}">${ic(icon, 15)}</span><span>${name}</span>${o.tag ? `<span class="tag">${o.tag}</span>` : ''}</button>`;
+S[5] = () => app({
+  rail: 'files',
+  side: `<aside class="side" style="width:272px" aria-label="Dateien">
+    <div class="side-hd"><b>Dateien</b><span class="grow"></span><button class="ibtn s" aria-label="Im Explorer zeigen" title="Im Explorer zeigen">${ic('openext', 15)}</button><button class="ibtn s" data-go="1" aria-label="Schließen">${ic('x', 15, 2)}</button></div>
+    <div style="padding:8px 0;display:flex;flex-direction:column;gap:1px">
+      ${frow('file', 'model.py', { tag: 'Modell' })}
+      ${frow('folder', 'parts', { fold: 'down' })}${frow('file', 'zeiger.py', { ind: 1 })}
+      ${frow('folder', 'inputs', { fold: 'down' })}
+      <div style="display:flex;align-items:center;margin:0 6px;border-radius:6px;background:var(--s3)"><button class="frow" style="padding-left:26px;margin:0;width:auto;flex-grow:1"><span class="c3" style="width:12px"></span><span class="c3">${ic('file', 15)}</span><span>uhrwerk_quarz.step</span></button><button class="ibtn s" style="width:24px;height:24px;margin-right:4px;color:var(--acc-tx)" aria-label="Im Viewer ansehen" title="Im Viewer ansehen (Basisansicht)">${ic('eye', 14, 2)}</button></div>
+      ${frow('folder', 'output', { fold: 'down' })}${frow('file', 'model.step', { ind: 1, tag: 'Ergebnis' })}
+      ${frow('file', 'NOTES.md', { tag: 'Notizen' })}${frow('file', 'requirements.txt', { tag: 'Pakete' })}
+      <div style="height:8px"></div>
+      ${frow('lock', 'Vom Programm verwaltet', { fold: 'right', cls: 'dim', tag: '4' })}
+    </div>
+    <span class="grow"></span>
+    <div style="margin:12px;padding:18px 14px;border:1.5px dashed var(--line2);border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;color:var(--tx2);font-size:12px">
+      <span class="c2">${ic('upload', 20)}</span><b style="color:var(--tx);font-size:13px">Dateien hierher ziehen</b>STEP-Dateien, Bilder und Skizzen landen in <span style="font-family:var(--mono)">inputs/</span></div>
+  </aside>`,
+  vp: clock({ W: 648, s: 0.82 }) + parts({ collapsed: true }) + dock({ icons: true }) + CUBE,
+  agent: agent('idle'),
+});
+
+S[6] = () => app({
+  rail: 'code',
+  side: `<aside class="side" style="width:520px;background:var(--term)" aria-label="Code">
+    <div class="side-hd" style="background:var(--s1);padding:0 6px 0 8px;gap:2px;align-items:flex-end">
+      <div class="ctab on">model.py<button class="ibtn" style="width:20px;height:20px;color:var(--tx3)" aria-label="model.py schließen">${ic('x', 11, 2.2)}</button></div>
+      <div class="ctab">zeiger.py</div><span class="grow"></span>
+      <button class="btn sm ghost" style="margin-bottom:5px;color:var(--acc-tx)" title="Klick auf ein Bauteil springt zur Codestelle">${ic('link', 14, 1.9)}Mit Auswahl verknüpft</button>
+      <button class="ibtn s" style="margin-bottom:6px" data-go="1" aria-label="Code schließen">${ic('x', 15, 2)}</button></div>
+    <div style="height:32px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:12px;color:var(--tx2);border-bottom:1px solid var(--line)"><span class="sw" style="background:#2a2f36;box-shadow:inset 0 0 0 1px #f6b46a"></span>Minutenzeiger · Zeile 48–50</div>
+    <div class="code" style="font-size:12.5px;line-height:1.72;padding:8px 0;flex-grow:1;overflow:hidden">${codeLines(30, MODEL, { 48: 'hl', 49: 'hl', 50: 'hl' })}</div>
+  </aside>`,
+  vp: clock({ W: 816, s: 0.9, sel: 'minute' }) + parts({ sel: 'Minutenzeiger' }) + dock({ icons: true }) + CUBE,
+  agent: agent('collapsed'),
+});
+
+const THUMB = {
+  uhr: '<ellipse cx="104" cy="62" rx="34" ry="46" fill="#1f447f" stroke="#0e141c"/><ellipse cx="97" cy="62" rx="34" ry="46" fill="#2f63b5" stroke="#0e141c"/><ellipse cx="98" cy="62" rx="28" ry="39" fill="#e9ecef" stroke="#0e141c" stroke-width=".8"/><path d="M98 62 L86 52 M98 62 L117 48" stroke="#2a2f36" stroke-width="3" stroke-linecap="round"/><path d="M98 62 L90 93" stroke="#d64541" stroke-width="1.3"/>',
+  box: '<polygon points="56,52 108,32 152,50 100,70" fill="#d9dde2" stroke="#0e141c"/><polygon points="56,52 100,70 100,76 56,58" fill="#b9bfc6" stroke="#0e141c"/><polygon points="100,70 152,50 152,56 100,76" fill="#a3aab2" stroke="#0e141c"/><polygon points="56,58 100,76 100,108 56,90" fill="#2f63b5" stroke="#0e141c"/><polygon points="100,76 152,56 152,88 100,108" fill="#264f93" stroke="#0e141c"/>',
+  halter: '<polygon points="50,80 110,56 150,72 90,96" fill="#aab2bb" stroke="#0e141c"/><polygon points="50,80 90,96 90,104 50,88" fill="#7b848f" stroke="#0e141c"/><polygon points="90,96 150,72 150,80 90,104" fill="#6a727c" stroke="#0e141c"/><polygon points="110,56 150,72 150,24 110,8" fill="#9aa3ad" stroke="#0e141c"/><ellipse cx="130" cy="38" rx="5" ry="7" fill="#3a4048"/><ellipse cx="92" cy="76" rx="8" ry="4" fill="#3a4048"/>',
+  clip: '<path d="M126 38 A30 30 0 1 0 126 92" fill="none" stroke="#2f7d76" stroke-width="16" transform="translate(4 3)"/><path d="M126 38 A30 30 0 1 0 126 92" fill="none" stroke="#4fb3a9" stroke-width="16"/>',
+};
+const recent = (t, name, when, file, warn) => `<button class="recent" ${t === 'uhr' ? 'data-go="1"' : ''} title="${file}"><div class="th"><svg width="200" height="120" viewBox="0 0 200 130" aria-hidden="true">${THUMB[t]}</svg></div>
+  <div class="meta" style="min-width:0"><b>${name}</b><span class="c3" style="font-size:12px">${when}</span>
+    <span class="${warn ? '' : 'c3'}" style="font-size:12px;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${warn ? 'color:var(--warn)' : ''}">${warn ? '<span class="dot" style="width:6px;height:6px;background:var(--warn)"></span>' : ''}${file}</span></div></button>`;
+const agrow = (name, found, extra) => `<div class="agrow"><span style="color:${found ? 'var(--ok)' : 'var(--tx3)'}">${ic(found ? 'check' : 'x', 16, 2.2)}</span>
+  <div style="display:flex;flex-direction:column;flex-grow:1"><b>${name}</b><span class="c3" style="font-size:12px">${found ? 'gefunden' : 'nicht installiert'}</span></div>${extra || ''}</div>`;
+S[7] = () => `<div class="app">
+  <header class="top"><div class="logo">${ic('cube', 22)}</div><b style="font-size:14px">CAD-IDE</b><span class="grow"></span>
+    <button class="btn ghost">${ic('help', 15)}Hilfe</button><button class="btn ghost">${ic('sliders', 15)}Optionen</button></header>
+  <div style="flex-grow:1;display:flex;justify-content:center;overflow:hidden">
+    <div style="width:1100px;padding:52px 0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:44px;align-content:start">
+      <div>
+        <h1 style="margin:0 0 6px;font-size:28px;font-weight:600">Modelle</h1>
+        <p class="c2" style="margin:0 0 26px;font-size:14px">Ein Modell ist eine ZIP-Datei mit Code, Ergebnis und Verlauf. Du kannst sie frei verschieben und weitergeben.</p>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+          <button class="bigcard" data-go="1"><span class="ico" style="background:var(--acc);color:#1b1206">${ic('plus', 22, 2.2)}</span><b style="font-size:16px">Neues Modell</b><span class="c2">Vorlage mit Beispielteil, der Agent startet von selbst</span><span class="c3" style="font-size:12px;margin-top:6px">Strg N</span></button>
+          <button class="bigcard"><span class="ico" style="background:var(--s3);color:var(--tx)">${ic('folder', 22)}</span><b style="font-size:16px">Öffnen …</b><span class="c2">ZIP-Datei von diesem oder einem anderen Rechner, auch per Ziehen</span><span class="c3" style="font-size:12px;margin-top:6px">Strg O</span></button>
+        </div>
+        <div class="cap" style="margin:34px 0 12px">ZULETZT GEÖFFNET</div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px">
+          ${recent('uhr', 'Wanduhr', 'heute 14:02', 'nicht gespeichert', true)}
+          ${recent('box', 'Platinengehäuse', 'gestern', 'Desktop\\Platinengehaeuse.zip')}
+          ${recent('halter', 'Wandhalterung', '24.09.', 'Projekte\\Wandhalterung.zip')}
+          ${recent('clip', 'Kabelclip', '18.09.', 'Downloads\\Kabelclip.zip')}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;padding-top:44px">
+        <section class="panel">
+          <div style="padding:14px 16px 12px"><b style="font-size:14px">Agenten auf diesem Rechner</b><div class="c3" style="font-size:12px;margin-top:2px">Du bringst deinen eigenen Agenten mit.</div></div>
+          ${agrow('Claude Code', true)}${agrow('OpenCode', true)}
+          ${agrow('Codex', false, '<button class="btn sm ghost" style="color:var(--acc-tx)">Anleitung</button>')}
+          ${agrow('Gemini CLI', false, '<button class="btn sm ghost" style="color:var(--acc-tx)">Anleitung</button>')}
+          <div class="agrow" style="justify-content:space-between"><span class="c2" style="font-size:12px">Startet beim Öffnen</span><button class="btn sm">Claude Code${ic('down', 12, 2)}</button></div>
+        </section>
+        <section class="panel" style="padding:16px;display:flex;gap:12px">
+          <span style="color:var(--vio)">${ic('info', 18)}</span>
+          <div style="display:flex;flex-direction:column;gap:8px"><b>Gut zu wissen</b>
+            <span class="c2" style="font-size:12.5px">Der Agent arbeitet mit deinen Benutzerrechten. Er kann Dateien auf diesem Rechner lesen und ändern. Freigaben und Schutz regelst du im Agenten selbst.</span>
+            <button class="btn sm" style="align-self:flex-start">Verstanden</button></div>
+        </section>
+      </div>
+    </div>
+  </div></div>`;
+
+const mi = (icon, label, k, cls = '') => `<button class="mi ${cls}">${icon ? `<span class="c2">${ic(icon, 15)}</span>` : '<span style="width:15px"></span>'}<span>${label}</span>${k ? `<span class="k">${k}</span>` : ''}</button>`;
+const pillDemo = (dot, main, sub, auto, extra = '', err = false) => `<div class="pill ${err ? 'err' : ''}" style="align-self:flex-start"><span class="main">${dot}${main}<span class="c2">${sub}</span>${extra}</span><span class="sep"></span><span class="auto">${ic('refresh', 14, 2)}${auto}</span></div>`;
+S[8] = () => `<div class="app" style="background:#101215;padding:36px 40px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:36px;align-content:start">
+  <div style="display:flex;flex-direction:column;gap:30px">
+    <div><div class="cap">DOKUMENTMENÜ · KLICK AUF DEN MODELLNAMEN</div><div class="menu">
+      ${mi('plus', 'Neues Modell', 'Strg N')}${mi('folder', 'Öffnen …', 'Strg O')}${mi('history', 'Zuletzt geöffnet', ic('right', 14, 2))}<div class="msep"></div>
+      ${mi('', 'Speichern', 'Strg S', 'on')}${mi('', 'Speichern unter …', 'Strg Umschalt S')}<div class="msep"></div>
+      ${mi('openext', 'Im Explorer zeigen')}${mi('x', 'Modell schließen')}</div></div>
+    <div><div class="cap">RECHTSKLICK AUF EIN BAUTEIL</div><div class="menu"><div class="mh">MINUTENZEIGER</div>
+      ${mi('target', 'Isolieren')}${mi('eyeoff', 'Ausblenden')}${mi('fit', 'Kamera auf Bauteil')}<div class="msep"></div>
+      ${mi('code', 'Code zeigen')}${mi('send', 'An Agent geben')}${mi('export', 'Exportieren', ic('right', 14, 2))}</div></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:30px">
+    <div><div class="cap">BUILD-ANZEIGE IN DER KOPFZEILE</div><div style="display:flex;flex-direction:column;gap:10px">
+      ${pillDemo('<span class="dot" style="background:var(--ok)"></span>', '<span style="font-weight:500">Gebaut</span>', '6 Bauteile · 0,9 s', 'Auto an')}
+      ${pillDemo(`<span style="color:var(--acc)" class="spin">${ic('spin', 14, 2.4)}</span>`, '<span style="font-weight:500">Baut …</span>', '3 s', 'Auto an', '<span class="inner">Abbrechen</span>')}
+      ${pillDemo('<span class="dot" style="background:var(--err)"></span>', '<span style="font-weight:500;color:#ffb8b3">Build fehlgeschlagen</span>', 'Zeile 47', 'Auto an', '', true)}
+      ${pillDemo('<span class="dot" style="background:var(--tx3)"></span>', '<span style="font-weight:500">Code geändert</span>', '', 'Auto aus', '<span class="inner" style="color:var(--acc-tx);border-color:rgba(242,154,56,.45)">Jetzt bauen</span>')}
+    </div></div>
+    <div><div class="cap">BUILD-MENÜ · KLICK AUF DIE ANZEIGE</div><div class="menu">
+      <div style="padding:8px 10px 6px"><b>Zuletzt gebaut 14:02</b><div class="c3" style="font-size:12px">0,9 s · 6 Bauteile · keine Warnungen</div></div><div class="msep"></div>
+      <button class="mi"><span class="c2">${ic('refresh', 15)}</span><span>Automatisch bauen</span><span class="switch" aria-hidden="true"></span></button>
+      <div class="c3" style="font-size:12px;padding:0 10px 8px 35px;white-space:normal">Bei großen Modellen ausschalten. Dann baut der Knopf oder der Agent.</div>
+      ${mi('play', 'Jetzt bauen', 'Strg B')}${mi('file', 'Build-Protokoll anzeigen')}</div></div>
+    <div><div class="cap">KURZE BESTÄTIGUNG</div><div class="menu" style="display:flex;align-items:center;gap:10px;padding:10px 14px;width:auto"><span style="color:var(--ok)">${ic('check', 16, 2.2)}</span>In die Eingabe von Claude Code eingefügt</div></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:30px">
+    <div><div class="cap">EXPORTIEREN</div><div class="menu">
+      <div class="mh">UMFANG</div><div class="seg"><button class="on">Alle Bauteile</button><button>Nur Minutenzeiger</button></div>
+      <div class="mh">3D-DRUCK</div><div class="chips"><button class="chip">STL</button><button class="chip">3MF</button><button class="chip">AMF</button></div>
+      <div class="mh">CAD-AUSTAUSCH</div><div class="chips"><button class="chip">STEP</button><button class="chip">IGES</button><button class="chip">BREP</button></div>
+      <div class="mh">GRAFIK UND WEB</div><div class="chips"><button class="chip">GLB</button><button class="chip">GLTF</button><button class="chip">OBJ</button><button class="chip">VRML</button></div>
+      <div class="mh">2D</div><div class="chips"><button class="chip">DXF · Schnitt</button><button class="chip">SVG · Ansicht</button></div>
+      <div class="msep"></div><div class="c3" style="font-size:12px;padding:4px 10px 6px">Referenzen sind nicht enthalten. Ziel: <span style="font-family:var(--mono)">exports/</span></div></div></div>
+    <div><div class="cap">VERLAUF · MAUS ÜBER EINEM PUNKT</div>
+      <div class="menu" style="padding:10px 12px;width:280px"><b>Zeiger schmaler, Sekundenzeiger rot</b><div class="c2" style="font-size:12px">Claude Code · heute 14:02</div><div class="c3" style="font-size:12px;margin-top:6px">Klick zeigt diesen Stand als Vorschau</div></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;font-size:12px;color:var(--tx2)">
+        <span style="display:flex;align-items:center;gap:6px"><span class="dot" style="background:var(--tx2)"></span>vom Agenten</span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="dot" style="box-shadow:inset 0 0 0 2px var(--tx2)"></span>von der App</span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="dot" style="background:var(--ok)"></span>gespeichert</span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="dot" style="background:var(--vio)"></span>Vorschau</span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="dot" style="box-shadow:inset 0 0 0 2px var(--acc)"></span>Jetzt</span></div></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:30px">
+    <div><div class="cap">NEUER TAB IM AGENT-BEREICH</div><div class="menu"><div class="mh">AGENT STARTEN</div>
+      <button class="mi"><span class="dot" style="background:var(--ok);margin:0 4px"></span><span>Claude Code</span><span class="k">Standard</span></button>
+      <button class="mi"><span class="dot" style="background:var(--ok);margin:0 4px"></span><span>OpenCode</span></button>
+      <button class="mi dim"><span class="dot" style="box-shadow:inset 0 0 0 1.5px var(--tx3);margin:0 4px"></span><span>Codex</span><span class="k" style="color:var(--acc-tx)">Anleitung</span></button>
+      <button class="mi dim"><span class="dot" style="box-shadow:inset 0 0 0 1.5px var(--tx3);margin:0 4px"></span><span>Gemini CLI</span><span class="k" style="color:var(--acc-tx)">Anleitung</span></button>
+      <div class="msep"></div>${mi('term', 'Leeres Terminal')}<div class="msep"></div>
+      <button class="mi"><span style="color:var(--acc-tx)">${ic('check', 15, 2.2)}</span><span>Beim Öffnen automatisch starten</span></button>
+      <div class="c3" style="font-size:12px;padding:0 10px 6px 35px;white-space:normal">Startet neu, ohne die letzte Sitzung fortzusetzen.</div></div></div>
+    <div><div class="cap">PROJEKT-CHECK · MELDET NUR</div>
+      <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:rgba(232,197,71,.12);color:var(--warn);font-size:12px;font-weight:500">${ic('alert', 14, 2)}1 Hinweis</span>
+      <div class="menu" style="margin-top:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:10px"><span style="color:var(--warn)">${ic('alert', 16)}</span><div style="display:flex;flex-direction:column;gap:3px"><b>AGENTS.md wurde verändert</b><span class="c2" style="font-size:12px">Die App erneuert sie erst beim nächsten Versions-Update. Mit <span style="font-family:var(--mono)">cadide check</span> sieht der Agent dasselbe.</span></div></div>
+        <div class="c3" style="font-size:12px;border-top:1px solid var(--line);padding-top:8px">Die App meldet nur, sie repariert nichts selbst.</div></div></div>
+  </div></div>`;
+
+// ---------- Blättern ----------
+const META = {
+  1: ['Arbeitsbereich', ['Der Viewer bekommt die Mitte, etwa 2,5-mal so viel Fläche wie heute', 'Bauteile schweben oben links, nur so hoch wie nötig', 'Auswahl unten links mit Codeausschnitt statt festem Infofeld', 'Übergabeleiste: Auswahl, Markierung oder Fehler mit einem Klick in die Eingabe']],
+  2: ['Alter Stand als Vorschau', ['Violetter Rahmen: das ist nicht der Arbeitsstand', 'Banner direkt über der Verlaufsleiste', 'Wiederherstellen legt einen neuen Stand an, nichts geht verloren']],
+  3: ['Build-Fehler', ['Die Anzeige oben wird rot und nennt die Zeile', 'Karte mit Meldung und Code, das Modell bleibt gedimmt sichtbar', 'An Agent geben schreibt den Fehler in seine Eingabe']],
+  4: ['Screenshot markieren', ['Der Viewer wird zur Zeichenfläche', 'Bauteilkarte und Würfel verschwinden für ein sauberes Bild', 'Ergebnis: PNG in .cadide/feedback, Pfad in der Eingabe des Agenten']],
+  5: ['Dateien', ['Klappt links aus, immer nur ein Panel', 'Dateien der App eingeklappt unter „Vom Programm verwaltet“', 'Ablagefläche für inputs/, fremde STEP-Dateien direkt ansehen', 'Schmaler Viewer: Bauteile eingeklappt, Werkzeuge nur als Symbole']],
+  6: ['Code, Agent eingeklappt', ['Editor als Panel, mit der Auswahl im Viewer verknüpft', 'Der Agent-Bereich klappt zu einer Leiste zusammen und läuft weiter']],
+  7: ['Startseite', ['Neu und Öffnen groß, zuletzt geöffnete Modelle mit Vorschaubild', 'Erkannte Agenten mit Anleitung für fehlende', 'Einmaliger Hinweis: der Agent arbeitet mit deinen Rechten (E29)']],
+  8: ['Menüs und Einblendungen', ['Hierhin sind die Knöpfe der alten Kopfzeile gewandert', 'Build-Anzeige in vier Zuständen', 'Projekt-Check meldet nur (E28)']],
+};
+const params = new URLSearchParams(location.search);
+if (params.has('nur')) document.body.classList.add('solo');
+let cur = Math.min(8, Math.max(1, parseInt(location.hash.slice(1), 10) || 1)), actual = false;
+const tabs = document.getElementById('tabs');
+tabs.innerHTML = Object.keys(META).map((n) => `<button class="deck-tab" data-go="${n}" role="tab"><span class="n">${n}</span>${META[n][0]}</button>`).join('');
+function fit() {
+  const head = document.body.classList.contains('solo') ? 0 : document.querySelector('.deck-top').offsetHeight;
+  const k = (actual || document.body.classList.contains('solo')) ? 1 : Math.min(1, (innerWidth - 48) / 1440, (innerHeight - head - 40) / 900);
+  document.documentElement.style.setProperty('--k', Math.max(0.3, k));
+}
+function show(n) {
+  cur = n;
+  document.getElementById('screen').innerHTML = S[n]();
+  document.getElementById('cap-title').textContent = `${n} · ${META[n][0]}`;
+  document.getElementById('cap-list').innerHTML = META[n][1].map((t) => `<li>${esc(t)}</li>`).join('');
+  tabs.querySelectorAll('.deck-tab').forEach((t) => t.setAttribute('aria-selected', String(+t.dataset.go === n)));
+  if (location.hash !== '#' + n) history.replaceState(null, '', location.pathname + location.search + '#' + n);
+  fit();
+}
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-go]');
+  if (el && el.dataset.go) show(+el.dataset.go);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') show(cur % 8 + 1);
+  if (e.key === 'ArrowLeft') show((cur + 6) % 8 + 1);
+});
+document.getElementById('zoom').addEventListener('click', (e) => { actual = !actual; e.target.textContent = actual ? 'Einpassen' : 'Originalgröße'; fit(); });
+addEventListener('resize', fit);
+show(cur);
+</script>
+</body>
+</html>
