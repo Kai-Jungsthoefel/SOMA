@@ -9,65 +9,249 @@
 </head>
 <body>
 <div id="app">
-  <header id="topbar">
-    <span class="brand">CAD-IDE</span>
-    <button id="btn-new" title="Neues Modell anlegen">Neu</button>
-    <button id="btn-open" title="Modell aus einer ZIP-Datei öffnen (Strg+O)">Öffnen …</button>
-    <select id="sel-projects" title="Modelle auf diesem Rechner"></select>
-    <span class="sep"></span>
-    <button id="btn-save" title="Speichern: Snapshot im Verlauf und ZIP schreiben (Strg+S)">Speichern</button>
-    <button id="btn-saveas" title="Als neue ZIP-Datei speichern">Speichern unter …</button>
-    <span id="save-badge" class="badge">–</span>
-    <span class="sep"></span>
-    <button id="btn-build" title="Modell jetzt bauen">Bauen</button>
-    <button id="btn-cancel" title="Laufenden Build abbrechen" disabled>Abbrechen</button>
-    <label class="chk" title="Bei Änderungen an model.py automatisch bauen. Bei großen Modellen ausschalten."><input type="checkbox" id="chk-auto" checked> Auto-Build</label>
-    <span class="sep"></span>
-    <span id="agent-buttons"></span>
+  <header id="topbar" class="top">
+    <button id="btn-home" class="logo" title="Startseite" aria-label="Startseite"><i data-icon="cube" data-size="22"></i></button>
+    <button id="btn-doc" class="docname" title="Neu, Öffnen, Zuletzt geöffnet, Speichern unter" aria-haspopup="menu" aria-expanded="false"><b id="doc-name">CAD-IDE</b><i data-icon="down" data-size="14" data-stroke="2"></i></button>
+    <span id="save-badge" class="savestate"></span>
+    <button id="problems" class="warnbadge" hidden aria-haspopup="dialog" aria-expanded="false"></button>
     <span class="grow"></span>
-    <span id="problems" class="problems" hidden></span>
+    <div id="build-pill" class="pill">
+      <button id="btn-buildinfo" class="main" title="Build-Details" aria-haspopup="menu" aria-expanded="false">
+        <span id="build-dot" class="dot"></span><span id="status" class="strong">Bereit</span><span id="status-detail" class="c2"></span>
+      </button>
+      <button id="btn-cancel" class="inner" hidden>Abbrechen</button>
+      <button id="btn-buildnow" class="inner acc" hidden>Jetzt bauen</button>
+      <span class="sep"></span>
+      <button id="btn-auto" class="auto" title="Automatisch bauen, wenn sich der Code ändert"><i data-icon="refresh" data-size="14" data-stroke="2"></i><span id="auto-label">Auto an</span></button>
+    </div>
+    <span class="grow"></span>
+    <button id="btn-export" class="btn" aria-haspopup="menu" aria-expanded="false"><i data-icon="export" data-size="15"></i>Exportieren<i data-icon="down" data-size="13" data-stroke="2"></i></button>
+    <button id="btn-save" class="btn primary" title="Snapshot im Verlauf anlegen und die ZIP schreiben">Speichern <span class="kbd">Strg S</span></button>
   </header>
-  <main id="main">
-    <aside id="tree">
-      <div class="tabs"><button class="tab active" data-tab="model">Modell</button><button class="tab" data-tab="files">Dateien</button></div>
-      <div id="tab-model" class="tabpane"></div>
-      <div id="tab-files" class="tabpane" hidden></div>
+
+  <div id="body">
+    <nav id="rail" aria-label="Seitenleisten">
+      <button data-panel="files" aria-pressed="false" title="Dateien des Modells"><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Dateien</span></button>
+      <button data-panel="code" aria-pressed="false" title="Code ansehen"><i data-icon="code" data-size="20" data-stroke="1.7"></i><span>Code</span></button>
+      <button disabled title="Skills kommen in einem späteren Schritt"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
+      <button disabled title="Die Paketliste kommt in einem späteren Schritt"><i data-icon="pkg" data-size="20" data-stroke="1.7"></i><span>Pakete</span></button>
+      <span class="grow"></span>
+      <button disabled title="Hilfe kommt in einem späteren Schritt"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Hilfe</span></button>
+      <button disabled title="Optionen kommen in einem späteren Schritt"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Optionen</span></button>
+    </nav>
+
+    <aside id="side" hidden>
+      <section id="panel-files" class="panel" aria-label="Dateien" hidden>
+        <div class="side-hd"><b>Dateien</b><span class="grow"></span>
+          <button id="btn-reveal" class="ibtn s" title="Im Explorer zeigen" aria-label="Im Explorer zeigen"><i data-icon="openext" data-size="15"></i></button>
+          <button class="ibtn s side-close" aria-label="Dateien schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+        <div id="tab-files" class="ftree"></div>
+        <div id="dropzone" class="dropzone"><i data-icon="upload" data-size="20"></i><b>Dateien hierher ziehen</b><span>STEP-Dateien, Bilder und Skizzen landen in <code>inputs/</code>. Vorhandenes wird nicht überschrieben.</span></div>
+      </section>
+      <section id="panel-code" class="panel" aria-label="Code" hidden>
+        <div class="side-hd code-hd"><div id="code-tabs" class="ctabs"></div><span class="grow"></span>
+          <button id="btn-codelink" class="btn sm ghost" aria-pressed="true" title="Klick auf ein Bauteil springt zur Codestelle"><i data-icon="link" data-size="14" data-stroke="1.9"></i>Mit Auswahl verknüpft</button>
+          <button class="ibtn s side-close" aria-label="Code schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+        <div id="code-info" class="code-info"></div>
+        <div id="code-view" class="codeview code"></div>
+      </section>
     </aside>
-    <div class="splitter" id="split-left"></div>
-    <section id="center">
-      <div id="viewer-toolbar">
-        <button data-view="iso" title="Isometrisch">Iso</button>
-        <button data-view="front" title="Vorne">Vorne</button>
-        <button data-view="top" title="Oben">Oben</button>
-        <button data-view="right" title="Rechts">Rechts</button>
-        <button data-view="fit" title="Alles einpassen">Einpassen</button>
-        <span class="sep"></span>
-        <label class="chk"><input type="checkbox" id="chk-edges" checked> Kanten</label>
-        <label class="chk"><input type="checkbox" id="chk-wire"> Drahtgitter</label>
-        <label class="chk"><input type="checkbox" id="chk-ghost"> Transparent</label>
+    <div class="splitter" id="split-side" hidden></div>
+
+    <main id="center">
+      <section id="viewer" aria-label="3D-Ansicht">
+        <div id="viewer-msg"></div>
+
+        <div id="parts" class="float parts">
+          <div class="hd">
+            <button id="btn-parts-toggle" class="hd-title" aria-expanded="true" title="Liste ein- oder ausklappen"><b>Bauteile</b><span id="parts-count" class="c3"></span><span class="chev"><i data-icon="up" data-size="15" data-stroke="2"></i></span></button>
+            <span class="grow"></span>
+            <button id="btn-parts-search" class="ibtn s" aria-label="Bauteile suchen" title="Bauteile suchen"><i data-icon="search" data-size="15" data-stroke="1.9"></i></button>
+          </div>
+          <div id="parts-body">
+            <input id="parts-filter" class="filter" type="search" placeholder="Bauteil suchen" aria-label="Bauteil suchen" hidden>
+            <div id="tab-model" class="list"></div>
+          </div>
+        </div>
+
+        <div id="dock" class="float dock">
+          <button id="btn-display" aria-haspopup="menu" aria-expanded="false" title="Darstellung"><i data-icon="layers"></i><span class="lbl">Darstellung</span><span class="c2"><i data-icon="down" data-size="13" data-stroke="2"></i></span></button>
+          <span class="vsep"></span>
+          <button disabled title="Messen kommt in einem späteren Schritt"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
+          <button disabled title="Die Schnittansicht kommt in einem späteren Schritt"><i data-icon="section"></i><span class="lbl">Schnitt</span></button>
+          <span class="vsep"></span>
+          <button class="hot" disabled title="Screenshot mit Markierung kommt im nächsten Schritt"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
+        </div>
+
+        <div id="cube" class="cube">
+          <svg width="100" height="96" viewBox="0 0 100 96" aria-label="Ansichtswürfel">
+            <g class="face" data-view="top" role="button" tabindex="0" aria-label="Ansicht von oben"><polygon points="50,6 90,24 50,42 10,24"/><text x="50" y="27">OBEN</text></g>
+            <g class="face" data-view="front" role="button" tabindex="0" aria-label="Ansicht von vorne"><polygon points="10,24 50,42 50,88 10,70"/><text x="30" y="59">VORNE</text></g>
+            <g class="face" data-view="right" role="button" tabindex="0" aria-label="Ansicht von rechts"><polygon points="50,42 90,24 90,70 50,88"/><text x="70" y="59">RECHTS</text></g>
+          </svg>
+          <div class="vbtns">
+            <button data-view="fit" aria-label="Alles einpassen" title="Alles einpassen"><i data-icon="fit"></i></button>
+            <button data-view="iso" aria-label="Standardansicht" title="Standardansicht (isometrisch)"><i data-icon="home"></i></button>
+          </div>
+        </div>
+
+        <div id="selcard" class="float selcard" hidden>
+          <div class="sc-hd"><span id="sel-swatch" class="sw"></span><b id="sel-name"></b><span class="grow"></span>
+            <button id="btn-sel-close" class="ibtn s" aria-label="Auswahl aufheben"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div id="info" class="sc-info c2"></div>
+          <div id="code" class="peek code"></div>
+          <div class="sc-actions">
+            <button id="btn-sel-code" class="btn sm"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code öffnen</button>
+            <button id="btn-sel-agent" class="btn sm acc" title="Bauteil, Datei und Zeilen in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+          </div>
+        </div>
+
+        <div id="errcard" class="float errcard" hidden>
+          <div class="ec-hd"><span class="err-ico"><i data-icon="alert" data-size="18"></i></span>
+            <div class="ec-title"><b>Build fehlgeschlagen</b><span id="err-where" class="c2"></span></div><span class="grow"></span>
+            <button id="btn-err-fold" class="ibtn s" aria-label="Meldung einklappen" aria-expanded="true"><i data-icon="up" data-size="15" data-stroke="2"></i></button></div>
+          <div id="err-body">
+            <div id="err-msg" class="errmsg"></div>
+            <div id="err-code" class="peek code" hidden></div>
+            <pre id="err-trace" class="trace" hidden></pre>
+            <div class="ec-actions"><span class="grow"></span>
+              <button id="btn-err-details" class="btn sm" aria-expanded="false">Details</button>
+              <button id="btn-err-code" class="btn sm"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code öffnen</button>
+              <button id="btn-err-agent" class="btn sm acc" title="Die Fehlermeldung in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button></div>
+          </div>
+        </div>
+        <div id="lastgood" class="float lastgood" hidden></div>
+
+        <div id="preview-banner" class="float banner" hidden>
+          <span class="bn-ico"><i data-icon="history" data-size="18"></i></span>
+          <div class="bn-text">
+            <div class="bn-line"><b id="bn-title"></b><span class="tag">nur ansehen</span></div>
+            <span id="bn-sub" class="c2"></span>
+            <span class="c3">Dein Arbeitsstand bleibt unverändert. Wiederherstellen legt einen neuen Stand an, nichts geht verloren.</span>
+          </div>
+          <span class="grow"></span>
+          <button id="btn-live" class="btn">Zurück zu Jetzt</button>
+          <button id="btn-restore" class="btn vio" title="Diesen Stand als neuen Stand übernehmen">Wiederherstellen</button>
+        </div>
+      </section>
+
+      <div id="versions" class="tl">
+        <span class="lbl"><i data-icon="history" data-size="15"></i>Verlauf</span>
+        <div id="vtrack" class="track"><div class="line"></div><div id="vdots"></div></div>
+        <span id="vproblem" class="vproblem" hidden></span>
+        <span id="vinfo" class="c3"></span>
       </div>
-      <div id="viewer"><div id="viewer-msg"></div><div id="preview-banner" hidden></div></div>
-      <div id="versions">
-        <span class="vlabel">Verlauf</span>
-        <div id="vtrack"><input type="range" id="vslider" min="0" max="0" step="1" value="0" disabled><div id="vdots"></div></div>
-        <span id="vinfo"></span>
-        <button id="btn-restore" hidden title="Diesen Stand als neuen Stand übernehmen">Stand wiederherstellen</button>
-        <button id="btn-live" hidden>Zurück zum Arbeitsstand</button>
-      </div>
-      <div id="vproblem" hidden></div>
-      <div id="info-panel">
-        <div id="info">Klick auf ein Bauteil zeigt die zugehörige Codestelle.</div>
-        <pre id="code"></pre>
-      </div>
-    </section>
+    </main>
+
     <div class="splitter" id="split-right"></div>
-    <aside id="terminals">
-      <div class="tabs" id="term-tabs"><button id="btn-term-add" title="Neues Terminal">+</button></div>
+    <aside id="terminals" class="agent" aria-label="Agent und Terminals">
+      <div id="term-tabs" class="tabs">
+        <button id="btn-term-add" class="ibtn addtab" aria-haspopup="menu" aria-expanded="false" title="Neuer Tab: Agent oder Terminal" aria-label="Neuer Tab: Agent oder Terminal"><i data-icon="plus" data-size="15" data-stroke="2"></i><i data-icon="down" data-size="12" data-stroke="2"></i></button>
+        <span class="grow"></span>
+        <button id="btn-agent-collapse" class="ibtn" title="Agent-Bereich einklappen" aria-label="Agent-Bereich einklappen"><i data-icon="panel"></i></button>
+      </div>
       <div id="term-panes"></div>
+      <div id="handoff" class="handoff"><span class="c3">Einfügen:</span>
+        <button id="btn-ins-sel" class="btn sm" disabled title="Bauteil, Datei und Zeilen der Auswahl in die Eingabe einfügen"><i data-icon="target" data-size="13" data-stroke="2"></i>Auswahl</button>
+        <button id="btn-ins-mark" class="btn sm" disabled title="Screenshot mit Markierung kommt im nächsten Schritt"><i data-icon="image" data-size="13" data-stroke="2"></i>Markierung</button>
+        <button id="btn-ins-err" class="btn sm" disabled title="Meldung des letzten Builds in die Eingabe einfügen"><i data-icon="alert" data-size="13" data-stroke="2"></i>Build-Fehler</button>
+      </div>
+      <div id="agent-strip" class="strip" hidden>
+        <button id="btn-agent-expand" class="ibtn" title="Agent-Bereich ausklappen" aria-label="Agent-Bereich ausklappen"><i data-icon="panel"></i></button>
+        <div id="strip-tabs" class="strip-tabs"></div>
+      </div>
     </aside>
-  </main>
-  <div id="toast" hidden></div>
-  <footer id="statusbar"><span id="status" data-state="idle">Bereit</span><span class="grow"></span><span id="status-detail"></span></footer>
+  </div>
+
+  <!-- Menüs: fest im Dokument, damit Kurzbefehle und Tests die Einträge auch geschlossen finden -->
+  <div id="menu-doc" class="menu" role="menu" hidden>
+    <button id="btn-new" class="mi" role="menuitem"><i data-icon="plus" data-size="15"></i><span>Neues Modell</span><span class="k">Strg N</span></button>
+    <button id="btn-open" class="mi" role="menuitem"><i data-icon="folder" data-size="15"></i><span>Öffnen …</span><span class="k">Strg O</span></button>
+    <div id="recent-wrap"><div class="msep"></div><div class="mh">ZULETZT GEÖFFNET</div><div id="recent-list"></div></div>
+    <div class="msep"></div>
+    <button id="btn-save-menu" class="mi" role="menuitem"><span class="noico"></span><span>Speichern</span><span class="k">Strg S</span></button>
+    <button id="btn-saveas" class="mi" role="menuitem"><span class="noico"></span><span>Speichern unter …</span><span class="k">Strg Umschalt S</span></button>
+    <div class="msep"></div>
+    <button id="btn-reveal-menu" class="mi" role="menuitem"><i data-icon="openext" data-size="15"></i><span>Im Explorer zeigen</span></button>
+    <button id="btn-start" class="mi" role="menuitem"><i data-icon="home" data-size="15"></i><span>Startseite</span></button>
+  </div>
+
+  <div id="menu-build" class="menu" role="menu" hidden>
+    <div class="mhead"><b id="bm-title"></b><span id="bm-sub" class="c3"></span></div>
+    <div id="bm-warn" class="mnote warn" hidden></div>
+    <div class="msep"></div>
+    <label class="mi keep switchrow"><i data-icon="refresh" data-size="15"></i><span>Automatisch bauen</span><input id="chk-auto" type="checkbox" class="switch" checked></label>
+    <div class="mnote indent">Bei großen Modellen ausschalten. Dann baut der Knopf oder der Agent.</div>
+    <button id="btn-build" class="mi" role="menuitem"><i data-icon="play" data-size="15"></i><span>Jetzt bauen</span><span class="k">Strg B</span></button>
+  </div>
+
+  <div id="menu-display" class="menu" role="menu" hidden>
+    <button class="mi keep" role="menuitemcheckbox" data-display="edges" aria-checked="true"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Kanten</span></button>
+    <button class="mi keep" role="menuitemcheckbox" data-display="wire" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Drahtgitter</span></button>
+    <button class="mi keep" role="menuitemcheckbox" data-display="ghost" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Transparent</span></button>
+  </div>
+
+  <div id="menu-export" class="menu wide" role="menu" hidden>
+    <div class="mh">UMFANG</div>
+    <div class="seg"><button id="exp-all" class="on" aria-pressed="true">Alle Bauteile</button><button id="exp-sel" aria-pressed="false" disabled>Nur Auswahl</button></div>
+    <div class="mh">3D-DRUCK</div>
+    <div class="chips"><button class="chip" data-fmt="stl">STL</button><button class="chip" data-fmt="3mf">3MF</button><button class="chip" data-fmt="amf">AMF</button></div>
+    <div class="mh">CAD-AUSTAUSCH</div>
+    <div class="chips"><button class="chip" data-fmt="step">STEP</button><button class="chip" data-fmt="iges">IGES</button><button class="chip" data-fmt="brep">BREP</button></div>
+    <div class="mh">GRAFIK UND WEB</div>
+    <div class="chips"><button class="chip" data-fmt="glb">GLB</button><button class="chip" data-fmt="gltf">GLTF</button><button class="chip" data-fmt="obj">OBJ</button><button class="chip" data-fmt="vrml">VRML</button></div>
+    <div class="mh">2D</div>
+    <div class="chips"><button class="chip" data-fmt="dxf" title="Schnitt in Bauteilmitte">DXF · Schnitt</button><button class="chip" data-fmt="svg" title="Projektion">SVG · Ansicht</button></div>
+    <div class="msep"></div>
+    <div class="mnote">Jedes Bauteil wird eine eigene Datei. Referenzen sind bei „Alle Bauteile“ nicht dabei. Ziel: <code>exports/</code></div>
+  </div>
+
+  <div id="menu-agents" class="menu" role="menu" hidden>
+    <div class="mh">AGENT STARTEN</div>
+    <div id="agent-list"></div>
+    <div class="msep"></div>
+    <button id="btn-term-plain" class="mi" role="menuitem"><i data-icon="term" data-size="15" data-stroke="2"></i><span>Leeres Terminal</span></button>
+  </div>
+
+  <div id="menu-problems" class="menu wide" role="dialog" aria-label="Hinweise zum Projekt" hidden>
+    <div id="problem-list"></div>
+    <div class="mnote sepline">Die App meldet nur, sie repariert nichts selbst.</div>
+  </div>
+
+  <div id="menu-ctx" class="menu" role="menu" hidden></div>
+
+  <div id="start" class="start" hidden>
+    <header class="top"><span class="logo"><i data-icon="cube" data-size="22"></i></span><b class="brand">CAD-IDE</b><span class="grow"></span>
+      <button id="btn-start-close" class="btn">Zurück zum Modell</button></header>
+    <div class="start-body">
+      <div class="start-grid">
+        <div>
+          <h1>Modelle</h1>
+          <p class="c2 lead">Ein Modell ist eine ZIP-Datei mit Code, Ergebnis und Verlauf. Du kannst sie frei verschieben und weitergeben.</p>
+          <div class="bigcards">
+            <button id="start-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="22" data-stroke="2.2"></i></span><b>Neues Modell</b><span class="c2">Vorlage mit Beispielteil, dazu ein Terminal im Modellordner</span><span class="c3 small">Strg N</span></button>
+            <button id="start-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="22"></i></span><b>Öffnen …</b><span class="c2">ZIP-Datei von diesem oder einem anderen Rechner</span><span class="c3 small">Strg O</span></button>
+          </div>
+          <div class="cap">ZULETZT GEÖFFNET</div>
+          <div id="start-recent" class="recent-grid"></div>
+        </div>
+        <div class="start-side">
+          <section class="panel-card">
+            <div class="ph"><b>Agenten auf diesem Rechner</b><span class="c3 small">Du bringst deinen eigenen Agenten mit und installierst ihn selbst.</span></div>
+            <div id="start-agents"></div>
+          </section>
+          <section id="start-note" class="panel-card note">
+            <span class="note-ico"><i data-icon="info" data-size="18"></i></span>
+            <div class="note-text"><b>Gut zu wissen</b>
+              <span class="c2">Der Agent arbeitet mit deinen Benutzerrechten. Er kann Dateien auf diesem Rechner lesen und ändern. Freigaben und Schutz regelst du im Agenten selbst.</span>
+              <button id="btn-note-ok" class="btn sm">Verstanden</button></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" hidden></div>
 </div>
 <script src="main.js"></script>
 </body>

@@ -36,10 +36,11 @@ export class Viewer {
   onPick: (r: PickResult | null) => void = () => {};
 
   constructor(private container: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    // Durchsichtiger Hintergrund: den Verlauf dahinter zeichnet CSS, so passt er zur übrigen Oberfläche
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setClearColor(0x000000, 0);
     container.appendChild(this.renderer.domElement);
-    this.scene.background = new THREE.Color(0x1e2227);
     this.camera.up.set(0, 0, 1);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -69,7 +70,9 @@ export class Viewer {
         if ((c as THREE.LineSegments).isLineSegments) lines.push(c as THREE.LineSegments);
       });
       for (const m of meshes) {
-        const mat = m.material as THREE.MeshStandardMaterial;
+        // Eigenes Material je Netz: die Auswahl färbt ein Bauteil ein, gleichfarbige Teile dürfen nicht mitleuchten
+        const mat = (m.material as THREE.MeshStandardMaterial).clone();
+        m.material = mat;
         // Flächen minimal nach hinten, damit Kantenlinien nicht mit ihnen um die Tiefe kämpfen
         mat.polygonOffset = true; mat.polygonOffsetFactor = 1; mat.polygonOffsetUnits = 1;
         mat.userData.baseOpacity = mat.opacity;
@@ -87,6 +90,7 @@ export class Viewer {
     this.applyDisplay();
     this.highlight.clear();
     if (this.selectedId && !this.parts.has(this.selectedId)) this.selectedId = null;
+    this.applySelection();
     if (!this.hasFitted && this.parts.size) { this.setView('iso'); this.hasFitted = true; }
     this.requestRender();
   }
@@ -128,6 +132,17 @@ export class Viewer {
     this.applyVisibility();
     this.requestRender();
   }
+
+  /** Nur dieses Bauteil zeigen. */
+  isolate(id: string): void {
+    for (const k of this.parts.keys()) if (k !== id) this.hidden.add(k); else this.hidden.delete(k);
+    this.applyVisibility();
+    this.requestRender();
+  }
+
+  showAll(): void { this.hidden.clear(); this.applyVisibility(); this.requestRender(); }
+
+  get hiddenCount(): number { return this.hidden.size; }
 
   private applyVisibility(): void {
     for (const [id, p] of this.parts) p.group.visible = !this.hidden.has(id);
@@ -203,10 +218,11 @@ export class Viewer {
     for (const p of this.parts.values()) if (p.group.visible) targets.push(...p.meshes);
     const hit = this.raycaster.intersectObjects(targets, false)[0];
     this.highlight.clear();
-    if (!hit) { this.selectedId = null; this.requestRender(); return null; }
+    if (!hit) { this.selectedId = null; this.applySelection(); this.requestRender(); return null; }
     const part = [...this.parts.values()].find((p) => p.meshes.includes(hit.object as THREE.Mesh))!;
     const face = hit.faceIndex != null ? Viewer.faceOfTriangle(part.meta.faces, hit.faceIndex) : null;
     this.selectedId = part.meta.partId;
+    this.applySelection();
     if (face && face.triCount) this.highlightFace(part, face);
     this.requestRender();
     return {
@@ -223,7 +239,7 @@ export class Viewer {
     g.setAttribute('position', src.geometry.getAttribute('position'));
     g.setIndex(Array.from(src.geometry.index!.array.slice(face.triStart * 3, (face.triStart + face.triCount) * 3)));
     const o = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
-      color: 0xffa000, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide }));
+      color: 0xf29a38, transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide }));
     o.renderOrder = 2;
     this.highlight.add(o);
   }
@@ -239,7 +255,14 @@ export class Viewer {
     });
   }
 
-  select(id: string | null): void { this.selectedId = id; this.highlight.clear(); this.requestRender(); }
+  select(id: string | null): void { this.selectedId = id; this.highlight.clear(); this.applySelection(); this.requestRender(); }
+
+  /** Das ausgewählte Bauteil leuchtet leicht orange (Farbe der Auswahl in der ganzen Oberfläche). */
+  private applySelection(): void {
+    for (const [id, p] of this.parts) {
+      for (const m of p.meshes) (m.material as THREE.MeshStandardMaterial).emissive?.setHex(id === this.selectedId ? 0x5a2e00 : 0x000000);
+    }
+  }
   get selection(): string | null { return this.selectedId; }
 
   // ---- Rendern --------------------------------------------------------------------------------------------------
@@ -257,6 +280,28 @@ export class Viewer {
     if (this.renderQueued) return;
     this.renderQueued = true;
     requestAnimationFrame(() => { this.renderQueued = false; this.renderer.render(this.scene, this.camera); });
+  }
+
+  /**
+   * Vorschaubild für die Startseite: aktuelle Ansicht, mittig auf das Seitenverhältnis zugeschnitten, als JPEG.
+   * Der Hintergrund ist sonst durchsichtig, deshalb bekommt das Bild den Grundton der Oberfläche.
+   */
+  thumbnail(w = 360, h = 240): string | null {
+    const src = this.renderer.domElement;
+    if (!this.parts.size || !src.width || !src.height) return null;
+    this.renderer.render(this.scene, this.camera);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const g = c.getContext('2d');
+    if (!g) return null;
+    const grad = g.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, w * 0.7);
+    grad.addColorStop(0, '#272c34'); grad.addColorStop(1, '#1b1e23');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    // Ganz hineinpassen lassen (das Modell füllt den Viewer fast aus, Beschneiden kappt sonst Kanten)
+    const scale = Math.min(w / src.width, h / src.height);
+    const dw = src.width * scale, dh = src.height * scale;
+    g.drawImage(src, 0, 0, src.width, src.height, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    return c.toDataURL('image/jpeg', 0.82);
   }
 
   // ---- Prüfhilfen (nur für Tests) -------------------------------------------------------------------------------

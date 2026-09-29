@@ -12,6 +12,13 @@ try {
   app = await startApp({ name: 'smoke' });
   const { ev, waitFor, domClick, ud, page } = app;
   const status = () => ev(() => window.__t.status());
+  // SMOKE_SHOTS=1 (zusammen mit SMOKE_VISIBLE=offscreen): Bilder der wichtigsten Zustände nach test/shots/ zum Ansehen
+  const shot = async (name) => {
+    if (!process.env.SMOKE_SHOTS) return;
+    fs.mkdirSync(path.join(APP, 'test', 'shots'), { recursive: true });
+    await sleep(900);
+    await app.screenshot(path.join(APP, 'test', 'shots', `${name}.png`)).catch((e) => console.log('Screenshot:', e.message));
+  };
   check('App gestartet, Fenster verbunden', true);
 
   // 1) Start: Projekt angelegt, automatischer erster Build, Bauteile im Viewer
@@ -21,8 +28,10 @@ try {
   check('Projekt liegt unter <App-Daten>/workspaces/<uuid>', proj.dir.startsWith(path.join(ud, 'workspaces')) && /[0-9a-f-]{36}$/.test(proj.dir), proj.dir.slice(-45));
   check('Vorlagen-Dateien vorhanden (AGENTS.md, CLAUDE.md, NOTES.md, model.py …)',
     ['AGENTS.md', 'CLAUDE.md', 'NOTES.md', 'model.py', '.gitignore', '.cadide/project.json', '.git/HEAD'].every((f) => fs.existsSync(path.join(proj.dir, f))));
-  check('Erster Build automatisch, 2 Bauteile im Baum', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
+  check('Erster Build automatisch, 2 Bauteile in der Bauteilkarte', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
   check('Nach dem Build kein Fehlerhinweis', (await status()).viewerMsg === '', (await status()).text);
+  const okStatus = await status();
+  check('Build-Anzeige oben: „Gebaut · 2 Bauteile"', okStatus.text === 'Gebaut' && okStatus.detail.startsWith('2 Bauteile'), `${okStatus.text} ${okStatus.detail}`);
 
   // 2) Klick im Viewer -> Bauteil, Fläche, Code
   const lidFace = await ev(() => {
@@ -34,8 +43,24 @@ try {
   await waitFor('Info nach Klick', () => window.__t.info().includes('Lid'));
   const info = await ev(() => window.__t.info());
   const hl = await ev(() => window.__t.codeHighlight());
-  check('Klick auf Deckel-Oberseite: Bauteil, Fläche, Codezeile', info.includes(`Fläche f${lidFace.face}`) && info.includes('model.py:'), info.replace(/\s+/g, ' ').slice(0, 60));
-  check('Codezeile mit add_part("Lid") ist markiert', hl.some((l) => l.includes('add_part("Lid"')), String(hl[0]).trim().slice(0, 40));
+  check('Klick auf Deckel-Oberseite: Auswahlkarte mit Bauteil, Fläche, Codezeile', info.startsWith('Lid') && info.includes('Fläche · eben') && /model\.py\s*Zeile \d+/.test(info), info.replace(/\s+/g, ' ').slice(0, 60));
+  check('Codeausschnitt: add_part("Lid") ist markiert', hl.some((l) => l.includes('add_part("Lid"')), String(hl[0]).trim().slice(0, 40));
+  const selText = await ev(() => window.__t.selectionText());
+  check('Text für den Agenten nennt Bauteil, Datei, Zeile und Fläche', /^\[Auswahl: Bauteil "Lid", model\.py Zeile \d+.*angeklickte Fläche: eben/.test(selText), selText.slice(0, 70));
+
+  await shot('1-arbeitsbereich');
+
+  // Code-Panel und Dateien-Panel
+  await domClick('btn-sel-code');
+  await waitFor('Code-Panel', () => window.__t.codeText().includes('add_part("Lid"'), 10000).catch(() => {});
+  check('„Code öffnen" zeigt model.py im Code-Panel', (await ev(() => window.__t.codeText())).includes('add_part("Lid"'));
+  await shot('2-code');
+  await ev(() => window.__t.showPanel('files'));
+  await waitFor('Dateiliste', () => window.__t.fileRows().includes('model.py'), 10000).catch(() => {});
+  const rows = await ev(() => window.__t.fileRows());
+  check('Dateien-Panel: model.py sichtbar, AGENTS.md eingeklappt unter „Vom Programm verwaltet"', rows.includes('model.py') && rows.includes('Vom Programm verwaltet') && !rows.includes('AGENTS.md'), rows.slice(0, 6).join(','));
+  await shot('3-dateien');
+  await ev(() => window.__t.showPanel(null));
 
   // 3) Terminal: echte Shell im Projektordner, cadide im PATH
   const tid = await ev(() => window.__t.terminals.activeId);
@@ -46,6 +71,13 @@ try {
   await ev((id) => window.cadide.term.write(id, 'Get-Location\r'), tid);
   await waitFor('Get-Location', (id) => window.__t.termText(id).includes('workspaces'), 20000, tid).catch(() => {});
   check('Terminal startet im Projektordner', (await ev((id) => window.__t.termText(id), tid)).includes('workspaces'));
+  // Übergabe an den Agenten: Text landet in der Eingabezeile, abgeschickt wird nicht (E11)
+  await ev((t) => window.__t.insert(t), selText);
+  await waitFor('eingefügter Text', (id) => window.__t.termText(id).includes('[Auswahl: Bauteil "Lid"'), 10000, tid).catch(() => {});
+  const afterInsert = await ev((id) => window.__t.termText(id), tid);
+  check('„An Agent geben" fügt den Text in die Eingabezeile ein, ohne abzuschicken', afterInsert.includes('[Auswahl: Bauteil "Lid"') && !/Auswahl:.*\n.*(nicht erkannt|not recognized)/.test(afterInsert));
+  check('Bestätigung „In die Eingabe von Terminal eingefügt"', (await ev(() => window.__t.toast())).text.includes('In die Eingabe von Terminal eingefügt'));
+  await ev((id) => window.cadide.term.write(id, '\x03'), tid); // Zeile verwerfen
 
   // 4) Auto-Build: Änderung an model.py -> neuer Build -> drittes Bauteil
   const modelPy = path.join(proj.dir, 'model.py');
@@ -59,8 +91,11 @@ try {
   fs.writeFileSync(modelPy, original + third + 'def kaputt(:\n');
   await waitFor('Fehlerstatus', () => window.__t.status().state === 'error');
   const err = await status();
-  check('Syntaxfehler: Status Fehler mit Datei und Zeile', /model\.py:\d+/.test(err.detail), err.detail.slice(0, 70));
-  check('Fehlermeldung im Viewer, letzter guter Stand (3 Bauteile) bleibt', err.viewerMsg.includes('Build-Fehler') && await ev(() => window.__t.partCount()) === 3);
+  check('Syntaxfehler: Anzeige oben „Build fehlgeschlagen" mit Datei und Zeile', err.text === 'Build fehlgeschlagen' && /model\.py, Zeile \d+/.test(err.detail), err.detail.slice(0, 70));
+  check('Fehlerkarte im Viewer, letzter guter Stand (3 Bauteile) bleibt', err.viewerMsg.includes('Build fehlgeschlagen') && await ev(() => window.__t.partCount()) === 3);
+  const errText = await ev(() => window.__t.errorText());
+  check('Fehlertext für den Agenten nennt Datei und Zeile', /^\[Build-Fehler: model\.py Zeile \d+: /.test(errText), errText.slice(0, 60));
+  await shot('4-fehler');
   await sleep(300);
   check('App reagiert weiter (Terminal aktiv, kein Absturz)', await ev(() => window.__t.terminals.count) === 1);
 
@@ -78,7 +113,15 @@ try {
   await waitFor('Knopf-Build', () => window.__t.partCount() === 3 && window.__t.status().state === 'ok');
   check('Knopf „Bauen" baut trotzdem (3 Bauteile)', true);
   fs.writeFileSync(modelPy, original);
+  await waitFor('veraltet gemeldet', () => window.__t.status().text === 'Code geändert', 10000).catch(() => {});
+  check('Auto-Build aus: Anzeige meldet „Code geändert"', (await status()).text === 'Code geändert', (await status()).text);
   await domClick('chk-auto');
+  await waitFor('Auto an baut nach', () => window.__t.partCount() === 2 && window.__t.status().state === 'ok', 60000).catch(() => {});
+  check('Auto-Build wieder an: veralteter Stand wird gleich gebaut', await ev(() => window.__t.partCount()) === 2);
+
+  // Export über das Menü (cadide export): jedes Bauteil eine Datei in exports/
+  const exp = await ev(() => window.cadide.build.export('stl', null));
+  check('Export STL: alle Bauteile nach exports/', exp.ok && ['exports/Body.stl', 'exports/Lid.stl'].every((f) => exp.files.includes(f) && fs.existsSync(path.join(proj.dir, f))), exp.error ?? exp.files.join(','));
 
   // 8) Neues Projekt: anderer Ordner, Terminals des alten sind zu, frischer erster Build
   await domClick('btn-new');
@@ -90,6 +133,14 @@ try {
   check('Beide Arbeitsordner existieren getrennt', fs.existsSync(proj.dir) && fs.existsSync(p2.dir) && proj.dir !== p2.dir);
 
   if (app.visible) { await sleep(500); await page.screenshot(path.join(APP, 'test', 'smoke.png')); }
+  if (process.env.SMOKE_SHOTS) {
+    await ev(() => window.__t.showStart(true));
+    await shot('5-startseite');
+    await ev(() => window.__t.showStart(false));
+    await ev(() => window.__t.setAgentCollapsed(true));
+    await shot('6-agent-eingeklappt');
+    await ev(() => window.__t.setAgentCollapsed(false));
+  }
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));
 } catch (e) {

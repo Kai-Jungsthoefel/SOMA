@@ -59,6 +59,9 @@ try {
   await type('git add -A; git commit -q -m "Laenge auf 80"');
   await waitFor('zweiter Stand im Verlauf', () => window.__t.versions().count === 2, 20000);
   check('Commit des Agenten erscheint in der Verlaufsleiste', (await versions()).subjects.includes('Laenge auf 80'));
+  const kinds = (await versions()).byApp;
+  check('Leiste unterscheidet App-Stand (Start) und Agenten-Stand', kinds[0] === true && kinds[1] === false, JSON.stringify(kinds));
+  check('App-Commits tragen den Trailer „Erstellt-von: CAD-IDE"', (await g('log', '--format=%(trailers:key=Erstellt-von,valueonly)', 'HEAD~1')).includes('CAD-IDE'));
   check('Commit enthält die STEP-Datei des gebauten Standes', (await g('show', '--stat', '--format=', 'HEAD')).includes('output/model.step'));
 
   // ---- 3) Speichern: Snapshot + ZIP ----
@@ -75,7 +78,9 @@ try {
   await waitFor('Meldung und Name', () => window.__t.toast().text.startsWith('Gespeichert') && window.__t.project().name === 'Testmodell', 20000);
   check('Auto-Snapshot beim Speichern hat die Notiz gesichert', (await g('log', '-1', '--format=%s')) === 'Automatischer Snapshot beim Speichern');
   check('Modellname folgt dem Dateinamen der ZIP', (await ev(() => window.__t.project())).name === 'Testmodell');
-  check('Nach dem Speichern: sauber, gespeichert-Anzeige', (await saveState()).dirtyFiles === 0 && (await ev(() => document.getElementById('save-badge').textContent)).includes('gespeichert'));
+  check('Nach dem Speichern: sauber, Anzeige „Gespeichert · Uhrzeit"', (await saveState()).dirtyFiles === 0 && /^Gespeichert · \d\d:\d\d$/.test(await ev(() => document.getElementById('save-badge').textContent)), await ev(() => document.getElementById('save-badge').textContent));
+  await waitFor('grüner Punkt', () => document.querySelectorAll('#vdots .vdot.saved').length === 1, 10000).catch(() => {});
+  check('Verlaufsleiste markiert den gespeicherten Stand', await ev(() => document.querySelectorAll('#vdots .vdot.saved').length) === 1);
   check('Meldung „Gespeichert" erscheint', (await ev(() => window.__t.toast())).text.startsWith('Gespeichert'));
   const commitsBefore = (await g('rev-list', '--count', 'HEAD'));
   await app.domClick('btn-save');
@@ -88,7 +93,9 @@ try {
   await waitFor('Vorschau aktiv', () => !!window.__t.versions().previewing, 60000);
   await waitFor('Vorschau geladen', () => window.__t.partCount() === 2 && !window.__t.banner().hidden);
   check('Vorschau des ersten Standes: Body ist 60 mm lang (Arbeitsstand: 80)', (await ev(() => window.__t.partSize('Body')))[0] === 60);
-  check('Banner zeigt „Vorschau … schreibgeschützt"', (await ev(() => window.__t.banner())).text.includes('schreibgeschützt'));
+  const bn = (await ev(() => window.__t.banner())).text.replace(/\s+/g, ' ').trim();
+  check('Banner zeigt „Vorschau · Stand 1 von …, nur ansehen"', bn.includes('Vorschau · Stand 1 von') && bn.includes('nur ansehen') && bn.includes('Arbeitsstand bleibt unverändert'), bn.slice(0, 60));
+  check('Viewer hat den Vorschau-Rahmen', await ev(() => document.getElementById('viewer').classList.contains('preview')));
   await sleep(800); // capturePage liefert bei unsichtbaren Fenstern sonst ein etwas älteres Bild
   const shot = await app.screenshot(path.join(import.meta.dirname, 'versions.png')).catch((e) => ({ error: String(e) }));
   check('Screenshot der Vorschau (Verlaufsleiste sichtbar)', !!shot.width, shot.width ? `${shot.width}x${shot.height}` : shot.error);

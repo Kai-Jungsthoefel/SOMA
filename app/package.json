@@ -10,9 +10,12 @@
     "start": "npm run build && node scripts/start.mjs",
     "test:smoke": "npm run build && node test/smoke.mjs",
     "test:versions": "npm run build && node test/versions.mjs",
-    "test": "npm run build && node test/smoke.mjs && node test/versions.mjs"
+    "test:unit": "node test/unit.mjs",
+    "test": "npm run build && node test/unit.mjs && node test/smoke.mjs && node test/versions.mjs"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "dugite": "^3.2.3",
