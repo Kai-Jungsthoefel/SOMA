@@ -27,9 +27,16 @@ export class BuildManager extends EventEmitter {
 
   constructor(private readonly dir: string) { super(); }
 
-  /** Dateiaenderung im Projekt gemeldet (nur relevant bei eingeschaltetem Auto-Build). */
+  /** Dateiaenderung im Projekt gemeldet. Ohne Auto-Build merkt sich der Stand nur, dass er veraltet ist. */
   sourceChanged(): void {
     if (this.autoBuild) this.schedule('Dateiänderung');
+    else if (!this.status.stale) this.setStatus({ ...this.status, stale: true });
+  }
+
+  /** Auto-Build umschalten. Wird er eingeschaltet, während der Stand veraltet ist, baut er gleich nach. */
+  setAuto(on: boolean): void {
+    this.autoBuild = on;
+    if (on && this.status.stale) this.schedule('Auto-Build eingeschaltet', 0);
   }
 
   schedule(reason: string, delay = DEBOUNCE_MS): void {

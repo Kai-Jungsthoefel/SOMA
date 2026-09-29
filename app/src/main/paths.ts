@@ -15,6 +15,8 @@ export const appStateFile = () => path.join(userDataDir(), 'state.json');
 export const backupsDir = () => path.join(userDataDir(), 'workspace-backups');
 /** Vorschauen alter Stände (aus dem Verlauf erzeugt, jederzeit neu erzeugbar). */
 export const previewsDir = () => path.join(userDataDir(), 'previews');
+/** Vorschaubilder für die Startseite (vom Viewer nach dem Laden des Modells, jederzeit neu erzeugbar). */
+export const thumbnailsDir = () => path.join(userDataDir(), 'thumbnails');
 
 /** Vorlage fuer neue Projekte (liegt neben dem Programm, spaeter im Installationspaket). */
 export const templateDir = () => path.join(app.getAppPath(), 'resources', 'template');

@@ -1,7 +1,7 @@
-import type { BrowserWindow, WebContents } from 'electron';
+import { shell, type BrowserWindow, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { GitLog, ModelMap, OpenResult, PreviewResult, ProjectInfo, RestoreResult, SaveResult, SaveState } from '../shared/types';
+import type { ExportResult, GitLog, ModelMap, OpenResult, PreviewResult, ProjectInfo, RestoreResult, SaveResult, SaveState } from '../shared/types';
 import { BuildManager, buildIsStale, newestSourceMtime, runCadide } from './build';
 import { choose, choosePath } from './dialogs';
 import { GitRepo } from './git';
@@ -110,7 +110,28 @@ export class ProjectController {
     if (!app.zipPath) unsaved = true;
     else if (hasRepo) unsaved = st.dirty || st.head !== (app.savedHead ?? null);
     else unsaved = newestSourceMtime(s.dir) > (app.savedAt ?? 0); // ohne Git bleibt nur der Zeitvergleich
-    return { zipPath: app.zipPath ?? null, savedHead: app.savedHead ?? null, head: st.head, dirtyFiles: st.changed, unsaved, hasRepo };
+    return { zipPath: app.zipPath ?? null, savedHead: app.savedHead ?? null, head: st.head, dirtyFiles: st.changed, unsaved, hasRepo, savedAt: app.zipPath ? app.savedAt ?? null : null };
+  }
+
+  /** ZIP im Dateimanager zeigen. Noch nicht gespeichert (oder ZIP verschwunden): den Arbeitsordner öffnen. */
+  async reveal(): Promise<void> {
+    const s = this.need();
+    const zip = getAppState(s.id).zipPath;
+    if (zip && fs.existsSync(zip)) shell.showItemInFolder(zip);
+    else await shell.openPath(s.dir);
+  }
+
+  /** Einzelexport über `cadide export` (E34). Der Export baut das Modell selbst, der Viewer bleibt davon unberührt. */
+  async exportModel(format: string, part: string | null): Promise<ExportResult> {
+    const s = this.need();
+    if (!/^[a-z0-9]{2,5}$/.test(format)) return { ok: false, files: [], error: `Unbekanntes Format: ${format}` };
+    // `--` vor dem Namen: Bauteilnamen dürfen mit einem Minus beginnen, ohne als Option zu gelten
+    const args = ['export', '--format', format, '--project', s.dir, ...(part ? ['--', part] : ['--all'])];
+    const r = await runCadide(args, s.dir, 5 * 60 * 1000);
+    const files = [...r.out.matchAll(/^exportiert: (.+)$/gm)].map((m) => m[1].trim());
+    if (r.ok) return { ok: true, files };
+    const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
+    return { ok: false, files, error: msg || 'Export fehlgeschlagen' };
   }
 
   /** Speichern: Snapshot im Verlauf, dann ZIP. Fragt beim ersten Mal nach dem Ort. */

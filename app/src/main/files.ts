@@ -1,10 +1,36 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FileNode } from '../shared/types';
+import type { FileNode, ImportResult } from '../shared/types';
 
 const HIDDEN = new Set(['.git', '.cadide', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
 const MAX_ENTRIES = 2000;
 const MAX_DEPTH = 5;
+const MAX_IMPORT_BYTES = 500 * 1024 * 1024;
+
+/**
+ * Kopiert gezogene Dateien nach inputs/ (E33). Der Agent bindet sie danach im Skript ein.
+ * Nichts wird überschrieben: bei gleichem Namen entsteht „name (2).ext“. Ordner werden nicht übernommen.
+ */
+export function importInputs(root: string, sources: string[]): ImportResult {
+  const res: ImportResult = { files: [], errors: [] };
+  for (const src of sources) {
+    const base = path.basename(src);
+    try {
+      const st = fs.statSync(src);
+      if (!st.isFile()) { res.errors.push(`${base}: Nur einzelne Dateien lassen sich übernehmen, keine Ordner.`); continue; }
+      if (st.size > MAX_IMPORT_BYTES) { res.errors.push(`${base}: größer als 500 MB, nicht übernommen.`); continue; }
+      const dest = resolveInside(root, 'inputs');
+      fs.mkdirSync(dest, { recursive: true });
+      const ext = path.extname(base), stem = base.slice(0, base.length - ext.length);
+      let name = base;
+      for (let i = 2; fs.existsSync(path.join(dest, name)); i++) name = `${stem} (${i})${ext}`;
+      // COPYFILE_EXCL: falls zwischen Prüfung und Kopie doch eine Datei entsteht, schlägt die Kopie fehl statt zu überschreiben
+      fs.copyFileSync(src, resolveInside(root, `inputs/${name}`), fs.constants.COPYFILE_EXCL);
+      res.files.push(`inputs/${name}`);
+    } catch (e) { res.errors.push(`${base}: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  return res;
+}
 
 /**
  * Loest einen Pfad relativ zum Projektordner auf und lehnt alles ab, was ausserhalb landet

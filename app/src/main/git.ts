@@ -3,9 +3,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveInside } from './files';
 
-export interface Commit { hash: string; short: string; author: string; date: string; subject: string }
+export interface Commit { hash: string; short: string; author: string; date: string; subject: string; byApp: boolean }
 export interface RunResult { ok: boolean; code: number; out: string; err: string }
 export interface GitStatus { dirty: boolean; changed: number; head: string | null }
+
+/**
+ * Markiert Commits der App, damit die Verlaufsleiste sie von Commits des Agenten unterscheiden kann. Der Autor taugt dafür
+ * nicht: Agent und App committen mit derselben Git-Identität. Ältere Projekte ohne Trailer erkennt die Leiste am Betreff.
+ */
+const APP_TRAILER = ['--trailer', 'Erstellt-von: CAD-IDE'];
+const APP_SUBJECT = /^(Neues Modell angelegt|Automatischer Snapshot beim Speichern|Sicherung vor Wiederherstellung|Stand wiederhergestellt: )/;
 
 /** Gilt für jeden Aufruf: UTF-8-Pfade lesbar, keine Zeilenenden-Umwandlung (ZIPs wandern zwischen Systemen). */
 const COMMON = ['-c', 'core.quotepath=false', '-c', 'core.autocrlf=false'];
@@ -68,7 +75,7 @@ export class GitRepo {
       if (!name.out.trim()) await this.mustRun(['config', '--local', 'user.name', 'CAD-IDE'], true);
       if (!email.out.trim()) await this.mustRun(['config', '--local', 'user.email', 'cadide@localhost'], true);
       await this.mustRun(['add', '-A'], true);
-      await this.mustRun(['commit', '--allow-empty', '--no-verify', '-m', message], true);
+      await this.mustRun(['commit', '--allow-empty', '--no-verify', '-m', message, ...APP_TRAILER], true);
       return (await this.mustRun(['rev-parse', 'HEAD'])).trim();
     });
   }
@@ -89,18 +96,19 @@ export class GitRepo {
     return this.serial(async () => {
       if (!(await this.status()).dirty) return null;
       await this.mustRun(['add', '-A'], true);
-      await this.mustRun(['commit', '--no-verify', '-m', message], true);
+      await this.mustRun(['commit', '--no-verify', '-m', message, ...APP_TRAILER], true);
       return (await this.mustRun(['rev-parse', 'HEAD'])).trim();
     });
   }
 
   /** Verlauf, älteste zuerst. Ein kaputtes oder leeres Repository liefert eine leere Liste. */
   async log(limit = 500): Promise<Commit[]> {
-    const r = await this.run(['log', `-n${limit}`, '--format=%H%x1f%h%x1f%an%x1f%aI%x1f%s%x1e', 'HEAD']);
+    const fmt = '--format=%H%x1f%h%x1f%an%x1f%aI%x1f%s%x1f%(trailers:key=Erstellt-von,valueonly,separator=%x2c)%x1e';
+    const r = await this.run(['log', `-n${limit}`, fmt, 'HEAD']);
     if (!r.ok) return [];
     return r.out.split('\x1e').map((e) => e.trim()).filter(Boolean).map((e) => {
-      const [hash, short, author, date, subject] = e.split('\x1f');
-      return { hash, short, author, date, subject };
+      const [hash, short, author, date, subject, by = ''] = e.split('\x1f');
+      return { hash, short, author, date, subject, byApp: by.includes('CAD-IDE') || APP_SUBJECT.test(subject) };
     }).reverse();
   }
 
@@ -137,7 +145,7 @@ export class GitRepo {
       let safety: string | null = null;
       if ((await this.status()).dirty) {
         await this.mustRun(['add', '-A'], true);
-        await this.mustRun(['commit', '--no-verify', '-m', 'Sicherung vor Wiederherstellung'], true);
+        await this.mustRun(['commit', '--no-verify', '-m', 'Sicherung vor Wiederherstellung', ...APP_TRAILER], true);
         safety = (await this.mustRun(['rev-parse', 'HEAD'])).trim();
       }
       const target = new Set((await this.mustRun(['ls-tree', '-r', '-z', '--name-only', hash])).split('\0').filter(Boolean));
@@ -149,7 +157,7 @@ export class GitRepo {
       await this.mustRun(['add', '-A'], true);
       const diff = await this.run(['diff', '--cached', '--quiet']);
       if (diff.ok) return { commit: null, safety }; // Stand war schon identisch
-      await this.mustRun(['commit', '--no-verify', '-m', `Stand wiederhergestellt: ${subject} (${short})`], true);
+      await this.mustRun(['commit', '--no-verify', '-m', `Stand wiederhergestellt: ${subject} (${short})`, ...APP_TRAILER], true);
       return { commit: (await this.mustRun(['rev-parse', 'HEAD'])).trim(), safety };
     });
   }

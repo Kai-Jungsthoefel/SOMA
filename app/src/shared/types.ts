@@ -22,7 +22,16 @@ export interface BuildResult {
 }
 
 export type BuildState = 'idle' | 'building' | 'ok' | 'error';
-export interface BuildStatus { state: BuildState; result?: BuildResult; startedAt?: number; queued?: boolean; reason?: string }
+export interface BuildStatus {
+  state: BuildState; result?: BuildResult; startedAt?: number; queued?: boolean; reason?: string;
+  /** Auto-Build ist aus und der Quelltext hat sich seit dem letzten Build geändert. */
+  stale?: boolean;
+}
+
+/** Einzelexport über `cadide export` (E34). `files` relativ zum Projekt. */
+export interface ExportResult { ok: boolean; files: string[]; error?: string }
+/** Dateien, die per Ziehen nach inputs/ kopiert wurden (E33). */
+export interface ImportResult { files: string[]; errors: string[] }
 
 export interface FileNode { name: string; path: string; dir: boolean; children?: FileNode[] }
 
@@ -43,11 +52,14 @@ export interface SaveState {
   dirtyFiles: number;
   unsaved: boolean;
   hasRepo: boolean;
+  /** Zeitpunkt des letzten Speicherns (ms seit 1970), null wenn noch nie gespeichert. */
+  savedAt: number | null;
 }
 export interface SaveResult { cancelled: boolean; zipPath?: string; snapshot?: string | null; files?: number; bytes?: number; warnings?: string[]; error?: string }
 export interface OpenResult { cancelled: boolean; opened?: boolean; error?: string }
 
-export interface CommitInfo { hash: string; short: string; author: string; date: string; subject: string }
+/** `byApp`: Stand hat die App angelegt (Start, Snapshot, Wiederherstellen), sonst der Agent oder der Nutzer. */
+export interface CommitInfo { hash: string; short: string; author: string; date: string; subject: string; byApp: boolean }
 export interface GitLog { commits: CommitInfo[]; problems: string[]; head: string | null; dirtyFiles: number }
 export interface PreviewResult { commit: CommitInfo | null; glb: ArrayBuffer; map: ModelMap; error?: string }
 export interface RestoreResult { cancelled: boolean; commit?: string | null; safety?: string | null; error?: string }
@@ -64,6 +76,11 @@ export interface CadideApi {
     save(saveAs?: boolean): Promise<SaveResult>;
     openZip(): Promise<OpenResult>;
     onSaveState(cb: (s: SaveState) => void): void;
+    /** Zeigt die ZIP im Dateimanager (noch nicht gespeichert: den Arbeitsordner). */
+    reveal(): Promise<void>;
+    /** Vorschaubild des offenen Modells für die Startseite (JPEG als Data-URL). */
+    setThumb(dataUrl: string): Promise<void>;
+    thumb(id: string): Promise<string | null>;
   };
   versions: {
     log(): Promise<GitLog>;
@@ -79,12 +96,16 @@ export interface CadideApi {
     setAuto(on: boolean): Promise<void>;
     status(): Promise<BuildStatus>;
     onStatus(cb: (s: BuildStatus) => void): void;
+    /** `part` null = alle Bauteile ohne Referenzen. */
+    export(format: string, part: string | null): Promise<ExportResult>;
   };
   fs: {
     list(): Promise<FileNode[]>;
     readText(rel: string): Promise<string>;
     readBinary(rel: string): Promise<ArrayBuffer>;
     onChanged(cb: () => void): void;
+    /** Kopiert gezogene Dateien nach inputs/. Vorhandenes wird nie überschrieben. */
+    importFiles(files: File[]): Promise<ImportResult>;
   };
   term: {
     create(opts?: { command?: string; title?: string }): Promise<number>;

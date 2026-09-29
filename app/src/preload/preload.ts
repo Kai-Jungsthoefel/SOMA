@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { CadideApi } from '../shared/types';
 
 /** Schmale, feste Schnittstelle zwischen Renderer und Hauptprozess. Der Renderer hat keinen Node-Zugriff. */
@@ -14,6 +14,9 @@ const api: CadideApi = {
     save: (saveAs) => ipcRenderer.invoke('project:save', saveAs),
     openZip: () => ipcRenderer.invoke('project:openZip'),
     onSaveState: (cb) => { ipcRenderer.on('save:state', (_e, st) => cb(st)); },
+    reveal: () => ipcRenderer.invoke('project:reveal'),
+    setThumb: (dataUrl) => ipcRenderer.invoke('project:setThumb', dataUrl),
+    thumb: (id) => ipcRenderer.invoke('project:thumb', id),
   },
   versions: {
     log: () => ipcRenderer.invoke('versions:log'),
@@ -27,12 +30,15 @@ const api: CadideApi = {
     setAuto: (on) => ipcRenderer.invoke('build:setAuto', on),
     status: () => ipcRenderer.invoke('build:status'),
     onStatus: (cb) => { ipcRenderer.on('build:status', (_e, s) => cb(s)); },
+    export: (format, part) => ipcRenderer.invoke('build:export', format, part),
   },
   fs: {
     list: () => ipcRenderer.invoke('fs:list'),
     readText: (rel) => ipcRenderer.invoke('fs:readText', rel),
     readBinary: (rel) => ipcRenderer.invoke('fs:readBinary', rel),
     onChanged: (cb) => { ipcRenderer.on('fs:changed', () => cb()); },
+    // Der Renderer kennt keine Dateipfade. Nur die Pfade gezogener Dateien gehen an den Hauptprozess, der prüft und kopiert.
+    importFiles: (files) => ipcRenderer.invoke('fs:import', files.map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
   },
   term: {
     create: (opts) => ipcRenderer.invoke('term:create', opts),

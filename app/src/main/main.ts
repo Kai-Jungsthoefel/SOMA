@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { detectAgents } from './agents';
 import { setTestAnswers } from './dialogs';
-import { listFiles, resolveInside } from './files';
+import { importInputs, listFiles, resolveInside } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
-import { createProject, getLastProject } from './workspace';
+import { thumbnailsDir } from './paths';
+import { createProject, getLastProject, isProjectId } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
 // umgeleitet oder synchronisiert sein, das ist für Arbeitsordner und GPU-Cache ungeeignet. Tests leiten alles um.
@@ -25,6 +26,17 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('project:saveState', () => ctl.saveState());
   ipcMain.handle('project:save', (_e, saveAs?: boolean) => ctl.save(!!saveAs));
   ipcMain.handle('project:openZip', () => ctl.openZip());
+  ipcMain.handle('project:reveal', () => ctl.reveal());
+  ipcMain.handle('project:setThumb', (_e, dataUrl: string) => {
+    const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));
+    if (!m || m[1].length > 2_000_000 || !ctl.session) return;
+    fs.mkdirSync(thumbnailsDir(), { recursive: true });
+    fs.writeFileSync(path.join(thumbnailsDir(), `${ctl.session.id}.jpg`), Buffer.from(m[1], 'base64'));
+  });
+  ipcMain.handle('project:thumb', (_e, id: string) => {
+    if (!isProjectId(String(id))) return null;
+    try { return `data:image/jpeg;base64,${fs.readFileSync(path.join(thumbnailsDir(), `${id}.jpg`)).toString('base64')}`; } catch { return null; }
+  });
 
   ipcMain.handle('versions:log', () => ctl.gitLog());
   ipcMain.handle('versions:preview', (_e, hash: string) => ctl.preview(hash));
@@ -32,10 +44,12 @@ function registerIpc(ctl: ProjectController): void {
 
   ipcMain.handle('build:run', () => ctl.need().builds.start('manuell'));
   ipcMain.handle('build:cancel', () => ctl.need().builds.cancel());
-  ipcMain.handle('build:setAuto', (_e, on: boolean) => { ctl.need().builds.autoBuild = !!on; });
+  ipcMain.handle('build:setAuto', (_e, on: boolean) => ctl.need().builds.setAuto(!!on));
   ipcMain.handle('build:status', () => ctl.need().builds.status);
+  ipcMain.handle('build:export', (_e, format: string, part: string | null) => ctl.exportModel(String(format), part ? String(part) : null));
 
   ipcMain.handle('fs:list', () => listFiles(dir()));
+  ipcMain.handle('fs:import', (_e, paths: string[]) => importInputs(dir(), Array.isArray(paths) ? paths.map(String) : []));
   ipcMain.handle('fs:readText', (_e, rel: string) => fs.readFileSync(resolveInside(dir(), rel), 'utf8'));
   ipcMain.handle('fs:readBinary', (_e, rel: string) => {
     const b = fs.readFileSync(resolveInside(dir(), rel));
@@ -79,7 +93,7 @@ const testWindowMode = process.env.CADIDE_HIDDEN;
 
 function createWindow(): void {
   win = new BrowserWindow({
-    width: 1600, height: 950, title: 'CAD-IDE', backgroundColor: '#1e2227', show: testWindowMode !== '1' && testWindowMode !== 'offscreen',
+    width: 1600, height: 950, title: 'CAD-IDE', backgroundColor: '#121417', show: testWindowMode !== '1' && testWindowMode !== 'offscreen',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
