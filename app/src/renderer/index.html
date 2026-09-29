@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:">
+<title>CAD-IDE</title>
+<link rel="stylesheet" href="xterm.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <span class="brand">CAD-IDE</span>
+    <button id="btn-new" title="Neues Modell anlegen">Neu</button>
+    <select id="sel-projects" title="Zuletzt geöffnete Modelle"></select>
+    <span class="sep"></span>
+    <button id="btn-build" title="Modell jetzt bauen">Bauen</button>
+    <button id="btn-cancel" title="Laufenden Build abbrechen" disabled>Abbrechen</button>
+    <label class="chk" title="Bei Änderungen an model.py automatisch bauen. Bei großen Modellen ausschalten."><input type="checkbox" id="chk-auto" checked> Auto-Build</label>
+    <span class="sep"></span>
+    <span id="agent-buttons"></span>
+    <span class="grow"></span>
+    <span id="problems" class="problems" hidden></span>
+  </header>
+  <main id="main">
+    <aside id="tree">
+      <div class="tabs"><button class="tab active" data-tab="model">Modell</button><button class="tab" data-tab="files">Dateien</button></div>
+      <div id="tab-model" class="tabpane"></div>
+      <div id="tab-files" class="tabpane" hidden></div>
+    </aside>
+    <div class="splitter" id="split-left"></div>
+    <section id="center">
+      <div id="viewer-toolbar">
+        <button data-view="iso" title="Isometrisch">Iso</button>
+        <button data-view="front" title="Vorne">Vorne</button>
+        <button data-view="top" title="Oben">Oben</button>
+        <button data-view="right" title="Rechts">Rechts</button>
+        <button data-view="fit" title="Alles einpassen">Einpassen</button>
+        <span class="sep"></span>
+        <label class="chk"><input type="checkbox" id="chk-edges" checked> Kanten</label>
+        <label class="chk"><input type="checkbox" id="chk-wire"> Drahtgitter</label>
+        <label class="chk"><input type="checkbox" id="chk-ghost"> Transparent</label>
+      </div>
+      <div id="viewer"><div id="viewer-msg"></div></div>
+      <div id="info-panel">
+        <div id="info">Klick auf ein Bauteil zeigt die zugehörige Codestelle.</div>
+        <pre id="code"></pre>
+      </div>
+    </section>
+    <div class="splitter" id="split-right"></div>
+    <aside id="terminals">
+      <div class="tabs" id="term-tabs"><button id="btn-term-add" title="Neues Terminal">+</button></div>
+      <div id="term-panes"></div>
+    </aside>
+  </main>
+  <footer id="statusbar"><span id="status" data-state="idle">Bereit</span><span class="grow"></span><span id="status-detail"></span></footer>
+</div>
+<script src="main.js"></script>
+</body>
+</html>

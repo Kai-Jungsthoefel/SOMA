@@ -1,0 +1,12 @@
+# Python environments and caches never belong into the project
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Viewer cache and app-internal files (regenerated)
+.cadide/model.glb
+.cadide/model.map.json
+.cadide/build.json
+.cadide/feedback/
