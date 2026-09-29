@@ -1,0 +1,21 @@
+# Abhängigkeiten und Build-Ausgaben
+node_modules/
+app/dist/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+
+# Erzeugte Dateien des Phase-0-Prototyps (entstehen durch run_all.ps1 bzw. make_board_step.py neu)
+prototype/phase0/example/output/
+prototype/phase0/example/.cadide/
+prototype/phase0/example/exports/
+prototype/phase0/basic_example/
+
+# Betriebssystem und Editoren
+Thumbs.db
+.DS_Store
