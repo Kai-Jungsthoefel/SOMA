@@ -37,6 +37,14 @@ Run them in this terminal. They work without the app.
 
 If `cadide build` fails, fix the error before doing anything else. Keep the model buildable at all times.
 
+## Version history (git)
+
+This folder is a git repository, and the `git` on your PATH is the one the app uses. The app shows the commits as a timeline under the 3D view, so the user can look at earlier versions and restore them.
+
+- After every meaningful iteration that **builds successfully** (`cadide build` says "Build ok"), commit it: `git add -A`, then `git commit -m "<short description>"`. Write the message in the language the user speaks. Build first, so `output/model.step` in the commit matches the code.
+- Do not rewrite history: no `git reset`, `rebase`, `commit --amend` or `push --force`, no new branches, no `checkout` or `switch` to old commits. To go back to an earlier version, tell the user to use "Restore version" in the app.
+- Do not delete or re-create `.git` and do not remove `.gitignore`.
+
 ## Environment
 
 - Use the `python` and `pip` on your PATH. They belong to this app. **Do not create virtual environments** (`.venv`, `venv`) and do not install packages globally.

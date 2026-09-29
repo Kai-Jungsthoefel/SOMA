@@ -19,3 +19,6 @@ prototype/phase0/basic_example/
 # Betriebssystem und Editoren
 Thumbs.db
 .DS_Store
+
+# Testausgaben, die sich bei jedem Lauf ändern
+app/test/versions.png

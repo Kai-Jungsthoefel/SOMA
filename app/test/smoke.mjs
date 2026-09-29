@@ -1,61 +1,26 @@
-// Smoke-Test der echten Electron-App: startet sie mit isolierten App-Daten und steuert sie über den Debug-Port (CDP).
-// Aufruf: npm run test:smoke   (baut vorher). Beendet sich mit Exit-Code 1, wenn eine Prüfung scheitert.
-import { spawn, spawnSync } from 'node:child_process';
+// Smoke-Test der echten Electron-App: Projekt, Viewer, Terminal, Auto-Build, Fehlerfall, Projektwechsel.
+// Aufruf: npm run test:smoke (baut vorher). SMOKE_VISIBLE=1 zeigt das Fenster und macht einen Screenshot.
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { electronExe } from '../scripts/electron-local.mjs';
-import { connectPage } from './cdp.mjs';
+import { APP, checker, cleanup, sleep, startApp } from './harness.mjs';
 
-const APP = path.resolve(import.meta.dirname, '..');
-const PORT = 9333;
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cadide-smoke-'));
-const electron = electronExe(APP);
+const t = checker();
+const { check } = t;
+let app;
 
-let fails = 0;
-const check = (label, ok, detail = '') => { console.log((ok ? 'OK     ' : 'FEHLER ') + label.padEnd(66) + detail); if (!ok) fails++; };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// Standard: Fenster unsichtbar (CADIDE_HIDDEN), zeichnet aber weiter. Mit SMOKE_VISIBLE=1 sichtbar, nur dann gibt es einen Screenshot.
-const visible = process.env.SMOKE_VISIBLE === '1';
-const child = spawn(electron, ['.', `--remote-debugging-port=${PORT}`], {
-  cwd: APP, env: { ...process.env, CADIDE_USER_DATA: userData, CADIDE_TEST: '1', CADIDE_HIDDEN: visible ? '0' : '1' }, stdio: ['ignore', 'pipe', 'pipe'],
-});
-let appLog = '';
-child.stdout.on('data', (d) => { appLog += d; });
-child.stderr.on('data', (d) => { appLog += d; });
-const killApp = () => {
-  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true });
-  else child.kill('SIGKILL');
-};
-
-// Watchdog: hängt irgendetwas, wird der Test nach 4 Minuten hart beendet, statt ewig zu laufen
-setTimeout(() => { console.log('ABBRUCH: Watchdog nach 4 Minuten'); killApp(); process.exit(1); }, 4 * 60 * 1000).unref();
-
-async function main() {
-  const page = await connectPage(PORT, 'index.html', 60000);
-  if (!page) throw new Error('Electron nicht erreichbar oder kein Fenster. ' + appLog.slice(-600));
-  check('App gestartet, Fenster verbunden', true);
-
-  const ev = (fn, arg) => page.evaluate(fn, arg);
-  const waitFor = async (desc, fn, timeout = 60000, arg) => {
-    const t0 = Date.now();
-    for (;;) {
-      try { const v = await ev(fn, arg); if (v) return v; } catch { /* Seite lädt noch */ }
-      if (Date.now() - t0 > timeout) throw new Error(`Zeitüberschreitung: ${desc}`);
-      await sleep(200);
-    }
-  };
+try {
+  app = await startApp({ name: 'smoke' });
+  const { ev, waitFor, domClick, ud, page } = app;
   const status = () => ev(() => window.__t.status());
-  const domClick = (id) => ev((i) => document.getElementById(i).click(), id);
+  check('App gestartet, Fenster verbunden', true);
 
   // 1) Start: Projekt angelegt, automatischer erster Build, Bauteile im Viewer
   await waitFor('window.__t', () => !!window.__t && !!window.__t.project());
   await waitFor('Build ok', () => window.__t.status().state === 'ok' && window.__t.partCount() === 2);
   const proj = await ev(() => window.__t.project());
-  check('Projekt liegt unter <App-Daten>/workspaces/<uuid>', proj.dir.startsWith(path.join(userData, 'workspaces')) && /[0-9a-f-]{36}$/.test(proj.dir), proj.dir.slice(-45));
+  check('Projekt liegt unter <App-Daten>/workspaces/<uuid>', proj.dir.startsWith(path.join(ud, 'workspaces')) && /[0-9a-f-]{36}$/.test(proj.dir), proj.dir.slice(-45));
   check('Vorlagen-Dateien vorhanden (AGENTS.md, CLAUDE.md, NOTES.md, model.py …)',
-    ['AGENTS.md', 'CLAUDE.md', 'NOTES.md', 'model.py', '.gitignore', '.cadide/project.json'].every((f) => fs.existsSync(path.join(proj.dir, f))));
+    ['AGENTS.md', 'CLAUDE.md', 'NOTES.md', 'model.py', '.gitignore', '.cadide/project.json', '.git/HEAD'].every((f) => fs.existsSync(path.join(proj.dir, f))));
   check('Erster Build automatisch, 2 Bauteile im Baum', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
   check('Nach dem Build kein Fehlerhinweis', (await status()).viewerMsg === '', (await status()).text);
 
@@ -124,15 +89,13 @@ async function main() {
   check('Projektwechsel: genau ein frisches Terminal', await ev(() => window.__t.terminals.count) === 1);
   check('Beide Arbeitsordner existieren getrennt', fs.existsSync(proj.dir) && fs.existsSync(p2.dir) && proj.dir !== p2.dir);
 
-  if (visible) { await sleep(500); await page.screenshot(path.join(APP, 'test', 'smoke.png')); }
+  if (app.visible) { await sleep(500); await page.screenshot(path.join(APP, 'test', 'smoke.png')); }
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));
-  page.close();
+} catch (e) {
+  console.log('ABBRUCH:', e.message);
+  t.fail();
 }
-
-try { await main(); } catch (e) { console.log('ABBRUCH:', e.message); fails++; }
-killApp();
-await sleep(600);
-try { fs.rmSync(userData, { recursive: true, force: true }); } catch { /* Dateien noch gesperrt */ }
-console.log(fails ? `\n${fails} Prüfung(en) fehlgeschlagen` : '\nALLE PRÜFUNGEN BESTANDEN');
-process.exit(fails ? 1 : 0);
+if (app) { await app.stop(); cleanup(app.ud); }
+console.log(t.fails ? `\n${t.fails} Prüfung(en) fehlgeschlagen` : '\nALLE PRÜFUNGEN BESTANDEN');
+process.exit(t.fails ? 1 : 0);

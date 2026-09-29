@@ -10,6 +10,16 @@ const api: CadideApi = {
     list: () => ipcRenderer.invoke('project:list'),
     open: (id) => ipcRenderer.invoke('project:open', id),
     onChanged: (cb) => { ipcRenderer.on('project:changed', (_e, p) => cb(p)); },
+    saveState: () => ipcRenderer.invoke('project:saveState'),
+    save: (saveAs) => ipcRenderer.invoke('project:save', saveAs),
+    openZip: () => ipcRenderer.invoke('project:openZip'),
+    onSaveState: (cb) => { ipcRenderer.on('save:state', (_e, st) => cb(st)); },
+  },
+  versions: {
+    log: () => ipcRenderer.invoke('versions:log'),
+    preview: (hash) => ipcRenderer.invoke('versions:preview', hash),
+    restore: (hash) => ipcRenderer.invoke('versions:restore', hash),
+    onChanged: (cb) => { ipcRenderer.on('versions:changed', () => cb()); },
   },
   build: {
     run: () => ipcRenderer.invoke('build:run'),
@@ -33,6 +43,10 @@ const api: CadideApi = {
     onExit: (cb) => { ipcRenderer.on('term:exit', (_e, id, code) => cb(id, code)); },
   },
   agents: { detect: () => ipcRenderer.invoke('agents:detect') },
+  // Nur im Testmodus: vorbereitete Antworten für native Dialoge
+  test: process.env.CADIDE_TEST === '1'
+    ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f) }
+    : undefined,
 };
 
 contextBridge.exposeInMainWorld('cadide', api);

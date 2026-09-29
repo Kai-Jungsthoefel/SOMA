@@ -8,17 +8,24 @@
     "typecheck": "tsc --noEmit",
     "build": "node esbuild.config.mjs",
     "start": "npm run build && node scripts/start.mjs",
-    "test:smoke": "npm run build && node test/smoke.mjs"
+    "test:smoke": "npm run build && node test/smoke.mjs",
+    "test:versions": "npm run build && node test/versions.mjs",
+    "test": "npm run build && node test/smoke.mjs && node test/versions.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "dugite": "^3.2.3",
     "node-pty": "^1.1.0",
-    "three": "^0.180.0"
+    "three": "^0.180.0",
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/three": "^0.180.0",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "electron": "^44.4.5",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.0"

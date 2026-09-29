@@ -1,4 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import type { BuildResult, BuildStatus } from '../shared/types';
 import { pythonExe } from './paths';
@@ -76,6 +78,20 @@ export class BuildManager extends EventEmitter {
     });
   }
 
+  /** Läuft gerade ein Build oder steht einer an? */
+  get busy(): boolean { return this.proc !== null || this.timer !== null; }
+
+  /** Wartet, bis kein Build mehr läuft oder ansteht (mit Zeitlimit, damit Speichern nie ewig hängt). */
+  whenIdle(timeoutMs = 120000): Promise<void> {
+    if (!this.busy) return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => { clearTimeout(t); this.off('status', onStatus); resolve(); };
+      const onStatus = () => { if (!this.busy) done(); };
+      const t = setTimeout(done, timeoutMs);
+      this.on('status', onStatus);
+    });
+  }
+
   cancel(): void {
     this.rerun = false;
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
@@ -96,4 +112,43 @@ export class BuildManager extends EventEmitter {
 
 function errorResult(kind: string, message: string): BuildResult {
   return { status: 'error', error: { kind, message, file: null, line: null, traceback: '' } };
+}
+
+/** Neuester Änderungszeitpunkt von Einstiegspunkt, parts/ und inputs/ (Quelltext des Modells). */
+export function newestSourceMtime(dir: string): number {
+  let newest = 0;
+  const walk = (d: string, depth: number) => {
+    if (depth > 4) return;
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.isSymbolicLink()) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p, depth + 1);
+      else try { newest = Math.max(newest, fs.statSync(p).mtimeMs); } catch { /* verschwunden */ }
+    }
+  };
+  for (const top of ['parts', 'inputs']) walk(path.join(dir, top), 0);
+  for (const f of fs.readdirSync(dir)) if (f.endsWith('.py')) try { newest = Math.max(newest, fs.statSync(path.join(dir, f)).mtimeMs); } catch { /* weg */ }
+  return newest;
+}
+
+/** Ist der Quelltext neuer als das letzte Build-Ergebnis (oder gibt es noch keines)? */
+export function buildIsStale(dir: string): boolean {
+  try { return newestSourceMtime(dir) > fs.statSync(path.join(dir, '.cadide', 'build.json')).mtimeMs; } catch { return true; }
+}
+
+/** Führt `python -m cadide <args>` aus (z. B. glb für Vorschauen). Kein Wurf: das Ergebnis trägt den Fehler. */
+export function runCadide(args: string[], cwd: string, timeoutMs = 120000): Promise<{ ok: boolean; out: string; err: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(pythonExe(), ['-m', 'cadide', ...args], {
+      cwd, windowsHide: true, env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
+    });
+    let out = '', err = '';
+    child.stdout.on('data', (d: Buffer) => { out += d.toString('utf8'); });
+    child.stderr.on('data', (d: Buffer) => { err += d.toString('utf8'); });
+    const timer = setTimeout(() => child.kill(), timeoutMs);
+    child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, out, err: e.message }); });
+    child.on('close', (code) => { clearTimeout(timer); resolve({ ok: code === 0, out, err }); });
+  });
 }

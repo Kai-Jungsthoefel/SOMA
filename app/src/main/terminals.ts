@@ -1,17 +1,18 @@
 import path from 'node:path';
 import type { WebContents } from 'electron';
 import * as pty from 'node-pty';
-import { pythonBinDir } from './paths';
+import { gitCmdDir, pythonBinDir } from './paths';
 
 /** Umgebung fuer Terminals: Python-Basisumgebung vorn im PATH, damit `python`, `pip` und `cadide` gefunden werden. */
 export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUTF8: '1', CADIDE_PROJECT: projectDir };
+  const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+  const front: string[] = [];
   const bin = pythonBinDir();
-  if (bin) {
-    const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
-    env[key] = bin + path.delimiter + (env[key] ?? '');
-    env.VIRTUAL_ENV = path.dirname(bin);
-  }
+  if (bin) { front.push(bin); env.VIRTUAL_ENV = path.dirname(bin); }
+  const git = gitCmdDir(); // das mitgelieferte Git hat Vorrang vor einem Git des Systems
+  if (git) front.push(git);
+  env[key] = [...front, env[key] ?? ''].join(path.delimiter);
   return env;
 }
 

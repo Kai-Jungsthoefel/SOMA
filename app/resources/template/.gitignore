@@ -9,4 +9,5 @@ __pycache__/
 .cadide/model.glb
 .cadide/model.map.json
 .cadide/build.json
+.cadide/zip-info.json
 .cadide/feedback/

@@ -11,6 +11,10 @@ export const workspacesDir = () => path.join(userDataDir(), 'workspaces');
 /** Zweite Kopie des Projektzustands ausserhalb des Arbeitsordners (E27). */
 export const projectStateDir = () => path.join(userDataDir(), 'projects');
 export const appStateFile = () => path.join(userDataDir(), 'state.json');
+/** Gesicherte Arbeitsordner (wenn eine ZIP den Arbeitsstand ersetzt). */
+export const backupsDir = () => path.join(userDataDir(), 'workspace-backups');
+/** Vorschauen alter Stände (aus dem Verlauf erzeugt, jederzeit neu erzeugbar). */
+export const previewsDir = () => path.join(userDataDir(), 'previews');
 
 /** Vorlage fuer neue Projekte (liegt neben dem Programm, spaeter im Installationspaket). */
 export const templateDir = () => path.join(app.getAppPath(), 'resources', 'template');
@@ -26,6 +30,14 @@ export function pythonExe(): string {
     if (fs.existsSync(dev)) return dev;
   }
   return process.platform === 'win32' ? 'python.exe' : 'python3';
+}
+
+/** Ordner des mitgelieferten Git (dugite). Kommt in die Terminals, damit Agent und App dasselbe Git benutzen (E31). */
+export function gitCmdDir(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return path.dirname((require('dugite') as typeof import('dugite')).resolveGitBinary());
+  } catch { return null; }
 }
 
 /** Ordner mit python und cadide-Startprogramm, kommt bei Terminals an den Anfang von PATH. */

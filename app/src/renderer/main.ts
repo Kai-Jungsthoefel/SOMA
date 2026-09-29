@@ -1,5 +1,6 @@
-import type { AgentInfo, BuildStatus, FileNode, ModelMap, ProjectInfo } from '../shared/types';
+import type { AgentInfo, BuildStatus, FileNode, ModelMap, PreviewResult, ProjectInfo, SaveState } from '../shared/types';
 import { TerminalTabs } from './terminals';
+import { VersionsBar } from './versions';
 import { PickResult, Viewer, ViewName } from './viewer';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -9,6 +10,7 @@ const viewer = new Viewer($('viewer'));
 const terminals = new TerminalTabs($('term-tabs'), $('term-panes'), $('btn-term-add'));
 
 let project: ProjectInfo | null = null;
+let saveState: SaveState | null = null;
 let map: ModelMap | null = null;
 let loadSeq = 0;
 const textCache = new Map<string, string>();
@@ -20,6 +22,34 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
   return e;
 }
 
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+function toast(text: string, kind: 'info' | 'error' = 'info'): void {
+  const t = $('toast');
+  t.textContent = text;
+  t.className = kind === 'error' ? 'error' : '';
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'error' ? 12000 : 6000);
+}
+
+const versions = new VersionsBar({
+  slider: $<HTMLInputElement>('vslider'), dots: $('vdots'), info: $('vinfo'), problem: $('vproblem'),
+  restore: $<HTMLButtonElement>('btn-restore'), live: $<HTMLButtonElement>('btn-live'), banner: $('preview-banner'),
+}, {
+  async show(res: PreviewResult | null) {
+    if (!res) { await loadModel(); return; }
+    try {
+      map = res.map;
+      textCache.clear();
+      await viewer.load(res.glb);
+      buildModelTree();
+      $('info').textContent = 'Vorschau eines alten Standes: Ein Klick zeigt Bauteil und Fläche, aber keinen Code.';
+      $('code').replaceChildren();
+    } catch (e) { toast(`Vorschau nicht darstellbar: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
+  },
+  toast,
+});
+
 // ---- Projekt ----------------------------------------------------------------------------------------------------
 
 async function onProject(p: ProjectInfo): Promise<void> {
@@ -28,6 +58,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   map = null;
   textCache.clear();
   viewer.clear();
+  versions.reset();
   terminals.closeAll();
   $('tab-model').replaceChildren(el('div', { className: 'hint' }, 'Modell wird gebaut …'));
   $('info').textContent = 'Klick auf ein Bauteil zeigt die zugehörige Codestelle.';
@@ -37,6 +68,8 @@ async function onProject(p: ProjectInfo): Promise<void> {
   showProblems(p.problems);
   await refreshProjects();
   void refreshFiles();
+  void versions.refresh();
+  void refreshSaveState();
   void terminals.add({ title: 'Terminal' });
   void refreshAgents();
   setStatusFromBuild(await api.build.status());
@@ -87,6 +120,7 @@ function setStatusFromBuild(s: BuildStatus): void {
 }
 
 async function loadModel(): Promise<void> {
+  if (versions.previewing) return; // während einer Vorschau bleibt der alte Stand stehen
   const seq = ++loadSeq;
   try {
     const [mapText, glb] = await Promise.all([api.fs.readText('.cadide/model.map.json'), api.fs.readBinary('.cadide/model.glb')]);
@@ -190,6 +224,47 @@ async function refreshAgents(): Promise<void> {
   }));
 }
 
+// ---- Speichern und Öffnen ---------------------------------------------------------------------------------------
+
+function renderSaveState(st: SaveState): void {
+  saveState = st;
+  const b = $('save-badge');
+  b.textContent = st.unsaved ? '● ungespeichert' : '✓ gespeichert';
+  b.className = 'badge' + (st.unsaved ? ' unsaved' : '');
+  b.title = st.zipPath ? `ZIP: ${st.zipPath}` : 'Noch nicht als ZIP gespeichert';
+  document.title = `CAD-IDE – ${project?.name ?? ''}${st.unsaved ? ' ●' : ''}`;
+}
+
+async function refreshSaveState(): Promise<void> {
+  try { renderSaveState(await api.project.saveState()); } catch { /* Projekt wechselt gerade */ }
+}
+
+async function doSave(saveAs = false): Promise<void> {
+  const r = await api.project.save(saveAs);
+  if (r.cancelled) return;
+  if (r.error) { toast(r.error, 'error'); return; }
+  const kb = Math.round((r.bytes ?? 0) / 1024);
+  const lines = [`Gespeichert: ${r.zipPath}`, `${r.files} Dateien, ${kb} KB${r.snapshot ? ' · Snapshot im Verlauf angelegt' : ''}`];
+  if (r.warnings?.length) lines.push(`Hinweis: ${r.warnings.join(' ')}`);
+  toast(lines.join('\n'), r.warnings?.length ? 'error' : 'info');
+  project = await api.project.current(); // der Modellname folgt dem Dateinamen
+  void refreshProjects();
+  void refreshSaveState();
+}
+
+async function doOpen(): Promise<void> {
+  const r = await api.project.openZip();
+  if (r.error) toast(r.error, 'error');
+}
+
+// Kurzbefehle gelten nicht im Terminal: dort gehören Strg+S/Strg+O den Programmen (Claude Code nutzt Strg+O selbst)
+window.addEventListener('keydown', (e) => {
+  if ((e.target as HTMLElement | null)?.closest?.('#terminals') || !e.ctrlKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 's') { e.preventDefault(); void doSave(e.shiftKey); }
+  else if (k === 'o' && !e.shiftKey) { e.preventDefault(); void doOpen(); }
+}, true);
+
 // ---- Bedienelemente ---------------------------------------------------------------------------------------------
 
 document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((b) => b.addEventListener('click', () => {
@@ -202,6 +277,9 @@ $<HTMLInputElement>('chk-edges').addEventListener('change', (e) => viewer.setEdg
 $<HTMLInputElement>('chk-wire').addEventListener('change', (e) => viewer.setWireframe((e.target as HTMLInputElement).checked));
 $<HTMLInputElement>('chk-ghost').addEventListener('change', (e) => viewer.setGhost((e.target as HTMLInputElement).checked));
 $('btn-new').addEventListener('click', () => void api.project.create());
+$('btn-open').addEventListener('click', () => void doOpen());
+$('btn-save').addEventListener('click', () => void doSave(false));
+$('btn-saveas').addEventListener('click', () => void doSave(true));
 $('btn-build').addEventListener('click', () => void api.build.run());
 $('btn-cancel').addEventListener('click', () => void api.build.cancel());
 $<HTMLInputElement>('chk-auto').addEventListener('change', (e) => void api.build.setAuto((e.target as HTMLInputElement).checked));
@@ -233,6 +311,8 @@ api.build.onStatus((s) => {
   if (s.state === 'ok') { void loadModel(); void refreshFiles(); }
 });
 api.fs.onChanged(() => void refreshFiles());
+api.versions.onChanged(() => void versions.refresh());
+api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (der Hauptprozess öffnet es beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
 // Prüfschnittstelle, nur im Testmodus
@@ -247,5 +327,11 @@ if (api.testMode) {
     codeHighlight: () => [...document.querySelectorAll('#code .hl')].map((x) => x.textContent),
     treeNames: () => [...document.querySelectorAll('#tab-model .part .name')].map((x) => x.textContent),
     termText: (id: number) => terminals.text(id),
+    versions: () => versions.state(),
+    saveState: () => saveState,
+    toast: () => ({ text: $('toast').textContent, hidden: $('toast').hidden, error: $('toast').className === 'error' }),
+    banner: () => ({ hidden: $('preview-banner').hidden, text: $('preview-banner').textContent }),
+    partSize: (name: string) => { const p = viewer.partList().find((x) => x.name === name); return p ? viewer.partSize(p.id) : null; },
+    versionsUi: () => ({ restoreHidden: $('btn-restore').hidden, problem: $('vproblem').hidden ? '' : $('vproblem').textContent }),
   };
 }

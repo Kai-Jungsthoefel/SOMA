@@ -12,7 +12,12 @@
   <header id="topbar">
     <span class="brand">CAD-IDE</span>
     <button id="btn-new" title="Neues Modell anlegen">Neu</button>
-    <select id="sel-projects" title="Zuletzt geöffnete Modelle"></select>
+    <button id="btn-open" title="Modell aus einer ZIP-Datei öffnen (Strg+O)">Öffnen …</button>
+    <select id="sel-projects" title="Modelle auf diesem Rechner"></select>
+    <span class="sep"></span>
+    <button id="btn-save" title="Speichern: Snapshot im Verlauf und ZIP schreiben (Strg+S)">Speichern</button>
+    <button id="btn-saveas" title="Als neue ZIP-Datei speichern">Speichern unter …</button>
+    <span id="save-badge" class="badge">–</span>
     <span class="sep"></span>
     <button id="btn-build" title="Modell jetzt bauen">Bauen</button>
     <button id="btn-cancel" title="Laufenden Build abbrechen" disabled>Abbrechen</button>
@@ -41,7 +46,15 @@
         <label class="chk"><input type="checkbox" id="chk-wire"> Drahtgitter</label>
         <label class="chk"><input type="checkbox" id="chk-ghost"> Transparent</label>
       </div>
-      <div id="viewer"><div id="viewer-msg"></div></div>
+      <div id="viewer"><div id="viewer-msg"></div><div id="preview-banner" hidden></div></div>
+      <div id="versions">
+        <span class="vlabel">Verlauf</span>
+        <div id="vtrack"><input type="range" id="vslider" min="0" max="0" step="1" value="0" disabled><div id="vdots"></div></div>
+        <span id="vinfo"></span>
+        <button id="btn-restore" hidden title="Diesen Stand als neuen Stand übernehmen">Stand wiederherstellen</button>
+        <button id="btn-live" hidden>Zurück zum Arbeitsstand</button>
+      </div>
+      <div id="vproblem" hidden></div>
       <div id="info-panel">
         <div id="info">Klick auf ein Bauteil zeigt die zugehörige Codestelle.</div>
         <pre id="code"></pre>
@@ -53,6 +66,7 @@
       <div id="term-panes"></div>
     </aside>
   </main>
+  <div id="toast" hidden></div>
   <footer id="statusbar"><span id="status" data-state="idle">Bereit</span><span class="grow"></span><span id="status-detail"></span></footer>
 </div>
 <script src="main.js"></script>

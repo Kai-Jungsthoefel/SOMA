@@ -263,6 +263,14 @@ export class Viewer {
 
   facesOf(partId: string): FaceEntry[] { return this.parts.get(partId)?.meta.faces ?? []; }
 
+  /** Ausdehnung (x, y, z in mm) eines Bauteils. */
+  partSize(partId: string): number[] | null {
+    const p = this.parts.get(partId);
+    if (!p) return null;
+    const s = new THREE.Box3().setFromObject(p.group).getSize(new THREE.Vector3());
+    return [+s.x.toFixed(3), +s.y.toFixed(3), +s.z.toFixed(3)];
+  }
+
   /** Bildschirmposition (Pixel im Fenster) des Flächenmittelpunkts. */
   screenOf(partId: string, faceId: number): { x: number; y: number } {
     const f = this.facesOf(partId).find((x) => x.id === faceId)!;
