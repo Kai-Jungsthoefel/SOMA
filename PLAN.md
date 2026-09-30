@@ -241,6 +241,13 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Ansichtswürfel in 3D** (`viewcube.ts`, eigene kleine Szene): dreht sich mit der Kamera, jede Seite ist in 3 × 3 Felder geteilt, ein Klick auf Seite, Kante oder Ecke dreht die Ansicht animiert in eine der 26 Richtungen. Ziehen am Würfel dreht frei, beim Überfahren leuchtet das Feld orange und ein Hinweis nennt die Richtung. Achsen X, Y, Z an der Ecke links vorne unten. Einpassen und Standardansicht darunter wie bisher, die sechs Ansichten auch im Menü „Darstellung“ (per Tastatur erreichbar).
 - **Drehpunkt verschieben:** Doppelklick ins Modell macht die Stelle zum Drehpunkt, die Ansicht verschiebt sich dafür, ohne zu drehen. Das Mausrad zoomt zur Mausposition, die rechte Maustaste verschiebt. Während der Bewegung zeigt ein Punkt den Drehpunkt. Die vordere Schnittebene folgt dem Abstand, so lassen sich Ecken von ganz nah ansehen, ohne dass sie weggeschnitten werden.
 
+*Gruppen und Transparenz (E42; 17 Prüfungen in `app/test/groups.mjs`):*
+
+- **Gruppen:** `add_part("Deckel", lid, group="Gehäuse")`, verschachtelt mit „/“. Eine STEP-Datei mit Struktur kommt mit `import_assembly("inputs/platine.step")` und `add_part("Platine", asm, role="reference")` herein: Jeder Körper wird ein Bauteil mit seinem Namen und seiner Farbe, Unterbaugruppen werden Gruppen unter „Platine“, verschoben wird mit `asm.loc`. Doppelte Namen aus der Datei bekommen „(2)“. Die Ausgabe-STEP enthält die Gruppen als Unterbaugruppen (Referenzen unter „Referenz“), auch die Vorschau alter Stände zeigt sie.
+- **Bauteilkarte als Baum:** Gruppen auf- und zuklappbar, mit Anzahl. Jede Zeile hat ein Auge und einen Schalter „transparent“, bei Gruppen für alle Teile darin (teilweise transparente Gruppen sind gekennzeichnet). Rechtsklick auf eine Gruppe: Isolieren, Aus-/Einblenden, Transparent, Kamera auf Gruppe. Die Suche zeigt Treffer samt ihren Gruppen. Der Auswahltext für den Agenten nennt die Gruppe.
+- **Transparent:** deutlich durchsichtig, ohne zu verdecken. Klicks und Messungen gehen durch transparente Teile hindurch, sie selbst werden nur getroffen, wenn dahinter nichts liegt.
+- **Nebenbei behoben:** Die Verlaufsleiste konnte einen veralteten Stand behalten, wenn sich zwei Abfragen überholten (fiel im Gesamtlauf der Tests auf, als `.git` verschwand).
+
 *Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
@@ -278,6 +285,8 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - Messen: Die Geometrie liegt als BREP neben dem GLB (Größe etwa wie die STEP-Datei) und wird bei jedem Build ersetzt
 - Ansichtswürfel: Ein Klick dreht nur, Drehpunkt und Abstand bleiben (kein Einpassen, damit man nah an einer Stelle bleiben kann). Einpassen und Standardansicht setzen den Drehpunkt zurück in die Mitte. Die Achsen haben die in CAD üblichen Farben (X rot, Y grün, Z blau), außerhalb der festen Farbbedeutungen der Oberfläche
 - Drehpunkt per Doppelklick (auch im Messmodus), Zoomen zur Mausposition immer an
+- Gruppen (E42): Import mit Struktur über eine eigene Funktion `import_assembly()`, `import_step()` fasst die Datei weiter zu einem Körper zusammen. Die oberste Baugruppe der Datei heißt wie im `add_part`-Aufruf. Alle Teile einer Baugruppe verweisen auf die Zeile dieses Aufrufs
+- Transparenz einzelner Teile bleibt über neue Builds erhalten, geht aber wie das Ausblenden beim Öffnen verloren (nicht gespeichert)
 
 - Rolle `reference` und ihre Standardwerte (E34)
 - Hinweis beim ersten Start, dass der Agent mit den Rechten des Nutzers läuft (E29)
