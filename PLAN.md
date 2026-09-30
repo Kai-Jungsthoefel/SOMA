@@ -236,6 +236,11 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Exakt gerechnet:** Der Build legt die Bauteile zusätzlich als BREP unter `.cadide/geometry/<build>.brep` ab, die Kennung steht auch in `model.map.json`. Ein langlebiger Python-Dienst (`cadide serve`, JSON-Zeilen) lädt sie beim ersten Messen (einige Sekunden) und rechnet mit OCC. Jede Anfrage trägt die Build-Kennung und den Flächeninhalt bzw. die Länge aus dem Viewer, so fällt jede Verwechslung auf. Nach einem neuen Build beginnt die Messung von vorn. Auch Vorschauen alter Stände lassen sich vermessen.
 - **Git und ZIP:** `.cadide/geometry/` ist ein Zwischenergebnis. Neue Projekte haben es in der `.gitignore`, bei älteren klammert die App es selbst aus (Status, Snapshot, ZIP). Dabei fiel auf, dass `git add` mit einem Ausschluss auf einen ignorierten Ordner scheitert: Die App nimmt den Ordner deshalb nach dem Hinzufügen wieder aus dem Index.
 
+*Ansicht (Wunsch des Nutzers; 8 Prüfungen im Smoke-Test):*
+
+- **Ansichtswürfel in 3D** (`viewcube.ts`, eigene kleine Szene): dreht sich mit der Kamera, jede Seite ist in 3 × 3 Felder geteilt, ein Klick auf Seite, Kante oder Ecke dreht die Ansicht animiert in eine der 26 Richtungen. Ziehen am Würfel dreht frei, beim Überfahren leuchtet das Feld orange und ein Hinweis nennt die Richtung. Achsen X, Y, Z an der Ecke links vorne unten. Einpassen und Standardansicht darunter wie bisher, die sechs Ansichten auch im Menü „Darstellung“ (per Tastatur erreichbar).
+- **Drehpunkt verschieben:** Doppelklick ins Modell macht die Stelle zum Drehpunkt, die Ansicht verschiebt sich dafür, ohne zu drehen. Das Mausrad zoomt zur Mausposition, die rechte Maustaste verschiebt. Während der Bewegung zeigt ein Punkt den Drehpunkt. Die vordere Schnittebene folgt dem Abstand, so lassen sich Ecken von ganz nah ansehen, ohne dass sie weggeschnitten werden.
+
 *Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
@@ -271,6 +276,8 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - Messen: eigener Modus über den Knopf „Messen“ (Klicks wählen dann Punkte, Kanten und Flächen statt Bauteile). Die wichtigste Angabe eines Paars ist der Abstand paralleler Ebenen, dann der paralleler Achsen, dann vom Punkt aus der zur Ebene, Achse oder Geraden (jeweils unbegrenzt gedacht), zwischen zwei Punkten ihr Abstand, sonst der kürzeste Abstand. Punkt zu Punkt nutzt die Klickpunkte, exakt auf die Elemente gelegt. Punkte haben Vorrang vor Kanten, Kanten vor Flächen. Mittelpunkte von Kreisen sind keine eigenen Punkte, sie stecken im Abstand der Mittelpunkte
 - Messen: Messlinien kommen nicht mit ins Bild der Markierung (ohne ihre Beschriftung wären sie dort unverständlich). Einen Messbefehl für den Agenten (`cadide measure`) gibt es noch nicht, der Agent bekommt Messungen über „An Agent geben“
 - Messen: Die Geometrie liegt als BREP neben dem GLB (Größe etwa wie die STEP-Datei) und wird bei jedem Build ersetzt
+- Ansichtswürfel: Ein Klick dreht nur, Drehpunkt und Abstand bleiben (kein Einpassen, damit man nah an einer Stelle bleiben kann). Einpassen und Standardansicht setzen den Drehpunkt zurück in die Mitte. Die Achsen haben die in CAD üblichen Farben (X rot, Y grün, Z blau), außerhalb der festen Farbbedeutungen der Oberfläche
+- Drehpunkt per Doppelklick (auch im Messmodus), Zoomen zur Mausposition immer an
 
 - Rolle `reference` und ihre Standardwerte (E34)
 - Hinweis beim ersten Start, dass der Agent mit den Rechten des Nutzers läuft (E29)
