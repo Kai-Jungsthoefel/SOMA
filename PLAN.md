@@ -1,6 +1,6 @@
 # Plan: CAD-IDE mit KI-Agenten
 
-> Stand: 2026-09-30 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 5 erledigt, siehe Abschnitt 10 und [app/README.md](app/README.md))
+> Stand: 2026-09-30 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 5 erledigt, Messen vorgezogen, siehe Abschnitt 10 und [app/README.md](app/README.md))
 > Ursprung: [IDEA.md](IDEA.md) · Begründungen und Historie: [DECISIONS.md](DECISIONS.md)
 > Zahlen in Klammern, z. B. (E12), verweisen auf Entscheidungen im Log.
 
@@ -38,7 +38,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
 ```
 
 - **Desktop:** Electron, TypeScript (E23). Editor: CodeMirror 6 (Phase 1, Schritt 5).
-- **Python-Dienst:** Pro Projekt ein langlebiger Prozess für die App (schnelle Messungen, Modell im Speicher). Der Build-Befehl des Agenten läuft zusätzlich als eigenständiger Einmal-Prozess und funktioniert auch ohne App (E24).
+- **Python-Dienst:** Pro Projekt ein langlebiger Prozess für die App (schnelle Messungen, Modell im Speicher). Der Build-Befehl des Agenten läuft zusätzlich als eigenständiger Einmal-Prozess und funktioniert auch ohne App (E24). **Umgesetzt für das Messen** (`cadide serve`), gebaut wird weiter im Einmal-Prozess.
 - **CAD-Framework:** **CadQuery**, fest (E12). OpenSCAD ist ausgeschlossen (kein STEP, kein B-Rep).
 - **Viewer:** three.js zeigt ein GLB, das nach jedem Build aus der STEP-Datei erzeugt wird (Bauteilnamen, Farben, Flächen- und Kanten-IDs). Exakte Messwerte (Radius, Flächenabstand) fragt die App beim Python-Dienst ab. Es gibt keinen zweiten CAD-Kern im Frontend (E9).
 
@@ -117,7 +117,7 @@ Das Paket `cadide` liegt in der mitgelieferten **Basisumgebung**, nicht im Proje
 | Phase | Funktionen |
 |---|---|
 | **Phase 1 (MVP)** | Navigation, Standardansichten, Darstellungsmodi (schattiert, Kanten, Drahtgitter, Transparenz), Ein-/Ausblenden über den Tree, Klick auf Bauteil → Codezeile, **Screenshot mit Markup** |
-| **Danach** | Messen (Punkt-zu-Punkt, Bounding-Box, exakte Werte), Schnittansicht (wichtig für Gehäuse), Versions-Schieber |
+| **Danach** | Messen (Punkt-zu-Punkt, Bounding-Box, exakte Werte, **umgesetzt**), Schnittansicht (wichtig für Gehäuse), Versions-Schieber (umgesetzt in Schritt 2) |
 | **Später** | Volumen/Gewicht, Versionsvergleich, Explosionsansicht |
 
 Der Viewer zeigt auch **beliebige weitere STEP-Dateien** im Basismodus, ohne Mapping und Zusatzfunktionen. Standardanzeige ist immer das Hauptmodell.
@@ -229,9 +229,16 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Höhe:** Der Editor füllt das Panel bis unten und lässt sich bei langen Dateien bis zum Ende scrollen (CodeMirror erzwingt `position: relative`, die Höhe kommt deshalb über `height`).
 - **Nebenbei:** Die App nutzt jetzt das dunkle Farbschema des Systems (`color-scheme: dark`), Scrollleisten sind dunkel. Im schmalen Viewer (etwa bei offenem Code-Panel) rückt die Fehlerkarte nach unten, statt über den Rand zu ragen. Behoben: Der Speicherstand oben konnte nach dem Speichern fälschlich „Noch nicht gespeichert“ zeigen, wenn die regelmäßige Git-Abfrage gerade lief (sie las den Stand der App vor ihren Git-Aufrufen).
 
+*Messen (vorgezogen aus „Danach“, E9, E22, E24; 21 Prüfungen in `app/test/measure.mjs`):*
+
+- **Ablauf:** „Messen“ im Viewer schaltet den Messmodus. Ein Klick wählt einen Eckpunkt, eine Kante oder eine Fläche, in dieser Reihenfolge (Punkte mit 9 px Fangradius, Kanten mit 7 px, Verdecktes zählt nicht), und zeigt die exakten Werte: Lage eines Punkts, Durchmesser und Radius (Zylinder, Kreis, Kugel), Achse oder Normale, Länge, Flächeninhalt, dazu die Außenmaße des Bauteils. Ein zweiter Klick misst zum ersten: Abstand paralleler Ebenen (Wandstärke, Spaltmaß), Abstand der Achsen oder Mittelpunkte (Bohrungen), vom Punkt aus den Abstand zur Ebene, Achse oder Geraden, zwischen zwei Punkten ihren Abstand, sonst den kürzesten Abstand, dazu Punkt zu Punkt mit ΔX/ΔY/ΔZ und den Winkel. Punkte kamen auf Wunsch des Nutzers dazu, der Mesher legt dafür eine Tabelle der Eckpunkte mit exakten Koordinaten ins GLB. Der dritte Klick beginnt von vorn, Escape verwirft erst die Messung, dann den Modus.
+- **Anzeige:** Elemente in Orange hervorgehoben, unter dem Zeiger leicht aufgehellt, die Hauptstrecke als Linie mit Beschriftung, Punkt zu Punkt gestrichelt. Die Karte unten links ersetzt solange die Auswahlkarte. „An Agent geben“ fügt die Messung als Text ein (Zahlen mit Punkt, drei Stellen).
+- **Exakt gerechnet:** Der Build legt die Bauteile zusätzlich als BREP unter `.cadide/geometry/<build>.brep` ab, die Kennung steht auch in `model.map.json`. Ein langlebiger Python-Dienst (`cadide serve`, JSON-Zeilen) lädt sie beim ersten Messen (einige Sekunden) und rechnet mit OCC. Jede Anfrage trägt die Build-Kennung und den Flächeninhalt bzw. die Länge aus dem Viewer, so fällt jede Verwechslung auf. Nach einem neuen Build beginnt die Messung von vorn. Auch Vorschauen alter Stände lassen sich vermessen.
+- **Git und ZIP:** `.cadide/geometry/` ist ein Zwischenergebnis. Neue Projekte haben es in der `.gitignore`, bei älteren klammert die App es selbst aus (Status, Snapshot, ZIP). Dabei fiel auf, dass `git add` mit einem Ausschluss auf einen ignorierten Ordner scheitert: Die App nimmt den Ordner deshalb nach dem Hinzufügen wieder aus dem Index.
+
 *Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
-**Danach:** Messen, Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
+**Danach:** Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
 
 ## 11. Offene Punkte
 
@@ -261,6 +268,9 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - Editor: Nach Strg+S ohne Änderung oder nur an Notizen wird nicht gebaut (E40). „Jetzt bauen“ speichert vorher und baut immer. Bei einem Konflikt wird weder gespeichert noch gebaut
 - Editor-Konflikt: zwei Wahlmöglichkeiten mit Sicherung, **kein automatisches Zusammenführen** (E28). Sicherungen liegen in den App-Daten, nicht im Projekt, und werden nicht aufgeräumt
 - Editor: Welche Dateien nur lesbar sind (siehe Schritt 5). Dateien in `inputs/` darf der Nutzer bearbeiten, der Agent laut `AGENTS.md` nicht
+- Messen: eigener Modus über den Knopf „Messen“ (Klicks wählen dann Punkte, Kanten und Flächen statt Bauteile). Die wichtigste Angabe eines Paars ist der Abstand paralleler Ebenen, dann der paralleler Achsen, dann vom Punkt aus der zur Ebene, Achse oder Geraden (jeweils unbegrenzt gedacht), zwischen zwei Punkten ihr Abstand, sonst der kürzeste Abstand. Punkt zu Punkt nutzt die Klickpunkte, exakt auf die Elemente gelegt. Punkte haben Vorrang vor Kanten, Kanten vor Flächen. Mittelpunkte von Kreisen sind keine eigenen Punkte, sie stecken im Abstand der Mittelpunkte
+- Messen: Messlinien kommen nicht mit ins Bild der Markierung (ohne ihre Beschriftung wären sie dort unverständlich). Einen Messbefehl für den Agenten (`cadide measure`) gibt es noch nicht, der Agent bekommt Messungen über „An Agent geben“
+- Messen: Die Geometrie liegt als BREP neben dem GLB (Größe etwa wie die STEP-Datei) und wird bei jedem Build ersetzt
 
 - Rolle `reference` und ihre Standardwerte (E34)
 - Hinweis beim ersten Start, dass der Agent mit den Rechten des Nutzers läuft (E29)

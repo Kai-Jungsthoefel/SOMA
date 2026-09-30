@@ -14,9 +14,9 @@ Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten
 
 | Pfad | Inhalt |
 |---|---|
-| `app/` | Electron-App. `src/main/` Hauptprozess (`projects.ts` Speichern/Öffnen/Verlauf/Export, `git.ts`, `zip.ts`, `build.ts`, `workspace.ts`, `terminals.ts`, `files.ts`), `src/preload/`, `src/renderer/` (`main.ts` Verdrahtung, `viewer.ts`, `markup.ts`, `parts.ts`, `code.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `ui.ts`, `icons.ts`), `src/shared/types.ts` (IPC-Vertrag), `src/shared/editable.ts`, `resources/template/` (Vorlage für Nutzerprojekte inkl. `AGENTS.md`), `test/` |
+| `app/` | Electron-App. `src/main/` Hauptprozess (`projects.ts` Speichern/Öffnen/Verlauf/Export, `git.ts`, `zip.ts`, `build.ts`, `measure.ts`, `workspace.ts`, `terminals.ts`, `files.ts`), `src/preload/`, `src/renderer/` (`main.ts` Verdrahtung, `viewer.ts`, `markup.ts`, `measuretool.ts`, `parts.ts`, `code.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `ui.ts`, `icons.ts`), `src/shared/types.ts` (IPC-Vertrag), `src/shared/editable.ts`, `resources/template/` (Vorlage für Nutzerprojekte inkl. `AGENTS.md`), `test/` |
 | `design/ui-entwurf.html` | Freigegebener Oberflächenentwurf (E38), im Browser öffnen. Maßstab für Aufbau, Farben und Texte der Oberfläche |
-| `python/cadide/` | Hilfsbibliothek und CLI: `add_part`, `cadide build`, `cadide export`, `cadide glb` |
+| `python/cadide/` | Hilfsbibliothek und CLI: `add_part`, `cadide build`, `cadide export`, `cadide glb`, `cadide serve` (Messdienst, `measure.py`) |
 | `prototype/phase0/` | Abgeschlossener technischer Prototyp mit `ERGEBNISSE.md`. Nur noch Referenz |
 
 Details: `app/README.md`.
@@ -32,7 +32,7 @@ uv pip install --python "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/python.ex
 npm install
 npm start               # baut und startet
 npm run typecheck
-npm test                # baut, dann test:unit, test:smoke, test:versions und test:editor (echte App, unsichtbares Fenster)
+npm test                # baut, dann test:unit, test:smoke, test:versions, test:editor und test:measure (echte App, unsichtbares Fenster)
 
 # cadide direkt
 "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/cadide.exe" build --project <ordner>
