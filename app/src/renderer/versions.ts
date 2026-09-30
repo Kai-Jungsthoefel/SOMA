@@ -35,6 +35,7 @@ export class VersionsBar {
   private previewHash: string | null = null;
   private savedHead: string | null = null;
   private seq = 0;
+  private logSeq = 0;
 
   constructor(private ui: Ui, private hooks: Hooks) {
     ui.live.addEventListener('click', () => void this.select(this.log.commits.length));
@@ -62,7 +63,13 @@ export class VersionsBar {
   }
 
   async refresh(): Promise<void> {
-    try { this.log = await window.cadide.versions.log(); } catch { return; }
+    // Abfragen können sich überholen (etwa wenn .git gerade verschwindet). Nur die neueste zählt, sonst bliebe ein
+    // veralteter Stand stehen, und weil sich danach nichts mehr ändert, käme auch keine neue Abfrage.
+    const seq = ++this.logSeq;
+    let log: GitLog;
+    try { log = await window.cadide.versions.log(); } catch { return; }
+    if (seq !== this.logSeq) return;
+    this.log = log;
     // Existiert der angezeigte Stand nicht mehr (Verlauf umgebaut), zurück zum Arbeitsstand
     if (this.previewHash && !this.log.commits.some((c) => c.hash === this.previewHash)) await this.select(this.log.commits.length);
     else this.render();

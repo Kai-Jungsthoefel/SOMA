@@ -17,13 +17,14 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 
 ## Rules for model.py
 
-1. `from cadide import add_part, import_step`
+1. `from cadide import add_part, import_step, import_assembly`
 2. **Register every part**: `add_part("Name", workplane_or_shape)`. Unregistered geometry is invisible in the viewer and missing from exports.
 3. Names are unique. Umlauts are fine, they are shown as written.
-4. Mark a part the user brought (for example a circuit board) with `role="reference"`: it is shown semi-transparent and skipped by `cadide export --all`. Cut clearances around it, but do not export it.
-5. Units are millimetres, Z is up. Put dimensions in named constants at the top so the user can ask for changes ("make the wall 3 mm").
-6. Load user files with `import_step("inputs/board.step")`. STEP files often have their origin in a corner: check the bounding box and move the part deliberately.
-7. Prefer simple, readable CadQuery. Check that operations produced solids. Do not use `show_object` or `cq_editor`.
+4. Group related parts with `group`: `add_part("Screw front", screw, group="Housing/Screws")` (nested with `/`). Groups show up in the part tree of the app and as sub-assemblies in `output/model.step`.
+5. Mark a part the user brought (for example a circuit board) with `role="reference"`: it is shown semi-transparent and skipped by `cadide export --all`. Cut clearances around it, but do not export it.
+6. Units are millimetres, Z is up. Put dimensions in named constants at the top so the user can ask for changes ("make the wall 3 mm").
+7. Load user files with `import_step("inputs/board.step")`: this merges the whole file into one shape. If the file has several parts or sub-assemblies, keep them with `asm = import_assembly("inputs/board.step")` and `add_part("Board", asm, role="reference")`: every body becomes its own part with its name and color, the sub-assemblies become groups under "Board". Move an assembly with `asm.loc = cq.Location((x, y, z))`. STEP files often have their origin in a corner: check the bounding box and move the part deliberately.
+8. Prefer simple, readable CadQuery. Check that operations produced solids. Do not use `show_object` or `cq_editor`.
 
 ## Commands
 

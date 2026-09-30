@@ -35,6 +35,7 @@ const PATHS: Record<string, string> = {
   play: '<path d="M7 5v14l11-7z"/>',
   // Werkzeuge der Markierung
   pointer: '<path d="M6 3v16l4.2-4.1 2.9 6.2 2.6-1.2-2.9-6.1H18.5z"/>',
+  ghost: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" fill-opacity=".45"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', arrow: '<path d="M5 19 19 5M9 5h10v10"/>',
   square: '<rect x="4" y="4" width="16" height="16" rx="1.5"/>', circle: '<circle cx="12" cy="12" r="8"/>',

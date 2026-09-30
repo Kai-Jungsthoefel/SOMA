@@ -125,9 +125,12 @@ const partsCard = new PartsCard({
   search: $<HTMLButtonElement>('btn-parts-search'), filter: $<HTMLInputElement>('parts-filter'),
 }, {
   select: (id) => selectPart(id, null, true),
-  setVisible: (id, on) => viewer.setVisible(id, on),
+  setVisible: (ids, on) => viewer.setVisible(ids, on),
   isVisible: (id) => viewer.isVisible(id),
+  setGhost: (ids, on) => viewer.setGhosted(ids, on),
+  isGhost: (id) => viewer.isGhosted(id),
   context: (id, x, y) => openPartMenu(id, x, y),
+  groupContext: (ids, name, x, y) => openGroupMenu(ids, name, x, y),
 });
 
 const refreshPartsCard = () => partsCard.set(viewer.partList(), viewer.selection);
@@ -154,6 +157,7 @@ async function renderSelection(): Promise<void> {
   const e = partEntry(partId);
   const name = e?.name ?? p?.name ?? partId;
   $('sel-name').textContent = name + (p?.role === 'reference' ? ' (Referenz)' : '');
+  $('sel-name').title = p?.group ? `Gruppe ${p.group}` : '';
   $('sel-swatch').style.background = p?.color ?? '';
   const bits = pick?.faceId != null
     ? ['Fläche', surfaceName(pick.surface), ...(pick.area != null ? [`${num(pick.area)} mm²`] : [])]
@@ -180,7 +184,8 @@ async function renderSelection(): Promise<void> {
 function selectionText(): string | null {
   if (!selection) return null;
   const e = partEntry(selection.partId);
-  const bits = [`Bauteil "${e?.name ?? partInfo(selection.partId)?.name ?? selection.partId}"`];
+  const group = partInfo(selection.partId)?.group;
+  const bits = [`Bauteil "${e?.name ?? partInfo(selection.partId)?.name ?? selection.partId}"${group ? ` in Gruppe "${group}"` : ''}`];
   if (e?.file && e.line) { const { from, to } = lineRange(e); bits.push(`${e.file} Zeile ${from}${to !== from ? '-' + to : ''}`); }
   const pk = selection.pick;
   if (pk?.faceId != null) {
@@ -262,17 +267,36 @@ $('btn-mark-send').addEventListener('click', () => void sendMarkup());
 function openPartMenu(id: string, x: number, y: number): void {
   const e = partEntry(id);
   const visible = viewer.isVisible(id);
+  const ghost = viewer.isGhosted(id);
   const m = $('menu-ctx');
   const items: (HTMLElement | null)[] = [
     el('div', { className: 'mh', textContent: e?.name ?? partInfo(id)?.name ?? id }),
     menuItem('Isolieren', { icon: 'target', onClick: () => { viewer.isolate(id); refreshPartsCard(); } }),
     viewer.hiddenCount ? menuItem('Alle einblenden', { icon: 'eye', onClick: () => { viewer.showAll(); refreshPartsCard(); } }) : null,
     menuItem(visible ? 'Ausblenden' : 'Einblenden', { icon: visible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(id, !visible); refreshPartsCard(); } }),
+    menuItem(ghost ? 'Nicht mehr transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(id, !ghost); refreshPartsCard(); } }),
     menuItem('Kamera auf Bauteil', { icon: 'fit', onClick: () => viewer.focusPart(id) }),
     el('div', { className: 'msep' }),
     menuItem('Code zeigen', { icon: 'code', disabled: !e?.file, onClick: () => { selectPart(id, null); if (e?.file && e.line) void openCode(e.file, { ...lineRange(e), label: e.name, color: partInfo(id)?.color }); } }),
     menuItem('An Agent geben', { icon: 'send', onClick: () => { selectPart(id, null); insertToAgent(selectionText()); } }),
     menuItem('Exportieren …', { icon: 'export', onClick: () => { selectPart(id, null); exportScope = 'sel'; openExportMenu(); } }),
+  ];
+  m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
+  menus.at(m, x, y);
+}
+
+/** Rechtsklick auf eine Gruppe: dasselbe für alle ihre Teile. */
+function openGroupMenu(ids: string[], name: string, x: number, y: number): void {
+  const anyVisible = ids.some((id) => viewer.isVisible(id));
+  const allGhost = ids.every((id) => viewer.isGhosted(id));
+  const m = $('menu-ctx');
+  const items: (HTMLElement | null)[] = [
+    el('div', { className: 'mh', textContent: `${name} · ${ids.length} Teil${ids.length === 1 ? '' : 'e'}` }),
+    menuItem('Isolieren', { icon: 'target', onClick: () => { viewer.isolate(ids); refreshPartsCard(); } }),
+    viewer.hiddenCount ? menuItem('Alle einblenden', { icon: 'eye', onClick: () => { viewer.showAll(); refreshPartsCard(); } }) : null,
+    menuItem(anyVisible ? 'Ausblenden' : 'Einblenden', { icon: anyVisible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(ids, !anyVisible); refreshPartsCard(); } }),
+    menuItem(allGhost ? 'Nicht mehr transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(ids, !allGhost); refreshPartsCard(); } }),
+    menuItem('Kamera auf Gruppe', { icon: 'fit', onClick: () => viewer.setView('fit', ids) }),
   ];
   m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
   menus.at(m, x, y);

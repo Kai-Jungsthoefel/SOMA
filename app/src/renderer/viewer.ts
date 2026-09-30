@@ -12,7 +12,7 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 interface FaceEntry { id: number; surface: string; area?: number; center?: number[]; triStart: number; triCount: number }
 interface EdgeEntry { id: number; curve: string; length?: number; segStart: number; segCount: number }
 interface VertexEntry { id: number; p: number[] }
-interface PartMeta { partId: string; name: string; role: string; faces: FaceEntry[]; edges?: EdgeEntry[]; vertices?: VertexEntry[] }
+interface PartMeta { partId: string; name: string; role: string; group?: string | null; faces: FaceEntry[]; edges?: EdgeEntry[]; vertices?: VertexEntry[] }
 interface PartEntry { group: THREE.Object3D; meta: PartMeta; meshes: THREE.Mesh[]; lines: THREE.LineSegments[] }
 
 export interface PickResult {
@@ -55,6 +55,8 @@ export class Viewer {
   private parts = new Map<string, PartEntry>();
   private highlight = new THREE.Group();
   private hidden = new Set<string>();
+  /** Einzeln transparent geschaltete Bauteile (anders als „Transparent“ im Menü, das für alle gilt). */
+  private ghosted = new Set<string>();
   private raycaster = new THREE.Raycaster();
   private renderQueued = false;
   private hasFitted = false;
@@ -131,6 +133,8 @@ export class Viewer {
         if ((c as THREE.Mesh).isMesh) meshes.push(c as THREE.Mesh);
         if ((c as THREE.LineSegments).isLineSegments) lines.push(c as THREE.LineSegments);
       });
+      // Auch die Kanten brauchen ihr eigenes Material, sonst würden sie mit einem transparenten Teil überall blass
+      for (const l of lines) l.material = (l.material as THREE.LineBasicMaterial).clone();
       for (const m of meshes) {
         // Eigenes Material je Netz: die Auswahl färbt ein Bauteil ein, gleichfarbige Teile dürfen nicht mitleuchten
         const mat = (m.material as THREE.MeshStandardMaterial).clone();
@@ -148,6 +152,7 @@ export class Viewer {
     this.parts = fresh;
     this.scene.add(gltf.scene);
     for (const id of [...this.hidden]) if (!this.parts.has(id)) this.hidden.delete(id);
+    for (const id of [...this.ghosted]) if (!this.parts.has(id)) this.ghosted.delete(id);
     this.applyVisibility();
     this.applyDisplay();
     this.highlight.clear();
@@ -166,6 +171,7 @@ export class Viewer {
     this.disposeModel();
     this.parts.clear();
     this.hidden.clear();
+    this.ghosted.clear();
     this.hasFitted = false;
     this.highlight.clear();
     this.clearGroup(this.hover);
@@ -187,25 +193,35 @@ export class Viewer {
 
   // ---- Sichtbarkeit und Darstellung -----------------------------------------------------------------------------
 
-  partList(): { id: string; name: string; role: string; color: string }[] {
+  partList(): { id: string; name: string; role: string; color: string; group: string | null }[] {
     return [...this.parts.values()].map((p) => ({
-      id: p.meta.partId, name: p.meta.name, role: p.meta.role,
+      id: p.meta.partId, name: p.meta.name, role: p.meta.role, group: p.meta.group ?? null,
       color: p.meshes[0] ? '#' + (p.meshes[0].material as THREE.MeshStandardMaterial).color.getHexString() : '#888',
     }));
   }
 
   isVisible(id: string): boolean { return !this.hidden.has(id); }
 
-  setVisible(id: string, on: boolean): void {
-    if (on) this.hidden.delete(id); else this.hidden.add(id);
+  setVisible(ids: string | string[], on: boolean): void {
+    for (const id of typeof ids === 'string' ? [ids] : ids) { if (on) this.hidden.delete(id); else this.hidden.add(id); }
     this.applyVisibility();
     this.requestRender();
   }
 
-  /** Nur dieses Bauteil zeigen. */
-  isolate(id: string): void {
-    for (const k of this.parts.keys()) if (k !== id) this.hidden.add(k); else this.hidden.delete(k);
+  /** Nur dieses Bauteil (oder diese Gruppe) zeigen. */
+  isolate(ids: string | string[]): void {
+    const keep = new Set(typeof ids === 'string' ? [ids] : ids);
+    for (const k of this.parts.keys()) if (!keep.has(k)) this.hidden.add(k); else this.hidden.delete(k);
     this.applyVisibility();
+    this.requestRender();
+  }
+
+  isGhosted(id: string): boolean { return this.ghosted.has(id); }
+
+  /** Einzelne Bauteile transparent schalten. Sie lassen dann Klicks durch zu dem, was dahinter liegt. */
+  setGhosted(ids: string | string[], on: boolean): void {
+    for (const id of typeof ids === 'string' ? [ids] : ids) { if (on) this.ghosted.add(id); else this.ghosted.delete(id); }
+    this.applyDisplay();
     this.requestRender();
   }
 
@@ -222,17 +238,39 @@ export class Viewer {
   setGhost(on: boolean): void { this.ghost = on; this.applyDisplay(); this.requestRender(); }
 
   private applyDisplay(): void {
-    for (const p of this.parts.values()) {
-      for (const l of p.lines) l.visible = this.edges;
+    for (const [id, p] of this.parts) {
+      const own = this.ghosted.has(id);
+      for (const l of p.lines) {
+        l.visible = this.edges;
+        const lm = l.material as THREE.LineBasicMaterial;
+        lm.transparent = own;
+        lm.opacity = own ? 0.3 : 1;
+      }
       for (const m of p.meshes) {
         const mat = m.material as THREE.MeshStandardMaterial;
         mat.wireframe = this.wire;
         const base = (mat.userData.baseOpacity as number) ?? 1;
-        mat.opacity = this.ghost ? Math.min(base, 0.35) : base;
-        mat.transparent = this.ghost || (mat.userData.baseTransparent as boolean);
+        // Einzeln transparent: deutlich durchsichtiger und ohne Tiefe, damit man sieht, was dahinter liegt
+        mat.opacity = own ? Math.min(base, 0.18) : this.ghost ? Math.min(base, 0.35) : base;
+        mat.transparent = own || this.ghost || (mat.userData.baseTransparent as boolean);
+        mat.depthWrite = !own && p.meta.role !== 'reference';
+        m.renderOrder = own ? 2 : p.meta.role === 'reference' ? 1 : 0;
         mat.needsUpdate = true;
       }
     }
+  }
+
+  /** Sichtbare Bauteile, getrennt nach deckend und einzeln transparent. Treffer gehen zuerst an die deckenden. */
+  private pickSets(): [PartEntry[], PartEntry[]] {
+    const vis = [...this.parts.values()].filter((p) => p.group.visible);
+    return [vis.filter((p) => !this.ghosted.has(p.meta.partId)), vis.filter((p) => this.ghosted.has(p.meta.partId))];
+  }
+
+  /** Erste Fläche unter dem Strahl, transparente Teile nur, wenn dahinter nichts Deckendes liegt. */
+  private firstHit(): THREE.Intersection | undefined {
+    const [solid, ghost] = this.pickSets();
+    return this.raycaster.intersectObjects(solid.flatMap((p) => p.meshes), false)[0]
+      ?? this.raycaster.intersectObjects(ghost.flatMap((p) => p.meshes), false)[0];
   }
 
   // ---- Kamera ---------------------------------------------------------------------------------------------------
@@ -382,9 +420,7 @@ export class Viewer {
 
   pickAt(ndcX: number, ndcY: number): PickResult | null {
     this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
-    const targets: THREE.Mesh[] = [];
-    for (const p of this.parts.values()) if (p.group.visible) targets.push(...p.meshes);
-    const hit = this.raycaster.intersectObjects(targets, false)[0];
+    const hit = this.firstHit();
     this.highlight.clear();
     if (!hit) { this.selectedId = null; this.applySelection(); this.requestRender(); return null; }
     const part = [...this.parts.values()].find((p) => p.meshes.includes(hit.object as THREE.Mesh))!;
@@ -434,9 +470,7 @@ export class Viewer {
     el.addEventListener('dblclick', (e) => {
       const r = el.getBoundingClientRect();
       this.raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.camera);
-      const targets: THREE.Mesh[] = [];
-      for (const p of this.parts.values()) if (p.group.visible) targets.push(...p.meshes);
-      const hit = this.raycaster.intersectObjects(targets, false)[0];
+      const hit = this.firstHit();
       if (hit) this.setPivot(hit.point.clone());
     });
   }
@@ -461,13 +495,19 @@ export class Viewer {
     if (!r.width || !r.height) return null;
     const px = clientX - r.left, py = clientY - r.top;
     this.camera.updateMatrixWorld();
-    this.raycaster.setFromCamera(new THREE.Vector2((px / r.width) * 2 - 1, -(py / r.height) * 2 + 1), this.camera);
-    const targets: THREE.Mesh[] = [];
-    for (const p of this.parts.values()) if (p.group.visible) targets.push(...p.meshes);
+    // Erst die deckenden Teile, transparent geschaltete nur, wenn dort nichts anderes liegt: So misst man durch sie hindurch
+    const [solid, ghost] = this.pickSets();
+    return this.probeIn(px, py, r.width, r.height, solid) ?? this.probeIn(px, py, r.width, r.height, ghost);
+  }
+
+  private probeIn(px: number, py: number, w: number, h: number, parts: PartEntry[]): ProbeHit | null {
+    if (!parts.length) return null;
+    const targets = parts.flatMap((p) => p.meshes);
+    this.raycaster.setFromCamera(new THREE.Vector2((px / w) * 2 - 1, -(py / h) * 2 + 1), this.camera);
     const hit = this.raycaster.intersectObjects(targets, false)[0];
-    const vertex = this.nearestVertex(px, py, r.width, r.height, targets);
+    const vertex = this.nearestVertex(px, py, w, h, parts, targets);
     if (vertex) return vertex;
-    const edge = this.nearestEdge(px, py, r.width, r.height, targets);
+    const edge = this.nearestEdge(px, py, w, h, parts, targets);
     if (edge) return edge;
     if (!hit) return null;
     const part = [...this.parts.values()].find((p) => p.meshes.includes(hit.object as THREE.Mesh))!;
@@ -485,11 +525,11 @@ export class Viewer {
     return !!first && first.distance < dist - Math.max(0.5, dist * 0.002);
   }
 
-  private nearestVertex(px: number, py: number, w: number, h: number, occluders: THREE.Mesh[]): ProbeHit | null {
+  private nearestVertex(px: number, py: number, w: number, h: number, parts: PartEntry[], occluders: THREE.Mesh[]): ProbeHit | null {
     const v = new THREE.Vector3(), s = new THREE.Vector3();
     const cands: { part: PartEntry; vx: VertexEntry; d: number; point: THREE.Vector3 }[] = [];
-    for (const p of this.parts.values()) {
-      if (!p.group.visible || !p.meta.vertices?.length || !p.lines.some((l) => l.visible)) continue;
+    for (const p of parts) {
+      if (!p.meta.vertices?.length || !p.lines.some((l) => l.visible)) continue;
       p.group.updateMatrixWorld();
       for (const vx of p.meta.vertices) {
         v.set(vx.p[0], vx.p[1], vx.p[2]).applyMatrix4(p.group.matrixWorld);
@@ -507,11 +547,11 @@ export class Viewer {
     return null;
   }
 
-  private nearestEdge(px: number, py: number, w: number, h: number, occluders: THREE.Mesh[]): ProbeHit | null {
+  private nearestEdge(px: number, py: number, w: number, h: number, parts: PartEntry[], occluders: THREE.Mesh[]): ProbeHit | null {
     const a = new THREE.Vector3(), b = new THREE.Vector3(), sa = new THREE.Vector3(), sb = new THREE.Vector3();
     const cands: { part: PartEntry; seg: number; d: number; point: THREE.Vector3 }[] = [];
-    for (const p of this.parts.values()) {
-      if (!p.group.visible || !p.meta.edges?.length) continue;
+    for (const p of parts) {
+      if (!p.meta.edges?.length) continue;
       for (const l of p.lines) {
         if (!l.visible) continue;
         const pos = l.geometry.getAttribute('position');
@@ -809,6 +849,12 @@ export class Viewer {
   /** Eckpunkte eines Bauteils mit Bildschirmposition. */
   verticesOf(partId: string): { id: number; p: number[]; screen: { x: number; y: number } }[] {
     return (this.parts.get(partId)?.meta.vertices ?? []).map((v) => ({ id: v.id, p: v.p, screen: this.screenAt(v.p) }));
+  }
+
+  /** Deckkraft und Tiefenschreiben eines Bauteils, für Tests. */
+  partLook(id: string): { opacity: number; depthWrite: boolean } | null {
+    const m = this.parts.get(id)?.meshes[0]?.material as THREE.MeshStandardMaterial | undefined;
+    return m ? { opacity: m.opacity, depthWrite: m.depthWrite } : null;
   }
 
   /** Kamera, Drehpunkt und Schnittebenen, für Tests. */

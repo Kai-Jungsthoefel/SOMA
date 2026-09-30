@@ -47,6 +47,8 @@ export interface AgentInfo { id: string; label: string; command: string; found: 
 export interface PartMap {
   id: string; name: string; step_name: string; role: string;
   file?: string; line?: number; end_line?: number; volume?: number;
+  /** Gruppe mit „/“ verschachtelt, z. B. „Gehäuse/Schrauben“ (aus add_part(group=…) oder einer importierten Baugruppe). */
+  group?: string | null;
   /** Achsparallele Hülle [[xmin, ymin, zmin], [xmax, ymax, zmax]] in mm. */
   bbox?: number[][];
 }
