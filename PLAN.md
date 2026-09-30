@@ -1,6 +1,6 @@
 # Plan: CAD-IDE mit KI-Agenten
 
-> Stand: 2026-09-30 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 4 erledigt, siehe Abschnitt 10 und [app/README.md](app/README.md))
+> Stand: 2026-09-30 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 5 erledigt, siehe Abschnitt 10 und [app/README.md](app/README.md))
 > Ursprung: [IDEA.md](IDEA.md) · Begründungen und Historie: [DECISIONS.md](DECISIONS.md)
 > Zahlen in Klammern, z. B. (E12), verweisen auf Entscheidungen im Log.
 
@@ -37,7 +37,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
       nutzt `cadide build|check|export`  Hilfsbibliothek + CLI
 ```
 
-- **Desktop:** Electron, TypeScript (E23). Editor: Monaco oder CodeMirror (offen).
+- **Desktop:** Electron, TypeScript (E23). Editor: CodeMirror 6 (Phase 1, Schritt 5).
 - **Python-Dienst:** Pro Projekt ein langlebiger Prozess für die App (schnelle Messungen, Modell im Speicher). Der Build-Befehl des Agenten läuft zusätzlich als eigenständiger Einmal-Prozess und funktioniert auch ohne App (E24).
 - **CAD-Framework:** **CadQuery**, fest (E12). OpenSCAD ist ausgeschlossen (kein STEP, kein B-Rep).
 - **Viewer:** three.js zeigt ein GLB, das nach jedem Build aus der STEP-Datei erzeugt wird (Bauteilnamen, Farben, Flächen- und Kanten-IDs). Exakte Messwerte (Radius, Flächenabstand) fragt die App beim Python-Dienst ab. Es gibt keinen zweiten CAD-Kern im Frontend (E9).
@@ -158,6 +158,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 | `inputs/` verändert | Mitgebrachte Datei verfälscht | Git-Stand, Hinweis |
 | Build hängt oder dauert endlos | App blockiert | Timeout, Abbrechen, Dienst neu starten |
 | Agent arbeitet außerhalb des Projektordners | Ergebnisse fehlen in der ZIP | Nicht verhinderbar, wo möglich erkennen |
+| Agent ändert eine Datei, die der Nutzer gerade im Editor bearbeitet | Eine der beiden Fassungen ginge verloren | **Umgesetzt:** nichts überschreiben, Hinweis im Editor, der Nutzer wählt, die andere Fassung kommt in eine Sicherung |
 | Python-Dienst stürzt ab | Viewer/Messen tot | Automatischer Neustart, Meldung |
 
 ## 10. Phasen
@@ -215,7 +216,20 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Robustheit:** Scheitert das Speichern, bleibt die Zeichnung offen. Der Hauptprozess nimmt nur PNG bis 64 MB an. Der Pfadschutz (`resolveInside`) prüft bei noch nicht vorhandenen Dateien jetzt den nächsten vorhandenen Ordner darüber, sonst hätte ein Verweis `.cadide` → außen Dateien außerhalb des Projekts landen lassen.
 - **Git und ZIP:** Markierungen sind nicht in Git (E11) und zählen nicht als ungespeicherte Änderung, wandern aber beim nächsten Speichern mit der ZIP.
 
-*Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Editor zum Bearbeiten (bisher nur Lesen), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen (darin auch: Liest der Agent die Markierung als Bild?), Bündelung von Python und Installer, macOS und Linux.
+*Agent-Test Markierung (informell, vom Nutzer):* Mit `[Markierung: …]` in der Eingabe hat Claude Code das Bild geöffnet und umgesetzt.
+
+*Schritt 5, Editor (erledigt, E39, E40; 29 Prüfungen in `app/test/editor.mjs`, 15 Einheitentests):*
+
+- **Editor im Code-Panel:** CodeMirror 6 mit Zeilennummern, Python-Hervorhebung in den Farben der Codeausschnitte (Konstanten wie `LENGTH` eigens), Klammern, Einrückung mit 4 Leerzeichen, Suchen und Ersetzen (Strg+F, deutsch beschriftet), Rückgängig je Datei. Die Auswahl im Viewer markiert die Zeilen des `add_part`-Aufrufs, die Fehlerkarte die Fehlerzeile in Rot. Während getippt wird, springt der Editor nicht, nur die Markierung wandert mit.
+- **Speichern nur auf Wunsch (E39):** Beim Tippen passiert nichts auf der Platte und es wird nicht gebaut. Der Reiter zeigt einen Punkt, die Infozeile „Nicht gespeichert · Strg+S“ und den Knopf „Speichern und bauen“, der Speicherstand oben zählt die Eingaben mit. Strg+S im Editor und der Knopf schreiben die Dateien (erst in eine Nebendatei, dann umbenennen) und bauen **genau einmal**, aber nur, wenn eine gespeicherte Datei das Modell betrifft (E40: Python und `inputs/`, dieselbe Regel wie die Dateiüberwachung in `src/shared/editable.ts`). Bei `NOTES.md` heißt der Knopf nur „Speichern“. Die Dateiüberwachung erkennt, dass die Änderung schon im laufenden Build steckt, und baut nicht noch einmal. „Speichern“ oben (und Strg+S außerhalb des Editors) speichert zuerst den Editor, dann Snapshot und ZIP. „Jetzt bauen“ speichert ebenfalls vorher.
+- **Rückfragen statt Verlust:** Vor Modellwechsel, Wiederherstellen, Schließen eines Reiters und Beenden fragt die App bei ungespeicherten Eingaben: Speichern, Verwerfen (die Eingabe kommt vorher in eine Sicherung) oder Abbrechen. Beim Beenden ist das eine gemeinsame Frage mit der nach der ZIP. Jede Schreibanfrage trägt die ID des Modells, eine verspätete für ein altes Modell wird als Sicherung abgelegt statt ins neue geschrieben.
+- **Agent und Nutzer an derselben Datei:** Der Editor kennt den Stand, den er zuletzt von der Platte hatte. Ändert der Agent die Datei und im Editor liegt nichts Ungesichertes, übernimmt der Editor die neue Fassung (nur den geänderten Teil, Schreibmarke bleibt, nicht im Rückgängig). Liegt etwas Ungesichertes da, wird nichts überschrieben: Ein Hinweis bietet „Meine Fassung behalten“ oder „Fassung von außen laden“, die jeweils andere Fassung kommt nach `workspace-backups/<id>-editor/`. Gelöschte Dateien lassen sich mit der eigenen Fassung neu anlegen. Beim Beenden mit offenem Konflikt sichert die App die eigene Fassung und nennt den Pfad.
+- **Nur lesen:** `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `output/`, `exports/`, `.cadide/`, `.git/` (Regel in `src/shared/editable.ts`, der Hauptprozess prüft sie beim Schreiben noch einmal), dazu Dateien über 2 MB und solche, die nicht als UTF-8 lesbar sind. Der Grund steht über dem Text.
+- **Zeilenenden** der Datei bleiben erhalten (CRLF bleibt CRLF).
+- **Höhe:** Der Editor füllt das Panel bis unten und lässt sich bei langen Dateien bis zum Ende scrollen (CodeMirror erzwingt `position: relative`, die Höhe kommt deshalb über `height`).
+- **Nebenbei:** Die App nutzt jetzt das dunkle Farbschema des Systems (`color-scheme: dark`), Scrollleisten sind dunkel. Im schmalen Viewer (etwa bei offenem Code-Panel) rückt die Fehlerkarte nach unten, statt über den Rand zu ragen. Behoben: Der Speicherstand oben konnte nach dem Speichern fälschlich „Noch nicht gespeichert“ zeigen, wenn die regelmäßige Git-Abfrage gerade lief (sie las den Stand der App vor ihren Git-Aufrufen).
+
+*Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Messen, Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
 
@@ -242,6 +256,11 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - Markierung: Eingefügt wird `[Markierung: .cadide/feedback/markierung-JJJJMMTT-HHMM.png] ` (gleiche Form wie Auswahl und Build-Fehler). Beide Knöpfe („Markieren“ im Viewer, „Markierung“ in der Übergabeleiste) öffnen die Zeichenfläche
 - Markierung: Escape verwirft eine Zeichnung erst beim zweiten Druck, „Abbrechen“ sofort. Text wird mit Enter oder beim nächsten Klick übernommen
 - Markierungen zählen nicht als ungespeicherte Änderung und werden nie aufgeräumt (`.cadide/feedback/` wächst, siehe ZIP-Größe unten)
+- Editor: **CodeMirror 6** statt Monaco (leichter, braucht keine Worker, passt zur Sicherheitsrichtlinie, lässt sich mit den eigenen Farben gestalten). Keine Autovervollständigung und keine Prüfung beim Tippen, das übernimmt der Build
+- Editor (E39, Auslegung): **Strg+S im Editor** speichert Code und baut, ohne ZIP und Snapshot. **Strg+S außerhalb** und „Speichern“ oben speichern das ganze Modell. Grund: Beim Ausprobieren im Code soll nicht jedes Speichern einen Snapshot anlegen und beim neuen Modell nach dem ZIP-Ort fragen. Änderungen des Agenten baut weiter der Auto-Build
+- Editor: Nach Strg+S ohne Änderung oder nur an Notizen wird nicht gebaut (E40). „Jetzt bauen“ speichert vorher und baut immer. Bei einem Konflikt wird weder gespeichert noch gebaut
+- Editor-Konflikt: zwei Wahlmöglichkeiten mit Sicherung, **kein automatisches Zusammenführen** (E28). Sicherungen liegen in den App-Daten, nicht im Projekt, und werden nicht aufgeräumt
+- Editor: Welche Dateien nur lesbar sind (siehe Schritt 5). Dateien in `inputs/` darf der Nutzer bearbeiten, der Agent laut `AGENTS.md` nicht
 
 - Rolle `reference` und ihre Standardwerte (E34)
 - Hinweis beim ersten Start, dass der Agent mit den Rechten des Nutzers läuft (E29)
