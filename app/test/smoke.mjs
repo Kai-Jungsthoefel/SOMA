@@ -79,6 +79,119 @@ try {
   check('Bestätigung „In die Eingabe von Terminal eingefügt"', (await ev(() => window.__t.toast())).text.includes('In die Eingabe von Terminal eingefügt'));
   await ev((id) => window.cadide.term.write(id, '\x03'), tid); // Zeile verwerfen
 
+  // Markierung (E16): Viewer-Bild einfrieren, zeichnen, als PNG nach .cadide/feedback/, Pfad in die Eingabe
+  const dirtyBefore = (await ev(() => window.cadide.project.saveState())).dirtyFiles;
+  const lidPos = await ev((l) => { const v = window.__t.viewer, r = document.getElementById('viewer').getBoundingClientRect(), p = v.screenOf(l.id, l.face); return [p.x - r.left, p.y - r.top]; }, lidFace);
+  await domClick('btn-mark');
+  await waitFor('Zeichenfläche offen', () => window.__t.markup().active, 5000).catch(() => {});
+  const hiddenUi = await ev(() => ['parts', 'cube', 'selcard'].every((id) => getComputedStyle(document.getElementById(id)).display === 'none'));
+  const mk0 = await ev(() => window.__t.markup());
+  check('„Markieren": Zeichenfläche offen, Bauteilkarte, Würfel und Auswahlkarte treten zurück', mk0.active && !mk0.blank && hiddenUi && mk0.pixels[0] > 0, `${mk0.pixels.join('x')} px`);
+  const [bgPx, lidPx] = await ev((p) => [window.__t.markPixel(3, 3), window.__t.markPixel(p[0], p[1])], lidPos);
+  // Die angeklickte Fläche leuchtet im Viewer orange. Im Bild fehlt die Auswahl, sonst verschluckt sie die orange Markierung.
+  check('Das eingefrorene Bild zeigt das Modell ohne Auswahlfarbe', bgPx[3] === 255 && lidPx.slice(0, 3).reduce((s, v, i) => s + Math.abs(v - bgPx[i]), 0) > 40
+    && !(lidPx[0] > 200 && lidPx[2] < 120), `${bgPx.slice(0, 3)} / ${lidPx.slice(0, 3)}`);
+  check('Die Auswahl im Viewer selbst bleibt bestehen', await ev(() => window.__t.viewer.selection) === lidFace.id);
+  const drag = (pts) => ev((pts) => {
+    const c = document.getElementById('mark-canvas'), r = c.getBoundingClientRect();
+    const fire = (type, [x, y]) => c.dispatchEvent(new PointerEvent(type, { clientX: r.left + x, clientY: r.top + y, bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true }));
+    fire('pointerdown', pts[0]); for (const p of pts.slice(1)) fire('pointermove', p); fire('pointerup', pts[pts.length - 1]);
+  }, pts);
+  const tool = (name) => ev((n) => document.querySelector(`#mark-tools [data-tool="${n}"]`).click(), name);
+  await drag([[60, 300], [100, 302], [140, 300], [180, 301]]);
+  await tool('arrow'); await drag([[420, 140], [lidPos[0], lidPos[1]]]);
+  await tool('rect'); await drag([[40, 380], [200, 460]]);
+  await tool('ellipse'); await drag([[250, 380], [252, 381]]); // bloßer Klick: keine Form
+  await tool('text'); await drag([[430, 110]]);
+  await sleep(100);
+  await ev(() => { document.getElementById('mark-text').value = 'vorne spitz, etwa 1 mm'; });
+  await shot('7a-markieren-text');
+  await ev(() => document.getElementById('mark-text').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+  const mk1 = await ev(() => window.__t.markup());
+  const penPx = await ev(() => window.__t.markPixel(120, 301));
+  check('Zeichnen: Stift, Pfeil, Rechteck, Text (Klick ohne Ziehen ergibt keine Form)', JSON.stringify(mk1.shapes) === '["pen","arrow","rect","text"]', mk1.shapes.join(','));
+  check('Stiftstrich im Bild in Orange', penPx[0] > 200 && penPx[1] > 110 && penPx[1] < 190 && penPx[2] < 110, penPx.slice(0, 3).join(','));
+  await shot('7-markieren');
+  await tool('ellipse'); await drag([[250, 380], [330, 440]]);
+  await domClick('btn-mark-undo');
+  check('Rückgängig nimmt die letzte Form zurück', JSON.stringify((await ev(() => window.__t.markup())).shapes) === '["pen","arrow","rect","text"]');
+  await domClick('btn-mark-blank');
+  const blankPx = await ev((p) => window.__t.markPixel(p[0] + 30, p[1] + 30), lidPos);
+  await shot('7c-markieren-leer');
+  check('„Leere Fläche": Hintergrund ohne Modell, Zeichnung bleibt', (await ev(() => window.__t.markup())).blank && blankPx.slice(0, 3).join() === '27,30,35'
+    && (await ev(() => window.__t.markup())).shapes.length === 4, blankPx.slice(0, 3).join(','));
+  await domClick('btn-mark-blank');
+
+  // Gezeichnetes bleibt bearbeitbar: auswählen, verschieben, drehen, skalieren, umfärben, löschen
+  const mk = () => ev(() => window.__t.markup());
+  const key = (k, o = {}) => ev(([k, o]) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, ...o })), [k, o]);
+  await tool('select');
+  const rect0 = (await mk()).items[2];
+  await drag([[40, 420], [60, 410], [80, 400]]); // Klick auf den linken Rand, dann ziehen
+  let st = await mk();
+  check('Auswählen: Klick auf den Rand wählt das Rechteck, Ziehen verschiebt es', st.selected === 2 && st.items[2].x === rect0.x + 40 && st.items[2].y === rect0.y - 20, `${st.selected}: ${st.items[2].x},${st.items[2].y}`);
+  let hd = await ev(() => window.__t.markHandles());
+  await drag([hd.rotate, [hd.center[0] + 50, hd.rotate[1] + 20], [hd.center[0] + 100, hd.center[1]]]);
+  st = await mk();
+  check('Drehgriff dreht um die Mitte (hier um 90°)', Math.abs(st.items[2].rot - Math.PI / 2) < 0.01 && st.items[2].x === rect0.x + 40, `${st.items[2].rot} rad`);
+  hd = await ev(() => window.__t.markHandles());
+  const [cx2, cy2] = hd.corners[2];
+  await drag([[cx2, cy2], [cx2 + (cx2 - hd.center[0]) * 0.5, cy2 + (cy2 - hd.center[1]) * 0.5]]);
+  st = await mk();
+  const hd2 = await ev(() => window.__t.markHandles());
+  check('Eckgriff skaliert, die gegenüberliegende Ecke bleibt stehen', st.items[2].sx > 1.2 && st.items[2].sy > 1.2 && Math.hypot(hd2.corners[0][0] - hd.corners[0][0], hd2.corners[0][1] - hd.corners[0][1]) < 0.5,
+    `${st.items[2].sx} × ${st.items[2].sy}`);
+  await domClick('btn-mark-color');
+  const swatches = await ev(() => document.querySelectorAll('#menu-mark-color [data-color]').length);
+  await shot('7e-markieren-farben');
+  await ev(() => document.querySelector('#menu-mark-color [data-color="blue"]').click());
+  st = await mk();
+  check('Farbmenü: 10 Farben und eigene Farbe, die ausgewählte Form wird umgefärbt', swatches === 10 && await ev(() => !!document.getElementById('mark-color-custom'))
+    && st.items[2].color === '#5ea8ff' && st.color === '#5ea8ff' && await ev(() => document.getElementById('menu-mark-color').hidden), `${swatches} Farben, ${st.items[2].color}`);
+  await shot('7d-markieren-auswahl');
+  await key('Delete');
+  st = await mk();
+  check('Entf löscht die ausgewählte Form', JSON.stringify(st.shapes) === '["pen","arrow","text"]' && st.selected === -1, st.shapes.join(','));
+  await domClick('btn-mark-undo');
+  st = await mk();
+  check('Rückgängig holt sie zurück, mit Drehung, Größe und Farbe', st.shapes.length === 4 && st.items[2].color === '#5ea8ff' && Math.abs(st.items[2].rot - Math.PI / 2) < 0.01 && st.items[2].sx > 1.2);
+  await key('y', { ctrlKey: true });
+  check('Strg+Y wiederholt das Löschen', (await mk()).shapes.length === 3);
+  await domClick('btn-mark-undo');
+  const tx = (await mk()).items[3];
+  await drag([[tx.x, tx.y]]); await drag([[tx.x, tx.y]]);
+  await sleep(50);
+  const ed = await ev(() => ({ open: !document.getElementById('mark-text').hidden, value: document.getElementById('mark-text').value }));
+  await ev(() => { const t = document.getElementById('mark-text'); t.value = 'Spitze etwa 1 mm'; t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  st = await mk();
+  check('Doppelklick auf einen Text öffnet ihn zum Bearbeiten, Enter übernimmt', ed.open && ed.value === 'vorne spitz, etwa 1 mm' && st.items[3].text === 'Spitze etwa 1 mm' && st.shapes.length === 4, ed.value);
+  await key('Escape');
+  check('Escape hebt zuerst nur die Auswahl auf', (await mk()).selected === -1 && (await mk()).active);
+
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  check('Escape mit Zeichnung verwirft nicht sofort (erst beim zweiten Mal)', (await ev(() => window.__t.markup())).active && (await ev(() => window.__t.toast())).text.includes('Noch einmal Escape'));
+  const px = (await ev(() => window.__t.markup())).pixels;
+  await domClick('btn-mark-send');
+  await waitFor('Markierung gespeichert', () => !window.__t.markup().active, 10000).catch(() => {});
+  const fbDir = path.join(proj.dir, '.cadide', 'feedback');
+  const fbFiles = fs.existsSync(fbDir) ? fs.readdirSync(fbDir) : [];
+  const png = fbFiles.length === 1 ? fs.readFileSync(path.join(fbDir, fbFiles[0])) : Buffer.alloc(0);
+  if (process.env.SMOKE_SHOTS && png.length) fs.writeFileSync(path.join(APP, 'test', 'shots', '7b-markierung-bild.png'), png); // so sieht der Agent es
+  check('„An Agent geben": PNG in .cadide/feedback/, so groß wie der Viewer in Gerätepixeln', /^markierung-\d{8}-\d{4}\.png$/.test(fbFiles[0] ?? '') && png.length > 2000
+    && png.readUInt32BE(16) === px[0] && png.readUInt32BE(20) === px[1], `${fbFiles.join(',')} ${png.length > 24 ? `${png.readUInt32BE(16)}x${png.readUInt32BE(20)}` : ''}`);
+  await waitFor('Pfad im Terminal', (id) => window.__t.termText(id).includes('[Markierung: .cadide/feedback/markierung-'), 10000, tid).catch(() => {});
+  check('Pfad steht in der Eingabe des Terminals, nicht abgeschickt', (await ev((id) => window.__t.termText(id), tid)).includes(`[Markierung: .cadide/feedback/${fbFiles[0]}]`));
+  const tst = await ev(() => window.__t.toast());
+  check('Meldung nennt Datei und Ziel, Bauteilkarte ist zurück', tst.text.includes(`Markierung gespeichert: .cadide/feedback/${fbFiles[0]}`) && tst.text.includes('In die Eingabe von Terminal eingefügt')
+    && await ev(() => getComputedStyle(document.getElementById('parts')).display !== 'none'), tst.text.replace(/\s+/g, ' ').slice(0, 70));
+  await ev((id) => window.cadide.term.write(id, '\x03'), tid);
+  check('Markierung zählt nicht als ungespeicherte Änderung (nicht in Git, E11)', (await ev(() => window.cadide.project.saveState())).dirtyFiles === dirtyBefore);
+  await domClick('btn-ins-mark');
+  await waitFor('Zeichenfläche über die Übergabeleiste', () => window.__t.markup().active, 5000).catch(() => {});
+  const viaHandoff = await ev(() => window.__t.markup().active);
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  check('„Markierung" in der Übergabeleiste öffnet die Zeichenfläche, Escape ohne Zeichnung schließt', viaHandoff && !(await ev(() => window.__t.markup().active)) && fs.readdirSync(fbDir).length === 1);
+
   // 4) Auto-Build: Änderung an model.py -> neuer Build -> drittes Bauteil
   const modelPy = path.join(proj.dir, 'model.py');
   const original = fs.readFileSync(modelPy, 'utf8');

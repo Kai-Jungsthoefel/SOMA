@@ -2,6 +2,7 @@ import type { AgentInfo, BuildStatus, ModelMap, PartMap, PreviewResult, ProjectI
 import { CodePanel, codeRows } from './code';
 import { FileTree, TEXT_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
+import { Markup } from './markup';
 import { PartsCard } from './parts';
 import { TerminalTabs } from './terminals';
 import { $, el, fmtWhen, menuItem, menus, toast } from './ui';
@@ -184,15 +185,55 @@ function errorText(): string | null {
   return `[Build-Fehler: ${where}${e.message.replace(/\s+/g, ' ').trim().slice(0, 400)}] `;
 }
 
-/** Fügt Text in die Eingabezeile des aktiven Terminals ein. Abschicken macht der Nutzer selbst (E11). */
-function insertToAgent(text: string | null): void {
+/** Fügt Text in die Eingabezeile des aktiven Terminals ein. Abschicken macht der Nutzer selbst (E11). `done` steht vor der Meldung. */
+function insertToAgent(text: string | null, done?: string): void {
   if (!text) return;
-  if (!terminals.count) { toast('Kein Terminal offen. Starte über + einen Agenten oder ein Terminal.', 'error'); return; }
+  const pre = done ? `${done}\n` : '';
+  if (!terminals.count) { toast(`${pre}Kein Terminal offen. Starte über + einen Agenten oder ein Terminal.`, 'error'); return; }
   setAgentCollapsed(false);
   const title = terminals.insert(text);
-  if (title) toast(`In die Eingabe von ${title} eingefügt. Enter schickt ab.`);
-  else toast('Das Terminal ist beendet. Öffne über + ein neues.', 'error');
+  if (title) toast(`${pre}In die Eingabe von ${title} eingefügt. Enter schickt ab.`);
+  else toast(`${pre}Das Terminal ist beendet. Öffne über + ein neues.`, 'error');
 }
+
+// ---- Markierung (E16) -------------------------------------------------------------------------------------------
+
+const markup = new Markup({
+  viewer: $('viewer'), layer: $('markup'), canvas: $<HTMLCanvasElement>('mark-canvas'), text: $<HTMLInputElement>('mark-text'),
+  hint: $('mark-hint'), tools: $('mark-tools'), undo: $<HTMLButtonElement>('btn-mark-undo'), del: $<HTMLButtonElement>('btn-mark-delete'),
+  blank: $<HTMLButtonElement>('btn-mark-blank'), colorBtn: $<HTMLButtonElement>('btn-mark-color'), colorSwatch: $('mark-color-sw'),
+  palette: $('menu-mark-color'), custom: $<HTMLInputElement>('mark-color-custom'),
+});
+
+/** Friert die Ansicht ein, wie sie gerade ist (auch als Vorschau eines alten Stands, nur ohne Auswahl). Ohne Modell: leere Fläche. */
+function startMarkup(): void {
+  if (!project || markup.active) return;
+  menus.close();
+  markup.open(viewer.partList().length ? viewer.snapshot() : null);
+}
+
+async function sendMarkup(): Promise<void> {
+  const btn = $<HTMLButtonElement>('btn-mark-send');
+  if (btn.disabled || !markup.active) return;
+  btn.disabled = true;
+  try {
+    const r = await api.fs.saveFeedback(await markup.image());
+    // Ging das Speichern schief, bleibt die Zeichnung offen: Nichts geht verloren, der Nutzer kann es noch einmal versuchen
+    if (!r.ok || !r.path) { toast(`Die Markierung ließ sich nicht speichern: ${r.error ?? 'unbekannter Fehler'}`, 'error'); return; }
+    const old = versions.previewed;
+    markup.close();
+    // Zeigt das Bild einen alten Stand, soll der Agent das wissen (sonst vergleicht er es mit dem aktuellen Code)
+    const note = old ? `, zeigt den älteren Stand ${old.short} "${old.subject.slice(0, 80)}"` : '';
+    insertToAgent(`[Markierung: ${r.path}${note}] `, `Markierung gespeichert: ${r.path}`);
+  } catch (e) {
+    toast(`Die Markierung ließ sich nicht speichern: ${e instanceof Error ? e.message : String(e)}`, 'error');
+  } finally { btn.disabled = false; }
+}
+
+$('btn-mark').addEventListener('click', startMarkup);
+$('btn-ins-mark').addEventListener('click', startMarkup);
+$('btn-mark-cancel').addEventListener('click', () => markup.close());
+$('btn-mark-send').addEventListener('click', () => void sendMarkup());
 
 function openPartMenu(id: string, x: number, y: number): void {
   const e = partEntry(id);
@@ -339,6 +380,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   map = null;
   lastOkAt = null;
   textCache.clear();
+  markup.close();
   viewer.clear();
   versions.reset();
   terminals.closeAll();
@@ -677,6 +719,9 @@ if (api.testMode) {
     partSize: (name: string) => { const p = viewer.partList().find((x) => x.name === name); return p ? viewer.partSize(p.id) : null; },
     versionsUi: () => ({ restoreHidden: $('btn-restore').hidden, problem: $('vproblem').hidden ? '' : $('vproblem').textContent }),
     selectionText, errorText,
+    markup: () => markup.state(),
+    markPixel: (x: number, y: number) => markup.pixel(x, y),
+    markHandles: () => markup.handles(),
     insert: (text: string) => insertToAgent(text),
     showPanel: (p: PanelName | null) => showPanel(p),
     showStart: (on: boolean) => showStart(on),

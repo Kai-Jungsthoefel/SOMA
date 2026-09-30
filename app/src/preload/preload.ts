@@ -39,6 +39,7 @@ const api: CadideApi = {
     onChanged: (cb) => { ipcRenderer.on('fs:changed', () => cb()); },
     // Der Renderer kennt keine Dateipfade. Nur die Pfade gezogener Dateien gehen an den Hauptprozess, der prüft und kopiert.
     importFiles: (files) => ipcRenderer.invoke('fs:import', files.map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
+    saveFeedback: (png) => ipcRenderer.invoke('fs:saveFeedback', png),
   },
   term: {
     create: (opts) => ipcRenderer.invoke('term:create', opts),

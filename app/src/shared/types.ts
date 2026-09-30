@@ -32,6 +32,8 @@ export interface BuildStatus {
 export interface ExportResult { ok: boolean; files: string[]; error?: string }
 /** Dateien, die per Ziehen nach inputs/ kopiert wurden (E33). */
 export interface ImportResult { files: string[]; errors: string[] }
+/** Gespeicherte Markierung (E16). `path` relativ zum Projekt, z. B. `.cadide/feedback/markierung-20260930-1405.png`. */
+export interface FeedbackResult { ok: boolean; path?: string; error?: string }
 
 export interface FileNode { name: string; path: string; dir: boolean; children?: FileNode[] }
 
@@ -106,6 +108,8 @@ export interface CadideApi {
     onChanged(cb: () => void): void;
     /** Kopiert gezogene Dateien nach inputs/. Vorhandenes wird nie überschrieben. */
     importFiles(files: File[]): Promise<ImportResult>;
+    /** Legt ein PNG der Markierung in .cadide/feedback/ ab. Vorhandenes wird nie überschrieben. */
+    saveFeedback(png: Uint8Array): Promise<FeedbackResult>;
   };
   term: {
     create(opts?: { command?: string; title?: string }): Promise<number>;

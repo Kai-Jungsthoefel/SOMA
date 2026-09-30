@@ -80,7 +80,7 @@
           <button disabled title="Messen kommt in einem späteren Schritt"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
           <button disabled title="Die Schnittansicht kommt in einem späteren Schritt"><i data-icon="section"></i><span class="lbl">Schnitt</span></button>
           <span class="vsep"></span>
-          <button class="hot" disabled title="Screenshot mit Markierung kommt im nächsten Schritt"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
+          <button id="btn-mark" class="hot" title="Viewer-Bild markieren und an den Agenten geben"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
         </div>
 
         <div id="cube" class="cube">
@@ -133,6 +133,34 @@
           <button id="btn-live" class="btn">Zurück zu Jetzt</button>
           <button id="btn-restore" class="btn vio" title="Diesen Stand als neuen Stand übernehmen">Wiederherstellen</button>
         </div>
+
+        <!-- Markierung (E16): eingefrorenes Bild des Viewers oder leere Fläche zum Zeichnen -->
+        <div id="markup" class="markup" hidden>
+          <canvas id="mark-canvas" aria-label="Zeichenfläche"></canvas>
+          <div class="mk-frame"></div>
+          <input id="mark-text" class="mk-text" type="text" spellcheck="false" autocomplete="off" aria-label="Text der Markierung" hidden>
+          <div id="mark-tools" class="float dock mk-tools" role="toolbar" aria-label="Markieren">
+            <span class="mk-title"><i data-icon="camera" data-size="15"></i><b>Markieren</b></span><span class="vsep"></span>
+            <button data-tool="select" aria-pressed="false" aria-label="Auswählen" title="Auswählen: Form anklicken und ziehen. Ecken skalieren (Umschalt: Seitenverhältnis), der Punkt oben dreht (Umschalt: 15°-Schritte), Entf löscht, Doppelklick bearbeitet Text"><i data-icon="pointer"></i></button>
+            <button data-tool="pen" aria-pressed="true" aria-label="Stift" title="Stift: frei zeichnen"><i data-icon="pen"></i></button>
+            <button data-tool="arrow" aria-pressed="false" aria-label="Pfeil" title="Pfeil: vom Anfang zur Spitze ziehen"><i data-icon="arrow"></i></button>
+            <button data-tool="rect" aria-pressed="false" aria-label="Rechteck" title="Rechteck (mit Umschalt: Quadrat)"><i data-icon="square"></i></button>
+            <button data-tool="ellipse" aria-pressed="false" aria-label="Kreis" title="Kreis oder Ellipse (mit Umschalt: Kreis)"><i data-icon="circle"></i></button>
+            <button data-tool="text" aria-pressed="false" aria-label="Text" title="Text: an die Stelle klicken, schreiben, Enter. Klick auf einen Text bearbeitet ihn"><i data-icon="text"></i></button>
+            <span class="vsep"></span>
+            <button id="btn-mark-color" class="mk-colorbtn" aria-haspopup="menu" aria-expanded="false" aria-label="Farbe" title="Farbe (gilt auch für die ausgewählte Form)"><span id="mark-color-sw" class="swatch"></span><i data-icon="down" data-size="12" data-stroke="2"></i></button>
+            <span class="vsep"></span>
+            <button id="btn-mark-undo" aria-label="Rückgängig" title="Rückgängig (Strg Z), wiederholen mit Strg Y" disabled><i data-icon="undo"></i></button>
+            <button id="btn-mark-delete" aria-label="Löschen" title="Ausgewählte Form löschen (Entf)" disabled><i data-icon="trash"></i></button>
+            <span class="vsep"></span>
+            <button id="btn-mark-blank" aria-pressed="false" title="Auf leerer Fläche zeichnen statt auf dem Viewer-Bild"><i data-icon="image"></i><span class="lbl">Leere Fläche</span></button>
+          </div>
+          <div id="mark-hint" class="float mk-hint"></div>
+          <div class="mk-actions">
+            <button id="btn-mark-cancel" class="btn" title="Zeichnung verwerfen (Escape)">Abbrechen</button>
+            <button id="btn-mark-send" class="btn primary" title="Als PNG in .cadide/feedback/ speichern und den Pfad in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="15" data-stroke="2"></i>An Agent geben</button>
+          </div>
+        </div>
       </section>
 
       <div id="versions" class="tl">
@@ -153,7 +181,7 @@
       <div id="term-panes"></div>
       <div id="handoff" class="handoff"><span class="c3">Einfügen:</span>
         <button id="btn-ins-sel" class="btn sm" disabled title="Bauteil, Datei und Zeilen der Auswahl in die Eingabe einfügen"><i data-icon="target" data-size="13" data-stroke="2"></i>Auswahl</button>
-        <button id="btn-ins-mark" class="btn sm" disabled title="Screenshot mit Markierung kommt im nächsten Schritt"><i data-icon="image" data-size="13" data-stroke="2"></i>Markierung</button>
+        <button id="btn-ins-mark" class="btn sm" title="Viewer-Bild markieren und den Pfad einfügen"><i data-icon="image" data-size="13" data-stroke="2"></i>Markierung</button>
         <button id="btn-ins-err" class="btn sm" disabled title="Meldung des letzten Builds in die Eingabe einfügen"><i data-icon="alert" data-size="13" data-stroke="2"></i>Build-Fehler</button>
       </div>
       <div id="agent-strip" class="strip" hidden>
@@ -219,6 +247,25 @@
   </div>
 
   <div id="menu-ctx" class="menu" role="menu" hidden></div>
+
+  <div id="menu-mark-color" class="menu" role="menu" aria-label="Farbe der Markierung" hidden>
+    <div class="mh">FARBE</div>
+    <div class="mk-palette">
+      <button data-color="orange" aria-pressed="true" aria-label="Orange" title="Orange" style="--c:var(--mk-orange)"></button>
+      <button data-color="red" aria-pressed="false" aria-label="Rot" title="Rot" style="--c:var(--mk-red)"></button>
+      <button data-color="pink" aria-pressed="false" aria-label="Pink" title="Pink" style="--c:var(--mk-pink)"></button>
+      <button data-color="violet" aria-pressed="false" aria-label="Violett" title="Violett" style="--c:var(--mk-violet)"></button>
+      <button data-color="blue" aria-pressed="false" aria-label="Blau" title="Blau" style="--c:var(--mk-blue)"></button>
+      <button data-color="cyan" aria-pressed="false" aria-label="Türkis" title="Türkis" style="--c:var(--mk-cyan)"></button>
+      <button data-color="green" aria-pressed="false" aria-label="Grün" title="Grün" style="--c:var(--mk-green)"></button>
+      <button data-color="yellow" aria-pressed="false" aria-label="Gelb" title="Gelb" style="--c:var(--mk-yellow)"></button>
+      <button data-color="white" aria-pressed="false" aria-label="Weiß" title="Weiß" style="--c:var(--mk-white)"></button>
+      <button data-color="black" aria-pressed="false" aria-label="Schwarz" title="Schwarz" style="--c:var(--mk-black)"></button>
+    </div>
+    <div class="msep"></div>
+    <label class="mi keep mk-custom" title="Beliebige Farbe im Farbdialog wählen"><input id="mark-color-custom" type="color" value="#f29a38"><span>Eigene Farbe …</span></label>
+    <div class="mnote">Ist eine Form ausgewählt, bekommt sie die Farbe gleich mit.</div>
+  </div>
 
   <div id="start" class="start" hidden>
     <header class="top"><span class="logo"><i data-icon="cube" data-size="22"></i></span><b class="brand">CAD-IDE</b><span class="grow"></span>

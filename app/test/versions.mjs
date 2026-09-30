@@ -105,6 +105,15 @@ try {
   await sleep(4000);
   check('Ein Build während der Vorschau ändert die Anzeige nicht', (await ev(() => window.__t.partSize('Body')))[0] === 60);
   fs.writeFileSync(modelPy, fs.readFileSync(modelPy, 'utf8').replace('\n# Kommentar während der Vorschau\n', ''));
+  // Markierung einer Vorschau: Der Agent erfährt, dass das Bild einen alten Stand zeigt (sonst vergleicht er es mit dem aktuellen Code)
+  await domClick('btn-mark');
+  await waitFor('Zeichenfläche', () => window.__t.markup().active, 5000).catch(() => {});
+  await domClick('btn-mark-send');
+  const firstShort = await g('rev-parse', '--short', first);
+  await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markierung: .cadide/feedback/'), 10000, await term()).catch(() => {});
+  check('Markierung in der Vorschau nennt den alten Stand', (await termText()).includes(`zeigt den älteren Stand ${firstShort} "Neues Modell angelegt"]`), (await termText()).match(/\[Markierung:[^\]]*\]/)?.[0]?.slice(0, 90) ?? '');
+  check('Nach der Markierung läuft die Vorschau weiter', !!(await versions()).previewing && await ev(() => document.getElementById('viewer').classList.contains('preview')));
+  await ev((i) => window.cadide.term.write(i, '\x03'), await term()); // Zeile verwerfen
 
   // ---- 5) Wiederherstellen als neuer Commit ----
   await app.answers([0]);
@@ -120,6 +129,8 @@ try {
   // ---- 6) Störfall: .git verschwindet (Agent hat es gelöscht/verschoben) ----
   await app.domClick('btn-save');
   await waitFor('gespeichert nach Restore', () => !window.__t.saveState().unsaved, 60000);
+  check('ZIP enthält die Markierung aus .cadide/feedback/ (in Git ist sie nicht)', (await listZip(zipPath)).some((n) => /^\.cadide\/feedback\/markierung-\d{8}-\d{4}\.png$/.test(n))
+    && (await g('ls-files', '.cadide/feedback')) === '');
   fs.renameSync(path.join(dir, '.git'), path.join(dir, '.git_weg'));
   await waitFor('Problem gemeldet', () => window.__t.versions().problems.some((p) => p.includes('Kein Git-Verlauf')), 20000);
   check('Ohne .git: Verlauf meldet das Problem verständlich', (await versions()).problems[0].includes('Kein Git-Verlauf'), (await versions()).problems[0].slice(0, 50));

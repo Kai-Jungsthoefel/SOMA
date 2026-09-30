@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FileNode, ImportResult } from '../shared/types';
+import type { FeedbackResult, FileNode, ImportResult } from '../shared/types';
 
 const HIDDEN = new Set(['.git', '.cadide', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
 const MAX_ENTRIES = 2000;
 const MAX_DEPTH = 5;
 const MAX_IMPORT_BYTES = 500 * 1024 * 1024;
+const MAX_FEEDBACK_BYTES = 64 * 1024 * 1024;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /**
  * Kopiert gezogene Dateien nach inputs/ (E33). Der Agent bindet sie danach im Skript ein.
@@ -33,15 +35,45 @@ export function importInputs(root: string, sources: string[]): ImportResult {
 }
 
 /**
+ * Legt ein Bild der Markierung in .cadide/feedback/ ab (E16). Dort ist es nicht in Git (E11), wandert aber mit der ZIP.
+ * Der Name trägt Datum und Uhrzeit, bei Gleichstand kommt „-2“ dazu. Vorhandenes wird nie überschrieben.
+ */
+export function saveFeedbackImage(root: string, png: unknown, when = new Date()): FeedbackResult {
+  const bytes = png instanceof Uint8Array ? png : png instanceof ArrayBuffer ? new Uint8Array(png) : null;
+  if (!bytes || bytes.length < PNG_SIGNATURE.length || !PNG_SIGNATURE.equals(bytes.subarray(0, PNG_SIGNATURE.length))) return { ok: false, error: 'Das ist kein PNG-Bild.' };
+  if (bytes.length > MAX_FEEDBACK_BYTES) return { ok: false, error: 'Das Bild ist größer als 64 MB.' };
+  const two = (n: number) => String(n).padStart(2, '0');
+  const stem = `markierung-${when.getFullYear()}${two(when.getMonth() + 1)}${two(when.getDate())}-${two(when.getHours())}${two(when.getMinutes())}`;
+  try {
+    fs.mkdirSync(resolveInside(root, '.cadide/feedback'), { recursive: true });
+    for (let i = 1; ; i++) {
+      const rel = `.cadide/feedback/${stem}${i > 1 ? `-${i}` : ''}.png`;
+      try {
+        // „wx“: entsteht die Datei zwischen Prüfung und Schreiben, schlägt das Schreiben fehl statt zu überschreiben
+        fs.writeFileSync(resolveInside(root, rel), bytes, { flag: 'wx' });
+        return { ok: true, path: rel };
+      } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST' || i > 999) throw e; }
+    }
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+const exists = (p: string) => { try { fs.lstatSync(p); return true; } catch { return false; } };
+
+/**
  * Loest einen Pfad relativ zum Projektordner auf und lehnt alles ab, was ausserhalb landet
  * (auch ueber Symlinks). Der Renderer bekommt so nie Zugriff auf andere Dateien des Rechners.
  */
 export function resolveInside(root: string, rel: string): string {
   const abs = path.resolve(root, rel);
-  const realRoot = fs.realpathSync(root);
-  const real = fs.existsSync(abs) ? fs.realpathSync(abs) : abs;
   const inside = (p: string, r: string) => p === r || p.startsWith(r + path.sep);
-  if (!inside(abs, path.resolve(root)) || !inside(real, realRoot)) throw new Error(`Pfad liegt ausserhalb des Projekts: ${rel}`);
+  const outside = () => new Error(`Pfad liegt ausserhalb des Projekts: ${rel}`);
+  if (!inside(abs, path.resolve(root))) throw outside();
+  // Gibt es das Ziel noch nicht, zählt der nächste vorhandene Ordner darüber. Sonst könnte ein Verweis weiter oben
+  // (etwa .cadide als Verknüpfung nach außen) neue Dateien außerhalb des Projekts landen lassen.
+  let probe = abs, rest = '';
+  while (!exists(probe) && path.dirname(probe) !== probe) { rest = rest ? path.join(path.basename(probe), rest) : path.basename(probe); probe = path.dirname(probe); }
+  const real = rest ? path.join(fs.realpathSync(probe), rest) : fs.realpathSync(probe);
+  if (!inside(real, fs.realpathSync(root))) throw outside();
   return abs;
 }
 

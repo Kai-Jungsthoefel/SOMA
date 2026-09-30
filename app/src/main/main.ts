@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { detectAgents } from './agents';
 import { setTestAnswers } from './dialogs';
-import { importInputs, listFiles, resolveInside } from './files';
+import { importInputs, listFiles, resolveInside, saveFeedbackImage } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
 import { thumbnailsDir } from './paths';
@@ -50,6 +50,7 @@ function registerIpc(ctl: ProjectController): void {
 
   ipcMain.handle('fs:list', () => listFiles(dir()));
   ipcMain.handle('fs:import', (_e, paths: string[]) => importInputs(dir(), Array.isArray(paths) ? paths.map(String) : []));
+  ipcMain.handle('fs:saveFeedback', (_e, png: unknown) => saveFeedbackImage(dir(), png));
   ipcMain.handle('fs:readText', (_e, rel: string) => fs.readFileSync(resolveInside(dir(), rel), 'utf8'));
   ipcMain.handle('fs:readBinary', (_e, rel: string) => {
     const b = fs.readFileSync(resolveInside(dir(), rel));

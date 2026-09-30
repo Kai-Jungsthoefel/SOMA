@@ -18,6 +18,9 @@
   --acc:#f29a38; --acc-tx:#f6b46a; --acc-tint:rgba(242,154,56,.14); --acc-line:rgba(242,154,56,.45);
   --vio:#9aa6ff; --vio-tint:rgba(154,166,255,.14);
   --ok:#5cc98b; --warn:#e8c547; --err:#f07470; --err-tint:rgba(240,116,112,.12);
+  /* Stiftfarben der Markierung (landen im Bild für den Agenten, keine Bedeutung in der Oberfläche) */
+  --mk-orange:var(--acc); --mk-red:#f0524d; --mk-pink:#f47ab4; --mk-violet:#a78bfa; --mk-blue:#5ea8ff;
+  --mk-cyan:#2fd0c0; --mk-green:#4fcf7f; --mk-yellow:#f7d046; --mk-white:#f4f5f6; --mk-black:#121417;
   --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif; --mono:'IBM Plex Mono',Consolas,'Cascadia Mono',monospace;
   --shadow:0 10px 30px rgba(0,0,0,.35);
 }
@@ -132,8 +135,8 @@ code { font-family:var(--mono); font-size:.95em; }
 #center { flex:1; min-width:0; display:flex; flex-direction:column; }
 #viewer { flex:1; position:relative; overflow:hidden; min-height:120px; container-type:inline-size; container-name:viewer;
   background:radial-gradient(ellipse at 52% 44%, #272c34 0%, #1b1e23 60%, #16181c 100%); }
-#viewer canvas { position:absolute; inset:0; width:100%; height:100%; display:block; transition:opacity .2s; }
-#viewer.dim canvas { opacity:.35; filter:grayscale(.5); }
+#viewer > canvas { position:absolute; inset:0; width:100%; height:100%; display:block; transition:opacity .2s; }
+#viewer.dim > canvas { opacity:.35; filter:grayscale(.5); }
 #viewer.preview::after { content:''; position:absolute; inset:0; border:2px solid var(--vio); pointer-events:none; z-index:6; }
 #viewer-msg { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--tx2); pointer-events:none; white-space:pre-wrap; text-align:center; z-index:1; max-width:70%; }
 #viewer-msg.error { color:var(--err); }
@@ -168,7 +171,6 @@ code { font-family:var(--mono); font-size:.95em; }
 .dock button:hover:not(:disabled), .dock button[aria-expanded=true] { background:var(--s3); }
 .dock button.hot { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
 .dock button:disabled { color:#5d6671; }
-.dock button.hot:disabled { background:transparent; color:#8a6a45; }
 .vsep { width:1px; height:20px; background:var(--line2); margin:0 3px; flex-shrink:0; }
 @container viewer (max-width: 900px) { .dock .lbl { display:none; } .dock button { padding:0 8px; gap:3px; } }
 
@@ -214,6 +216,28 @@ code { font-family:var(--mono); font-size:.95em; }
 .bn-line { display:flex; align-items:center; gap:8px; }
 .bn-text .tag { font-size:11px; padding:1px 7px; border-radius:9px; background:var(--vio-tint); color:#cdd2ff; }
 #bn-sub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* ---- Markierung (E16) ----------------------------------------------------------------------------------------- */
+#viewer.marking > .float, #viewer.marking > .cube, #viewer.marking > #viewer-msg { display:none; }
+.markup { position:absolute; inset:0; z-index:8; background:var(--s2); }
+.markup canvas { position:absolute; left:0; top:0; display:block; touch-action:none; }
+.mk-frame { position:absolute; inset:6px; border:2px dashed var(--acc-line); border-radius:8px; pointer-events:none; }
+.mk-tools { left:12px; top:12px; }
+.mk-title { display:flex; align-items:center; gap:7px; padding:0 10px 0 8px; color:var(--acc-tx); }
+.mk-tools [data-tool][aria-pressed=true], #btn-mark-blank[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
+.mk-tools .mk-colorbtn { gap:5px; padding:0 7px 0 9px; }
+.mk-tools .swatch { width:16px; height:16px; border-radius:50%; background:var(--c); box-shadow:inset 0 0 0 1px rgba(255,255,255,.25); }
+.mk-palette { display:grid; grid-template-columns:repeat(5, 28px); gap:10px; padding:6px 10px 10px; }
+.mk-palette button { width:28px; height:28px; border-radius:50%; background:var(--c); box-shadow:inset 0 0 0 1px rgba(255,255,255,.25); }
+.mk-palette button:hover { box-shadow:0 0 0 2px var(--s2), 0 0 0 4px var(--line2); }
+.mk-palette button[aria-pressed=true] { box-shadow:0 0 0 2px var(--s2), 0 0 0 4px var(--acc-tx); }
+.mk-custom { cursor:pointer; }
+.mk-custom input { width:22px; height:22px; padding:0; border:0; background:none; cursor:pointer; flex-shrink:0; }
+.mk-hint { left:12px; bottom:12px; padding:8px 12px; font-size:12px; color:var(--tx2); max-width:calc(100% - 330px); }
+.mk-actions { position:absolute; right:12px; bottom:12px; z-index:2; display:flex; gap:8px; }
+.mk-actions .btn:not(.primary) { background:var(--s2); }
+.mk-text { position:absolute; z-index:1; font:600 19px/1 var(--sans); padding:2px 4px; border:1px dashed currentColor; border-radius:3px;
+  background:rgba(15,17,20,.55); outline:none; field-sizing:content; min-width:140px; }
 
 /* ---- Verlauf --------------------------------------------------------------------------------------------------- */
 .tl { height:44px; flex-shrink:0; display:flex; align-items:center; gap:14px; padding:0 16px; background:var(--s1); border-top:1px solid var(--line); min-width:0; }

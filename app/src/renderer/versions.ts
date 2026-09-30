@@ -40,6 +40,8 @@ export class VersionsBar {
   }
 
   get previewing(): boolean { return this.previewHash !== null; }
+  /** Der alte Stand, der gerade als Vorschau zu sehen ist. */
+  get previewed(): CommitInfo | null { return this.previewHash ? this.log.commits.find((c) => c.hash === this.previewHash) ?? null : null; }
 
   /** Stand der letzten Speicherung, für den grünen Punkt. */
   setSaved(head: string | null): void {

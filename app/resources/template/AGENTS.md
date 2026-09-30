@@ -53,4 +53,8 @@ This folder is a git repository, and the `git` on your PATH is the one the app u
 
 ## Feedback from the user
 
-The user can send screenshots and sketches. They arrive as image files in `.cadide/feedback/`, the path is pasted into your input. Look at the image, compare it with the model, and change `model.py`.
+The app pastes short notes into your input. The user adds their own words and sends them:
+
+- `[Markierung: .cadide/feedback/markierung-20260930-1405.png]`: a picture of the 3D view (or a blank sketch) with the user's drawings: arrows, circles, handwritten text, often with dimensions. **Open the image file and look at it**, compare it with the model, then change the code. If the note says `zeigt den älteren Stand <hash>`, the picture shows that older commit, not the current code (`git show <hash>:model.py`). Leave the images where they are.
+- `[Auswahl: Bauteil "…", model.py Zeile …]`: the part the user clicked, with the lines of its `add_part` call and the clicked face.
+- `[Build-Fehler: …]`: the message of the last failed build.

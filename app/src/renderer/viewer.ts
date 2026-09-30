@@ -283,6 +283,47 @@ export class Viewer {
   }
 
   /**
+   * Bild der aktuellen Ansicht in voller Auflösung, Grundlage der Markierung (E16). Die Zeichenfläche ist durchsichtig,
+   * den Verlauf dahinter malt sonst CSS. Er wird hier nachgebildet (`radial-gradient(ellipse at 52% 44%, …)` in style.css),
+   * damit das Bild aussieht wie der Viewer. Die Auswahl fehlt im Bild: Sie ist Orange wie der Stift und würde die Markierung verschlucken.
+   */
+  snapshot(): HTMLCanvasElement {
+    const sel = this.selectedId;
+    this.selectedId = null;
+    this.applySelection();
+    this.highlight.visible = false;
+    this.renderer.render(this.scene, this.camera);
+    const c = document.createElement('canvas');
+    try { this.paintSnapshot(c); } finally {
+      this.selectedId = sel;
+      this.applySelection();
+      this.highlight.visible = true;
+      this.requestRender();
+    }
+    return c;
+  }
+
+  private paintSnapshot(c: HTMLCanvasElement): void {
+    const src = this.renderer.domElement;
+    c.width = src.width; c.height = src.height;
+    const g = c.getContext('2d');
+    if (!g || !c.width || !c.height) return;
+    const w = c.width, h = c.height, cx = w * 0.52, cy = h * 0.44;
+    // CSS: Ellipse mit dem Seitenverhältnis von closest-side, die durch die fernste Ecke geht (farthest-corner)
+    const k = Math.min(cx, w - cx) / Math.min(cy, h - cy);
+    const ry = Math.hypot(Math.max(cx, w - cx) / k, Math.max(cy, h - cy)), rx = ry * k;
+    g.save();
+    g.translate(cx, cy);
+    g.scale(1, ry / rx);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, rx);
+    grad.addColorStop(0, '#272c34'); grad.addColorStop(0.6, '#1b1e23'); grad.addColorStop(1, '#16181c');
+    g.fillStyle = grad;
+    g.fillRect(-cx, -cy * rx / ry, w, h * rx / ry);
+    g.restore();
+    g.drawImage(src, 0, 0);
+  }
+
+  /**
    * Vorschaubild für die Startseite: aktuelle Ansicht, mittig auf das Seitenverhältnis zugeschnitten, als JPEG.
    * Der Hintergrund ist sonst durchsichtig, deshalb bekommt das Bild den Grundton der Oberfläche.
    */
