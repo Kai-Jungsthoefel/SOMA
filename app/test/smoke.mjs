@@ -236,6 +236,51 @@ try {
   const exp = await ev(() => window.cadide.build.export('stl', null));
   check('Export STL: alle Bauteile nach exports/', exp.ok && ['exports/Body.stl', 'exports/Lid.stl'].every((f) => exp.files.includes(f) && fs.existsSync(path.join(proj.dir, f))), exp.error ?? exp.files.join(','));
 
+  // 7b) Ansicht: Würfel (Seite, Ecke, Ziehen), Drehpunkt per Doppelklick, Zoom zur Maus, Ansichten im Menü
+  const vs = () => ev(() => window.__t.viewer.viewState());
+  const settle = () => waitFor('Ansicht steht', () => !window.__t.viewer.viewState().animating, 5000).catch(() => {});
+  const near = (a, b, tol = 1e-3) => a.every((v, i) => Math.abs(v - b[i]) < tol);
+  const unit = (v) => { const l = Math.hypot(...v); return v.map((x) => x / l); };
+  await ev(() => window.__t.viewer.setView('iso'));
+  const v0 = await vs();
+  check('Ansichtswürfel ist da (3D, eigene Zeichenfläche)', await ev(() => { const c = document.querySelector('#cube-view canvas'); return !!c && c.width > 0; }));
+  await page.click(...Object.values(await ev(() => window.__t.viewer.cubeScreen([0, -1, 0]))));
+  await settle();
+  let v1 = await vs();
+  check('Würfel „Vorne" anklicken: Ansicht von vorne, Drehpunkt und Abstand bleiben', near(v1.dir, [0, -1, 0]) && near(v1.target, v0.target) && Math.abs(v1.dist - v0.dist) < 1e-6, v1.dir.map((x) => x.toFixed(3)).join(','));
+  await page.click(...Object.values(await ev(() => window.__t.viewer.cubeScreen([0.85, -1, 0.85]))));
+  await settle();
+  v1 = await vs();
+  check('Ecke „oben vorne rechts" anklicken: Blick schräg von dort', near(v1.dir, unit([1, -1, 1])), v1.dir.map((x) => x.toFixed(3)).join(','));
+  await ev((p) => {
+    const c = document.querySelector('#cube-view canvas'), f = (type, x) => c.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: p.y, bubbles: true, button: 0, buttons: 1, pointerId: 1 }));
+    f('pointerdown', p.x); f('pointermove', p.x + 20); f('pointermove', p.x + 40); f('pointerup', p.x + 40);
+  }, await ev(() => window.__t.viewer.cubeScreen([0, -1, 0])));
+  const v2 = await vs();
+  check('Würfel ziehen dreht die Ansicht um den Drehpunkt', !near(v2.dir, v1.dir, 1e-2) && near(v2.target, v1.target) && Math.abs(v2.dir[2] - v1.dir[2]) < 1e-6, v2.dir.map((x) => x.toFixed(3)).join(','));
+  await ev(() => window.__t.viewer.setView('iso'));
+  const corner = await ev(() => {
+    const v = window.__t.viewer, id = window.__t.parts().find((p) => p.name === 'Lid').id;
+    const f = v.facesOf(id).filter((x) => x.surface === 'PLANE').sort((a, b) => b.center[2] - a.center[2])[0];
+    return { s: v.screenOf(id, f.id), c: f.center };
+  });
+  const before = await vs();
+  await ev((p) => document.querySelector('#viewer > canvas').dispatchEvent(new MouseEvent('dblclick', { clientX: p.x, clientY: p.y, bubbles: true })), corner.s);
+  await settle();
+  const v3 = await vs();
+  check('Doppelklick ins Modell: Drehpunkt dorthin, die Ansicht verschiebt sich nur (dreht nicht)', near(v3.target, corner.c, 0.2) && near(v3.dir, before.dir, 1e-6),
+    `${v3.target.map((x) => x.toFixed(2)).join(',')} statt ${corner.c.join(',')}`);
+  check('Zoom zur Mausposition an, vordere Schnittebene folgt dem Abstand', v3.zoomToCursor && Math.abs(v3.near - v3.dist / 200) < 1e-9 && v3.far > v3.dist, `near ${v3.near.toFixed(3)}, Abstand ${v3.dist.toFixed(1)}`);
+  await ev(() => document.querySelector('#menu-display [data-view="back"]').click());
+  check('Ansicht „Hinten" im Menü Darstellung', near((await vs()).dir, [0, 1, 0]));
+  await domClick(await ev(() => { const b = document.querySelector('.vbtns [data-view="iso"]'); b.id ||= 'btn-view-iso'; return b.id; }));
+  check('Standardansicht setzt den Drehpunkt zurück in die Mitte des Modells', near((await vs()).target, v0.target, 1e-6));
+  // Zum Ansehen: Zeiger über der Ecke oben vorne rechts (Felder in Orange)
+  await ev((p) => document.querySelector('#cube-view canvas').dispatchEvent(new PointerEvent('pointermove', { clientX: p.x, clientY: p.y, bubbles: true, pointerId: 1 })),
+    await ev(() => window.__t.viewer.cubeScreen([0.85, -0.85, 1])));
+  await shot('8-ansichtswuerfel');
+  await ev(() => document.querySelector('#cube-view canvas').dispatchEvent(new PointerEvent('pointerleave', { bubbles: true })));
+
   // 8) Neues Projekt: anderer Ordner, Terminals des alten sind zu, frischer erster Build
   await domClick('btn-new');
   await waitFor('neues Projekt', (oldId) => window.__t.project().id !== oldId && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000, proj.id).catch(() => {});

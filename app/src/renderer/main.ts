@@ -15,6 +15,7 @@ hydrateIcons();
 const api = window.cadide;
 
 const viewer = new Viewer($('viewer'));
+viewer.attachCube($('cube-view'));
 const terminals = new TerminalTabs($('term-tabs'), $('term-panes'), $('btn-term-add'), $('strip-tabs'));
 
 let project: ProjectInfo | null = null;
@@ -630,11 +631,8 @@ async function doExport(fmt: string, label: string): Promise<void> {
 
 // ---- Viewer-Bedienung -------------------------------------------------------------------------------------------
 
-document.querySelectorAll<HTMLElement>('[data-view]').forEach((b) => {
-  const go = () => viewer.setView(b.dataset.view as ViewName);
-  b.addEventListener('click', go);
-  b.addEventListener('keydown', (e) => { if (b.tagName !== 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); go(); } });
-});
+// Einpassen, Standardansicht und die Ansichten im Menü „Darstellung“ (der Würfel selbst steuert über viewcube.ts)
+document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach((b) => b.addEventListener('click', () => viewer.setView(b.dataset.view as ViewName)));
 $('btn-sel-close').addEventListener('click', () => selectPart(null, null));
 $('btn-sel-code').addEventListener('click', () => {
   const e = selection ? partEntry(selection.partId) : undefined;

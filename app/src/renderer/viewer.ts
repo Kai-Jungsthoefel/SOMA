@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { ViewCube } from './viewcube';
 
 // CAD-Konvention: Z ist oben, Einheit mm. Muss vor dem Anlegen von Kamera und Objekten gesetzt sein.
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
@@ -20,7 +21,7 @@ export interface PickResult {
   point: number[];
 }
 
-export type ViewName = 'iso' | 'front' | 'top' | 'right' | 'fit';
+export type ViewName = 'iso' | 'front' | 'back' | 'top' | 'bottom' | 'right' | 'left' | 'fit';
 
 /** Treffer beim Messen: Fläche, Kante oder Eckpunkt eines Bauteils, mit Punkt auf dem Netz (beim Eckpunkt seine Lage). */
 export interface ProbeHit {
@@ -70,6 +71,14 @@ export class Viewer {
   /** HTML-Ebene über dem Bild: Messpunkte und Beschriftung, bei jedem Zeichnen neu positioniert. */
   private overlay: HTMLElement;
   private overlayItems: { el: HTMLElement; at: THREE.Vector3 }[] = [];
+  /** Mitte und Radius aller Bauteile, für die Schnittebenen der Kamera. */
+  private center = new THREE.Vector3();
+  private radius = 1;
+  private cube: ViewCube | null = null;
+  private anim: { stop(): void } | null = null;
+  /** Punkt am Drehpunkt, sichtbar während der Bewegung und kurz nach dem Setzen. */
+  private pivot: THREE.Points;
+  private pivotTimer: ReturnType<typeof setTimeout> | undefined;
   onPick: (r: PickResult | null) => void = () => {};
   /** Klick im Messmodus. null: daneben geklickt. */
   onMeasurePick: (h: ProbeHit | null) => void = () => {};
@@ -90,7 +99,18 @@ export class Viewer {
     container.appendChild(this.overlay);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = false; // gerendert wird nur bei Änderungen
-    this.controls.addEventListener('change', () => this.requestRender());
+    // Zoomen zur Mausposition statt zur Mitte: So kommt man an Ecken und Kanten heran, ohne erst zu verschieben
+    this.controls.zoomToCursor = true;
+    this.controls.minDistance = 0.05;
+    this.controls.addEventListener('change', () => { this.fitClip(); this.requestRender(); });
+    this.controls.addEventListener('start', () => { this.anim?.stop(); this.showPivot(true); });
+    this.controls.addEventListener('end', () => this.showPivot(false, 350));
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
+    this.pivot = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xe6e8eb, size: 11, sizeAttenuation: false, map: Viewer.dot(), transparent: true, alphaTest: 0.2, depthTest: false }));
+    this.pivot.renderOrder = 12;
+    this.pivot.visible = false;
+    this.scene.add(this.pivot);
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
     this.installPicking();
@@ -135,7 +155,10 @@ export class Viewer {
     this.hoverKey = '';
     if (this.selectedId && !this.parts.has(this.selectedId)) this.selectedId = null;
     this.applySelection();
+    const box = this.bounds([...this.parts.keys()]);
+    if (!box.isEmpty()) { box.getCenter(this.center); this.radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1); }
     if (!this.hasFitted && this.parts.size) { this.setView('iso'); this.hasFitted = true; }
+    this.fitClip();
     this.requestRender();
   }
 
@@ -230,18 +253,117 @@ export class Viewer {
     const center = box.getCenter(new THREE.Vector3());
     const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
     const dir = {
-      iso: new THREE.Vector3(0.8, -1.2, 0.9), front: new THREE.Vector3(0, -1, 0),
-      top: new THREE.Vector3(0, -0.0001, 1), right: new THREE.Vector3(1, 0, 0),
+      iso: new THREE.Vector3(0.8, -1.2, 0.9), front: new THREE.Vector3(0, -1, 0), back: new THREE.Vector3(0, 1, 0),
+      top: new THREE.Vector3(0, -0.0001, 1), bottom: new THREE.Vector3(0, -0.0001, -1),
+      right: new THREE.Vector3(1, 0, 0), left: new THREE.Vector3(-1, 0, 0),
       fit: this.camera.position.clone().sub(this.controls.target),
     }[name].clone().normalize();
     const dist = radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2)) * 1.05;
+    this.anim?.stop();
     this.controls.target.copy(center);
     this.camera.position.copy(center).addScaledVector(dir, dist);
-    this.camera.near = Math.max(dist / 1000, 0.05);
-    this.camera.far = dist * 20;
-    this.camera.updateProjectionMatrix();
     this.controls.update();
+    this.fitClip();
     this.requestRender();
+  }
+
+  // ---- Ansichtswürfel und Drehpunkt -----------------------------------------------------------------------------
+
+  /** Den Ansichtswürfel in diesem Element anzeigen. Er dreht sich mit der Kamera und dreht sie auf Klick oder Ziehen. */
+  attachCube(el: HTMLElement): void {
+    this.cube = new ViewCube(el, {
+      camera: this.camera,
+      target: () => this.controls.target,
+      orient: (d) => this.orient(d),
+      orbit: (t, p) => this.orbit(t, p),
+    });
+    this.cube.render();
+  }
+
+  /** Ansicht aus einer Richtung (vom Drehpunkt zur Kamera), animiert. Drehpunkt und Abstand bleiben, anders als bei setView. */
+  orient(dir: THREE.Vector3): void {
+    const target = this.controls.target.clone();
+    const dist = this.camera.position.distanceTo(target);
+    const from = this.camera.position.clone().sub(target).normalize();
+    const to = dir.clone().normalize();
+    // Genau senkrecht kann die Kamera nicht stehen (Hochachse Z): ein Hauch nach vorne, dann liegt „Vorne“ unten im Bild
+    if (Math.abs(to.z) > 0.999999) to.set(0, -1e-4, Math.sign(to.z)).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(from, to), id = new THREE.Quaternion();
+    this.animate(280, (t) => {
+      this.camera.position.copy(target).addScaledVector(from.clone().applyQuaternion(id.clone().slerp(q, t)), dist);
+      this.controls.update();
+    });
+  }
+
+  /** Um den Drehpunkt drehen, wie OrbitControls es tut (Kugelkoordinaten zur Hochachse). */
+  orbit(dTheta: number, dPhi: number): void {
+    this.anim?.stop();
+    const target = this.controls.target;
+    const toY = new THREE.Quaternion().setFromUnitVectors(this.camera.up, new THREE.Vector3(0, 1, 0));
+    const off = this.camera.position.clone().sub(target).applyQuaternion(toY);
+    const sph = new THREE.Spherical().setFromVector3(off);
+    sph.theta += dTheta;
+    sph.phi = Math.min(Math.PI - 1e-4, Math.max(1e-4, sph.phi + dPhi));
+    off.setFromSpherical(sph).applyQuaternion(toY.invert());
+    this.camera.position.copy(target).add(off);
+    this.controls.update();
+  }
+
+  /**
+   * Neuer Drehpunkt: Die Ansicht verschiebt sich (ohne zu drehen), bis der Punkt in der Mitte liegt. Danach dreht und
+   * zoomt sie um ihn. So lassen sich Ecken und kleine Stellen genau ansehen. „Einpassen“ oder „Standardansicht“ setzen zurück.
+   */
+  setPivot(p: THREE.Vector3): void {
+    const t0 = this.controls.target.clone(), c0 = this.camera.position.clone();
+    const delta = p.clone().sub(t0);
+    this.animate(250, (t) => {
+      this.controls.target.copy(t0).addScaledVector(delta, t);
+      this.camera.position.copy(c0).addScaledVector(delta, t);
+      this.controls.update();
+    });
+    this.showPivot(true);
+    this.showPivot(false, 900);
+  }
+
+  /** Zeitgesteuerte Bewegung. Ohne Bildwiederholung (unsichtbares Fenster) steht sie nach Ablauf trotzdem am Ziel. */
+  private animate(ms: number, step: (t: number) => void): void {
+    this.anim?.stop();
+    const t0 = performance.now();
+    let raf = 0, done = false;
+    const stop = () => { done = true; cancelAnimationFrame(raf); clearTimeout(timer); if (this.anim === handle) this.anim = null; };
+    const finish = () => { if (done) return; stop(); step(1); };
+    const tick = () => {
+      if (done) return;
+      const t = Math.min(1, (performance.now() - t0) / ms);
+      if (t >= 1) { finish(); return; }
+      step(t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+      raf = requestAnimationFrame(tick);
+    };
+    const timer = setTimeout(finish, ms + 60);
+    const handle = { stop };
+    this.anim = handle;
+    raf = requestAnimationFrame(tick);
+  }
+
+  private showPivot(on: boolean, afterMs = 0): void {
+    clearTimeout(this.pivotTimer);
+    const apply = () => { this.pivot.visible = on && this.parts.size > 0; this.requestRender(); };
+    if (afterMs) this.pivotTimer = setTimeout(apply, afterMs); else apply();
+  }
+
+  /**
+   * Schnittebenen der Kamera nach Abstand: Nah am Drehpunkt muss die vordere Ebene nah heran, sonst schneidet sie die
+   * Ecke weg, die man ansehen will. Die hintere reicht über das ganze Modell.
+   */
+  private fitClip(): void {
+    const dist = Math.max(this.camera.position.distanceTo(this.controls.target), 1e-3);
+    const near = Math.max(dist / 200, 1e-3);
+    const far = Math.max(this.camera.position.distanceTo(this.center) + this.radius * 2, near * 100);
+    if (Math.abs(near - this.camera.near) > near * 0.02 || Math.abs(far - this.camera.far) > far * 0.02) {
+      this.camera.near = near;
+      this.camera.far = far;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   focusPart(id: string): void { if (this.parts.has(id)) this.setView('fit', [id]); }
@@ -308,6 +430,15 @@ export class Viewer {
       queued = [e.clientX, e.clientY];
     });
     el.addEventListener('pointerleave', () => this.showHover(null));
+    // Doppelklick ins Modell: Drehpunkt dorthin (auch beim Messen)
+    el.addEventListener('dblclick', (e) => {
+      const r = el.getBoundingClientRect();
+      this.raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), this.camera);
+      const targets: THREE.Mesh[] = [];
+      for (const p of this.parts.values()) if (p.group.visible) targets.push(...p.meshes);
+      const hit = this.raycaster.intersectObjects(targets, false)[0];
+      if (hit) this.setPivot(hit.point.clone());
+    });
   }
 
   // ---- Messen ---------------------------------------------------------------------------------------------------
@@ -575,7 +706,13 @@ export class Viewer {
   requestRender(): void {
     if (this.renderQueued) return;
     this.renderQueued = true;
-    requestAnimationFrame(() => { this.renderQueued = false; this.renderer.render(this.scene, this.camera); this.placeOverlay(); });
+    requestAnimationFrame(() => {
+      this.renderQueued = false;
+      this.pivot.position.copy(this.controls.target);
+      this.renderer.render(this.scene, this.camera);
+      this.placeOverlay();
+      this.cube?.render();
+    });
   }
 
   /**
@@ -590,6 +727,8 @@ export class Viewer {
     this.highlight.visible = false;
     this.hover.visible = false; // Messlinien ohne ihre Beschriftung wären im Bild nur verwirrend
     this.marks.visible = false;
+    const pivotShown = this.pivot.visible;
+    this.pivot.visible = false;
     this.renderer.render(this.scene, this.camera);
     const c = document.createElement('canvas');
     try { this.paintSnapshot(c); } finally {
@@ -598,6 +737,7 @@ export class Viewer {
       this.highlight.visible = true;
       this.hover.visible = true;
       this.marks.visible = true;
+      this.pivot.visible = pivotShown;
       this.requestRender();
     }
     return c;
@@ -670,6 +810,16 @@ export class Viewer {
   verticesOf(partId: string): { id: number; p: number[]; screen: { x: number; y: number } }[] {
     return (this.parts.get(partId)?.meta.vertices ?? []).map((v) => ({ id: v.id, p: v.p, screen: this.screenAt(v.p) }));
   }
+
+  /** Kamera, Drehpunkt und Schnittebenen, für Tests. */
+  viewState() {
+    const d = this.camera.position.clone().sub(this.controls.target);
+    return { target: this.controls.target.toArray(), dir: d.clone().normalize().toArray(), dist: d.length(), near: this.camera.near, far: this.camera.far,
+      zoomToCursor: this.controls.zoomToCursor, animating: !!this.anim };
+  }
+
+  /** Bildschirmposition eines Punkts auf dem Ansichtswürfel, für Tests. */
+  cubeScreen(p: number[]): { x: number; y: number } | null { return this.cube ? this.cube.screenOf(p) : null; }
 
   /** Bildschirmposition (Pixel im Fenster) eines Weltpunkts. */
   screenAt(p: number[]): { x: number; y: number } {

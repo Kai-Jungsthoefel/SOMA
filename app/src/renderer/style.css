@@ -220,13 +220,9 @@ code { font-family:var(--mono); font-size:.95em; }
 @container viewer (max-width: 900px) { .dock .lbl { display:none; } .dock button { padding:0 8px; gap:3px; } }
 
 .cube { position:absolute; top:12px; right:14px; z-index:2; display:flex; flex-direction:column; align-items:center; gap:8px; }
-.cube .face { cursor:pointer; outline:none; }
-.cube .face polygon { stroke:#56606c; stroke-width:1; transition:fill .1s; }
-.cube .face[data-view=top] polygon { fill:#2b3139; }
-.cube .face[data-view=front] polygon { fill:#232830; }
-.cube .face[data-view=right] polygon { fill:#1e2228; }
-.cube .face:hover polygon, .cube .face:focus-visible polygon { fill:rgba(242,154,56,.35); stroke:var(--acc); }
-.cube text { font-size:7.5px; font-weight:600; fill:#c9ced4; font-family:var(--sans); letter-spacing:.3px; text-anchor:middle; pointer-events:none; }
+.cube-view { width:116px; height:116px; }
+.cube-view canvas { display:block; cursor:grab; }
+.chips.views .chip { min-width:62px; }
 .vbtns { display:flex; flex-direction:column; gap:2px; padding:3px; background:rgba(24,27,31,.95); border:1px solid var(--line2); border-radius:9px; }
 .vbtns button { width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:#c9ced4; }
 .vbtns button:hover { background:var(--s3); }
