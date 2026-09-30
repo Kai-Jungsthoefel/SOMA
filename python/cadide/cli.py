@@ -108,6 +108,14 @@ def cmd_glb(args):
     return 0
 
 
+def cmd_serve(args):
+    """Messdienst der App: JSON-Zeilen auf stdin/stdout (siehe measure.serve)."""
+    from . import measure
+    sys.stdin.reconfigure(encoding="utf-8")
+    measure.serve()
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="cadide", description="CAD-IDE Hilfsprogramm (Arbeitsname)")
     ap.add_argument("--version", action="version", version=f"cadide {__version__}")
@@ -132,6 +140,9 @@ def main(argv=None):
     g.add_argument("--out", required=True, help="Zielordner (model.glb und model.map.json)")
     g.add_argument("--json", action="store_true")
     g.set_defaults(func=cmd_glb)
+
+    s = sub.add_parser("serve", help="Messdienst fuer die App (JSON-Zeilen auf stdin/stdout)")
+    s.set_defaults(func=cmd_serve)
 
     args = ap.parse_args(argv)
     return args.func(args)

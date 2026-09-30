@@ -82,11 +82,14 @@ def mesh_shape(shape, tol=0.05, ang=0.3):
                           segStart=seg_total, segCount=len(pts) - 1))
         seg_total += len(pts) - 1
 
+    # Eckpunkte zum Fassen beim Messen: exakte Koordinaten, Reihenfolge wie shape.Vertices() (dieselbe wie im Messdienst)
+    vertices = [dict(id=vi, p=[round(c, 6) for c in v.toTuple()]) for vi, v in enumerate(shape.Vertices())]
+
     cat = lambda arrs, shp, dt: np.concatenate(arrs) if arrs else np.zeros(shp, dtype=dt)
     return dict(
         positions=cat(pos, (0, 3), np.float32), normals=cat(nrm, (0, 3), np.float32),
         indices=cat(idx, (0, 3), np.uint32), lines=cat(lines, (0, 3), np.float32),
-        faces=faces, edges=edges,
+        faces=faces, edges=edges, vertices=vertices,
     )
 
 
@@ -137,7 +140,7 @@ def write_glb(path, parts):
                 POSITION=add_acc(m["lines"], "VEC3", 34962, True))))
         meshes.append(dict(name=p["meta"]["partId"], primitives=prims))
         meta = dict(p["meta"])
-        meta["faces"] = m["faces"]; meta["edges"] = m["edges"]
+        meta["faces"] = m["faces"]; meta["edges"] = m["edges"]; meta["vertices"] = m.get("vertices", [])
         nodes.append(dict(name=p["meta"]["partId"], mesh=len(meshes) - 1, extras=dict(cadide=meta)))
 
     root = dict(name="cadide-root", children=list(range(1, len(nodes) + 1)))

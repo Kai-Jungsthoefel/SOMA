@@ -3,11 +3,12 @@
 Wird fuer die Vorschau alter Staende (Versions-Schieber) und fuer fremde STEP-Dateien im Viewer gebraucht (E33, E35).
 """
 import json
+import uuid
 from pathlib import Path
 
 import cadquery as cq
 
-from . import build, mesher
+from . import build, measure, mesher
 
 
 def _flatten(assy, loc=None):
@@ -32,6 +33,8 @@ def step_to_glb(step_path, out_dir):
     if not items:
         raise ValueError("Die STEP-Datei enthaelt keine Geometrie")
     tol = build.auto_tolerance([s for _, s, _ in items])
+    build_id = uuid.uuid4().hex
+    measure.write_geometry(out, [s for _, s, _ in items], build_id)  # damit sich auch alte Staende vermessen lassen
     glb_parts, map_parts = [], []
     for i, (name, shape, rgba) in enumerate(items):
         name = name or f"Teil {i + 1}"
@@ -44,5 +47,5 @@ def step_to_glb(step_path, out_dir):
         glb_parts.append(dict(meta=dict(partId=pid, name=name, role="basic"),
                               mesh=mesher.mesh_shape(shape, tol, 0.3), color=rgba))
     mesher.write_glb(out / "model.glb", glb_parts)
-    (out / "model.map.json").write_text(json.dumps(dict(version=0, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
+    (out / "model.map.json").write_text(json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
     return map_parts

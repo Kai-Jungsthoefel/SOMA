@@ -9,11 +9,12 @@ import runpy
 import sys
 import time
 import traceback
+import uuid
 from pathlib import Path
 
 import cadquery as cq
 
-from . import mesher, registry
+from . import measure, mesher, registry
 
 DEFAULT_ENTRY = "model.py"
 
@@ -131,6 +132,9 @@ def write_outputs(root, parts, project_name):
 
     t = time.perf_counter()
     (root / ".cadide").mkdir(exist_ok=True)
+    # Kennung dieses Builds: verbindet model.glb, model.map.json und die exakte Geometrie fuer das Messen (E9)
+    build_id = uuid.uuid4().hex
+    measure.write_geometry(root / ".cadide", [p["shape"] for p in parts], build_id)
     glb_parts, map_parts = [], []
     for i, p in enumerate(parts):
         pid = f"{i}:{p['step_name']}"
@@ -145,7 +149,7 @@ def write_outputs(root, parts, project_name):
                               mesh=mesher.mesh_shape(p["shape"], tol, 0.3), color=p["color"]))
     glb_size = mesher.write_glb(root / ".cadide" / "model.glb", glb_parts)
     (root / ".cadide" / "model.map.json").write_text(
-        json.dumps(dict(version=0, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
+        json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
     timings["glb"] = time.perf_counter() - t
     return dict(glb_bytes=glb_size, tolerance=round(tol, 4), timings=timings, map_parts=map_parts)
 
