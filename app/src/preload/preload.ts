@@ -55,6 +55,7 @@ const api: CadideApi = {
     onExit: (cb) => { ipcRenderer.on('term:exit', (_e, id, code) => cb(id, code)); },
   },
   agents: { detect: () => ipcRenderer.invoke('agents:detect') },
+  measure: { query: (source, req) => ipcRenderer.invoke('measure:query', source, req) },
   dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.CADIDE_TEST === '1'

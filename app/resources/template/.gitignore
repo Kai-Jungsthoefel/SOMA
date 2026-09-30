@@ -11,3 +11,4 @@ __pycache__/
 .cadide/build.json
 .cadide/zip-info.json
 .cadide/feedback/
+.cadide/geometry/

@@ -47,8 +47,42 @@ export interface AgentInfo { id: string; label: string; command: string; found: 
 export interface PartMap {
   id: string; name: string; step_name: string; role: string;
   file?: string; line?: number; end_line?: number; volume?: number;
+  /** Achsparallele Hülle [[xmin, ymin, zmin], [xmax, ymax, zmax]] in mm. */
+  bbox?: number[][];
 }
-export interface ModelMap { version: number; parts: PartMap[] }
+/** `build`: Kennung des Builds. Sie verbindet GLB, Mapping und die exakte Geometrie für das Messen. */
+export interface ModelMap { version: number; build?: string; parts: PartMap[] }
+
+/** Art eines Elements beim Messen: Fläche, Kante oder Eckpunkt. */
+export type MeasureKind = 'face' | 'edge' | 'vertex';
+/**
+ * Angeklicktes Element (E9). `point`: Klickpunkt auf dem Netz, bei Eckpunkten ihre Lage (zum Abgleich).
+ * `check`: Flächeninhalt bzw. Länge laut Viewer, zum Abgleich.
+ */
+export interface MeasureEntity { part: string; kind: MeasureKind; id: number; point: number[] | null; check?: number }
+export interface MeasureRequest { build: string; a: MeasureEntity; b?: MeasureEntity }
+/** Exakte Angaben zu einem Element, Längen in mm, Winkel in Grad. `point`: Klickpunkt, exakt auf das Element gelegt. */
+export interface MeasureInfo {
+  kind: MeasureKind; part: string; name?: string; type: string; point: number[] | null;
+  area?: number; length?: number; radius?: number; normal?: number[]; origin?: number[];
+  axis?: { point: number[]; dir: number[] }; center?: number[]; start?: number[]; end?: number[]; dir?: number[];
+  semiAngle?: number; refRadius?: number; majorRadius?: number; minorRadius?: number; closed?: boolean;
+}
+/** Eine Strecke: Wert und die beiden Endpunkte (zum Zeichnen). */
+export interface MeasureSpan { value: number; p1: number[]; p2: number[]; delta?: number[] }
+/**
+ * `planes`: Abstand paralleler Ebenen, `axes`: Abstand paralleler Achsen, `min`: kürzester Abstand, `points`: Klickpunkt zu
+ * Klickpunkt. Mit einem Eckpunkt: `toPlane`, `toAxis`, `toLine` (Lot auf die unbegrenzte Ebene, Achse bzw. Gerade).
+ */
+export interface MeasurePair {
+  min: MeasureSpan; points?: MeasureSpan; planes?: MeasureSpan; axes?: MeasureSpan;
+  toPlane?: MeasureSpan; toAxis?: MeasureSpan; toLine?: MeasureSpan; angle?: number;
+}
+export interface MeasureResult { build: string; a: MeasureInfo; b?: MeasureInfo; pair?: MeasurePair }
+/** `stale`: Die Anfrage gehört zu einem älteren Build, die Auswahl ist neu zu treffen. */
+export interface MeasureResponse { ok: boolean; result?: MeasureResult; error?: string; stale?: boolean }
+/** Was vermessen wird: der aktuelle Stand oder die Vorschau eines alten Stands. */
+export type MeasureSource = 'live' | { preview: string };
 
 /** Stand der Speicherung: was ist gesichert, was nicht (E21). */
 export interface SaveState {
@@ -134,6 +168,8 @@ export interface CadideApi {
     onExit(cb: (id: number, code: number) => void): void;
   };
   agents: { detect(): Promise<AgentInfo[]> };
+  /** Exakte Messung über den Python-Dienst (E9, E24). */
+  measure: { query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse> };
   /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
   dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };
 }

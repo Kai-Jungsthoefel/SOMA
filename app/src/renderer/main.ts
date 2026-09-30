@@ -4,6 +4,7 @@ import { CodePanel, codeRows, type Mark } from './code';
 import { FileTree, TEXT_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
+import { MeasureTool } from './measuretool';
 import { PartsCard } from './parts';
 import { TerminalTabs } from './terminals';
 import { $, el, fmtWhen, menuItem, menus, toast } from './ui';
@@ -205,6 +206,19 @@ function insertToAgent(text: string | null, done?: string): void {
   else toast(`${pre}Das Terminal ist beendet. Öffne über + ein neues.`, 'error');
 }
 
+// ---- Messen (E9) ------------------------------------------------------------------------------------------------
+
+const measureTool = new MeasureTool({
+  card: $('measure-card'), body: $('measure-body'), button: $<HTMLButtonElement>('btn-measure'), close: $<HTMLButtonElement>('btn-measure-close'),
+  again: $<HTMLButtonElement>('btn-measure-again'), agent: $<HTMLButtonElement>('btn-measure-agent'), viewerEl: $('viewer'),
+}, {
+  viewer,
+  source: () => (versions.previewed ? { preview: versions.previewed.hash } : 'live'),
+  build: () => map?.build ?? null,
+  part: (id) => partEntry(id),
+  insert: (t) => insertToAgent(t),
+});
+
 // ---- Markierung (E16) -------------------------------------------------------------------------------------------
 
 const markup = new Markup({
@@ -340,6 +354,7 @@ async function loadModel(): Promise<void> {
     map = JSON.parse(mapText) as ModelMap;
     textCache.clear();
     await viewer.load(glb);
+    measureTool.reset(); // neuer Build: die Nummern der Flächen und Kanten gelten nicht mehr
     msg.className = ''; msg.textContent = '';
     refreshPartsCard();
     // Flächen-IDs gelten nur für einen Build: nach dem Neuladen bleibt das Bauteil gewählt, die Fläche nicht
@@ -373,6 +388,7 @@ const versions = new VersionsBar({
       map = res.map;
       textCache.clear();
       await viewer.load(res.glb);
+      measureTool.reset();
       refreshPartsCard();
       selectPart(null, null);
       void renderErrorCard();
@@ -391,6 +407,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   lastOkAt = null;
   textCache.clear();
   markup.close();
+  if (measureTool.isActive) measureTool.setActive(false);
   viewer.clear();
   versions.reset();
   terminals.closeAll();
@@ -778,6 +795,7 @@ if (api.testMode) {
     versionsUi: () => ({ restoreHidden: $('btn-restore').hidden, problem: $('vproblem').hidden ? '' : $('vproblem').textContent }),
     selectionText, errorText,
     markup: () => markup.state(),
+    measure: () => measureTool.state(),
     markPixel: (x: number, y: number) => markup.pixel(x, y),
     markHandles: () => markup.handles(),
     insert: (text: string) => insertToAgent(text),

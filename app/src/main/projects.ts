@@ -1,10 +1,11 @@
 import { shell, type BrowserWindow, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ExportResult, GitLog, ModelMap, OpenResult, PreviewResult, ProjectInfo, RestoreResult, SaveResult, SaveState } from '../shared/types';
+import type { ExportResult, GitLog, MeasureEntity, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult, ProjectInfo, RestoreResult, SaveResult, SaveState } from '../shared/types';
 import { BuildManager, buildIsStale, newestSourceMtime, runCadide } from './build';
 import { choose, choosePath } from './dialogs';
 import { GitRepo } from './git';
+import { MeasureService } from './measure';
 import { previewsDir } from './paths';
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
@@ -21,6 +22,7 @@ interface Session {
   builds: BuildManager;
   terminals: TerminalManager;
   git: GitRepo;
+  measure: MeasureService;
   stopWatch: () => void;
   poll: NodeJS.Timeout;
   signature: string;
@@ -58,6 +60,7 @@ export class ProjectController {
     s.stopWatch();
     s.builds.dispose();
     s.terminals.killAll();
+    s.measure.stop();
     this.session = null;
   }
 
@@ -69,7 +72,7 @@ export class ProjectController {
     const git = new GitRepo(dir);
     builds.on('status', (st) => this.send('build:status', st));
     const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'));
-    const session: Session = { id, dir, builds, terminals, git, stopWatch, signature: '', poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), stopWatch, signature: '', poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     setLastProject(id);
     // Erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
@@ -261,7 +264,8 @@ export class ProjectController {
     const commit = (await s.git.log()).find((c) => c.hash === hash) ?? null;
     const dir = path.join(previewsDir(), s.id, hash);
     try {
-      if (!fs.existsSync(path.join(dir, 'model.glb'))) {
+      // Ältere Vorschauen haben noch keine Geometrie zum Messen: dann neu erzeugen
+      if (!fs.existsSync(path.join(dir, 'model.glb')) || !fs.existsSync(path.join(dir, 'geometry'))) {
         const step = path.join(dir, 'model.step');
         await s.git.exportFile(hash, 'output/model.step', step);
         const r = await runCadide(['glb', step, '--out', dir], s.dir);
@@ -276,6 +280,30 @@ export class ProjectController {
       return { ...empty, commit, error: /exists on disk, but not in|does not exist|Path .* does not exist|invalid object/i.test(msg)
         ? 'Dieser Stand enthält kein output/model.step (noch nicht gebaut).' : `Vorschau nicht möglich: ${msg}` };
     }
+  }
+
+  /**
+   * Exakte Messung (E9). Der Renderer nennt nur die Quelle (aktueller Stand oder Vorschau), den Ordner bestimmt der
+   * Hauptprozess. Die Anfrage wird auf die erwartete Form gebracht, bevor sie an den Python-Dienst geht.
+   */
+  async measure(source: unknown, req: unknown): Promise<MeasureResponse> {
+    const s = this.need();
+    let folder: string;
+    const hash = (source as { preview?: unknown } | null)?.preview;
+    if (source === 'live') folder = path.join(s.dir, '.cadide');
+    else if (typeof hash === 'string' && /^[0-9a-f]{7,40}$/.test(hash)) folder = path.join(previewsDir(), s.id, hash);
+    else return { ok: false, error: 'Unbekannte Quelle für die Messung.' };
+    const r = req as { build?: unknown; a?: unknown; b?: unknown } | null;
+    const ent = (v: unknown): MeasureEntity | null => {
+      const e = v as { part?: unknown; kind?: unknown; id?: unknown; point?: unknown; check?: unknown } | null;
+      if (!e || typeof e.part !== 'string' || (e.kind !== 'face' && e.kind !== 'edge' && e.kind !== 'vertex') || !Number.isInteger(e.id)) return null;
+      const pt = Array.isArray(e.point) && e.point.length === 3 && e.point.every((x) => Number.isFinite(x)) ? (e.point as number[]) : null;
+      return { part: e.part, kind: e.kind, id: e.id as number, point: pt, check: Number.isFinite(e.check) ? (e.check as number) : undefined };
+    };
+    const a = ent(r?.a), b = r?.b == null ? undefined : ent(r.b);
+    if (!a || b === null || typeof r?.build !== 'string') return { ok: false, error: 'Ungültige Messanfrage.' };
+    const clean: MeasureRequest = { build: r.build, a, ...(b ? { b } : {}) };
+    return s.measure.request(folder, clean);
   }
 
   async restore(hash: string): Promise<RestoreResult> {

@@ -11,8 +11,9 @@
     "test:smoke": "npm run build && node test/smoke.mjs",
     "test:versions": "npm run build && node test/versions.mjs",
     "test:editor": "npm run build && node test/editor.mjs",
+    "test:measure": "npm run build && node test/measure.mjs",
     "test:unit": "node test/unit.mjs",
-    "test": "npm run build && node test/unit.mjs && node test/smoke.mjs && node test/versions.mjs && node test/editor.mjs"
+    "test": "npm run build && node test/unit.mjs && node test/smoke.mjs && node test/versions.mjs && node test/editor.mjs && node test/measure.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

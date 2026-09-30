@@ -76,6 +76,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.on('term:kill', (_e, id: number) => ctl.session?.terminals.kill(id));
 
   ipcMain.handle('agents:detect', () => detectAgents(terminalEnv(dir())));
+  ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   // Rückfragen aus dem Renderer (etwa ungespeicherte Eingaben im Editor) laufen über dieselben Dialoge wie im Hauptprozess
   ipcMain.handle('dialog:choose', (_e, o: { title?: unknown; message?: unknown; detail?: unknown; buttons?: unknown }) => {
     const buttons = Array.isArray(o?.buttons) ? o.buttons.slice(0, 4).map(String) : [];

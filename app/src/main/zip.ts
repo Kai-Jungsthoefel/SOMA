@@ -11,6 +11,8 @@ export const ZIP_INFO_PATH = '.cadide/zip-info.json';
 /** Wird nie gepackt: Umgebungen und Caches (Umgebung wird aus requirements.txt neu gebaut, Cache neu erzeugt). */
 const SKIP_DIRS = new Set(['.venv', 'venv', 'env', '__pycache__', 'node_modules']);
 const SKIP_FILES = new Set(['.cadide/model.glb', '.cadide/model.map.json', '.cadide/build.json']);
+/** Ganze Ordner, die nie gepackt werden (Pfad relativ zum Projekt): die Geometrie für das Messen entsteht beim Bauen neu. */
+const SKIP_PATHS = new Set(['.cadide/geometry']);
 const MAX_UNPACKED = 2 * 1024 ** 3;
 
 function collect(root: string): string[] {
@@ -19,7 +21,7 @@ function collect(root: string): string[] {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isSymbolicLink()) continue;
-      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(path.join(dir, e.name), r); continue; }
+      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name) && !SKIP_PATHS.has(r)) walk(path.join(dir, e.name), r); continue; }
       if (SKIP_FILES.has(r) || (r.startsWith('.git/') && r.endsWith('.lock'))) continue;
       out.push(r);
     }

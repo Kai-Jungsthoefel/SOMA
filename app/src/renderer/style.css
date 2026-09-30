@@ -232,6 +232,33 @@ code { font-family:var(--mono); font-size:.95em; }
 .vbtns button:hover { background:var(--s3); }
 
 .selcard { left:12px; bottom:12px; width:356px; overflow:hidden; }
+.dock button[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
+
+/* Messen (E9): Karte unten links statt der Auswahlkarte, Punkte und Beschriftung als HTML über dem Bild */
+#viewer.measuring #selcard { display:none; }
+.mcard { left:12px; bottom:12px; width:356px; overflow:hidden; }
+.mc-hd { display:flex; align-items:center; gap:8px; padding:10px 8px 6px 14px; }
+.mc-hd b { font-size:14px; }
+.mc-ico { color:var(--acc-tx); display:flex; }
+.mc-body { padding:0 0 4px; }
+.mc-hint { padding:2px 14px 6px; font-size:12px; color:var(--tx3); }
+.mc-err { margin:2px 12px 6px; padding:8px 10px; border-radius:6px; background:var(--err-tint); color:#ffc4c0; font-size:12px; }
+.mc-title { display:flex; align-items:baseline; gap:8px; padding:2px 14px 6px; min-width:0; }
+.mc-title b { font-size:13px; white-space:nowrap; }
+.mc-title span { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mc-row { display:flex; justify-content:space-between; gap:12px; padding:3px 14px; font-size:12.5px; color:var(--tx2); }
+.mc-row .v { font-family:var(--mono); font-size:12px; color:var(--tx); white-space:nowrap; }
+.mc-main { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:2px 14px 8px; color:var(--tx2); font-size:12.5px; }
+.mc-main b { font:600 20px var(--mono); color:var(--acc-tx); white-space:nowrap; }
+.mc-sub { padding:0 14px 4px; font:11.5px var(--mono); color:var(--tx3); text-align:right; }
+.mc-sep { height:1px; background:var(--line); margin:6px 12px; }
+.mc-ent { display:flex; gap:8px; padding:2px 14px; font-size:12px; color:var(--tx2); min-width:0; }
+.mc-ent b { color:var(--acc-tx); }
+.mc-ent span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.v-overlay { position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
+.v-pt { position:absolute; left:-5px; top:-5px; width:10px; height:10px; border-radius:50%; background:var(--acc); box-shadow:0 0 0 2px var(--bg); }
+.v-label { position:absolute; left:0; top:0; margin:-32px 0 0 10px; padding:3px 8px; border-radius:6px; background:rgba(24,27,31,.95);
+  border:1px solid var(--acc-line); color:var(--acc-tx); font:600 12.5px var(--mono); white-space:nowrap; }
 .sc-hd { display:flex; align-items:center; gap:8px; padding:10px 8px 0 14px; }
 .sc-hd b { font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sc-info { font-size:12px; padding:2px 14px 8px; }

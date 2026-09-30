@@ -78,7 +78,7 @@
         <div id="dock" class="float dock">
           <button id="btn-display" aria-haspopup="menu" aria-expanded="false" title="Darstellung"><i data-icon="layers"></i><span class="lbl">Darstellung</span><span class="c2"><i data-icon="down" data-size="13" data-stroke="2"></i></span></button>
           <span class="vsep"></span>
-          <button disabled title="Messen kommt in einem späteren Schritt"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
+          <button id="btn-measure" aria-pressed="false" title="Messen: Fläche oder Kante anklicken, ein zweiter Klick misst Abstand und Winkel (exakte Werte)"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
           <button disabled title="Die Schnittansicht kommt in einem späteren Schritt"><i data-icon="section"></i><span class="lbl">Schnitt</span></button>
           <span class="vsep"></span>
           <button id="btn-mark" class="hot" title="Viewer-Bild markieren und an den Agenten geben"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
@@ -104,6 +104,16 @@
           <div class="sc-actions">
             <button id="btn-sel-code" class="btn sm"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code öffnen</button>
             <button id="btn-sel-agent" class="btn sm acc" title="Bauteil, Datei und Zeilen in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+          </div>
+        </div>
+
+        <div id="measure-card" class="float mcard" hidden>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="ruler" data-size="16"></i></span><b>Messen</b><span class="grow"></span>
+            <button id="btn-measure-close" class="ibtn s" aria-label="Messen beenden" title="Messen beenden (Escape)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div id="measure-body" class="mc-body"></div>
+          <div class="sc-actions">
+            <button id="btn-measure-again" class="btn sm" disabled>Neu messen</button>
+            <button id="btn-measure-agent" class="btn sm acc" disabled title="Die Messung in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
           </div>
         </div>
 

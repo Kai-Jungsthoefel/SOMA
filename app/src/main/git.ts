@@ -16,8 +16,12 @@ const APP_SUBJECT = /^(Neues Modell angelegt|Automatischer Snapshot beim Speiche
 
 /** Gilt für jeden Aufruf: UTF-8-Pfade lesbar, keine Zeilenenden-Umwandlung (ZIPs wandern zwischen Systemen). */
 const COMMON = ['-c', 'core.quotepath=false', '-c', 'core.autocrlf=false'];
-/** `output/` zählt nicht als Änderung: STEP-Dateien sind nicht byte-stabil (Zeitstempel, teils Reihenfolge). */
-const NOT_OUTPUT = ['--', '.', ':(exclude)output'];
+/**
+ * `output/` zählt nicht als Änderung: STEP-Dateien sind nicht byte-stabil (Zeitstempel, teils Reihenfolge).
+ * `.cadide/geometry/` (Geometrie für das Messen) ist ein Zwischenergebnis. Ältere Projekte haben es noch nicht in der
+ * .gitignore, deshalb klammert die App es selbst aus, beim Status und beim Hinzufügen (siehe addAll).
+ */
+const NOT_OUTPUT = ['--', '.', ':(exclude)output', ':(exclude).cadide/geometry'];
 const HASH = /^[0-9a-f]{7,40}$/;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -47,6 +51,15 @@ export class GitRepo {
     }
   }
 
+  /**
+   * Alles vormerken außer `.cadide/geometry/`. Ein Ausschluss im Pfad (`:(exclude)…`) ginge nicht: Steht der Ordner in
+   * der .gitignore (neue Projekte), bricht `git add` dann mit Fehler ab. Deshalb danach aus dem Index nehmen, was dort liegt.
+   */
+  private async addAll(): Promise<void> {
+    await this.mustRun(['add', '-A'], true);
+    await this.mustRun(['rm', '-r', '--cached', '--ignore-unmatch', '-q', '--', '.cadide/geometry'], true);
+  }
+
   private async mustRun(args: string[], write = false): Promise<string> {
     const r = await this.run(args, write);
     if (!r.ok) throw new Error(`git ${args[0]} fehlgeschlagen: ${(r.err || r.out).trim().slice(0, 400)}`);
@@ -74,7 +87,7 @@ export class GitRepo {
       const email = await this.run(['config', 'user.email']);
       if (!name.out.trim()) await this.mustRun(['config', '--local', 'user.name', 'CAD-IDE'], true);
       if (!email.out.trim()) await this.mustRun(['config', '--local', 'user.email', 'cadide@localhost'], true);
-      await this.mustRun(['add', '-A'], true);
+      await this.addAll();
       await this.mustRun(['commit', '--allow-empty', '--no-verify', '-m', message, ...APP_TRAILER], true);
       return (await this.mustRun(['rev-parse', 'HEAD'])).trim();
     });
@@ -95,7 +108,7 @@ export class GitRepo {
   async snapshot(message: string): Promise<string | null> {
     return this.serial(async () => {
       if (!(await this.status()).dirty) return null;
-      await this.mustRun(['add', '-A'], true);
+      await this.addAll();
       await this.mustRun(['commit', '--no-verify', '-m', message, ...APP_TRAILER], true);
       return (await this.mustRun(['rev-parse', 'HEAD'])).trim();
     });
@@ -144,7 +157,7 @@ export class GitRepo {
 
       let safety: string | null = null;
       if ((await this.status()).dirty) {
-        await this.mustRun(['add', '-A'], true);
+        await this.addAll();
         await this.mustRun(['commit', '--no-verify', '-m', 'Sicherung vor Wiederherstellung', ...APP_TRAILER], true);
         safety = (await this.mustRun(['rev-parse', 'HEAD'])).trim();
       }
@@ -154,7 +167,7 @@ export class GitRepo {
         if (!target.has(f)) fs.rmSync(resolveInside(this.dir, f), { force: true });
       }
       await this.mustRun(['restore', `--source=${hash}`, '--staged', '--worktree', '--', '.'], true);
-      await this.mustRun(['add', '-A'], true);
+      await this.addAll();
       const diff = await this.run(['diff', '--cached', '--quiet']);
       if (diff.ok) return { commit: null, safety }; // Stand war schon identisch
       await this.mustRun(['commit', '--no-verify', '-m', `Stand wiederhergestellt: ${subject} (${short})`, ...APP_TRAILER], true);
