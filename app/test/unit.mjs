@@ -14,7 +14,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cadide-unit-'));
 try {
   const out = path.join(tmp, 'files.mjs');
   await build({ entryPoints: [path.join(APP, 'src', 'main', 'files.ts')], outfile: out, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
-  const { importInputs, saveFeedbackImage } = await import(pathToFileURL(out).href);
+  const { importInputs, saveFeedbackImage, writeProjectText, backupText } = await import(pathToFileURL(out).href);
 
   const proj = path.join(tmp, 'projekt');
   const src = path.join(tmp, 'quelle');
@@ -64,6 +64,33 @@ try {
     const r3 = saveFeedbackImage(proj3, png, when);
     check('.cadide zeigt nach außen: Markierung abgelehnt, draußen landet nichts', !r3.ok && fs.readdirSync(outside).length === 0, r3.error?.slice(0, 70) ?? '');
   } else check('.cadide als Verweis nach außen (übersprungen, Verweis nicht anlegbar)', true);
+
+  // Editor: schreiben nur, wenn die Platte noch dem gelesenen Stand entspricht (der Agent schreibt an denselben Dateien)
+  const bdir = path.join(tmp, 'sicherungen');
+  const mp = path.join(proj, 'model.py');
+  fs.writeFileSync(mp, 'A = 1\n');
+  let w = writeProjectText(proj, 'model.py', 'A = 2\n', 'A = 1\n', false, bdir);
+  check('Editor schreibt, wenn die Platte dem gelesenen Stand entspricht', w.ok && fs.readFileSync(mp, 'utf8') === 'A = 2\n' && !fs.existsSync(`${mp}.cadide-tmp`));
+  fs.writeFileSync(mp, 'A = 3  # Agent\n');
+  w = writeProjectText(proj, 'model.py', 'A = 4\n', 'A = 2\n', false, bdir);
+  check('Außen geändert: Konflikt statt Überschreiben, Platte bleibt, aktueller Inhalt kommt mit', !w.ok && w.conflict && w.disk === 'A = 3  # Agent\n' && fs.readFileSync(mp, 'utf8') === 'A = 3  # Agent\n');
+  w = writeProjectText(proj, 'model.py', 'A = 4\n', 'A = 2\n', true, bdir);
+  check('„Meine Fassung behalten": schreibt und sichert vorher die Fassung von außen', w.ok && fs.readFileSync(mp, 'utf8') === 'A = 4\n' && !!w.backup
+    && fs.readFileSync(w.backup, 'utf8') === 'A = 3  # Agent\n' && path.dirname(w.backup) === bdir, w.backup ? path.basename(w.backup) : w.error);
+  fs.rmSync(mp);
+  w = writeProjectText(proj, 'model.py', 'A = 5\n', 'A = 4\n', false, bdir);
+  check('Außen gelöscht: Konflikt mit disk = null', !w.ok && w.conflict && w.disk === null && !fs.existsSync(mp));
+  const locked = ['AGENTS.md', 'CLAUDE.md', '.gitignore', 'output/model.step', 'exports/Body.stl', '.cadide/project.json', '.git/config', 'parts/../AGENTS.md'].map((r) => {
+    fs.mkdirSync(path.dirname(path.join(proj, r)), { recursive: true });
+    fs.writeFileSync(path.join(proj, r), 'x');
+    const res = writeProjectText(proj, r, 'y', 'x', true, bdir);
+    return !res.ok && !res.conflict && fs.readFileSync(path.join(proj, r), 'utf8') === 'x';
+  });
+  check('App-Dateien, Ergebnisse, .cadide und .git: Schreiben aus dem Editor abgelehnt', locked.every(Boolean), locked.join(','));
+  w = writeProjectText(proj, '../draussen.py', 'x', null, true, bdir);
+  check('Pfad außerhalb des Projekts: abgelehnt', !w.ok && !fs.existsSync(path.join(tmp, 'draussen.py')), w.error?.slice(0, 60));
+  const b1 = backupText(bdir, 'parts/deckel.py', 'eins'), b2 = backupText(bdir, 'parts/deckel.py', 'zwei');
+  check('Sicherungen überschreiben einander nicht', b1 !== b2 && fs.readFileSync(b1, 'utf8') === 'eins' && fs.readFileSync(b2, 'utf8') === 'zwei', path.basename(b2));
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

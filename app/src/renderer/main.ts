@@ -1,5 +1,6 @@
+import { affectsBuild } from '../shared/editable';
 import type { AgentInfo, BuildStatus, ModelMap, PartMap, PreviewResult, ProjectInfo, SaveState } from '../shared/types';
-import { CodePanel, codeRows } from './code';
+import { CodePanel, codeRows, type Mark } from './code';
 import { FileTree, TEXT_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
@@ -62,9 +63,17 @@ function showPanel(p: PanelName | null): void {
   if (p === 'files' && filesDirty) void refreshFiles();
 }
 
-const code = new CodePanel({ tabs: $('code-tabs'), info: $('code-info'), view: $('code-view'), link: $<HTMLButtonElement>('btn-codelink') }, readText);
+const code = new CodePanel(
+  { tabs: $('code-tabs'), info: $('code-info'), banner: $('code-banner'), view: $('code-view'), link: $<HTMLButtonElement>('btn-codelink') },
+  {
+    read: (rel) => api.fs.readText(rel), projectId: () => project?.id ?? null, toast, ask: (o) => api.dialog.choose(o),
+    changed: () => { if (saveState) renderSaveState(saveState); },
+    saveAndBuild: () => void saveCode(),
+    build: () => void api.build.run(),
+  },
+);
 
-async function openCode(file: string, mark?: { from: number; to: number; label: string; color?: string }): Promise<void> {
+async function openCode(file: string, mark?: Mark): Promise<void> {
   showPanel('code');
   await code.open(file, mark);
 }
@@ -370,6 +379,7 @@ const versions = new VersionsBar({
     } catch (e) { toast(`Vorschau nicht darstellbar: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
   },
   toast,
+  beforeRestore: () => leaveEditor('Stand wiederherstellen'), // Wiederherstellen ersetzt Dateien
 });
 
 // ---- Projekt ----------------------------------------------------------------------------------------------------
@@ -422,21 +432,52 @@ function renderSaveState(st: SaveState): void {
   saveState = st;
   const dot = el('span', { className: 'dot' });
   let text: string;
+  // Ungespeichertes im Editor zählt mit, auch wenn die Dateien auf der Platte dem gespeicherten Stand entsprechen
+  const unsaved = st.unsaved || code.unsaved().length > 0;
   if (!st.zipPath) { dot.style.background = 'var(--warn)'; text = 'Noch nicht gespeichert'; }
-  else if (st.unsaved) { dot.style.background = 'var(--warn)'; text = `Nicht gespeichert${st.savedAt ? ` · zuletzt ${fmtWhen(st.savedAt)}` : ''}`; }
+  else if (unsaved) { dot.style.background = 'var(--warn)'; text = `Nicht gespeichert${st.savedAt ? ` · zuletzt ${fmtWhen(st.savedAt)}` : ''}`; }
   else { dot.style.background = 'var(--ok)'; text = `Gespeichert${st.savedAt ? ` · ${fmtWhen(st.savedAt)}` : ''}`; }
   const b = $('save-badge');
   b.replaceChildren(dot, text);
   b.title = st.zipPath ? `ZIP: ${st.zipPath}` : 'Noch nicht als ZIP gespeichert. Strg+S speichert.';
   versions.setSaved(st.zipPath ? st.savedHead : null);
-  document.title = `CAD-IDE – ${project?.name ?? ''}${st.unsaved ? ' ●' : ''}`;
+  document.title = `CAD-IDE – ${project?.name ?? ''}${unsaved ? ' ●' : ''}`;
 }
 
 async function refreshSaveState(): Promise<void> {
   try { renderSaveState(await api.project.saveState()); } catch { /* Projekt wechselt gerade */ }
 }
 
+/**
+ * Strg+S im Editor und „Speichern und bauen“: geänderte Dateien schreiben. Gebaut wird nur, wenn darunter eine ist,
+ * die das Modell betrifft (Python, inputs/). Keine ZIP, kein Snapshot, das macht „Speichern“ oben.
+ */
+async function saveCode(): Promise<void> {
+  const r = await code.saveAll();
+  if (!r.ok) { toast('Nicht alles ließ sich speichern (siehe Hinweis im Code-Panel). Gebaut wird erst danach.', 'error'); return; }
+  if (r.saved.some(affectsBuild)) await api.build.run();
+}
+
+/** Vor Modellwechsel und Wiederherstellen: ungespeicherte Eingaben im Editor nicht still verlieren. false = abbrechen. */
+async function leaveEditor(title: string): Promise<boolean> {
+  const files = code.unsaved();
+  if (!files.length) return true;
+  const c = await api.dialog.choose({
+    title, message: `Im Editor gibt es ungespeicherte Änderungen: ${files.join(', ')}.`,
+    detail: 'Verwerfen legt deine Fassung als Sicherung in den App-Daten ab.', buttons: ['Speichern', 'Verwerfen', 'Abbrechen'],
+  });
+  if (c === 0) {
+    const r = await code.saveAll();
+    if (!r.ok) toast('Nicht alles ließ sich speichern (siehe Hinweis im Code-Panel).', 'error');
+    return r.ok;
+  }
+  return c === 1 ? code.discardAll() : false;
+}
+
 async function doSave(saveAs = false): Promise<void> {
+  // Erst die Eingaben im Editor, sonst fehlten sie in Snapshot und ZIP. Das Speichern baut danach, falls nötig.
+  const c = await code.saveAll();
+  if (!c.ok) { toast('Nicht alles im Editor ließ sich speichern (siehe Hinweis im Code-Panel). Das Modell ist deshalb nicht gespeichert.', 'error'); return; }
   const r = await api.project.save(saveAs);
   if (r.cancelled) return;
   if (r.error) { toast(r.error, 'error'); return; }
@@ -450,19 +491,27 @@ async function doSave(saveAs = false): Promise<void> {
 }
 
 async function doOpen(): Promise<boolean> {
+  if (!(await leaveEditor('Modell öffnen'))) return false;
   const r = await api.project.openZip();
   if (r.error) toast(r.error, 'error');
   return !!r.opened;
 }
 
-const doNew = () => api.project.create();
-const doBuild = () => api.build.run();
+const doNew = async () => { if (await leaveEditor('Neues Modell')) await api.project.create(); };
+/** „Jetzt bauen“: baut immer. Vorher werden die Eingaben im Editor gespeichert, sonst sähe der Build sie nicht. */
+async function doBuild(): Promise<void> {
+  const r = await code.saveAll();
+  if (!r.ok) { toast('Nicht alles ließ sich speichern (siehe Hinweis im Code-Panel). Gebaut wird erst danach.', 'error'); return; }
+  await api.build.run();
+}
+const openProject = async (id: string) => { if (await leaveEditor('Modell öffnen')) await api.project.open(id); };
 
 // Kurzbefehle gelten nicht im Terminal: dort gehören Strg+S/Strg+O den Programmen (Claude Code nutzt Strg+O selbst)
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement | null)?.closest?.('#terminals') || !e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
-  if (k === 's') { e.preventDefault(); void doSave(e.shiftKey); }
+  // Im Editor speichert Strg+S den Code und baut, sonst das ganze Modell als ZIP
+  if (k === 's') { e.preventDefault(); if (!e.shiftKey && (e.target as HTMLElement | null)?.closest?.('#code-view')) void saveCode(); else void doSave(e.shiftKey); }
   else if (k === 'o' && !e.shiftKey) { e.preventDefault(); void doOpen().then((ok) => { if (ok) showStart(false); }); }
   else if (k === 'n' && !e.shiftKey) { e.preventDefault(); void doNew().then(() => showStart(false)); }
   else if (k === 'b' && !e.shiftKey) { e.preventDefault(); void doBuild(); }
@@ -476,7 +525,7 @@ async function renderRecent(): Promise<void> {
   list.sort((a, b) => b.modified - a.modified);
   const others = list.filter((p) => p.id !== project?.id).slice(0, 6);
   $('recent-wrap').hidden = others.length === 0;
-  $('recent-list').replaceChildren(...others.map((p) => menuItem(p.name, { icon: 'cube', sub: fmtWhen(p.modified, true), onClick: () => void api.project.open(p.id) })));
+  $('recent-list').replaceChildren(...others.map((p) => menuItem(p.name, { icon: 'cube', sub: fmtWhen(p.modified, true), onClick: () => void openProject(p.id) })));
 }
 
 $('btn-doc').addEventListener('click', () => { void renderRecent().then(() => menus.toggle($('menu-doc'), $('btn-doc'))); });
@@ -580,7 +629,7 @@ $('btn-ins-err').addEventListener('click', () => insertToAgent(errorText()));
 $('btn-err-agent').addEventListener('click', () => insertToAgent(errorText()));
 $('btn-err-code').addEventListener('click', () => {
   const e = buildStatus.result?.error;
-  if (e?.file) void openCode(e.file, e.line ? { from: e.line, to: e.line, label: 'Fehler' } : undefined);
+  if (e?.file) void openCode(e.file, e.line ? { from: e.line, to: e.line, label: 'Build-Fehler', kind: 'er' } : undefined);
 });
 $('btn-err-details').addEventListener('click', () => {
   const t = $('err-trace');
@@ -670,7 +719,7 @@ async function showStart(on: boolean): Promise<void> {
     const cur = p.id === project?.id;
     const card = el('button', { className: 'recent' + (cur ? ' cur' : ''), title: cur ? 'Gerade geöffnet' : `${p.name} öffnen` },
       th, el('div', { className: 'meta' }, el('b', { textContent: p.name }), el('span', { textContent: cur ? 'geöffnet' : `geändert ${fmtWhen(p.modified, true)}` })));
-    card.addEventListener('click', () => { if (!cur) void api.project.open(p.id); showStart(false); });
+    card.addEventListener('click', () => { if (!cur) void openProject(p.id); showStart(false); });
     return card;
   }));
   if (!list.length) $('start-recent').append(el('div', { className: 'c3', textContent: 'Noch keine Modelle auf diesem Rechner.' }));
@@ -687,11 +736,20 @@ $('btn-note-ok').addEventListener('click', () => { store.set('cadide.noteSeen', 
 // ---- Ereignisse vom Hauptprozess --------------------------------------------------------------------------------
 
 api.project.onChanged((p) => void onProject(p));
+let buildStarts = 0; // Prüfhilfe: Wie oft hat ein Build begonnen?
 api.build.onStatus((s) => {
+  if (s.state === 'building' && buildStatus.state !== 'building') buildStarts++;
   renderBuild(s);
   if (s.state === 'ok' && !s.stale) { void loadModel(); void refreshFiles(); }
 });
-api.fs.onChanged(() => { textCache.clear(); void refreshFiles(); if (panel === 'code') void code.refresh(); });
+// Auch bei geschlossenem Code-Panel abgleichen: Offene Dateien können ungesicherte Eingaben enthalten
+api.fs.onChanged(() => { textCache.clear(); void refreshFiles(); void code.refresh(); });
+// Beim Beenden fragt der Hauptprozess, was im Editor ungespeichert ist, und lässt speichern oder verwerfen
+api.fs.onEditorRequest(async (action) => {
+  if (action === 'status') return { dirty: code.unsaved() };
+  if (action === 'save') return { ok: (await code.saveAll()).ok };
+  return { ok: await code.discardAll() };
+});
 api.versions.onChanged(() => void versions.refresh());
 api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (der Hauptprozess öffnet es beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
@@ -727,6 +785,9 @@ if (api.testMode) {
     showStart: (on: boolean) => showStart(on),
     setAgentCollapsed,
     fileRows: () => [...document.querySelectorAll('#tab-files .frow .fn')].map((x) => x.textContent),
-    codeText: () => $('code-view').textContent,
+    codeText: () => code.text(),
+    openCode: (file: string) => openCode(file),
+    buildStarts: () => buildStarts,
+    editor: code.testApi(),
   };
 }

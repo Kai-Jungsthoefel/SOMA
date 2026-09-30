@@ -18,6 +18,8 @@ interface Hooks {
   /** `res` = Vorschau eines alten Standes, `null` = zurück zum Arbeitsstand. */
   show(res: PreviewResult | null): Promise<void>;
   toast(text: string, kind: 'ok' | 'info' | 'error'): void;
+  /** Vor dem Wiederherstellen: ungespeicherte Eingaben im Editor klären. false = abbrechen. */
+  beforeRestore(): Promise<boolean>;
 }
 
 const who = (c: CommitInfo) => (c.byApp ? 'CAD-IDE' : c.author);
@@ -99,6 +101,7 @@ export class VersionsBar {
 
   private async restore(): Promise<void> {
     if (!this.previewHash) return;
+    if (!(await this.hooks.beforeRestore())) return;
     const r = await window.cadide.versions.restore(this.previewHash);
     if (r.cancelled) return;
     if (r.error) { this.hooks.toast(r.error, 'error'); return; }

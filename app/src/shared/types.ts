@@ -32,6 +32,11 @@ export interface BuildStatus {
 export interface ExportResult { ok: boolean; files: string[]; error?: string }
 /** Dateien, die per Ziehen nach inputs/ kopiert wurden (E33). */
 export interface ImportResult { files: string[]; errors: string[] }
+/**
+ * Schreiben aus dem Editor. `conflict`: Die Datei hat sich seit dem Laden außerhalb geändert (meist durch den Agenten),
+ * `disk` ist ihr aktueller Inhalt (null: gelöscht). `backup`: Pfad der Sicherung der überschriebenen Fassung.
+ */
+export interface WriteResult { ok: boolean; conflict?: boolean; disk?: string | null; backup?: string; error?: string }
 /** Gespeicherte Markierung (E16). `path` relativ zum Projekt, z. B. `.cadide/feedback/markierung-20260930-1405.png`. */
 export interface FeedbackResult { ok: boolean; path?: string; error?: string }
 
@@ -110,6 +115,15 @@ export interface CadideApi {
     importFiles(files: File[]): Promise<ImportResult>;
     /** Legt ein PNG der Markierung in .cadide/feedback/ ab. Vorhandenes wird nie überschrieben. */
     saveFeedback(png: Uint8Array): Promise<FeedbackResult>;
+    /**
+     * Schreibt eine Datei aus dem Editor, nur wenn sie auf der Platte noch `base` entspricht (sonst Konflikt).
+     * `force` schreibt trotzdem und sichert vorher die Fassung auf der Platte. `projectId` schützt vor Schreiben ins falsche Modell.
+     */
+    writeText(projectId: string, rel: string, text: string, base: string | null, force?: boolean): Promise<WriteResult>;
+    /** Legt einen Text als Sicherung in den App-Daten ab und gibt den Pfad zurück. */
+    backupText(projectId: string, rel: string, text: string): Promise<string>;
+    /** Anfragen des Hauptprozesses an den Editor beim Beenden: ungespeicherte Dateien nennen, speichern oder verwerfen. */
+    onEditorRequest(cb: (action: 'status' | 'save' | 'discard') => Promise<{ dirty?: string[]; ok?: boolean }>): void;
   };
   term: {
     create(opts?: { command?: string; title?: string }): Promise<number>;
@@ -120,6 +134,8 @@ export interface CadideApi {
     onExit(cb: (id: number, code: number) => void): void;
   };
   agents: { detect(): Promise<AgentInfo[]> };
+  /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
+  dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };
 }
 
 declare global { interface Window { cadide: CadideApi } }

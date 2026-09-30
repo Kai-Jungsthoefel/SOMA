@@ -13,6 +13,7 @@
 @font-face { font-family: 'IBM Plex Mono'; font-weight: 500; src: url(fonts/ibm-plex-mono-latin-ext-500-normal.woff2) format('woff2'); unicode-range: U+0100-024F, U+1E00-1EFF, U+20A0-20CF, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 
 :root {
+  color-scheme:dark; /* nur dunkles Farbschema: Scrollleisten und Eingabefelder des Systems passen sich an */
   --bg:#121417; --s1:#16181c; --s2:#1b1e23; --s3:#232830; --line:#262a31; --line2:#2d323a;
   --tx:#e6e8eb; --tx2:#a3acb6; --tx3:#7f8994; --term:#0f1114;
   --acc:#f29a38; --acc-tx:#f6b46a; --acc-tint:rgba(242,154,56,.14); --acc-line:rgba(242,154,56,.45);
@@ -119,10 +120,54 @@ code { font-family:var(--mono); font-size:.95em; }
 .ctab .x { width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:4px; color:var(--tx3); }
 .ctab .x:hover { background:var(--s3); color:var(--tx); }
 .code-hd .btn, .code-hd .ibtn { align-self:center; }
+.code-hd .btn { font-family:var(--sans); }
 #btn-codelink[aria-pressed=true] { color:var(--acc-tx); }
-.code-info { min-height:32px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 14px; font-size:12px; color:var(--tx2); border-bottom:1px solid var(--line); background:var(--term); }
+.code-info { min-height:32px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:6px 14px; font:12px/1.4 var(--sans); color:var(--tx2); border-bottom:1px solid var(--line); background:var(--term); }
 .code-info:empty { display:none; }
-.codeview { flex:1; overflow:auto; padding:8px 0; background:var(--term); font-size:12.5px; line-height:1.72; }
+.codeview { flex:1; min-height:0; position:relative; background:var(--term); }
+.codeview .hint { color:var(--tx3); padding:14px; }
+.code-info .ci-main { display:flex; align-items:center; gap:8px; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.code-info.locked { color:var(--tx3); }
+.code-info.locked .ci-main { white-space:normal; align-items:flex-start; }
+.code-info.locked .ci-main svg { margin-top:2px; }
+.code-info .ci-err { color:var(--err); display:flex; }
+.code-info .ci-hint { white-space:nowrap; }
+.code-info #btn-code-save { height:24px; }
+.ctab .dirty { font-size:10px; color:var(--tx2); }
+.ctab .dirty.warn { color:var(--warn); }
+.code-banner { flex-shrink:0; display:flex; gap:10px; padding:10px 12px; font-family:var(--sans); background:rgba(232,197,71,.08); border-bottom:1px solid rgba(232,197,71,.35); font-size:12px; }
+.code-banner .cb-ico { color:var(--warn); display:flex; padding-top:1px; }
+.code-banner .cb-text { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.code-banner .cb-text span { color:var(--tx2); }
+.code-banner .cb-actions { display:flex; gap:8px; margin-top:4px; flex-wrap:wrap; }
+
+/* Editor (CodeMirror 6). Die Syntaxfarben kommen über die Klassen k-*, wie in den Codeausschnitten. Die ID sorgt dafür,
+   dass diese Regeln vor dem eingebauten Thema von CodeMirror gelten. */
+#code-view { overflow:hidden; }
+/* Volle Höhe über height, nicht über position: CodeMirror setzt position:relative !important */
+#code-view .cm-editor { height:100%; background:var(--term); color:#c9ced4; font-size:12.5px; }
+#code-view .cm-editor.cm-focused { outline:none; }
+#code-view .cm-scroller { font-family:var(--mono); line-height:1.72; }
+#code-view .cm-content { padding:8px 0; caret-color:var(--tx); }
+#code-view .cm-gutters { background:var(--term); color:#5d6671; border:0; }
+#code-view .cm-lineNumbers .cm-gutterElement { padding:0 12px 0 10px; min-width:34px; }
+#code-view .cm-activeLine { background:rgba(255,255,255,.035); }
+#code-view .cm-activeLineGutter { background:transparent; color:var(--tx2); }
+#code-view .cm-cursor { border-left:1.5px solid var(--tx); }
+#code-view .cm-selectionBackground { background:rgba(242,154,56,.24); }
+#code-view .cm-line.cm-mark-hl { background:rgba(242,154,56,.11); }
+#code-view .cm-line.cm-mark-er { background:rgba(240,116,112,.15); }
+#code-view .cm-matchingBracket { background:rgba(154,166,255,.22); color:inherit; }
+#code-view .cm-nonmatchingBracket { background:var(--err-tint); color:inherit; }
+#code-view .cm-selectionMatch { background:rgba(154,166,255,.12); }
+#code-view .cm-specialChar { color:var(--err); }
+#code-view .cm-panels { background:var(--s1); color:var(--tx); }
+#code-view .cm-panels-bottom { border-top:1px solid var(--line); }
+#code-view .cm-search { font-size:12px; padding:6px 8px; }
+#code-view .cm-search label { color:var(--tx2); }
+#code-view .cm-textfield { background:var(--term); border:1px solid var(--line2); border-radius:5px; color:var(--tx); font:12px var(--sans); padding:3px 6px; }
+#code-view .cm-button { background:var(--s3); background-image:none; border:1px solid var(--line2); border-radius:5px; color:var(--tx); font:12px var(--sans); padding:3px 8px; }
+#code-view .cm-panel button[name=close] { color:var(--tx2); }
 .code { font-family:var(--mono); font-size:11.5px; line-height:1.65; }
 .cl { display:flex; gap:12px; padding:0 10px; white-space:pre; }
 .cl .ln { color:#5d6671; min-width:22px; text-align:right; flex-shrink:0; user-select:none; }
@@ -205,7 +250,13 @@ code { font-family:var(--mono); font-size:.95em; }
 .errmsg { margin:0 12px; padding:8px 10px; border-radius:6px; background:var(--err-tint); font-family:var(--mono); font-size:12px; color:#ffc4c0; white-space:pre-wrap; overflow-wrap:anywhere; max-height:120px; overflow:auto; }
 #err-code { margin:8px 12px 0; }
 .trace { margin:8px 12px 0; padding:8px 10px; max-height:220px; overflow:auto; background:var(--term); border:1px solid var(--line); border-radius:6px; font:11px/1.5 var(--mono); color:var(--tx2); white-space:pre-wrap; }
-.ec-actions { display:flex; align-items:center; gap:8px; padding:12px; }
+.ec-actions { display:flex; align-items:center; gap:8px; padding:12px; flex-wrap:wrap; }
+/* Schmaler Viewer (etwa bei offenem Code-Panel): Die Fehlerkarte passt nicht neben die Bauteilkarte und rückt nach unten.
+   Die Auswahlkarte tritt solange zurück, der Hinweis auf den letzten guten Stand steht schon in der Karte. */
+@container viewer (max-width: 900px) {
+  .errcard { left:12px; right:12px; top:auto; bottom:12px; width:auto; min-width:0; }
+  #viewer.dim .selcard, #viewer.dim .lastgood { display:none; }
+}
 .errcard.folded #err-body { display:none; }
 .lastgood { left:50%; bottom:16px; transform:translateX(-50%); padding:6px 12px; border-radius:14px; font-size:12px; color:var(--tx2); white-space:nowrap; }
 

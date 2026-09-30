@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FeedbackResult, FileNode, ImportResult } from '../shared/types';
+import { readOnlyReason } from '../shared/editable';
+import type { FeedbackResult, FileNode, ImportResult, WriteResult } from '../shared/types';
 
 const HIDDEN = new Set(['.git', '.cadide', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
 const MAX_ENTRIES = 2000;
@@ -55,6 +56,49 @@ export function saveFeedbackImage(root: string, png: unknown, when = new Date())
       } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST' || i > 999) throw e; }
     }
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+/**
+ * Schreibt eine Datei aus dem Editor. Agent und Nutzer arbeiten an denselben Dateien: Weicht der Inhalt auf der Platte
+ * von `base` ab (dem Stand, den der Editor zuletzt gelesen oder geschrieben hat), wird nicht geschrieben, sondern
+ * der Konflikt gemeldet. Mit `force` wird trotzdem geschrieben, die Fassung auf der Platte wandert vorher nach `backupDir`.
+ */
+export function writeProjectText(root: string, rel: string, text: string, base: string | null, force: boolean, backupDir: string): WriteResult {
+  try {
+    const abs = resolveInside(root, rel);
+    const clean = path.relative(fs.realpathSync(root), path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs)));
+    const locked = readOnlyReason(clean);
+    if (locked) return { ok: false, error: `${rel} lässt sich hier nicht bearbeiten. ${locked}` };
+    let disk: string | null = null;
+    try { disk = fs.readFileSync(abs, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+    if (disk !== base && !force) return { ok: false, conflict: true, disk };
+    let backup: string | undefined;
+    if (force && disk !== null && disk !== text) backup = backupText(backupDir, rel, disk);
+    // Erst in eine Nebendatei, dann umbenennen: Ein Build liest so nie eine halb geschriebene Datei.
+    // Hält ein anderes Programm die Datei offen (Windows), klappt das Umbenennen nicht, dann direkt schreiben.
+    const tmp = `${abs}.cadide-tmp`;
+    try {
+      fs.writeFileSync(tmp, text, 'utf8');
+      fs.renameSync(tmp, abs);
+    } catch {
+      try { fs.rmSync(tmp, { force: true }); } catch { /* bleibt liegen, stört nicht */ }
+      fs.writeFileSync(abs, text, 'utf8');
+    }
+    return { ok: true, backup };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+}
+
+/** Legt einen Text als Sicherung ab (Name mit Zeitstempel und Pfad) und gibt den Pfad zurück. Nichts wird überschrieben. */
+export function backupText(backupDir: string, rel: string, text: string): string {
+  fs.mkdirSync(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const name = rel.replace(/[\\/:*?"<>|]/g, '_');
+  for (let i = 1; ; i++) {
+    const file = path.join(backupDir, `${stamp}${i > 1 ? `-${i}` : ''}-${name}`);
+    try { fs.writeFileSync(file, text, { encoding: 'utf8', flag: 'wx' }); return file; } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST' || i > 99) throw e;
+    }
+  }
 }
 
 const exists = (p: string) => { try { fs.lstatSync(p); return true; } catch { return false; } };

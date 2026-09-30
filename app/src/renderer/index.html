@@ -32,7 +32,7 @@
   <div id="body">
     <nav id="rail" aria-label="Seitenleisten">
       <button data-panel="files" aria-pressed="false" title="Dateien des Modells"><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Dateien</span></button>
-      <button data-panel="code" aria-pressed="false" title="Code ansehen"><i data-icon="code" data-size="20" data-stroke="1.7"></i><span>Code</span></button>
+      <button data-panel="code" aria-pressed="false" title="Code ansehen und bearbeiten"><i data-icon="code" data-size="20" data-stroke="1.7"></i><span>Code</span></button>
       <button disabled title="Skills kommen in einem späteren Schritt"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
       <button disabled title="Die Paketliste kommt in einem späteren Schritt"><i data-icon="pkg" data-size="20" data-stroke="1.7"></i><span>Pakete</span></button>
       <span class="grow"></span>
@@ -53,7 +53,8 @@
           <button id="btn-codelink" class="btn sm ghost" aria-pressed="true" title="Klick auf ein Bauteil springt zur Codestelle"><i data-icon="link" data-size="14" data-stroke="1.9"></i>Mit Auswahl verknüpft</button>
           <button class="ibtn s side-close" aria-label="Code schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="code-info" class="code-info"></div>
-        <div id="code-view" class="codeview code"></div>
+        <div id="code-banner" class="code-banner" role="alert" hidden></div>
+        <div id="code-view" class="codeview"></div>
       </section>
     </aside>
     <div class="splitter" id="split-side" hidden></div>

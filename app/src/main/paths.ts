@@ -13,6 +13,8 @@ export const projectStateDir = () => path.join(userDataDir(), 'projects');
 export const appStateFile = () => path.join(userDataDir(), 'state.json');
 /** Gesicherte Arbeitsordner (wenn eine ZIP den Arbeitsstand ersetzt). */
 export const backupsDir = () => path.join(userDataDir(), 'workspace-backups');
+/** Sicherungen aus dem Editor (Fassungen, die bei einem Konflikt ersetzt wurden), je Projekt. */
+export const editBackupsDir = (id: string) => path.join(backupsDir(), `${id}-editor`);
 /** Vorschauen alter Stände (aus dem Verlauf erzeugt, jederzeit neu erzeugbar). */
 export const previewsDir = () => path.join(userDataDir(), 'previews');
 /** Vorschaubilder für die Startseite (vom Viewer nach dem Laden des Modells, jederzeit neu erzeugbar). */

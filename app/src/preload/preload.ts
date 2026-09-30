@@ -40,6 +40,11 @@ const api: CadideApi = {
     // Der Renderer kennt keine Dateipfade. Nur die Pfade gezogener Dateien gehen an den Hauptprozess, der prüft und kopiert.
     importFiles: (files) => ipcRenderer.invoke('fs:import', files.map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
     saveFeedback: (png) => ipcRenderer.invoke('fs:saveFeedback', png),
+    writeText: (id, rel, text, base, force) => ipcRenderer.invoke('fs:writeText', id, rel, text, base, force),
+    backupText: (id, rel, text) => ipcRenderer.invoke('fs:backupText', id, rel, text),
+    onEditorRequest: (cb) => {
+      ipcRenderer.on('editor:req', async (_e, id: number, action: 'status' | 'save' | 'discard') => ipcRenderer.send('editor:res', id, await cb(action).catch(() => null)));
+    },
   },
   term: {
     create: (opts) => ipcRenderer.invoke('term:create', opts),
@@ -50,6 +55,7 @@ const api: CadideApi = {
     onExit: (cb) => { ipcRenderer.on('term:exit', (_e, id, code) => cb(id, code)); },
   },
   agents: { detect: () => ipcRenderer.invoke('agents:detect') },
+  dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.CADIDE_TEST === '1'
     ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f) }

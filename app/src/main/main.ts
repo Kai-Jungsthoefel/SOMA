@@ -2,11 +2,11 @@ import { app, BrowserWindow, dialog, ipcMain, type WebContents } from 'electron'
 import fs from 'node:fs';
 import path from 'node:path';
 import { detectAgents } from './agents';
-import { setTestAnswers } from './dialogs';
-import { importInputs, listFiles, resolveInside, saveFeedbackImage } from './files';
+import { choose, setTestAnswers } from './dialogs';
+import { backupText, importInputs, listFiles, resolveInside, saveFeedbackImage, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
-import { thumbnailsDir } from './paths';
+import { editBackupsDir, thumbnailsDir } from './paths';
 import { createProject, getLastProject, isProjectId } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -51,6 +51,19 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('fs:list', () => listFiles(dir()));
   ipcMain.handle('fs:import', (_e, paths: string[]) => importInputs(dir(), Array.isArray(paths) ? paths.map(String) : []));
   ipcMain.handle('fs:saveFeedback', (_e, png: unknown) => saveFeedbackImage(dir(), png));
+  ipcMain.handle('fs:writeText', (_e, id: string, rel: string, text: string, base: string | null, force?: boolean) => {
+    const s = ctl.session;
+    // Späte Eingabe aus einem schon gewechselten Modell: nicht ins falsche Projekt schreiben, aber auch nicht verlieren
+    if (!s || s.id !== id) {
+      if (!isProjectId(String(id))) return { ok: false, error: 'Unbekanntes Modell.' };
+      return { ok: false, error: `Das Modell wurde inzwischen gewechselt. Die Änderung liegt als Sicherung unter ${backupText(editBackupsDir(id), String(rel), String(text))}` };
+    }
+    return writeProjectText(s.dir, String(rel), String(text), base == null ? null : String(base), !!force, editBackupsDir(s.id));
+  });
+  ipcMain.handle('fs:backupText', (_e, id: string, rel: string, text: string) => {
+    if (!isProjectId(String(id))) throw new Error('Unbekanntes Modell.');
+    return backupText(editBackupsDir(String(id)), String(rel), String(text));
+  });
   ipcMain.handle('fs:readText', (_e, rel: string) => fs.readFileSync(resolveInside(dir(), rel), 'utf8'));
   ipcMain.handle('fs:readBinary', (_e, rel: string) => {
     const b = fs.readFileSync(resolveInside(dir(), rel));
@@ -63,6 +76,12 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.on('term:kill', (_e, id: number) => ctl.session?.terminals.kill(id));
 
   ipcMain.handle('agents:detect', () => detectAgents(terminalEnv(dir())));
+  // Rückfragen aus dem Renderer (etwa ungespeicherte Eingaben im Editor) laufen über dieselben Dialoge wie im Hauptprozess
+  ipcMain.handle('dialog:choose', (_e, o: { title?: unknown; message?: unknown; detail?: unknown; buttons?: unknown }) => {
+    const buttons = Array.isArray(o?.buttons) ? o.buttons.slice(0, 4).map(String) : [];
+    if (!buttons.length) return -1;
+    return choose(win, { title: String(o.title ?? 'CAD-IDE'), message: String(o.message ?? ''), detail: o.detail == null ? undefined : String(o.detail), buttons });
+  });
 
   // Nur im Testmodus: vorbereitete Antworten für Dialoge (siehe dialogs.ts)
   if (process.env.CADIDE_TEST === '1') {
@@ -87,6 +106,27 @@ function onRendererGone(wc: WebContents, reason: string, exitCode: number): void
     app.quit();
   }
   void wc;
+}
+
+let editorReq = 0;
+/**
+ * Fragt den Editor im Renderer: `status` (welche Dateien ungespeichert sind), `save` (speichern), `discard` (verwerfen,
+ * vorher sichern). Antwortet er nicht in 5 s, gilt `fallback`.
+ */
+function askEditor<T>(wc: WebContents, action: 'status' | 'save' | 'discard', fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    if (wc.isDestroyed()) { resolve(fallback); return; }
+    const id = ++editorReq;
+    const done = (_e: unknown, rid: number, result: unknown) => {
+      if (rid !== id) return;
+      clearTimeout(timer);
+      ipcMain.removeListener('editor:res', done);
+      resolve((result ?? fallback) as T);
+    };
+    const timer = setTimeout(() => { ipcMain.removeListener('editor:res', done); resolve(fallback); }, 5000);
+    ipcMain.on('editor:res', done);
+    wc.send('editor:req', id, action);
+  });
 }
 
 /** Tests: CADIDE_HIDDEN=1 unsichtbar (zeichnet nicht neu), =offscreen angezeigt, aber weit außerhalb des Bildschirms und ohne Fokus. */
@@ -119,12 +159,20 @@ function createWindow(): void {
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
-  // Schließen: bei ungespeicherten Änderungen nachfragen (der Arbeitsstand bleibt in jedem Fall erhalten)
+  // Schließen: bei ungespeicherten Änderungen (im Modell oder im Editor) nachfragen. Der Arbeitsstand bleibt in jedem Fall erhalten.
   let allowClose = false;
   win.on('close', (e) => {
     if (allowClose) return;
     e.preventDefault();
-    void ctl.confirmClose().then((ok) => { if (ok) { allowClose = true; win?.close(); } });
+    void (async () => {
+      const st = await askEditor<{ dirty?: string[] }>(wc, 'status', {});
+      const ok = await ctl.confirmClose({
+        dirty: Array.isArray(st.dirty) ? st.dirty.map(String) : [],
+        save: async () => !!(await askEditor<{ ok?: boolean }>(wc, 'save', { ok: false })).ok,
+        discard: async () => { await askEditor(wc, 'discard', {}); },
+      });
+      if (ok) { allowClose = true; win?.close(); }
+    })();
   });
   win.on('closed', () => { ctl.close(); win = null; });
 }

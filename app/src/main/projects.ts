@@ -68,7 +68,7 @@ export class ProjectController {
     const terminals = new TerminalManager(this.wc, dir);
     const git = new GitRepo(dir);
     builds.on('status', (st) => this.send('build:status', st));
-    const stopWatch = watchProject(dir, () => builds.sourceChanged(), () => this.send('fs:changed'));
+    const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'));
     const session: Session = { id, dir, builds, terminals, git, stopWatch, signature: '', poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     setLastProject(id);
@@ -103,9 +103,11 @@ export class ProjectController {
 
   async saveState(): Promise<SaveState> {
     const s = this.need();
-    const app = getAppState(s.id);
     const hasRepo = await s.git.isRepo();
     const st = hasRepo ? await s.git.status() : { dirty: false, changed: 0, head: null };
+    // Erst nach den Git-Abfragen lesen: Läuft währenddessen ein Speichern durch, wäre der Stand sonst veraltet, und eine
+    // Abfrage der Verlaufsleiste könnte nach der frischen Meldung noch „nicht gespeichert“ schicken
+    const app = getAppState(s.id);
     let unsaved: boolean;
     if (!app.zipPath) unsaved = true;
     else if (hasRepo) unsaved = st.dirty || st.head !== (app.savedHead ?? null);
@@ -301,19 +303,27 @@ export class ProjectController {
 
   // ---- Beenden ----------------------------------------------------------------------------------------------------
 
-  /** Darf das Fenster schließen? Bei ungespeicherten Änderungen fragt die App. Der Arbeitsstand bleibt in jedem Fall erhalten. */
-  async confirmClose(): Promise<boolean> {
+  /**
+   * Darf das Fenster schließen? Bei ungespeicherten Änderungen fragt die App. Der Arbeitsstand bleibt in jedem Fall erhalten,
+   * Eingaben im Editor (`editor.dirty`) aber nur, wenn sie gespeichert werden. „Nicht speichern“ legt sie als Sicherung ab.
+   */
+  async confirmClose(editor: { dirty: string[]; save(): Promise<boolean>; discard(): Promise<void> }): Promise<boolean> {
     if (!this.session || process.env.CADIDE_TEST === '1') return true;
     const st = await this.saveState();
-    if (!st.unsaved) return true;
+    if (!st.unsaved && !editor.dirty.length) return true;
+    const inEditor = editor.dirty.length ? `Im Editor noch nicht gespeichert: ${editor.dirty.join(', ')}. ` : '';
     const c = await choose(this.getWin(), {
       title: 'CAD-IDE beenden',
       message: 'Das Modell hat ungespeicherte Änderungen.',
-      detail: 'Der Arbeitsstand bleibt auf diesem Rechner erhalten und wird beim nächsten Start wieder geöffnet. Die ZIP-Datei wird nur beim Speichern aktualisiert.',
+      detail: `${inEditor}Der Arbeitsstand bleibt auf diesem Rechner erhalten und wird beim nächsten Start wieder geöffnet. Die ZIP-Datei wird nur beim Speichern aktualisiert.`,
       buttons: ['Speichern', 'Nicht speichern', 'Abbrechen'],
     });
     if (c === 2) return false;
-    if (c === 0) { const r = await this.save(false); if (r.cancelled || r.error) return false; }
+    if (c === 0) {
+      if (!(await editor.save())) return false;
+      const r = await this.save(false);
+      if (r.cancelled || r.error) return false;
+    } else await editor.discard();
     return true;
   }
 }

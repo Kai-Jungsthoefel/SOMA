@@ -27,8 +27,15 @@ export class BuildManager extends EventEmitter {
 
   constructor(private readonly dir: string) { super(); }
 
-  /** Dateiaenderung im Projekt gemeldet. Ohne Auto-Build merkt sich der Stand nur, dass er veraltet ist. */
-  sourceChanged(): void {
+  /**
+   * Dateiaenderung im Projekt gemeldet. Ohne Auto-Build merkt sich der Stand nur, dass er veraltet ist.
+   * Stammt die Aenderung von vor dem Start des laufenden Builds (Speichern im Editor, direkt danach gebaut), steckt sie
+   * schon darin: kein zweiter Build. Das Ereignis des Watchers kommt oft erst nach dem Start an.
+   */
+  sourceChanged(file: string | null = null): void {
+    if (file && this.proc && this.status.startedAt) {
+      try { if (fs.statSync(file).mtimeMs <= this.status.startedAt) return; } catch { /* Datei weg: normal weiter */ }
+    }
     if (this.autoBuild) this.schedule('Dateiänderung');
     else if (!this.status.stale) this.setStatus({ ...this.status, stale: true });
   }
