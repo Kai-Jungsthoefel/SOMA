@@ -1,6 +1,6 @@
 # Plan: CAD-IDE mit KI-Agenten
 
-> Stand: 2026-09-29 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 3 erledigt, siehe Abschnitt 10 und [app/README.md](app/README.md))
+> Stand: 2026-09-30 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 4 erledigt, siehe Abschnitt 10 und [app/README.md](app/README.md))
 > Ursprung: [IDEA.md](IDEA.md) · Begründungen und Historie: [DECISIONS.md](DECISIONS.md)
 > Zahlen in Klammern, z. B. (E12), verweisen auf Entscheidungen im Log.
 
@@ -106,7 +106,7 @@ Das Paket `cadide` liegt in der mitgelieferten **Basisumgebung**, nicht im Proje
 - **Terminal (E19):** Freies Terminal mit mehreren Tabs im Projektordner. Startbuttons für erkannte Agenten. Der zuletzt benutzte Agent startet beim Öffnen automatisch, **ohne Resume**. Der Nutzer installiert den Agenten selbst, die App hilft mit Erkennung und Hinweisen (E4).
 - **`AGENTS.md` (E18):** Ganz app-verwaltet, Notizen stehen getrennt in `NOTES.md`. Beim Öffnen eines Projekts mit älterer Regelversion wird sie erneuert, dem Nutzer angezeigt und als Commit gesichert (E36). Der Verweis auf die Notizen steht ganz oben.
 - **Skills (E17):** Markdown-Regeln (z. B. 3D-Druck, Toleranzen, Gehäusebau), pro Projekt aktivierbar. Aktivierte Skills liegen in `.cadide/skills/` und stehen mit vollem Pfad in `AGENTS.md`. Zunächst nur mitgelieferte, eigene Nutzer-Skills später.
-- **Rückmeldung an den Agenten (E11):** Screenshots, Skizzen und Auswahlen (Bauteilname, Datei, Zeilen) landen als Datei in `.cadide/feedback/`. Die App fügt Pfad oder Text in die Eingabezeile des Terminals ein, der Nutzer schickt selbst ab. Später kommt ein MCP-Server der App dazu.
+- **Rückmeldung an den Agenten (E11):** Markierungen (Viewer-Bild oder leere Fläche mit Zeichnung) landen als PNG in `.cadide/feedback/`, Auswahlen (Bauteilname, Datei, Zeilen, Fläche) und Build-Fehler gehen als Text. Die App fügt Pfad oder Text in die Eingabezeile des Terminals ein, der Nutzer schickt selbst ab. Später kommt ein MCP-Server der App dazu.
 
 ## 7. Oberfläche und Viewer
 
@@ -122,7 +122,7 @@ Das Paket `cadide` liegt in der mitgelieferten **Basisumgebung**, nicht im Proje
 
 Der Viewer zeigt auch **beliebige weitere STEP-Dateien** im Basismodus, ohne Mapping und Zusatzfunktionen. Standardanzeige ist immer das Hauptmodell.
 
-**2D-Sketching (E16):** Nur Bild-Markup ohne Maßhaltigkeit auf Viewer-Screenshots und leerer Fläche (Freihand, Formen, Pfeile, Text). Ergebnis ist ein PNG. Kein Constraint-Sketcher.
+**2D-Sketching (E16):** Nur Bild-Markup ohne Maßhaltigkeit auf Viewer-Screenshots und leerer Fläche (Freihand, Formen, Pfeile, Text). Ergebnis ist ein PNG. Kein Constraint-Sketcher. Umgesetzt in Phase 1, Schritt 4 (Abschnitt 10).
 
 ## 8. Umgebung, Auslieferung, Lizenz
 
@@ -182,7 +182,9 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Terminal:** Echte Shell (node-pty) im Projektordner mit `python`, `pip` und `cadide` der Basisumgebung im PATH. Startbuttons für erkannte Agenten (Claude Code, OpenCode, Codex, Gemini CLI).
 - **Vorlage:** `model.py`, erste `AGENTS.md`, `CLAUDE.md` (Verweis), `NOTES.md`, `.gitignore`.
 
-*Erster Agent-Test (informell, vom Nutzer):* Claude Code hat mit dieser Vorlage eine Wanduhr gebaut, 6 Bauteile mit deutschen Namen, Parameter als Konstanten, kein `.venv`, `AGENTS.md`, `CLAUDE.md`, `NOTES.md` und `.gitignore` unverändert. Das ist ein Datenpunkt, kein vollständiger Agent-Test. Damals gab es noch kein Git, das Committen des Agenten ist deshalb noch ungeprüft.
+*Erster Agent-Test (informell, vom Nutzer):* Claude Code hat mit dieser Vorlage eine Wanduhr gebaut, 6 Bauteile mit deutschen Namen, Parameter als Konstanten, kein `.venv`, `AGENTS.md`, `CLAUDE.md`, `NOTES.md` und `.gitignore` unverändert. Das ist ein Datenpunkt, kein vollständiger Agent-Test. Damals gab es noch kein Git.
+
+*Zweiter Agent-Test (informell, vom Nutzer, nach Schritt 2):* Claude Code hat nach dem Build **selbst committet**, mit deutscher Nachricht („Vereinfachte Wanduhr: Gehäuse, Zifferblatt, …“), `model.py` und `output/model.step` im selben Commit, der Verlauf blieb unangetastet. Auch das ist eine einzelne Iteration mit einem Agenten. Ungeprüft sind lange Sitzungen und andere Agenten (OpenCode, Codex, Gemini CLI).
 
 *Schritt 2, Git und ZIP (erledigt, 46 Prüfungen in `app/test/versions.mjs`):*
 
@@ -204,7 +206,16 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Startseite** beim allerersten Start und über das Logo: Neu, Öffnen, zuletzt geöffnete Modelle mit Vorschaubild, erkannte Agenten, Hinweis auf die Rechte des Agenten (E29).
 - **Schrift:** IBM Plex Sans und Mono liegen lokal bei (SIL Open Font License).
 
-*Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Editor zum Bearbeiten (bisher nur Lesen), Screenshot mit Markup (Knopf „Markieren“ und „Markierung einfügen“ sind schon da, aber noch ausgegraut), Auto-Start des Agenten ohne Resume, vollständiger Agent-Test (mit Git-Commits), Bündelung von Python und Installer, macOS und Linux.
+*Schritt 4, Markierung (erledigt, E16; 53 Prüfungen im Smoke-Test, 53 im Verlaufstest, 8 Einheitentests):*
+
+- **Ablauf:** „Markieren“ im Viewer oder „Markierung“ in der Übergabeleiste friert die aktuelle Ansicht in voller Auflösung ein. Bauteilkarte, Würfel und Karten treten zurück, ein gestrichelter Rahmen zeigt den Modus. „An Agent geben“ legt das Bild als `.cadide/feedback/markierung-JJJJMMTT-HHMM.png` ab (nie überschreibend, bei Gleichstand `-2`) und fügt `[Markierung: <Pfad>] ` in die Eingabe des aktiven Terminals ein, ohne abzuschicken (E11).
+- **Werkzeuge:** Stift, Pfeil, Rechteck, Kreis oder Ellipse (mit Umschalt: Quadrat und Kreis), Text. Farbmenü mit 10 Farben und eigener Farbe (Farbdialog), Rückgängig und Wiederholen (Strg+Z, Strg+Y), „Leere Fläche“ zum Skizzieren ohne Modell. Striche und Text haben einen dunklen Schatten, damit sie auch auf hellen Bauteilen lesbar bleiben.
+- **Formen bleiben bearbeitbar (Wunsch des Nutzers):** Mit „Auswählen“ lässt sich jede Form anklicken und verschieben (auch mit den Pfeiltasten), an den Ecken skalieren (die gegenüberliegende Ecke bleibt stehen, Umschalt hält das Seitenverhältnis), am Punkt über dem Rahmen drehen (Umschalt: 15°-Schritte), umfärben und mit Entf löschen. Doppelklick auf einen Text, oder Klick mit dem Textwerkzeug, bearbeitet ihn. Jede Form speichert Mittelpunkt, Drehung und Skalierung getrennt von ihrer Geometrie, deshalb wächst die Strichstärke beim Skalieren nicht mit. Auswahlrahmen und Griffe kommen nicht ins Bild.
+- **Vorschau alter Stände:** Wird ein alter Stand markiert, nennt der eingefügte Text den Stand (Kurz-Hash und Nachricht), damit der Agent nicht mit dem aktuellen Code vergleicht.
+- **Robustheit:** Scheitert das Speichern, bleibt die Zeichnung offen. Der Hauptprozess nimmt nur PNG bis 64 MB an. Der Pfadschutz (`resolveInside`) prüft bei noch nicht vorhandenen Dateien jetzt den nächsten vorhandenen Ordner darüber, sonst hätte ein Verweis `.cadide` → außen Dateien außerhalb des Projekts landen lassen.
+- **Git und ZIP:** Markierungen sind nicht in Git (E11) und zählen nicht als ungespeicherte Änderung, wandern aber beim nächsten Speichern mit der ZIP.
+
+*Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Editor zum Bearbeiten (bisher nur Lesen), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen (darin auch: Liest der Agent die Markierung als Bild?), Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Messen, Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
 
@@ -225,6 +236,12 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - Die Startseite erscheint nur beim allerersten Start und über das Logo. Sonst öffnet die App wie bisher das letzte Modell
 - „An Agent geben“ fügt eine Zeile wie `[Auswahl: Bauteil "Lid", model.py Zeile 31, angeklickte Fläche: eben, …]` ein. Zahlen mit Punkt, damit der Agent sie eindeutig liest
 - `exports/` ist nicht in der `.gitignore` der Vorlage und zählt damit als Änderung (Ort und Tracking sind noch offen, siehe unten)
+- Markierung (E16): Das Bild zeigt die Ansicht **ohne Auswahl-Hervorhebung** (die ist Orange wie der Stift und verschluckte die Zeichnung) und ohne schwebende Karten. Auflösung wie der Viewer in Gerätepixeln, keine Verkleinerung. Eine Strichstärke
+- Markierung, Farben: Statt der drei Farbpunkte aus dem Entwurf steht ein Farbknopf mit Menü in der Leiste (10 Farben und eigene Farbe), sonst würde die Leiste zu breit. Eine Farbe gilt für alles Folgende und färbt eine ausgewählte Form gleich mit
+- Markierung, Bearbeiten: eigenes Werkzeug „Auswählen“ statt Auswahl mit jedem Werkzeug (sonst verschöbe ein neuer Strich die Form darunter). Rechteck und Ellipse sind hohl und nur an der Linie greifbar, damit Formen darunter erreichbar bleiben. Text skaliert immer im Seitenverhältnis, das Textfeld steht beim Bearbeiten ungedreht
+- Markierung: Eingefügt wird `[Markierung: .cadide/feedback/markierung-JJJJMMTT-HHMM.png] ` (gleiche Form wie Auswahl und Build-Fehler). Beide Knöpfe („Markieren“ im Viewer, „Markierung“ in der Übergabeleiste) öffnen die Zeichenfläche
+- Markierung: Escape verwirft eine Zeichnung erst beim zweiten Druck, „Abbrechen“ sofort. Text wird mit Enter oder beim nächsten Klick übernommen
+- Markierungen zählen nicht als ungespeicherte Änderung und werden nie aufgeräumt (`.cadide/feedback/` wächst, siehe ZIP-Größe unten)
 
 - Rolle `reference` und ihre Standardwerte (E34)
 - Hinweis beim ersten Start, dass der Agent mit den Rechten des Nutzers läuft (E29)
@@ -238,7 +255,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Lizenz** der Software und Prüfung aller Komponenten
 - **Mittelbereich:** Tab-Umschaltung oder geteilte Ansicht zwischen Viewer und Sketch (E15)
 - **Build:** Auto-Build standardmäßig an oder aus, Statusanzeige, Fehlerpanel, Verhalten bei erneuter Änderung während des Builds (E20)
-- **Speichern/Öffnen:** mehrere Projekte parallel (bisher eines pro Fenster), Aufräumen alter Workspaces und Sicherungen, ZIP auf Netzlaufwerk (Speichern dorthin geht, Verhalten bei Verbindungsverlust ungetestet), ZIP-Größe bei langen Verläufen (E21)
+- **Speichern/Öffnen:** mehrere Projekte parallel (bisher eines pro Fenster), Aufräumen alter Workspaces und Sicherungen, ZIP auf Netzlaufwerk (Speichern dorthin geht, Verhalten bei Verbindungsverlust ungetestet), ZIP-Größe bei langen Verläufen und vielen Markierungen (je Bild einige hundert KB) (E21)
 - **Git:** Einbettung und Updates des Git-Binaries (E31), Verhalten bei sehr langen Verläufen (die Leiste zeigt bisher bis zu 500 Stände), Umschreiben des Verlaufs durch den Agenten trotz Verbot (die Leiste bleibt tolerant, es gibt nur eine Meldung bei fehlendem Repository, losem HEAD oder anderem Branch)
 - **Pakete:** Offline-Fall, Paketcache, Verhalten ohne Internet beim Öffnen (E25). Versionen fest pinnen (ein ungepinnter Install zieht inkompatible OCP- und multimethod-Versionen)
 - **Plattformen:** Phase 0 lief nur unter Windows. Python-Bundling, Bibliothekspfade und Wheels auf macOS und Linux sind ungetestet (E2)
@@ -263,4 +280,4 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 | Nur Windows getestet | Bundling und Bibliotheken auf macOS und Linux ungeprüft, E2 verlangt alle drei | Früh in Phase 1 auf macOS und Linux nachziehen |
 | Modellgröße und Buildzeit | Große Teile brauchen 8 bis 10 s (Meshen in OCC), feine Toleranz bis 30 s | Auto-Build abschaltbar (E20), Toleranz nach Bauteilgröße |
 | Chats bei ZIP-Weitergabe | Agenten speichern Historie außerhalb des Projekts | Bewusst akzeptiert (E5) |
-| Git für Nicht-Programmierer | Agent und App teilen sich ein Repo | Nur Vorschau und Wiederherstellen als neuer Commit (E35), App-Schreibvorgänge serialisiert, Sicherung vor Wiederherstellung. **Umgesetzt und getestet**, der Agent-Test mit echten Commits steht aus |
+| Git für Nicht-Programmierer | Agent und App teilen sich ein Repo | Nur Vorschau und Wiederherstellen als neuer Commit (E35), App-Schreibvorgänge serialisiert, Sicherung vor Wiederherstellung. **Umgesetzt und getestet**, Claude Code committet laut erstem Test selbst. Lange Sitzungen und andere Agenten sind ungeprüft |
