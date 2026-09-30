@@ -112,20 +112,40 @@ def auto_tolerance(shapes):
     return max(0.01, min(0.2, diag * 0.0004))
 
 
+def _assembly(name, items, taken):
+    """Baugruppe aus Teilen mit Gruppenpfad, von unten nach oben gebaut (cq.Assembly kopiert beim Hinzufuegen).
+    Gruppennamen werden ASCII und eindeutig, wie die Teilnamen (der STEP-Export verlangt beides)."""
+    asm = cq.Assembly(name=name)
+    for groups, p in items:
+        if not groups:
+            asm.add(p["shape"], name=p["step_name"], color=cq.Color(*p["color"]))
+    order = []
+    for groups, _ in items:
+        if groups and groups[0] not in order:
+            order.append(groups[0])
+    for seg in order:
+        sub_name = registry.ascii_name(seg)
+        base, i = sub_name, 2
+        while sub_name in taken:
+            sub_name, i = f"{base}_{i}", i + 1
+        taken.add(sub_name)
+        asm.add(_assembly(sub_name, [(g[1:], p) for g, p in items if g and g[0] == seg], taken), name=sub_name)
+    return asm
+
+
 def write_outputs(root, parts, project_name):
     tol = auto_tolerance([p["shape"] for p in parts])
     timings = {}
 
     t = time.perf_counter()
-    asm = cq.Assembly(name=registry.ascii_name(project_name))
-    for p in (q for q in parts if q["role"] != "reference"):
-        asm.add(p["shape"], name=p["step_name"], color=cq.Color(*p["color"]))
+    # Gruppen werden Unterbaugruppen der STEP-Datei, Referenzen stehen unter "Referenz" (E34)
+    taken = {p["step_name"] for p in parts} | {"Referenz"}
+    root_name = registry.ascii_name(project_name)
+    taken.add(root_name)
+    asm = _assembly(root_name, [(p.get("group", ()), p) for p in parts if p["role"] != "reference"], taken)
     refs = [p for p in parts if p["role"] == "reference"]
     if refs:
-        ref_asm = cq.Assembly(name="Referenz")
-        for p in refs:
-            ref_asm.add(p["shape"], name=p["step_name"], color=cq.Color(*p["color"]))
-        asm.add(ref_asm, name="Referenz")
+        asm.add(_assembly("Referenz", [(p.get("group", ()), p) for p in refs], taken), name="Referenz")
     (root / "output").mkdir(exist_ok=True)
     asm.export(str(root / "output" / "model.step"))
     timings["step"] = time.perf_counter() - t
@@ -139,13 +159,14 @@ def write_outputs(root, parts, project_name):
     for i, p in enumerate(parts):
         pid = f"{i}:{p['step_name']}"
         bb = p["shape"].BoundingBox()
+        group = "/".join(p.get("group", ())) or None
         map_parts.append(dict(
-            id=pid, name=p["name"], step_name=p["step_name"], role=p["role"],
+            id=pid, name=p["name"], step_name=p["step_name"], role=p["role"], group=group,
             file=_rel(p["file"], root), line=p["line"], end_line=p["end_line"],
             bbox=[[round(bb.xmin, 3), round(bb.ymin, 3), round(bb.zmin, 3)],
                   [round(bb.xmax, 3), round(bb.ymax, 3), round(bb.zmax, 3)]],
             volume=round(p["shape"].Volume(), 3)))
-        glb_parts.append(dict(meta=dict(partId=pid, name=p["name"], role=p["role"]),
+        glb_parts.append(dict(meta=dict(partId=pid, name=p["name"], role=p["role"], group=group),
                               mesh=mesher.mesh_shape(p["shape"], tol, 0.3), color=p["color"]))
     glb_size = mesher.write_glb(root / ".cadide" / "model.glb", glb_parts)
     (root / ".cadide" / "model.map.json").write_text(

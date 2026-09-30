@@ -11,12 +11,14 @@ import cadquery as cq
 from . import build, measure, mesher
 
 
-def _flatten(assy, loc=None):
+def _flatten(assy, loc=None, groups=None):
+    """Teile mit Lage und Gruppenpfad. Die oberste Baugruppe ist das Modell selbst, erst darunter beginnen Gruppen."""
     loc = (loc or cq.Location()) * assy.loc
     if assy.obj is not None:
-        yield assy.name, assy.obj, assy.color, loc
+        yield assy.name, assy.obj, assy.color, loc, groups or ()
+    inner = () if groups is None else groups + (assy.name,)
     for child in assy.children:
-        yield from _flatten(child, loc)
+        yield from _flatten(child, loc, inner)
 
 
 def step_to_glb(step_path, out_dir):
@@ -27,9 +29,11 @@ def step_to_glb(step_path, out_dir):
     out.mkdir(parents=True, exist_ok=True)
     assy = cq.Assembly.importStep(str(step_path))
     items = []
-    for name, obj, color, loc in _flatten(assy):
+    groups = []
+    for name, obj, color, loc, grp in _flatten(assy):
         shape = (obj.val() if isinstance(obj, cq.Workplane) else obj).moved(loc)
         items.append((name, shape, color.toTuple() if color is not None else (0.62, 0.66, 0.72, 1.0)))
+        groups.append("/".join(grp) or None)
     if not items:
         raise ValueError("Die STEP-Datei enthaelt keine Geometrie")
     tol = build.auto_tolerance([s for _, s, _ in items])
@@ -40,11 +44,11 @@ def step_to_glb(step_path, out_dir):
         name = name or f"Teil {i + 1}"
         pid = f"{i}:{name}"
         bb = shape.BoundingBox()
-        map_parts.append(dict(id=pid, name=name, role="basic",
+        map_parts.append(dict(id=pid, name=name, role="basic", group=groups[i],
                               bbox=[[round(bb.xmin, 3), round(bb.ymin, 3), round(bb.zmin, 3)],
                                     [round(bb.xmax, 3), round(bb.ymax, 3), round(bb.zmax, 3)]],
                               volume=round(shape.Volume(), 3)))
-        glb_parts.append(dict(meta=dict(partId=pid, name=name, role="basic"),
+        glb_parts.append(dict(meta=dict(partId=pid, name=name, role="basic", group=groups[i]),
                               mesh=mesher.mesh_shape(shape, tol, 0.3), color=rgba))
     mesher.write_glb(out / "model.glb", glb_parts)
     (out / "model.map.json").write_text(json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
