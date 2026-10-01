@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CAD-IDE Oberflächenentwurf</title>
+<title>SOMA Oberflächenentwurf</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -176,7 +176,7 @@ body.solo .screen{border-radius:0;box-shadow:none}
 <body>
 <div class="deck-top">
   <div class="deck-head">
-    <span class="deck-title">CAD-IDE · Oberflächenentwurf</span>
+    <span class="deck-title">SOMA · Oberflächenentwurf</span>
     <nav class="deck-tabs" id="tabs" aria-label="Ansichten"></nav>
     <span class="deck-tools"><span>Pfeiltasten blättern · einige Knöpfe sind klickbar</span><button class="btn sm" id="zoom">Originalgröße</button></span>
   </div>
@@ -367,7 +367,7 @@ const CONVO = `
   <div class="l">Ich ändere in model.py:</div>
   <div class="l pre">  HAND_WIDTH       4,0 → 2,5 mm</div>
   <div class="l pre">  Sekundenzeiger   Farbe → rot</div><div class="gap"></div>
-  <div class="l cmd">$ cadide build</div>
+  <div class="l cmd">$ soma build</div>
   <div class="l pre ok">  ✓ 6 Bauteile gebaut (0,9 s)</div><div class="gap"></div>
   <div class="l cmd">$ git commit -m "Zeiger schmaler, Sekundenzeiger rot"</div>
   <div class="l pre mut">  [main 3f2a91c] 1 file changed</div><div class="gap"></div>
@@ -383,7 +383,7 @@ function agent(v = 'main') {
     </aside>`;
   }
   const input = {
-    main: `<span class="p">›</span> Der Minutenzeiger soll vorne spitz zulaufen, siehe <span class="p">.cadide/feedback/markierung-1405.png</span><span class="cursor"></span>`,
+    main: `<span class="p">›</span> Der Minutenzeiger soll vorne spitz zulaufen, siehe <span class="p">.soma/feedback/markierung-1405.png</span><span class="cursor"></span>`,
     err: `<span class="p">›</span> Der Build ist fehlgeschlagen: model.py, Zeile 47: NameError: name 'HAND_WIDHT' is not defined<span class="cursor"></span>`,
     idle: `<span class="p">›</span><span class="cursor"></span>`,
   }[v];
@@ -467,7 +467,7 @@ S[4] = () => app({
       <span class="vsep"></span><button aria-label="Rückgängig" title="Rückgängig">${ic('undo')}</button>
       <span class="vsep"></span><button title="Auf leerer Fläche zeichnen statt auf dem Viewer-Bild">${ic('image')}Leere Fläche</button>
     </div>
-    <div class="float" style="left:14px;bottom:14px;padding:8px 12px;font-size:12px;color:var(--tx2)">Bild des Viewers von 14:05. Es landet in <span style="font-family:var(--mono)">.cadide/feedback/</span>, der Pfad in der Eingabe des Agenten.</div>
+    <div class="float" style="left:14px;bottom:14px;padding:8px 12px;font-size:12px;color:var(--tx2)">Bild des Viewers von 14:05. Es landet in <span style="font-family:var(--mono)">.soma/feedback/</span>, der Pfad in der Eingabe des Agenten.</div>
     <div style="position:absolute;right:14px;bottom:14px;display:flex;gap:8px"><button class="btn" data-go="1" style="background:var(--s2)">Abbrechen</button><button class="btn primary">${ic('send', 15, 2)}An Agent geben</button></div>`,
   agent: agent('idle'),
 });
@@ -523,7 +523,7 @@ const recent = (t, name, when, file, warn) => `<button class="recent" ${t === 'u
 const agrow = (name, found, extra) => `<div class="agrow"><span style="color:${found ? 'var(--ok)' : 'var(--tx3)'}">${ic(found ? 'check' : 'x', 16, 2.2)}</span>
   <div style="display:flex;flex-direction:column;flex-grow:1"><b>${name}</b><span class="c3" style="font-size:12px">${found ? 'gefunden' : 'nicht installiert'}</span></div>${extra || ''}</div>`;
 S[7] = () => `<div class="app">
-  <header class="top"><div class="logo">${ic('cube', 22)}</div><b style="font-size:14px">CAD-IDE</b><span class="grow"></span>
+  <header class="top"><div class="logo">${ic('cube', 22)}</div><b style="font-size:14px">SOMA</b><span class="grow"></span>
     <button class="btn ghost">${ic('help', 15)}Hilfe</button><button class="btn ghost">${ic('sliders', 15)}Optionen</button></header>
   <div style="flex-grow:1;display:flex;justify-content:center;overflow:hidden">
     <div style="width:1100px;padding:52px 0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:44px;align-content:start">
@@ -615,7 +615,7 @@ S[8] = () => `<div class="app" style="background:#101215;padding:36px 40px;displ
     <div><div class="cap">PROJEKT-CHECK · MELDET NUR</div>
       <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:rgba(232,197,71,.12);color:var(--warn);font-size:12px;font-weight:500">${ic('alert', 14, 2)}1 Hinweis</span>
       <div class="menu" style="margin-top:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:10px"><span style="color:var(--warn)">${ic('alert', 16)}</span><div style="display:flex;flex-direction:column;gap:3px"><b>AGENTS.md wurde verändert</b><span class="c2" style="font-size:12px">Die App erneuert sie erst beim nächsten Versions-Update. Mit <span style="font-family:var(--mono)">cadide check</span> sieht der Agent dasselbe.</span></div></div>
+        <div style="display:flex;gap:10px"><span style="color:var(--warn)">${ic('alert', 16)}</span><div style="display:flex;flex-direction:column;gap:3px"><b>AGENTS.md wurde verändert</b><span class="c2" style="font-size:12px">Die App erneuert sie erst beim nächsten Versions-Update. Mit <span style="font-family:var(--mono)">soma check</span> sieht der Agent dasselbe.</span></div></div>
         <div class="c3" style="font-size:12px;border-top:1px solid var(--line);padding-top:8px">Die App meldet nur, sie repariert nichts selbst.</div></div></div>
   </div></div>`;
 
@@ -624,7 +624,7 @@ const META = {
   1: ['Arbeitsbereich', ['Der Viewer bekommt die Mitte, etwa 2,5-mal so viel Fläche wie heute', 'Bauteile schweben oben links, nur so hoch wie nötig', 'Auswahl unten links mit Codeausschnitt statt festem Infofeld', 'Übergabeleiste: Auswahl, Markierung oder Fehler mit einem Klick in die Eingabe']],
   2: ['Alter Stand als Vorschau', ['Violetter Rahmen: das ist nicht der Arbeitsstand', 'Banner direkt über der Verlaufsleiste', 'Wiederherstellen legt einen neuen Stand an, nichts geht verloren']],
   3: ['Build-Fehler', ['Die Anzeige oben wird rot und nennt die Zeile', 'Karte mit Meldung und Code, das Modell bleibt gedimmt sichtbar', 'An Agent geben schreibt den Fehler in seine Eingabe']],
-  4: ['Screenshot markieren', ['Der Viewer wird zur Zeichenfläche', 'Bauteilkarte und Würfel verschwinden für ein sauberes Bild', 'Ergebnis: PNG in .cadide/feedback, Pfad in der Eingabe des Agenten']],
+  4: ['Screenshot markieren', ['Der Viewer wird zur Zeichenfläche', 'Bauteilkarte und Würfel verschwinden für ein sauberes Bild', 'Ergebnis: PNG in .soma/feedback, Pfad in der Eingabe des Agenten']],
   5: ['Dateien', ['Klappt links aus, immer nur ein Panel', 'Dateien der App eingeklappt unter „Vom Programm verwaltet“', 'Ablagefläche für inputs/, fremde STEP-Dateien direkt ansehen', 'Schmaler Viewer: Bauteile eingeklappt, Werkzeuge nur als Symbole']],
   6: ['Code, Agent eingeklappt', ['Editor als Panel, mit der Auswahl im Viewer verknüpft', 'Der Agent-Bereich klappt zu einer Leiste zusammen und läuft weiter']],
   7: ['Startseite', ['Neu und Öffnen groß, zuletzt geöffnete Modelle mit Vorschaubild', 'Erkannte Agenten mit Anleitung für fehlende', 'Einmaliger Hinweis: der Agent arbeitet mit deinen Rechten (E29)']],

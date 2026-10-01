@@ -1,4 +1,4 @@
-# Plan: CAD-IDE mit KI-Agenten
+# Plan: SOMA (CAD mit KI-Agenten)
 
 > Stand: 2026-09-30 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 5 erledigt, Messen vorgezogen, siehe Abschnitt 10 und [app/README.md](app/README.md))
 > Ursprung: [IDEA.md](IDEA.md) · Begründungen und Historie: [DECISIONS.md](DECISIONS.md)
@@ -33,12 +33,12 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
    Projektumgebung im PATH,          Messungen (OCP/OpenCascade)
    mitgeliefertes git                       |
             |                               |
-      CLI-Agent (Claude Code, …)     Paket `cadide` (Basisumgebung)
-      nutzt `cadide build|check|export`  Hilfsbibliothek + CLI
+      CLI-Agent (Claude Code, …)     Paket `soma` (Basisumgebung)
+      nutzt `soma build|check|export`  Hilfsbibliothek + CLI
 ```
 
 - **Desktop:** Electron, TypeScript (E23). Editor: CodeMirror 6 (Phase 1, Schritt 5).
-- **Python-Dienst:** Pro Projekt ein langlebiger Prozess für die App (schnelle Messungen, Modell im Speicher). Der Build-Befehl des Agenten läuft zusätzlich als eigenständiger Einmal-Prozess und funktioniert auch ohne App (E24). **Umgesetzt für das Messen** (`cadide serve`), gebaut wird weiter im Einmal-Prozess.
+- **Python-Dienst:** Pro Projekt ein langlebiger Prozess für die App (schnelle Messungen, Modell im Speicher). Der Build-Befehl des Agenten läuft zusätzlich als eigenständiger Einmal-Prozess und funktioniert auch ohne App (E24). **Umgesetzt für das Messen** (`soma serve`), gebaut wird weiter im Einmal-Prozess.
 - **CAD-Framework:** **CadQuery**, fest (E12). OpenSCAD ist ausgeschlossen (kein STEP, kein B-Rep).
 - **Viewer:** three.js zeigt ein GLB, das nach jedem Build aus der STEP-Datei erzeugt wird (Bauteilnamen, Farben, Flächen- und Kanten-IDs). Exakte Messwerte (Radius, Flächenabstand) fragt die App beim Python-Dienst ab. Es gibt keinen zweiten CAD-Kern im Frontend (E9).
 
@@ -66,7 +66,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
 ├── output/
 │   └── model.step     Hauptergebnis mit allen Bauteilen, benannt, farbig
 ├── exports/           Einzelexporte (Ort noch nicht festgelegt)
-├── .cadide/
+├── .soma/
 │   ├── project.json   ID, App-/Framework-Version, api_version, aktive Skills, Hauptdatei
 │   ├── skills/        aktivierte Skills als Markdown
 │   ├── feedback/      Screenshots und Skizzen (nicht in Git)
@@ -84,18 +84,18 @@ Einfacher Fall: alles steht in `model.py`. Bei wachsender Komplexität lagert de
 - **Umsetzung und Befund:** Die App nutzt das mitgelieferte Git (dugite, Git 2.53, rund 115 MB) und stellt es auch den Terminals vorn im PATH bereit. **STEP-Dateien sind nicht byte-stabil** (jeder Build ändert den Zeitstempel, manchmal die Reihenfolge einzelner Zeilen). Deshalb zählt `output/` nicht als ungespeicherte Änderung, wird aber mitcommittet, damit alte Stände als Vorschau anzeigbar bleiben. Der Startcommit entsteht nach einem ersten Build und enthält bereits eine STEP.
 - **Versions-Schieber:** Leiste unter dem Viewer, Commits als Punkte, letzter Punkt ist der aktuelle Arbeitsstand. Alte Stände sind **Vorschau** (STEP per `git show`, Arbeitsordner bleibt unberührt). Der Knopf **„Stand wiederherstellen"** kopiert die Dateien und legt einen **neuen Commit** an. Es gibt keinen Checkout oder Reset und keine Branches.
 
-**Projektzustand (E27):** ID und Einstellungen liegen doppelt: in `.cadide/project.json` (ZIP) und als Kopie in den App-Daten. Bei Verlust dient die jeweils andere Quelle als Rückfall.
+**Projektzustand (E27):** ID und Einstellungen liegen doppelt: in `.soma/project.json` (ZIP) und als Kopie in den App-Daten. Bei Verlust dient die jeweils andere Quelle als Rückfall.
 
-## 5. Hilfsbibliothek und Befehle (`cadide`)
+## 5. Hilfsbibliothek und Befehle (`soma`)
 
-Das Paket `cadide` liegt in der mitgelieferten **Basisumgebung**, nicht im Projekt. Neue App-Versionen bringen es mit, alte Projekte profitieren von Fixes. `api_version` in `project.json` sichert die Abwärtskompatibilität (E36). Die Namen sind Arbeitsnamen.
+Das Paket `soma` liegt in der mitgelieferten **Basisumgebung**, nicht im Projekt. Neue App-Versionen bringen es mit, alte Projekte profitieren von Fixes. `api_version` in `project.json` sichert die Abwärtskompatibilität (E36). Paket und Befehl heißen `soma` (E43).
 
 | Baustein | Aufgabe |
 |---|---|
 | `add_part("Deckel", obj, role=...)` | Bauteil registrieren (verbindlich, E10). Merkt sich Datei und Zeile, schreibt Namen und Farbe in den STEP-Baum, Positionen und Anzeigename in `model.map.json`. **Namen in der STEP nur ASCII** (Umlaute werden umgeschrieben, sonst zerstört der Export sie), Namen müssen eindeutig sein. Rolle `reference` ist eine Markierung (halbtransparent, eigener Ast, nicht in `--all`) |
-| `cadide build` | Baut STEP, GLB und Mapping in einem Lauf. Gemeinsam für App und Agent. Führt vorab einen kurzen Check aus und gibt Warnungen mit aus (E20) |
-| `cadide check` | Prüft die Projektstruktur und **meldet nur**, mit konkreten Handlungshinweisen, auch maschinenlesbar. Kein `--fix`. Der Agent repariert nach eigenem Ermessen (E28) |
-| `cadide export <Bauteil\|--all> --format …` | Einzelexport auf Basis der registrierten Bauteile, auch per Kontextmenü im Tree. Formate (in Phase 0 geprüft): STEP, STL, 3MF, AMF, BREP, IGES, OBJ, VRML, GLB/GLTF. 2D: DXF (Schnitt), SVG (Projektion) (E34) |
+| `soma build` | Baut STEP, GLB und Mapping in einem Lauf. Gemeinsam für App und Agent. Führt vorab einen kurzen Check aus und gibt Warnungen mit aus (E20) |
+| `soma check` | Prüft die Projektstruktur und **meldet nur**, mit konkreten Handlungshinweisen, auch maschinenlesbar. Kein `--fix`. Der Agent repariert nach eigenem Ermessen (E28) |
+| `soma export <Bauteil\|--all> --format …` | Einzelexport auf Basis der registrierten Bauteile, auch per Kontextmenü im Tree. Formate (in Phase 0 geprüft): STEP, STL, 3MF, AMF, BREP, IGES, OBJ, VRML, GLB/GLTF. 2D: DXF (Schnitt), SVG (Projektion) (E34) |
 
 **Bauen (E20):** Auto-Build bei Änderung von `model.py` und `parts/` (Hintergrund, Debounce, abbrechbar). Er ist **abschaltbar**, weil große Modelle sonst die App bremsen. Dann baut der Nutzer per Knopf oder der Agent per Befehl.
 
@@ -105,8 +105,8 @@ Das Paket `cadide` liegt in der mitgelieferten **Basisumgebung**, nicht im Proje
 
 - **Terminal (E19):** Freies Terminal mit mehreren Tabs im Projektordner. Startbuttons für erkannte Agenten. Der zuletzt benutzte Agent startet beim Öffnen automatisch, **ohne Resume**. Der Nutzer installiert den Agenten selbst, die App hilft mit Erkennung und Hinweisen (E4).
 - **`AGENTS.md` (E18):** Ganz app-verwaltet, Notizen stehen getrennt in `NOTES.md`. Beim Öffnen eines Projekts mit älterer Regelversion wird sie erneuert, dem Nutzer angezeigt und als Commit gesichert (E36). Der Verweis auf die Notizen steht ganz oben.
-- **Skills (E17):** Markdown-Regeln (z. B. 3D-Druck, Toleranzen, Gehäusebau), pro Projekt aktivierbar. Aktivierte Skills liegen in `.cadide/skills/` und stehen mit vollem Pfad in `AGENTS.md`. Zunächst nur mitgelieferte, eigene Nutzer-Skills später.
-- **Rückmeldung an den Agenten (E11):** Markierungen (Viewer-Bild oder leere Fläche mit Zeichnung) landen als PNG in `.cadide/feedback/`, Auswahlen (Bauteilname, Datei, Zeilen, Fläche) und Build-Fehler gehen als Text. Die App fügt Pfad oder Text in die Eingabezeile des Terminals ein, der Nutzer schickt selbst ab. Später kommt ein MCP-Server der App dazu.
+- **Skills (E17):** Markdown-Regeln (z. B. 3D-Druck, Toleranzen, Gehäusebau), pro Projekt aktivierbar. Aktivierte Skills liegen in `.soma/skills/` und stehen mit vollem Pfad in `AGENTS.md`. Zunächst nur mitgelieferte, eigene Nutzer-Skills später.
+- **Rückmeldung an den Agenten (E11):** Markierungen (Viewer-Bild oder leere Fläche mit Zeichnung) landen als PNG in `.soma/feedback/`, Auswahlen (Bauteilname, Datei, Zeilen, Fläche) und Build-Fehler gehen als Text. Die App fügt Pfad oder Text in die Eingabezeile des Terminals ein, der Nutzer schickt selbst ab. Später kommt ein MCP-Server der App dazu.
 
 ## 7. Oberfläche und Viewer
 
@@ -152,7 +152,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 | Agent legt `.venv` an und installiert dort | Build findet Pakete nicht, `.venv` landet in ZIP/Git | `.venv`/`venv` immer ausschließen, Build-Fehler mit Hinweis auf die Projektumgebung |
 | Agent nutzt anderes Python oder `pip --user` | Paketliste unvollständig | Abgleich beim Build, Warnung |
 | `AGENTS.md` verändert oder gelöscht | Regeln fehlen | Prüfsumme, im Check melden. Erneuerung nur beim Versions-Update (E36) |
-| `.cadide/` oder `project.json` gelöscht | ID und Einstellungen weg | Aus App-Daten bzw. ZIP wiederherstellen (siehe offene Punkte) |
+| `.soma/` oder `project.json` gelöscht | ID und Einstellungen weg | Aus App-Daten bzw. ZIP wiederherstellen (siehe offene Punkte) |
 | `.git` gelöscht, neu initialisiert, History umgeschrieben, anderer Branch | Zeitleiste kaputt | Zeitleiste tolerant aus `git log`, Bruch im Check melden |
 | Agent committet nie oder zu oft, riesige Dateien | Leerer Schieber, große ZIP | Auto-Snapshot, Größenwarnung |
 | `inputs/` verändert | Mitgebrachte Datei verfälscht | Git-Stand, Hinweis |
@@ -172,15 +172,15 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 5. **Umgebung:** VTK lässt sich nicht entfernen (OCP hängt hart daran). Installiert 0,76 bis 1,04 GB, vorerst hingenommen (E37).
 6. **Exportformate:** 12 Formate, PLY und X_T entfallen.
 
-**Phase 1: MVP-Kern als Desktop-App. In Arbeit.** Projekt neu, speichern und öffnen als ZIP mit Git. Editor, Terminal mit Agent, Viewer (Umfang siehe Abschnitt 7), Screenshot mit Markup, `AGENTS.md`, `cadide build`. Hier folgt auch der **Agent-Test**: Ein Agent baut mit erster `AGENTS.md` und Hilfsbibliothek ein Beispielmodell, geprüft wird u. a., ob er den Verweisen folgt.
+**Phase 1: MVP-Kern als Desktop-App. In Arbeit.** Projekt neu, speichern und öffnen als ZIP mit Git. Editor, Terminal mit Agent, Viewer (Umfang siehe Abschnitt 7), Screenshot mit Markup, `AGENTS.md`, `soma build`. Hier folgt auch der **Agent-Test**: Ein Agent baut mit erster `AGENTS.md` und Hilfsbibliothek ein Beispielmodell, geprüft wird u. a., ob er den Verweisen folgt.
 
 *Schritt 1, lauffähiges Gerüst (erledigt, Ende-zu-Ende-Test mit 21 Prüfungen in `app/test/smoke.mjs`):*
 
 - **App:** Electron und TypeScript, Layout aus Abschnitt 7 (Tree mit Reitern *Modell* und *Dateien*, Viewer, Terminal-Tabs, Top Bar, Statusleiste, verschiebbare Trennleisten). Arbeitsordner unter `<App-Daten>/workspaces/<uuid>/`, Projektzustand doppelt (E27), Projekt-Check meldet nur (E28).
-- **`cadide` (Python-Paket in `python/`):** `add_part` mit Datei und Zeilenbereich, `cadide build` (STEP, GLB, Mapping, `build.json`), `cadide export` (12 Formate). Fehler in `model.py` (Syntax, Laufzeit, doppelter Name, kein Bauteil, Einstiegspunkt fehlt) kommen mit Datei, Zeile und gekürztem Traceback zurück, der letzte gute Stand bleibt sichtbar.
+- **`soma` (Python-Paket in `python/`):** `add_part` mit Datei und Zeilenbereich, `soma build` (STEP, GLB, Mapping, `build.json`), `soma export` (12 Formate). Fehler in `model.py` (Syntax, Laufzeit, doppelter Name, kein Bauteil, Einstiegspunkt fehlt) kommen mit Datei, Zeile und gekürztem Traceback zurück, der letzte gute Stand bleibt sichtbar.
 - **Build (E20):** Auto-Build beim Speichern, entprellt, abschaltbar. Änderungen während eines Builds führen zu genau einem Folgebuild. Zeitlimit und Abbruch sind eingebaut.
 - **Viewer:** Klick liefert Bauteil, Fläche und markierte Codezeile. Ein- und Ausblenden, Standardansichten, Kanten, Drahtgitter, Transparenz. Kamera, Sichtbarkeit und Auswahl bleiben über Rebuilds erhalten.
-- **Terminal:** Echte Shell (node-pty) im Projektordner mit `python`, `pip` und `cadide` der Basisumgebung im PATH. Startbuttons für erkannte Agenten (Claude Code, OpenCode, Codex, Gemini CLI).
+- **Terminal:** Echte Shell (node-pty) im Projektordner mit `python`, `pip` und `soma` der Basisumgebung im PATH. Startbuttons für erkannte Agenten (Claude Code, OpenCode, Codex, Gemini CLI).
 - **Vorlage:** `model.py`, erste `AGENTS.md`, `CLAUDE.md` (Verweis), `NOTES.md`, `.gitignore`.
 
 *Erster Agent-Test (informell, vom Nutzer):* Claude Code hat mit dieser Vorlage eine Wanduhr gebaut, 6 Bauteile mit deutschen Namen, Parameter als Konstanten, kein `.venv`, `AGENTS.md`, `CLAUDE.md`, `NOTES.md` und `.gitignore` unverändert. Das ist ein Datenpunkt, kein vollständiger Agent-Test. Damals gab es noch kein Git.
@@ -190,7 +190,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 *Schritt 2, Git und ZIP (erledigt, 46 Prüfungen in `app/test/versions.mjs`):*
 
 - **Git pro Projekt:** Repository mit Startcommit, Identität und `core.autocrlf=false` gesetzt, damit auch der Agent committen kann. Die `AGENTS.md` verlangt Commits nach gebauten Iterationen und verbietet Umschreiben des Verlaufs.
-- **Speichern (E8, E21):** Strg+S baut bei Bedarf zuerst neu, legt einen Auto-Snapshot an (nur bei Änderungen an Quelltext, Eingaben oder Einstellungen) und schreibt die ZIP atomar (erst `.part`, dann umbenennen). Sie enthält `.git`, aber keine Umgebungen und Caches. Ein Marker `.cadide/zip-info.json` hält den gespeicherten Stand fest. Der Modellname folgt dem Dateinamen. Ohne `.git` klappt Speichern weiter, mit Warnung.
+- **Speichern (E8, E21):** Strg+S baut bei Bedarf zuerst neu, legt einen Auto-Snapshot an (nur bei Änderungen an Quelltext, Eingaben oder Einstellungen) und schreibt die ZIP atomar (erst `.part`, dann umbenennen). Sie enthält `.git`, aber keine Umgebungen und Caches. Ein Marker `.soma/zip-info.json` hält den gespeicherten Stand fest. Der Modellname folgt dem Dateinamen. Ohne `.git` klappt Speichern weiter, mit Warnung.
 - **Öffnen (E21):** Fehlt der Arbeitsordner (anderer Rechner), wird die ZIP entpackt. Ist er identisch, wird er einfach geöffnet. Weicht er ab, fragt die App: *Arbeitsstand behalten* oder *ZIP laden*, dabei wandert der alte Arbeitsordner nach `workspace-backups/`, nichts wird gelöscht. Entpacken ist gegen bösartige Pfade abgesichert (zwei Schichten).
 - **Absturz-Wiederherstellung:** Der Arbeitsordner liegt fest in den App-Daten, die App öffnet beim Start das letzte Projekt. Ungespeicherte Änderungen überleben einen harten Abbruch (getestet). Beim Schließen mit ungespeicherten Änderungen fragt die App (nicht automatisch getestet).
 - **Verlauf (E35):** Leiste unter dem Viewer, jeder Commit ein Punkt plus der Arbeitsstand, Schieber und Klick. Alte Stände sind eine schreibgeschützte Vorschau (STEP per `git show`, Basismodus). *Stand wiederherstellen* legt einen neuen Commit an und sichert vorher ungesicherte Änderungen als eigenen Stand. Kein Checkout, kein Reset, keine Branches.
@@ -200,20 +200,20 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 
 - **Kopfzeile:** Dokumentmenü (Neu, Öffnen, zuletzt geöffnete Modelle, Speichern unter, im Explorer zeigen, Startseite), Speicherstand („Nicht gespeichert · zuletzt 13:41“), Build-Anzeige in den Zuständen gebaut, baut (mit Abbrechen), fehlgeschlagen (mit Zeile) und „Code geändert“ bei ausgeschaltetem Auto-Build. Schaltet man Auto-Build wieder ein, baut die App den veralteten Stand gleich nach. Kurzbefehle Strg+S, Strg+Umschalt+S, Strg+O, Strg+N, Strg+B (nicht im Terminal).
 - **Viewer:** schwebende Bauteilkarte mit Auge, Suche, Referenzen-Abschnitt und Kontextmenü (Isolieren, Ausblenden, Kamera, Code zeigen, An Agent geben, Exportieren). Auswahlkarte mit Flächenart und Codeausschnitt. Fehlerkarte mit Meldung, Codezeile und Ablauf, das Modell bleibt gedimmt sichtbar. Ansichtswürfel (Oben, Vorne, Rechts), Einpassen, Standardansicht, Darstellungsmenü.
-- **Export (E34):** Menü mit allen 12 Formaten, für alle Bauteile oder die Auswahl, über `cadide export` nach `exports/`.
+- **Export (E34):** Menü mit allen 12 Formaten, für alle Bauteile oder die Auswahl, über `soma export` nach `exports/`.
 - **Dateien und Code:** Dateibaum mit eingeklappten App-Dateien. Dateien, die man ins Fenster zieht, landen in `inputs/`, Vorhandenes wird nie überschrieben (E33). Code-Panel zum Lesen mit Hervorhebung, der Auswahl im Viewer folgend.
-- **Verlauf:** Punkte unterscheiden Stände der App (Commit-Trailer `Erstellt-von: CAD-IDE`) und des Agenten, der gespeicherte Stand ist grün, die Vorschau violett mit Rahmen um den Viewer.
+- **Verlauf:** Punkte unterscheiden Stände der App (Commit-Trailer `Erstellt-von: SOMA`) und des Agenten, der gespeicherte Stand ist grün, die Vorschau violett mit Rahmen um den Viewer.
 - **Agent-Bereich:** Tabs mit Laufanzeige, „+“ startet erkannte Agenten oder ein leeres Terminal, einklappbar. Die Übergabeleiste fügt Text in die Eingabe ein (als Einfügen, ohne Enter, E11).
 - **Startseite** beim allerersten Start und über das Logo: Neu, Öffnen, zuletzt geöffnete Modelle mit Vorschaubild, erkannte Agenten, Hinweis auf die Rechte des Agenten (E29).
 - **Schrift:** IBM Plex Sans und Mono liegen lokal bei (SIL Open Font License).
 
 *Schritt 4, Markierung (erledigt, E16; 53 Prüfungen im Smoke-Test, 53 im Verlaufstest, 8 Einheitentests):*
 
-- **Ablauf:** „Markieren“ im Viewer oder „Markierung“ in der Übergabeleiste friert die aktuelle Ansicht in voller Auflösung ein. Bauteilkarte, Würfel und Karten treten zurück, ein gestrichelter Rahmen zeigt den Modus. „An Agent geben“ legt das Bild als `.cadide/feedback/markierung-JJJJMMTT-HHMM.png` ab (nie überschreibend, bei Gleichstand `-2`) und fügt `[Markierung: <Pfad>] ` in die Eingabe des aktiven Terminals ein, ohne abzuschicken (E11).
+- **Ablauf:** „Markieren“ im Viewer oder „Markierung“ in der Übergabeleiste friert die aktuelle Ansicht in voller Auflösung ein. Bauteilkarte, Würfel und Karten treten zurück, ein gestrichelter Rahmen zeigt den Modus. „An Agent geben“ legt das Bild als `.soma/feedback/markierung-JJJJMMTT-HHMM.png` ab (nie überschreibend, bei Gleichstand `-2`) und fügt `[Markierung: <Pfad>] ` in die Eingabe des aktiven Terminals ein, ohne abzuschicken (E11).
 - **Werkzeuge:** Stift, Pfeil, Rechteck, Kreis oder Ellipse (mit Umschalt: Quadrat und Kreis), Text. Farbmenü mit 10 Farben und eigener Farbe (Farbdialog), Rückgängig und Wiederholen (Strg+Z, Strg+Y), „Leere Fläche“ zum Skizzieren ohne Modell. Striche und Text haben einen dunklen Schatten, damit sie auch auf hellen Bauteilen lesbar bleiben.
 - **Formen bleiben bearbeitbar (Wunsch des Nutzers):** Mit „Auswählen“ lässt sich jede Form anklicken und verschieben (auch mit den Pfeiltasten), an den Ecken skalieren (die gegenüberliegende Ecke bleibt stehen, Umschalt hält das Seitenverhältnis), am Punkt über dem Rahmen drehen (Umschalt: 15°-Schritte), umfärben und mit Entf löschen. Doppelklick auf einen Text, oder Klick mit dem Textwerkzeug, bearbeitet ihn. Jede Form speichert Mittelpunkt, Drehung und Skalierung getrennt von ihrer Geometrie, deshalb wächst die Strichstärke beim Skalieren nicht mit. Auswahlrahmen und Griffe kommen nicht ins Bild.
 - **Vorschau alter Stände:** Wird ein alter Stand markiert, nennt der eingefügte Text den Stand (Kurz-Hash und Nachricht), damit der Agent nicht mit dem aktuellen Code vergleicht.
-- **Robustheit:** Scheitert das Speichern, bleibt die Zeichnung offen. Der Hauptprozess nimmt nur PNG bis 64 MB an. Der Pfadschutz (`resolveInside`) prüft bei noch nicht vorhandenen Dateien jetzt den nächsten vorhandenen Ordner darüber, sonst hätte ein Verweis `.cadide` → außen Dateien außerhalb des Projekts landen lassen.
+- **Robustheit:** Scheitert das Speichern, bleibt die Zeichnung offen. Der Hauptprozess nimmt nur PNG bis 64 MB an. Der Pfadschutz (`resolveInside`) prüft bei noch nicht vorhandenen Dateien jetzt den nächsten vorhandenen Ordner darüber, sonst hätte ein Verweis `.soma` → außen Dateien außerhalb des Projekts landen lassen.
 - **Git und ZIP:** Markierungen sind nicht in Git (E11) und zählen nicht als ungespeicherte Änderung, wandern aber beim nächsten Speichern mit der ZIP.
 
 *Agent-Test Markierung (informell, vom Nutzer):* Mit `[Markierung: …]` in der Eingabe hat Claude Code das Bild geöffnet und umgesetzt.
@@ -224,7 +224,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Speichern nur auf Wunsch (E39):** Beim Tippen passiert nichts auf der Platte und es wird nicht gebaut. Der Reiter zeigt einen Punkt, die Infozeile „Nicht gespeichert · Strg+S“ und den Knopf „Speichern und bauen“, der Speicherstand oben zählt die Eingaben mit. Strg+S im Editor und der Knopf schreiben die Dateien (erst in eine Nebendatei, dann umbenennen) und bauen **genau einmal**, aber nur, wenn eine gespeicherte Datei das Modell betrifft (E40: Python und `inputs/`, dieselbe Regel wie die Dateiüberwachung in `src/shared/editable.ts`). Bei `NOTES.md` heißt der Knopf nur „Speichern“. Die Dateiüberwachung erkennt, dass die Änderung schon im laufenden Build steckt, und baut nicht noch einmal. „Speichern“ oben (und Strg+S außerhalb des Editors) speichert zuerst den Editor, dann Snapshot und ZIP. „Jetzt bauen“ speichert ebenfalls vorher.
 - **Rückfragen statt Verlust:** Vor Modellwechsel, Wiederherstellen, Schließen eines Reiters und Beenden fragt die App bei ungespeicherten Eingaben: Speichern, Verwerfen (die Eingabe kommt vorher in eine Sicherung) oder Abbrechen. Beim Beenden ist das eine gemeinsame Frage mit der nach der ZIP. Jede Schreibanfrage trägt die ID des Modells, eine verspätete für ein altes Modell wird als Sicherung abgelegt statt ins neue geschrieben.
 - **Agent und Nutzer an derselben Datei:** Der Editor kennt den Stand, den er zuletzt von der Platte hatte. Ändert der Agent die Datei und im Editor liegt nichts Ungesichertes, übernimmt der Editor die neue Fassung (nur den geänderten Teil, Schreibmarke bleibt, nicht im Rückgängig). Liegt etwas Ungesichertes da, wird nichts überschrieben: Ein Hinweis bietet „Meine Fassung behalten“ oder „Fassung von außen laden“, die jeweils andere Fassung kommt nach `workspace-backups/<id>-editor/`. Gelöschte Dateien lassen sich mit der eigenen Fassung neu anlegen. Beim Beenden mit offenem Konflikt sichert die App die eigene Fassung und nennt den Pfad.
-- **Nur lesen:** `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `output/`, `exports/`, `.cadide/`, `.git/` (Regel in `src/shared/editable.ts`, der Hauptprozess prüft sie beim Schreiben noch einmal), dazu Dateien über 2 MB und solche, die nicht als UTF-8 lesbar sind. Der Grund steht über dem Text.
+- **Nur lesen:** `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `output/`, `exports/`, `.soma/`, `.git/` (Regel in `src/shared/editable.ts`, der Hauptprozess prüft sie beim Schreiben noch einmal), dazu Dateien über 2 MB und solche, die nicht als UTF-8 lesbar sind. Der Grund steht über dem Text.
 - **Zeilenenden** der Datei bleiben erhalten (CRLF bleibt CRLF).
 - **Höhe:** Der Editor füllt das Panel bis unten und lässt sich bei langen Dateien bis zum Ende scrollen (CodeMirror erzwingt `position: relative`, die Höhe kommt deshalb über `height`).
 - **Nebenbei:** Die App nutzt jetzt das dunkle Farbschema des Systems (`color-scheme: dark`), Scrollleisten sind dunkel. Im schmalen Viewer (etwa bei offenem Code-Panel) rückt die Fehlerkarte nach unten, statt über den Rand zu ragen. Behoben: Der Speicherstand oben konnte nach dem Speichern fälschlich „Noch nicht gespeichert“ zeigen, wenn die regelmäßige Git-Abfrage gerade lief (sie las den Stand der App vor ihren Git-Aufrufen).
@@ -233,8 +233,8 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 
 - **Ablauf:** „Messen“ im Viewer schaltet den Messmodus. Ein Klick wählt einen Eckpunkt, eine Kante oder eine Fläche, in dieser Reihenfolge (Punkte mit 9 px Fangradius, Kanten mit 7 px, Verdecktes zählt nicht), und zeigt die exakten Werte: Lage eines Punkts, Durchmesser und Radius (Zylinder, Kreis, Kugel), Achse oder Normale, Länge, Flächeninhalt, dazu die Außenmaße des Bauteils. Ein zweiter Klick misst zum ersten: Abstand paralleler Ebenen (Wandstärke, Spaltmaß), Abstand der Achsen oder Mittelpunkte (Bohrungen), vom Punkt aus den Abstand zur Ebene, Achse oder Geraden, zwischen zwei Punkten ihren Abstand, sonst den kürzesten Abstand, dazu Punkt zu Punkt mit ΔX/ΔY/ΔZ und den Winkel. Punkte kamen auf Wunsch des Nutzers dazu, der Mesher legt dafür eine Tabelle der Eckpunkte mit exakten Koordinaten ins GLB. Der dritte Klick beginnt von vorn, Escape verwirft erst die Messung, dann den Modus.
 - **Anzeige:** Elemente in Orange hervorgehoben, unter dem Zeiger leicht aufgehellt, die Hauptstrecke als Linie mit Beschriftung, Punkt zu Punkt gestrichelt. Die Karte unten links ersetzt solange die Auswahlkarte. „An Agent geben“ fügt die Messung als Text ein (Zahlen mit Punkt, drei Stellen).
-- **Exakt gerechnet:** Der Build legt die Bauteile zusätzlich als BREP unter `.cadide/geometry/<build>.brep` ab, die Kennung steht auch in `model.map.json`. Ein langlebiger Python-Dienst (`cadide serve`, JSON-Zeilen) lädt sie beim ersten Messen (einige Sekunden) und rechnet mit OCC. Jede Anfrage trägt die Build-Kennung und den Flächeninhalt bzw. die Länge aus dem Viewer, so fällt jede Verwechslung auf. Nach einem neuen Build beginnt die Messung von vorn. Auch Vorschauen alter Stände lassen sich vermessen.
-- **Git und ZIP:** `.cadide/geometry/` ist ein Zwischenergebnis. Neue Projekte haben es in der `.gitignore`, bei älteren klammert die App es selbst aus (Status, Snapshot, ZIP). Dabei fiel auf, dass `git add` mit einem Ausschluss auf einen ignorierten Ordner scheitert: Die App nimmt den Ordner deshalb nach dem Hinzufügen wieder aus dem Index.
+- **Exakt gerechnet:** Der Build legt die Bauteile zusätzlich als BREP unter `.soma/geometry/<build>.brep` ab, die Kennung steht auch in `model.map.json`. Ein langlebiger Python-Dienst (`soma serve`, JSON-Zeilen) lädt sie beim ersten Messen (einige Sekunden) und rechnet mit OCC. Jede Anfrage trägt die Build-Kennung und den Flächeninhalt bzw. die Länge aus dem Viewer, so fällt jede Verwechslung auf. Nach einem neuen Build beginnt die Messung von vorn. Auch Vorschauen alter Stände lassen sich vermessen.
+- **Git und ZIP:** `.soma/geometry/` ist ein Zwischenergebnis. Neue Projekte haben es in der `.gitignore`, bei älteren klammert die App es selbst aus (Status, Snapshot, ZIP). Dabei fiel auf, dass `git add` mit einem Ausschluss auf einen ignorierten Ordner scheitert: Die App nimmt den Ordner deshalb nach dem Hinzufügen wieder aus dem Index.
 
 *Ansicht (Wunsch des Nutzers; 8 Prüfungen im Smoke-Test):*
 
@@ -248,16 +248,20 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Transparent:** deutlich durchsichtig, ohne zu verdecken. Klicks und Messungen gehen durch transparente Teile hindurch, sie selbst werden nur getroffen, wenn dahinter nichts liegt.
 - **Nebenbei behoben:** Die Verlaufsleiste konnte einen veralteten Stand behalten, wenn sich zwei Abfragen überholten (fiel im Gesamtlauf der Tests auf, als `.git` verschwand).
 
+*Name (E43):*
+
+- **SOMA** (*Solid Object Modeling with Agents*) ersetzt den Arbeitsnamen CAD-IDE überall: Oberfläche, Paket und Befehl `soma`, Projektordner `.soma/`, Umgebungsvariablen `SOMA_*`, App-Daten unter `%LOCALAPPDATA%\soma`. Ohne Rückfallweg: Projekte mit `.cadide/` öffnet die App nicht mehr, ein `model.py` mit `from cadide import` baut nicht mehr. Die alten Ordner `%LOCALAPPDATA%\cadide` (App-Daten mit Arbeitsordnern) und `%LOCALAPPDATA%\cadide-dev` (lokale Electron-Kopie) bleiben liegen und werden nicht mehr benutzt.
+
 *Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
-**Danach:** Schnittansicht, Versions-Schieber, Skills, `cadide check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
+**Danach:** Schnittansicht, Versions-Schieber, Skills, `soma check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
 
 ## 11. Offene Punkte
 
 **Noch nicht ausdrücklich bestätigt (Vorschläge von mir)**
 
 - `AGENTS.md` und die Kommentare der Vorlage sind **auf Englisch** (Agenten befolgen englische Anweisungen zuverlässiger), die Oberfläche ist deutsch
-- App-Daten liegen unter Windows in `%LOCALAPPDATA%\cadide`, nicht im Roaming-Profil (Arbeitsordner und Caches gehören nicht ins Netz)
+- App-Daten liegen unter Windows in `%LOCALAPPDATA%\soma`, nicht im Roaming-Profil (Arbeitsordner und Caches gehören nicht ins Netz)
 - Beim Öffnen eines Projekts wird sofort gebaut, damit der Viewer nicht leer ist. Beim Anlegen läuft vor dem Startcommit ein Build (rund 2 s Wartezeit bei „Neu“)
 - Der Modellname folgt dem Dateinamen der ZIP
 - Speichern baut vorher neu, wenn der Quelltext neuer ist als das letzte Ergebnis, und wartet auf laufende Builds
@@ -272,16 +276,16 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - Markierung (E16): Das Bild zeigt die Ansicht **ohne Auswahl-Hervorhebung** (die ist Orange wie der Stift und verschluckte die Zeichnung) und ohne schwebende Karten. Auflösung wie der Viewer in Gerätepixeln, keine Verkleinerung. Eine Strichstärke
 - Markierung, Farben: Statt der drei Farbpunkte aus dem Entwurf steht ein Farbknopf mit Menü in der Leiste (10 Farben und eigene Farbe), sonst würde die Leiste zu breit. Eine Farbe gilt für alles Folgende und färbt eine ausgewählte Form gleich mit
 - Markierung, Bearbeiten: eigenes Werkzeug „Auswählen“ statt Auswahl mit jedem Werkzeug (sonst verschöbe ein neuer Strich die Form darunter). Rechteck und Ellipse sind hohl und nur an der Linie greifbar, damit Formen darunter erreichbar bleiben. Text skaliert immer im Seitenverhältnis, das Textfeld steht beim Bearbeiten ungedreht
-- Markierung: Eingefügt wird `[Markierung: .cadide/feedback/markierung-JJJJMMTT-HHMM.png] ` (gleiche Form wie Auswahl und Build-Fehler). Beide Knöpfe („Markieren“ im Viewer, „Markierung“ in der Übergabeleiste) öffnen die Zeichenfläche
+- Markierung: Eingefügt wird `[Markierung: .soma/feedback/markierung-JJJJMMTT-HHMM.png] ` (gleiche Form wie Auswahl und Build-Fehler). Beide Knöpfe („Markieren“ im Viewer, „Markierung“ in der Übergabeleiste) öffnen die Zeichenfläche
 - Markierung: Escape verwirft eine Zeichnung erst beim zweiten Druck, „Abbrechen“ sofort. Text wird mit Enter oder beim nächsten Klick übernommen
-- Markierungen zählen nicht als ungespeicherte Änderung und werden nie aufgeräumt (`.cadide/feedback/` wächst, siehe ZIP-Größe unten)
+- Markierungen zählen nicht als ungespeicherte Änderung und werden nie aufgeräumt (`.soma/feedback/` wächst, siehe ZIP-Größe unten)
 - Editor: **CodeMirror 6** statt Monaco (leichter, braucht keine Worker, passt zur Sicherheitsrichtlinie, lässt sich mit den eigenen Farben gestalten). Keine Autovervollständigung und keine Prüfung beim Tippen, das übernimmt der Build
 - Editor (E39, Auslegung): **Strg+S im Editor** speichert Code und baut, ohne ZIP und Snapshot. **Strg+S außerhalb** und „Speichern“ oben speichern das ganze Modell. Grund: Beim Ausprobieren im Code soll nicht jedes Speichern einen Snapshot anlegen und beim neuen Modell nach dem ZIP-Ort fragen. Änderungen des Agenten baut weiter der Auto-Build
 - Editor: Nach Strg+S ohne Änderung oder nur an Notizen wird nicht gebaut (E40). „Jetzt bauen“ speichert vorher und baut immer. Bei einem Konflikt wird weder gespeichert noch gebaut
 - Editor-Konflikt: zwei Wahlmöglichkeiten mit Sicherung, **kein automatisches Zusammenführen** (E28). Sicherungen liegen in den App-Daten, nicht im Projekt, und werden nicht aufgeräumt
 - Editor: Welche Dateien nur lesbar sind (siehe Schritt 5). Dateien in `inputs/` darf der Nutzer bearbeiten, der Agent laut `AGENTS.md` nicht
 - Messen: eigener Modus über den Knopf „Messen“ (Klicks wählen dann Punkte, Kanten und Flächen statt Bauteile). Die wichtigste Angabe eines Paars ist der Abstand paralleler Ebenen, dann der paralleler Achsen, dann vom Punkt aus der zur Ebene, Achse oder Geraden (jeweils unbegrenzt gedacht), zwischen zwei Punkten ihr Abstand, sonst der kürzeste Abstand. Punkt zu Punkt nutzt die Klickpunkte, exakt auf die Elemente gelegt. Punkte haben Vorrang vor Kanten, Kanten vor Flächen. Mittelpunkte von Kreisen sind keine eigenen Punkte, sie stecken im Abstand der Mittelpunkte
-- Messen: Messlinien kommen nicht mit ins Bild der Markierung (ohne ihre Beschriftung wären sie dort unverständlich). Einen Messbefehl für den Agenten (`cadide measure`) gibt es noch nicht, der Agent bekommt Messungen über „An Agent geben“
+- Messen: Messlinien kommen nicht mit ins Bild der Markierung (ohne ihre Beschriftung wären sie dort unverständlich). Einen Messbefehl für den Agenten (`soma measure`) gibt es noch nicht, der Agent bekommt Messungen über „An Agent geben“
 - Messen: Die Geometrie liegt als BREP neben dem GLB (Größe etwa wie die STEP-Datei) und wird bei jedem Build ersetzt
 - Ansichtswürfel: Ein Klick dreht nur, Drehpunkt und Abstand bleiben (kein Einpassen, damit man nah an einer Stelle bleiben kann). Einpassen und Standardansicht setzen den Drehpunkt zurück in die Mitte. Die Achsen haben die in CAD üblichen Farben (X rot, Y grün, Z blau), außerhalb der festen Farbbedeutungen der Oberfläche
 - Drehpunkt per Doppelklick (auch im Messmodus), Zoomen zur Mausposition immer an
@@ -296,7 +300,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 
 **Zu klären**
 
-- **Namen:** Software, Befehl `cadide`, Notizdatei `NOTES.md`, Ordner `exports/` (Ort, getrackt oder nicht)
+- **Namen:** Notizdatei `NOTES.md`, Ordner `exports/` (Ort, getrackt oder nicht)
 - **Lizenz** der Software und Prüfung aller Komponenten
 - **Mittelbereich:** Tab-Umschaltung oder geteilte Ansicht zwischen Viewer und Sketch (E15)
 - **Build:** Auto-Build standardmäßig an oder aus, Statusanzeige, Fehlerpanel, Verhalten bei erneuter Änderung während des Builds (E20)
@@ -307,7 +311,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Echte Fremddateien:** Herstellerplatinen und große Baugruppen mit Stückliste in Phase 1 testen
 - **Netzlaufwerke (Windows):** Liegt das Programm auf einem Netzlaufwerk, starten die sandboxed Prozesse von Electron nicht. Die installierte App muss lokal liegen, Fehlermeldung ist vorhanden. Klären, wie der Installer damit umgeht und ob Firmenrechner mit umgeleiteten Profilen Probleme machen
 - **Updates:** Regeln für alte und neuere `api_version`, Auto-Update der App, Signierung (E36)
-- **Format** von `model.map.json` (Entwurf `version 0` aus Phase 0 steht) und der Ausgabe von `cadide check`
+- **Format** von `model.map.json` (Entwurf `version 0` aus Phase 0 steht) und der Ausgabe von `soma check`
 - **Toleranz des Meshers:** Feste 0,05 mm passt für kleine Teile, große brauchen eine an der Größe orientierte Toleranz (siehe Leistungsmessung)
 - **Auswahlen des Agenten:** Flächen-IDs gelten nur pro Build, Verweise brauchen Bauteilname plus Geometrieangabe
 - **Inhalte** von `AGENTS.md` und den Skills, mit einem echten Agenten zu testen

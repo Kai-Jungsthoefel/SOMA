@@ -1,6 +1,6 @@
-# Entscheidungslog: CAD-IDE mit KI-Agenten
+# Entscheidungslog: SOMA (CAD mit KI-Agenten)
 
-> Chronologischer Log aller Entscheidungen aus der Planungsphase. Die Nummern werden im [PLAN.md](PLAN.md) referenziert. Spätere Entscheidungen können frühere präzisieren oder ersetzen (in der Spalte „Anmerkung" vermerkt). Stand: 2026-09-30
+> Chronologischer Log aller Entscheidungen aus der Planungsphase. Die Nummern werden im [PLAN.md](PLAN.md) referenziert. Spätere Entscheidungen können frühere präzisieren oder ersetzen (in der Spalte „Anmerkung" vermerkt). Stand: 2026-10-01
 
 | # | Thema | Entscheidung | Anmerkung |
 |---|---|---|---|
@@ -46,3 +46,4 @@
 | 40 | Editor: Was gebaut wird | **Gebaut wird nach dem Speichern nur, wenn eine gespeicherte Datei das Modell betrifft** (Python). Wer eine Markdown-Datei wie `NOTES.md` bearbeitet, speichert nur, es wird nicht gebaut | Präzisiert 39. Auslegung (nicht ausdrücklich bestätigt): dieselbe Regel wie bei der Dateiüberwachung, also neben `.py` auch Dateien in `inputs/` (etwa Tabellen, die `model.py` einliest). Der Knopf heißt dann „Speichern“ statt „Speichern und bauen“. „Jetzt bauen“ baut immer |
 | 41 | Oberfläche: Meldungen | **Kurze Meldungen** (etwa „In die Eingabe von … eingefügt“) erscheinen **oben rechts**, unter der Kopfzeile und den Reitern des Agent-Bereichs | Weicht vom Entwurf (38) ab, dort standen sie unten im Agent-Bereich. Grund: Unten lagen sie über der Eingabezeile des Agenten |
 | 42 | Gruppen und Transparenz | **Gruppen im eigenen Modell und beim Import:** `add_part(..., group="Gehäuse/Schrauben")`, und importierte STEP-Baugruppen behalten ihre Struktur (jeder Körper ein Bauteil mit Name und Farbe, Unterbaugruppen als Gruppen). Die Bauteilkarte zeigt einen Baum, die Ausgabe-STEP dieselben Gruppen. **Jedes Bauteil und jede Gruppe lässt sich transparent schalten**, zusätzlich zum Aus- und Einblenden | Präzisiert 10 und 34. Auslegung (nicht ausdrücklich bestätigt): Import mit Struktur über `import_assembly()`, `import_step()` bleibt beim einen Körper. Transparente Teile lassen Klicks durch, damit man dahinter auswählen und messen kann |
+| 43 | Name | Die Software heißt **SOMA** (*Solid Object Modeling with Agents*, griechisch σῶμα „Körper“). Der Name gilt **überall**: Oberfläche, Python-Paket und Befehl `soma`, Projektordner `.soma/`, Umgebungsvariablen `SOMA_*`, App-Daten unter `%LOCALAPPDATA%\soma` | Ersetzt die Arbeitsnamen „CAD-IDE“ und `cadide` (u. a. in 27, 28, 34 und 36). **Ohne Rückfallweg** für ältere Projekte: ZIPs mit `.cadide/` öffnet die App nicht mehr, ein `model.py` mit `from cadide import` baut nicht mehr. Ausgenommen sind `prototype/` und die Entwicklungsumgebung unter `%LOCALAPPDATA%\cadide-phase0` (ein verschobener venv läuft nicht mehr) |

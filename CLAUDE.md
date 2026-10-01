@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-Anweisungen für Claude Code bei der Entwicklung der CAD-IDE. Nicht verwechseln mit `app/resources/template/CLAUDE.md`, das ist die Vorlage für Nutzerprojekte.
+Anweisungen für Claude Code bei der Entwicklung von SOMA (*Solid Object Modeling with Agents*). Nicht verwechseln mit `app/resources/template/CLAUDE.md`, das ist die Vorlage für Nutzerprojekte.
 
 ## Worum es geht
 
-Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten seiner Wahl (Claude Code, OpenCode …) 3D-Modelle in CadQuery entwirft. Wir bauen **keinen eigenen Harness**. Die App liefert Terminal, 3D-Viewer, Projektformat (ZIP mit Git) und die Hilfsbibliothek `cadide`.
+Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten seiner Wahl (Claude Code, OpenCode …) 3D-Modelle in CadQuery entwirft. Wir bauen **keinen eigenen Harness**. Die App liefert Terminal, 3D-Viewer, Projektformat (ZIP mit Git) und die Hilfsbibliothek `soma`.
 
 - `PLAN.md` ist der gültige Plan mit Phasenstand (Abschnitt 10) und offenen Punkten (Abschnitt 11). Er geht vor `IDEA.md`.
 - `DECISIONS.md` ist das Entscheidungslog. `(E12)` in Plan und Code verweist darauf. Neue Entscheidungen des Nutzers kommen als neue Zeile ans Ende, alte Zeilen werden nicht umgeschrieben.
@@ -16,7 +16,7 @@ Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten
 |---|---|
 | `app/` | Electron-App. `src/main/` Hauptprozess (`projects.ts` Speichern/Öffnen/Verlauf/Export, `git.ts`, `zip.ts`, `build.ts`, `measure.ts`, `workspace.ts`, `terminals.ts`, `files.ts`), `src/preload/`, `src/renderer/` (`main.ts` Verdrahtung, `viewer.ts`, `viewcube.ts`, `markup.ts`, `measuretool.ts`, `parts.ts`, `code.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `ui.ts`, `icons.ts`), `src/shared/types.ts` (IPC-Vertrag), `src/shared/editable.ts`, `resources/template/` (Vorlage für Nutzerprojekte inkl. `AGENTS.md`), `test/` |
 | `design/ui-entwurf.html` | Freigegebener Oberflächenentwurf (E38), im Browser öffnen. Maßstab für Aufbau, Farben und Texte der Oberfläche |
-| `python/cadide/` | Hilfsbibliothek und CLI: `add_part` (mit `group=`), `import_step`, `import_assembly`, `cadide build`, `cadide export`, `cadide glb`, `cadide serve` (Messdienst, `measure.py`) |
+| `python/soma/` | Hilfsbibliothek und CLI: `add_part` (mit `group=`), `import_step`, `import_assembly`, `soma build`, `soma export`, `soma glb`, `soma serve` (Messdienst, `measure.py`) |
 | `prototype/phase0/` | Abgeschlossener technischer Prototyp mit `ERGEBNISSE.md`. Nur noch Referenz |
 
 Details: `app/README.md`.
@@ -24,7 +24,7 @@ Details: `app/README.md`.
 ## Befehle
 
 ```
-# einmalig: Python-Umgebung (lokal) und cadide darin
+# einmalig: Python-Umgebung (lokal) und soma darin
 powershell -File prototype/phase0/setup_env.ps1
 uv pip install --python "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/python.exe" -e python
 
@@ -34,8 +34,8 @@ npm start               # baut und startet
 npm run typecheck
 npm test                # baut, dann test:unit, test:smoke, test:versions, test:editor, test:measure und test:groups (echte App, unsichtbares Fenster)
 
-# cadide direkt
-"$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/cadide.exe" build --project <ordner>
+# soma direkt
+"$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/soma.exe" build --project <ordner>
 ```
 
 ## Grundsätze für den Code
@@ -52,7 +52,7 @@ npm test                # baut, dann test:unit, test:smoke, test:versions, test:
 ## Tests
 
 - Nach Änderungen `npm run typecheck` und `npm test`. Die npm-Skripte bauen vorher. `node test/*.mjs` ohne Build testet veraltete `dist/`-Dateien.
-- Testfenster bleiben unsichtbar (`CADIDE_HIDDEN=1`), sonst blitzen beim Nutzer Fenster auf. Unsichtbare Fenster zeichnen nicht neu: Für frische Screenshots `SMOKE_VISIBLE=offscreen`. Bei Änderungen an der Oberfläche `SMOKE_VISIBLE=offscreen` plus `SMOKE_SHOTS=1` und die Bilder in `app/test/shots/` ansehen.
+- Testfenster bleiben unsichtbar (`SOMA_HIDDEN=1`), sonst blitzen beim Nutzer Fenster auf. Unsichtbare Fenster zeichnen nicht neu: Für frische Screenshots `SMOKE_VISIBLE=offscreen`. Bei Änderungen an der Oberfläche `SMOKE_VISIBLE=offscreen` plus `SMOKE_SHOTS=1` und die Bilder in `app/test/shots/` ansehen.
 - Oberfläche: Farben mit fester Bedeutung (Orange Aktion und Auswahl, Violett Vorschau, Grün/Gelb/Rot Status), Tokens stehen oben in `style.css`. Symbole nur über `icons.ts`, keine Emoji. Menüeinträge, die Tests oder Kurzbefehle brauchen, stehen fest in `index.html`.
 - Native Dialoge im Test über `app.answers([...])` beantworten (`src/main/dialogs.ts`).
 - Steuerung per eigenem CDP-Client (`test/cdp.mjs`). puppeteer-core funktioniert mit Electron 44 nicht, `Input.dispatchMouseEvent` und `Page.captureScreenshot` hängen in unsichtbaren Fenstern.
@@ -64,7 +64,7 @@ npm test                # baut, dann test:unit, test:smoke, test:versions, test:
 - **Netzlaufwerke:** Liegt das Repo auf einem Netzlaufwerk, starten die sandboxed Prozesse von Electron nicht (schwarzes Fenster, `launch-failed` Code 18). Electron läuft deshalb aus einer lokalen Kopie (`app/scripts/electron-local.mjs`). Nie `node_modules/electron/dist/electron.exe` direkt starten. Die Python-Umgebung liegt lokal unter `%LOCALAPPDATA%\cadide-phase0\venv-full`.
 - **Proxy:** Node-Downloads (Electron-Binary, dugite) brauchen `NODE_USE_ENV_PROXY=1`.
 - **Ports:** Feste Ports können von anderen Programmen belegt sein. Eigene Ports: 8791 (Phase 0), 9333 (Tests).
-- Prozesse nur gezielt beenden (Pfad des Repos oder `cadide-dev` in der Kommandozeile), nie pauschal alle `electron.exe` oder `node.exe`.
+- Prozesse nur gezielt beenden (Pfad des Repos oder `soma-dev` in der Kommandozeile), nie pauschal alle `electron.exe` oder `node.exe`.
 
 ## Stolpersteine beim Bearbeiten
 
