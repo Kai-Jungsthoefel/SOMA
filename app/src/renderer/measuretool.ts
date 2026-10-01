@@ -124,7 +124,7 @@ export class MeasureTool {
     this.render();
     const ent = (x: ProbeHit) => ({ part: x.partId, kind: x.kind, id: x.id, point: x.point, check: x.size ?? undefined });
     let r: MeasureResponse;
-    try { r = await window.cadide.measure.query(this.deps.source(), { build, a: ent(this.a!), ...(this.b ? { b: ent(this.b) } : {}) }); }
+    try { r = await window.soma.measure.query(this.deps.source(), { build, a: ent(this.a!), ...(this.b ? { b: ent(this.b) } : {}) }); }
     catch (e) { r = { ok: false, error: e instanceof Error ? e.message : String(e) }; }
     if (seq !== this.seq) return; // inzwischen neu geklickt oder abgebrochen
     this.busy = false;

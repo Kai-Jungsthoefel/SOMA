@@ -9,7 +9,7 @@ const DEBOUNCE_MS = 700;
 const TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
- * Startet `cadide build` als eigenen Einmal-Prozess (E24) und haelt den Stand fest.
+ * Startet `soma build` als eigenen Einmal-Prozess (E24) und haelt den Stand fest.
  *
  * Regeln (E20):
  * - Auto-Build ist abschaltbar. Aenderungen werden entprellt.
@@ -61,7 +61,7 @@ export class BuildManager extends EventEmitter {
       return;
     }
     this.setStatus({ state: 'building', startedAt: Date.now(), reason, result: this.status.result });
-    const child = spawn(pythonExe(), ['-m', 'cadide', 'build', '--project', this.dir, '--json'], {
+    const child = spawn(pythonExe(), ['-m', 'soma', 'build', '--project', this.dir, '--json'], {
       cwd: this.dir, windowsHide: true,
       env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
     });
@@ -149,13 +149,13 @@ export function newestSourceMtime(dir: string): number {
 
 /** Ist der Quelltext neuer als das letzte Build-Ergebnis (oder gibt es noch keines)? */
 export function buildIsStale(dir: string): boolean {
-  try { return newestSourceMtime(dir) > fs.statSync(path.join(dir, '.cadide', 'build.json')).mtimeMs; } catch { return true; }
+  try { return newestSourceMtime(dir) > fs.statSync(path.join(dir, '.soma', 'build.json')).mtimeMs; } catch { return true; }
 }
 
-/** Führt `python -m cadide <args>` aus (z. B. glb für Vorschauen). Kein Wurf: das Ergebnis trägt den Fehler. */
-export function runCadide(args: string[], cwd: string, timeoutMs = 120000): Promise<{ ok: boolean; out: string; err: string }> {
+/** Führt `python -m soma <args>` aus (z. B. glb für Vorschauen). Kein Wurf: das Ergebnis trägt den Fehler. */
+export function runSoma(args: string[], cwd: string, timeoutMs = 120000): Promise<{ ok: boolean; out: string; err: string }> {
   return new Promise((resolve) => {
-    const child = spawn(pythonExe(), ['-m', 'cadide', ...args], {
+    const child = spawn(pythonExe(), ['-m', 'soma', ...args], {
       cwd, windowsHide: true, env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
     });
     let out = '', err = '';

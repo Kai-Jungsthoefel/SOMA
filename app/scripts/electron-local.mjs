@@ -16,7 +16,7 @@ export function electronExe(appDir) {
   if (!fs.realpathSync.native(dist).startsWith('\\\\')) return direct; // lokale Platte
 
   const version = JSON.parse(fs.readFileSync(path.join(appDir, 'node_modules', 'electron', 'package.json'), 'utf8')).version;
-  const local = path.join(process.env.LOCALAPPDATA ?? os.tmpdir(), 'cadide-dev', `electron-${version}`);
+  const local = path.join(process.env.LOCALAPPDATA ?? os.tmpdir(), 'soma-dev', `electron-${version}`);
   const stamp = path.join(local, '.kopiert');
   if (!fs.existsSync(stamp)) {
     console.log(`Electron liegt auf einem Netzlaufwerk. Lokale Kopie nach ${local} (einmalig, rund 370 MB) ...`);

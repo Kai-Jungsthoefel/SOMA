@@ -10,8 +10,8 @@ const t = checker();
 const { check } = t;
 let app;
 
-// Dasselbe Python wie die App (paths.ts): CADIDE_PYTHON oder die Entwicklungsumgebung aus Phase 0
-const PY = process.env.CADIDE_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'cadide-phase0', 'venv-full', 'Scripts', 'python.exe');
+// Dasselbe Python wie die App (paths.ts): SOMA_PYTHON oder die Entwicklungsumgebung aus Phase 0
+const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'cadide-phase0', 'venv-full', 'Scripts', 'python.exe');
 const py = (code) => spawnSync(PY, ['-c', code], { encoding: 'utf8' });
 
 // Fremde Baugruppe wie von einem Hersteller: Platine mit Unterbaugruppe „Stecker“
@@ -26,7 +26,7 @@ asm.add(sub, name="Stecker")
 asm.export(${JSON.stringify(file)})
 `;
 const MODEL = `import cadquery as cq
-from cadide import add_part, import_assembly
+from soma import add_part, import_assembly
 
 add_part("Boden", cq.Workplane().box(60, 40, 3), group="Gehäuse")
 add_part("Deckel", cq.Workplane().box(60, 40, 2).translate((0, 0, 20)), group="Gehäuse")

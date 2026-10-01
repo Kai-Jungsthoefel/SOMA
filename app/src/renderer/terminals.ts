@@ -16,8 +16,8 @@ export class TerminalTabs {
   onStripClick: () => void = () => {};
 
   constructor(private tabBar: HTMLElement, private panes: HTMLElement, private anchor: HTMLElement, private strip: HTMLElement) {
-    window.cadide.term.onData((id, data) => this.tabs.get(id)?.term.write(data));
-    window.cadide.term.onExit((id, code) => {
+    window.soma.term.onData((id, data) => this.tabs.get(id)?.term.write(data));
+    window.soma.term.onExit((id, code) => {
       const t = this.tabs.get(id);
       if (!t) return;
       t.exited = true;
@@ -29,7 +29,7 @@ export class TerminalTabs {
   }
 
   async add(opts: { command?: string; title?: string } = {}): Promise<number> {
-    const id = await window.cadide.term.create({ command: opts.command });
+    const id = await window.soma.term.create({ command: opts.command });
     const term = new Terminal({
       fontFamily: '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace', fontSize: 13, lineHeight: 1.2, cursorBlink: true, scrollback: 5000,
       theme: { background: '#0f1114', foreground: '#c9ced4', cursor: '#e6e8eb', selectionBackground: 'rgba(242,154,56,0.30)', black: '#1b1e23', brightBlack: '#7f8994' },
@@ -40,8 +40,8 @@ export class TerminalTabs {
     pane.hidden = true;
     this.panes.appendChild(pane);
     term.open(pane);
-    term.onData((d) => window.cadide.term.write(id, d));
-    term.onResize(({ cols, rows }) => window.cadide.term.resize(id, cols, rows));
+    term.onData((d) => window.soma.term.write(id, d));
+    term.onResize(({ cols, rows }) => window.soma.term.resize(id, cols, rows));
 
     const agent = !!opts.command;
     const title = opts.title ?? (this.tabs.size ? `Terminal ${this.tabs.size + 1}` : 'Terminal');
@@ -73,7 +73,7 @@ export class TerminalTabs {
   close(id: number): void {
     const t = this.tabs.get(id);
     if (!t) return;
-    window.cadide.term.kill(id);
+    window.soma.term.kill(id);
     t.term.dispose(); t.pane.remove(); t.tab.remove();
     this.tabs.delete(id);
     if (this.active === id) {

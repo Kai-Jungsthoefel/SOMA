@@ -3,7 +3,7 @@ import path from 'node:path';
 import { readOnlyReason } from '../shared/editable';
 import type { FeedbackResult, FileNode, ImportResult, WriteResult } from '../shared/types';
 
-const HIDDEN = new Set(['.git', '.cadide', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
+const HIDDEN = new Set(['.git', '.soma', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
 const MAX_ENTRIES = 2000;
 const MAX_DEPTH = 5;
 const MAX_IMPORT_BYTES = 500 * 1024 * 1024;
@@ -36,7 +36,7 @@ export function importInputs(root: string, sources: string[]): ImportResult {
 }
 
 /**
- * Legt ein Bild der Markierung in .cadide/feedback/ ab (E16). Dort ist es nicht in Git (E11), wandert aber mit der ZIP.
+ * Legt ein Bild der Markierung in .soma/feedback/ ab (E16). Dort ist es nicht in Git (E11), wandert aber mit der ZIP.
  * Der Name trägt Datum und Uhrzeit, bei Gleichstand kommt „-2“ dazu. Vorhandenes wird nie überschrieben.
  */
 export function saveFeedbackImage(root: string, png: unknown, when = new Date()): FeedbackResult {
@@ -46,9 +46,9 @@ export function saveFeedbackImage(root: string, png: unknown, when = new Date())
   const two = (n: number) => String(n).padStart(2, '0');
   const stem = `markierung-${when.getFullYear()}${two(when.getMonth() + 1)}${two(when.getDate())}-${two(when.getHours())}${two(when.getMinutes())}`;
   try {
-    fs.mkdirSync(resolveInside(root, '.cadide/feedback'), { recursive: true });
+    fs.mkdirSync(resolveInside(root, '.soma/feedback'), { recursive: true });
     for (let i = 1; ; i++) {
-      const rel = `.cadide/feedback/${stem}${i > 1 ? `-${i}` : ''}.png`;
+      const rel = `.soma/feedback/${stem}${i > 1 ? `-${i}` : ''}.png`;
       try {
         // „wx“: entsteht die Datei zwischen Prüfung und Schreiben, schlägt das Schreiben fehl statt zu überschreiben
         fs.writeFileSync(resolveInside(root, rel), bytes, { flag: 'wx' });
@@ -76,7 +76,7 @@ export function writeProjectText(root: string, rel: string, text: string, base: 
     if (force && disk !== null && disk !== text) backup = backupText(backupDir, rel, disk);
     // Erst in eine Nebendatei, dann umbenennen: Ein Build liest so nie eine halb geschriebene Datei.
     // Hält ein anderes Programm die Datei offen (Windows), klappt das Umbenennen nicht, dann direkt schreiben.
-    const tmp = `${abs}.cadide-tmp`;
+    const tmp = `${abs}.soma-tmp`;
     try {
       fs.writeFileSync(tmp, text, 'utf8');
       fs.renameSync(tmp, abs);
@@ -113,7 +113,7 @@ export function resolveInside(root: string, rel: string): string {
   const outside = () => new Error(`Pfad liegt ausserhalb des Projekts: ${rel}`);
   if (!inside(abs, path.resolve(root))) throw outside();
   // Gibt es das Ziel noch nicht, zählt der nächste vorhandene Ordner darüber. Sonst könnte ein Verweis weiter oben
-  // (etwa .cadide als Verknüpfung nach außen) neue Dateien außerhalb des Projekts landen lassen.
+  // (etwa .soma als Verknüpfung nach außen) neue Dateien außerhalb des Projekts landen lassen.
   let probe = abs, rest = '';
   while (!exists(probe) && path.dirname(probe) !== probe) { rest = rest ? path.join(path.basename(probe), rest) : path.basename(probe); probe = path.dirname(probe); }
   const real = rest ? path.join(fs.realpathSync(probe), rest) : fs.realpathSync(probe);

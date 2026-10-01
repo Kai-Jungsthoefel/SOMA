@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { affectsBuild } from '../shared/editable';
 
 /** Ordner, die nie einen Build oder eine Neuanzeige der Dateiliste ausloesen (Ausgaben wuerden sich sonst selbst anstossen). */
-const IGNORED_TOP = new Set(['.git', '.cadide', 'output', 'exports', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
+const IGNORED_TOP = new Set(['.git', '.soma', 'output', 'exports', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
 
 const topSegment = (rel: string) => rel.split(/[\\/]/)[0] ?? '';
 const isIgnored = (rel: string) => IGNORED_TOP.has(topSegment(rel)) || rel.split(/[\\/]/).includes('__pycache__');

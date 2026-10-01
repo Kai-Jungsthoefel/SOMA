@@ -11,8 +11,8 @@ import { createProject, getLastProject, isProjectId } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
 // umgeleitet oder synchronisiert sein, das ist für Arbeitsordner und GPU-Cache ungeeignet. Tests leiten alles um.
-if (process.env.CADIDE_USER_DATA) app.setPath('userData', process.env.CADIDE_USER_DATA);
-else if (process.platform === 'win32' && process.env.LOCALAPPDATA) app.setPath('userData', path.join(process.env.LOCALAPPDATA, 'cadide'));
+if (process.env.SOMA_USER_DATA) app.setPath('userData', process.env.SOMA_USER_DATA);
+else if (process.platform === 'win32' && process.env.LOCALAPPDATA) app.setPath('userData', path.join(process.env.LOCALAPPDATA, 'soma'));
 
 let win: BrowserWindow | null = null;
 
@@ -81,11 +81,11 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('dialog:choose', (_e, o: { title?: unknown; message?: unknown; detail?: unknown; buttons?: unknown }) => {
     const buttons = Array.isArray(o?.buttons) ? o.buttons.slice(0, 4).map(String) : [];
     if (!buttons.length) return -1;
-    return choose(win, { title: String(o.title ?? 'CAD-IDE'), message: String(o.message ?? ''), detail: o.detail == null ? undefined : String(o.detail), buttons });
+    return choose(win, { title: String(o.title ?? 'SOMA'), message: String(o.message ?? ''), detail: o.detail == null ? undefined : String(o.detail), buttons });
   });
 
   // Nur im Testmodus: vorbereitete Antworten für Dialoge (siehe dialogs.ts)
-  if (process.env.CADIDE_TEST === '1') {
+  if (process.env.SOMA_TEST === '1') {
     ipcMain.handle('test:answers', (_e, a: unknown[]) => setTestAnswers(a));
     // Screenshot auch aus unsichtbaren Fenstern (CDP liefert dort kein Bild)
     ipcMain.handle('test:screenshot', async (e, file: string) => {
@@ -97,11 +97,11 @@ function registerIpc(ctl: ProjectController): void {
 }
 
 function onRendererGone(wc: WebContents, reason: string, exitCode: number): void {
-  console.error(`[cadide] Renderer-Prozess beendet: Grund=${reason} Code=${exitCode}`);
-  if (reason === 'launch-failed' && process.env.CADIDE_HIDDEN !== '1') {
+  console.error(`[soma] Renderer-Prozess beendet: Grund=${reason} Code=${exitCode}`);
+  if (reason === 'launch-failed' && process.env.SOMA_HIDDEN !== '1') {
     // Häufigste Ursache unter Windows: das Programm liegt auf einem Netzlaufwerk. Die sandboxed Prozesse laufen mit
     // eingeschränktem Token, verlieren dort den Zugriff und starten nicht. Ohne Meldung bliebe nur ein schwarzes Fenster.
-    dialog.showErrorBox('CAD-IDE kann die Oberfläche nicht starten',
+    dialog.showErrorBox('SOMA kann die Oberfläche nicht starten',
       `Der Anzeigeprozess ließ sich nicht starten (Code ${exitCode}).\n\nHäufige Ursache: Das Programm liegt auf einem Netzlaufwerk. ` +
       'Installiere oder starte es von einer lokalen Platte (z. B. C:).');
     app.quit();
@@ -130,12 +130,12 @@ function askEditor<T>(wc: WebContents, action: 'status' | 'save' | 'discard', fa
   });
 }
 
-/** Tests: CADIDE_HIDDEN=1 unsichtbar (zeichnet nicht neu), =offscreen angezeigt, aber weit außerhalb des Bildschirms und ohne Fokus. */
-const testWindowMode = process.env.CADIDE_HIDDEN;
+/** Tests: SOMA_HIDDEN=1 unsichtbar (zeichnet nicht neu), =offscreen angezeigt, aber weit außerhalb des Bildschirms und ohne Fokus. */
+const testWindowMode = process.env.SOMA_HIDDEN;
 
 function createWindow(): void {
   win = new BrowserWindow({
-    width: 1600, height: 950, title: 'CAD-IDE', backgroundColor: '#121417', show: testWindowMode !== '1' && testWindowMode !== 'offscreen',
+    width: 1600, height: 950, title: 'SOMA', backgroundColor: '#121417', show: testWindowMode !== '1' && testWindowMode !== 'offscreen',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
@@ -149,13 +149,13 @@ function createWindow(): void {
   registerIpc(ctl);
   // Stürzt der Anzeigeprozess ab, steht der Grund im Protokoll (sonst bliebe nur ein schwarzes Fenster).
   wc.on('render-process-gone', (_e, d) => onRendererGone(wc, d.reason, d.exitCode));
-  wc.on('unresponsive', () => console.error('[cadide] Renderer reagiert nicht'));
+  wc.on('unresponsive', () => console.error('[soma] Renderer reagiert nicht'));
   wc.on('console-message', (_e, level, message, line, source) => { if (level >= 2) console.error(`[renderer] ${message} (${source}:${line})`); });
   wc.once('did-finish-load', () => {
     // Zuletzt geöffnetes Projekt (ungespeicherter Arbeitsstand bleibt so nach einem Absturz erhalten), sonst ein neues.
     void (async () => {
       try { await ctl.open(getLastProject() ?? (await createProject()).id); }
-      catch (e) { console.error('[cadide] Projekt konnte nicht geöffnet werden:', e); }
+      catch (e) { console.error('[soma] Projekt konnte nicht geöffnet werden:', e); }
     })();
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));

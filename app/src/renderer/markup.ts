@@ -586,7 +586,7 @@ export class Markup {
     u.blank.setAttribute('aria-pressed', String(this.blankBg));
     u.canvas.style.cursor = this.tool === 'select' ? 'default' : this.tool === 'text' ? 'text' : 'crosshair';
     u.hint.replaceChildren(this.blankBg ? 'Leere Fläche. Das Bild landet in ' : `Bild des Viewers von ${fmtWhen(this.takenAt)}. Es landet in `,
-      el('code', { textContent: '.cadide/feedback/' }), ', der Pfad in der Eingabe des Agenten.');
+      el('code', { textContent: '.soma/feedback/' }), ', der Pfad in der Eingabe des Agenten.');
   }
 
   // ---- Prüfhilfen (nur für Tests) -------------------------------------------------------------------------------

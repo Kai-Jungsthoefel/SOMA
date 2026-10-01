@@ -28,7 +28,7 @@ export interface BuildStatus {
   stale?: boolean;
 }
 
-/** Einzelexport über `cadide export` (E34). `files` relativ zum Projekt. */
+/** Einzelexport über `soma export` (E34). `files` relativ zum Projekt. */
 export interface ExportResult { ok: boolean; files: string[]; error?: string }
 /** Dateien, die per Ziehen nach inputs/ kopiert wurden (E33). */
 export interface ImportResult { files: string[]; errors: string[] }
@@ -37,7 +37,7 @@ export interface ImportResult { files: string[]; errors: string[] }
  * `disk` ist ihr aktueller Inhalt (null: gelöscht). `backup`: Pfad der Sicherung der überschriebenen Fassung.
  */
 export interface WriteResult { ok: boolean; conflict?: boolean; disk?: string | null; backup?: string; error?: string }
-/** Gespeicherte Markierung (E16). `path` relativ zum Projekt, z. B. `.cadide/feedback/markierung-20260930-1405.png`. */
+/** Gespeicherte Markierung (E16). `path` relativ zum Projekt, z. B. `.soma/feedback/markierung-20260930-1405.png`. */
 export interface FeedbackResult { ok: boolean; path?: string; error?: string }
 
 export interface FileNode { name: string; path: string; dir: boolean; children?: FileNode[] }
@@ -107,7 +107,7 @@ export interface GitLog { commits: CommitInfo[]; problems: string[]; head: strin
 export interface PreviewResult { commit: CommitInfo | null; glb: ArrayBuffer; map: ModelMap; error?: string }
 export interface RestoreResult { cancelled: boolean; commit?: string | null; safety?: string | null; error?: string }
 
-export interface CadideApi {
+export interface SomaApi {
   testMode: boolean;
   project: {
     current(): Promise<ProjectInfo>;
@@ -131,7 +131,7 @@ export interface CadideApi {
     restore(hash: string): Promise<RestoreResult>;
     onChanged(cb: () => void): void;
   };
-  /** Nur im Testmodus (CADIDE_TEST=1) vorhanden. */
+  /** Nur im Testmodus (SOMA_TEST=1) vorhanden. */
   test?: { answers(a: unknown[]): Promise<void>; screenshot(file: string): Promise<{ width: number; height: number }> };
   build: {
     run(): Promise<void>;
@@ -149,7 +149,7 @@ export interface CadideApi {
     onChanged(cb: () => void): void;
     /** Kopiert gezogene Dateien nach inputs/. Vorhandenes wird nie überschrieben. */
     importFiles(files: File[]): Promise<ImportResult>;
-    /** Legt ein PNG der Markierung in .cadide/feedback/ ab. Vorhandenes wird nie überschrieben. */
+    /** Legt ein PNG der Markierung in .soma/feedback/ ab. Vorhandenes wird nie überschrieben. */
     saveFeedback(png: Uint8Array): Promise<FeedbackResult>;
     /**
      * Schreibt eine Datei aus dem Editor, nur wenn sie auf der Platte noch `base` entspricht (sonst Konflikt).
@@ -176,4 +176,4 @@ export interface CadideApi {
   dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };
 }
 
-declare global { interface Window { cadide: CadideApi } }
+declare global { interface Window { soma: SomaApi } }

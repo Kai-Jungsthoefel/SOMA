@@ -1,10 +1,10 @@
 """Starter model: a small box with a lid. The agent (or you) edits this file.
 
 Rules (see AGENTS.md): every part must be registered with add_part(), names must be unique,
-build with `cadide build`. Units are millimetres, Z is up.
+build with `soma build`. Units are millimetres, Z is up.
 """
 import cadquery as cq
-from cadide import add_part
+from soma import add_part
 
 # --- parameters -------------------------------------------------------------------------
 LENGTH = 60.0

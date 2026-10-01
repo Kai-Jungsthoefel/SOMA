@@ -6,13 +6,13 @@ import yazl from 'yazl';
 
 /** Marker, den die App beim Speichern in die ZIP legt. Damit erkennt sie beim Öffnen, ob der Arbeitsordner abweicht (E21). */
 export interface ZipInfo { savedAt: string; head: string | null; id: string; name: string }
-export const ZIP_INFO_PATH = '.cadide/zip-info.json';
+export const ZIP_INFO_PATH = '.soma/zip-info.json';
 
 /** Wird nie gepackt: Umgebungen und Caches (Umgebung wird aus requirements.txt neu gebaut, Cache neu erzeugt). */
 const SKIP_DIRS = new Set(['.venv', 'venv', 'env', '__pycache__', 'node_modules']);
-const SKIP_FILES = new Set(['.cadide/model.glb', '.cadide/model.map.json', '.cadide/build.json']);
+const SKIP_FILES = new Set(['.soma/model.glb', '.soma/model.map.json', '.soma/build.json']);
 /** Ganze Ordner, die nie gepackt werden (Pfad relativ zum Projekt): die Geometrie für das Messen entsteht beim Bauen neu. */
-const SKIP_PATHS = new Set(['.cadide/geometry']);
+const SKIP_PATHS = new Set(['.soma/geometry']);
 const MAX_UNPACKED = 2 * 1024 ** 3;
 
 function collect(root: string): string[] {

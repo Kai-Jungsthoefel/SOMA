@@ -2,10 +2,10 @@ import { app, dialog, type BrowserWindow } from 'electron';
 import path from 'node:path';
 
 /**
- * Alle Dialoge laufen hier durch. Im Testmodus (CADIDE_TEST=1) beantwortet eine vorbereitete Warteschlange sie,
+ * Alle Dialoge laufen hier durch. Im Testmodus (SOMA_TEST=1) beantwortet eine vorbereitete Warteschlange sie,
  * damit Tests nicht an nativen Fenstern hängen. Ist die Schlange leer, schlägt der Aufruf laut fehl.
  */
-const testMode = () => process.env.CADIDE_TEST === '1';
+const testMode = () => process.env.SOMA_TEST === '1';
 const answers: unknown[] = [];
 export const setTestAnswers = (a: unknown[]) => { answers.length = 0; answers.push(...a); };
 export const pendingTestAnswers = () => answers.length;
@@ -17,7 +17,7 @@ function nextAnswer<T>(what: string): T {
 
 export async function choosePath(win: BrowserWindow | null, kind: 'save' | 'open', defaultName: string): Promise<string | null> {
   if (testMode()) return nextAnswer<string | null>(`${kind}-Pfad`);
-  const filters = [{ name: 'CAD-IDE-Modell (ZIP)', extensions: ['zip'] }];
+  const filters = [{ name: 'SOMA-Modell (ZIP)', extensions: ['zip'] }];
   const defaultPath = path.join(app.getPath('documents'), defaultName);
   if (kind === 'save') {
     const r = win ? await dialog.showSaveDialog(win, { title: 'Modell speichern', defaultPath, filters }) : await dialog.showSaveDialog({ title: 'Modell speichern', defaultPath, filters });

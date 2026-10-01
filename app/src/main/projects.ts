@@ -2,7 +2,7 @@ import { shell, type BrowserWindow, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ExportResult, GitLog, MeasureEntity, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult, ProjectInfo, RestoreResult, SaveResult, SaveState } from '../shared/types';
-import { BuildManager, buildIsStale, newestSourceMtime, runCadide } from './build';
+import { BuildManager, buildIsStale, newestSourceMtime, runSoma } from './build';
 import { choose, choosePath } from './dialogs';
 import { GitRepo } from './git';
 import { MeasureService } from './measure';
@@ -126,13 +126,13 @@ export class ProjectController {
     else await shell.openPath(s.dir);
   }
 
-  /** Einzelexport über `cadide export` (E34). Der Export baut das Modell selbst, der Viewer bleibt davon unberührt. */
+  /** Einzelexport über `soma export` (E34). Der Export baut das Modell selbst, der Viewer bleibt davon unberührt. */
   async exportModel(format: string, part: string | null): Promise<ExportResult> {
     const s = this.need();
     if (!/^[a-z0-9]{2,5}$/.test(format)) return { ok: false, files: [], error: `Unbekanntes Format: ${format}` };
     // `--` vor dem Namen: Bauteilnamen dürfen mit einem Minus beginnen, ohne als Option zu gelten
     const args = ['export', '--format', format, '--project', s.dir, ...(part ? ['--', part] : ['--all'])];
-    const r = await runCadide(args, s.dir, 5 * 60 * 1000);
+    const r = await runSoma(args, s.dir, 5 * 60 * 1000);
     const files = [...r.out.matchAll(/^exportiert: (.+)$/gm)].map((m) => m[1].trim());
     if (r.ok) return { ok: true, files };
     const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
@@ -192,15 +192,15 @@ export class ProjectController {
    */
   async openZipFile(zipPath: string): Promise<OpenResult> {
     let texts: Record<string, string | null>;
-    try { texts = await readZipTexts(zipPath, ['.cadide/project.json', ZIP_INFO_PATH]); }
+    try { texts = await readZipTexts(zipPath, ['.soma/project.json', ZIP_INFO_PATH]); }
     catch (e) { return { cancelled: false, error: `Die ZIP lässt sich nicht lesen: ${e instanceof Error ? e.message : String(e)}` }; }
     let id: string;
     let info: ZipInfo | null = null;
     try {
-      id = (JSON.parse(texts['.cadide/project.json'] ?? '') as { id?: string }).id ?? '';
+      id = (JSON.parse(texts['.soma/project.json'] ?? '') as { id?: string }).id ?? '';
       if (texts[ZIP_INFO_PATH]) info = JSON.parse(texts[ZIP_INFO_PATH]!) as ZipInfo;
     } catch { id = ''; }
-    if (!isProjectId(id)) return { cancelled: false, error: 'Das ist keine CAD-IDE-Datei (.cadide/project.json fehlt oder ist ungültig).' };
+    if (!isProjectId(id)) return { cancelled: false, error: 'Das ist keine SOMA-Datei (.soma/project.json fehlt oder ist ungültig).' };
 
     const dir = projectDir(id);
     const remember = () => patchAppState(id, { zipPath, savedHead: info?.head ?? null, savedAt: Date.now() });
@@ -268,7 +268,7 @@ export class ProjectController {
       if (!fs.existsSync(path.join(dir, 'model.glb')) || !fs.existsSync(path.join(dir, 'geometry'))) {
         const step = path.join(dir, 'model.step');
         await s.git.exportFile(hash, 'output/model.step', step);
-        const r = await runCadide(['glb', step, '--out', dir], s.dir);
+        const r = await runSoma(['glb', step, '--out', dir], s.dir);
         if (!r.ok) throw new Error((r.err || r.out).trim().split('\n').pop() || 'Umwandlung fehlgeschlagen');
       }
       const glb = fs.readFileSync(path.join(dir, 'model.glb'));
@@ -290,7 +290,7 @@ export class ProjectController {
     const s = this.need();
     let folder: string;
     const hash = (source as { preview?: unknown } | null)?.preview;
-    if (source === 'live') folder = path.join(s.dir, '.cadide');
+    if (source === 'live') folder = path.join(s.dir, '.soma');
     else if (typeof hash === 'string' && /^[0-9a-f]{7,40}$/.test(hash)) folder = path.join(previewsDir(), s.id, hash);
     else return { ok: false, error: 'Unbekannte Quelle für die Messung.' };
     const r = req as { build?: unknown; a?: unknown; b?: unknown } | null;
@@ -336,12 +336,12 @@ export class ProjectController {
    * Eingaben im Editor (`editor.dirty`) aber nur, wenn sie gespeichert werden. „Nicht speichern“ legt sie als Sicherung ab.
    */
   async confirmClose(editor: { dirty: string[]; save(): Promise<boolean>; discard(): Promise<void> }): Promise<boolean> {
-    if (!this.session || process.env.CADIDE_TEST === '1') return true;
+    if (!this.session || process.env.SOMA_TEST === '1') return true;
     const st = await this.saveState();
     if (!st.unsaved && !editor.dirty.length) return true;
     const inEditor = editor.dirty.length ? `Im Editor noch nicht gespeichert: ${editor.dirty.join(', ')}. ` : '';
     const c = await choose(this.getWin(), {
-      title: 'CAD-IDE beenden',
+      title: 'SOMA beenden',
       message: 'Das Modell hat ungespeicherte Änderungen.',
       detail: `${inEditor}Der Arbeitsstand bleibt auf diesem Rechner erhalten und wird beim nächsten Start wieder geöffnet. Die ZIP-Datei wird nur beim Speichern aktualisiert.`,
       buttons: ['Speichern', 'Nicht speichern', 'Abbrechen'],

@@ -125,7 +125,7 @@ export class Viewer {
     const gltf = await new GLTFLoader().parseAsync(glb, '');
     const fresh = new Map<string, PartEntry>();
     gltf.scene.traverse((o) => {
-      const meta = (o.userData as { cadide?: PartMeta }).cadide;
+      const meta = (o.userData as { soma?: PartMeta }).soma;
       if (!meta) return;
       const meshes: THREE.Mesh[] = [];
       const lines: THREE.LineSegments[] = [];

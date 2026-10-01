@@ -27,7 +27,7 @@ try {
   const proj = await ev(() => window.__t.project());
   check('Projekt liegt unter <App-Daten>/workspaces/<uuid>', proj.dir.startsWith(path.join(ud, 'workspaces')) && /[0-9a-f-]{36}$/.test(proj.dir), proj.dir.slice(-45));
   check('Vorlagen-Dateien vorhanden (AGENTS.md, CLAUDE.md, NOTES.md, model.py …)',
-    ['AGENTS.md', 'CLAUDE.md', 'NOTES.md', 'model.py', '.gitignore', '.cadide/project.json', '.git/HEAD'].every((f) => fs.existsSync(path.join(proj.dir, f))));
+    ['AGENTS.md', 'CLAUDE.md', 'NOTES.md', 'model.py', '.gitignore', '.soma/project.json', '.git/HEAD'].every((f) => fs.existsSync(path.join(proj.dir, f))));
   check('Erster Build automatisch, 2 Bauteile in der Bauteilkarte', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
   check('Nach dem Build kein Fehlerhinweis', (await status()).viewerMsg === '', (await status()).text);
   const okStatus = await status();
@@ -62,13 +62,13 @@ try {
   await shot('3-dateien');
   await ev(() => window.__t.showPanel(null));
 
-  // 3) Terminal: echte Shell im Projektordner, cadide im PATH
+  // 3) Terminal: echte Shell im Projektordner, soma im PATH
   const tid = await ev(() => window.__t.terminals.activeId);
   check('Ein Terminal wurde automatisch geöffnet', await ev(() => window.__t.terminals.count) === 1);
-  await ev((id) => window.cadide.term.write(id, 'cadide --version\r'), tid);
-  const gotVersion = await waitFor('cadide --version im Terminal', (id) => /^cadide \d/m.test(window.__t.termText(id)), 20000, tid).catch(() => false);
-  check('Im Terminal läuft `cadide` (PATH der Basisumgebung)', !!gotVersion);
-  await ev((id) => window.cadide.term.write(id, 'Get-Location\r'), tid);
+  await ev((id) => window.soma.term.write(id, 'soma --version\r'), tid);
+  const gotVersion = await waitFor('soma --version im Terminal', (id) => /^soma \d/m.test(window.__t.termText(id)), 20000, tid).catch(() => false);
+  check('Im Terminal läuft `soma` (PATH der Basisumgebung)', !!gotVersion);
+  await ev((id) => window.soma.term.write(id, 'Get-Location\r'), tid);
   await waitFor('Get-Location', (id) => window.__t.termText(id).includes('workspaces'), 20000, tid).catch(() => {});
   check('Terminal startet im Projektordner', (await ev((id) => window.__t.termText(id), tid)).includes('workspaces'));
   // Übergabe an den Agenten: Text landet in der Eingabezeile, abgeschickt wird nicht (E11)
@@ -77,10 +77,10 @@ try {
   const afterInsert = await ev((id) => window.__t.termText(id), tid);
   check('„An Agent geben" fügt den Text in die Eingabezeile ein, ohne abzuschicken', afterInsert.includes('[Auswahl: Bauteil "Lid"') && !/Auswahl:.*\n.*(nicht erkannt|not recognized)/.test(afterInsert));
   check('Bestätigung „In die Eingabe von Terminal eingefügt"', (await ev(() => window.__t.toast())).text.includes('In die Eingabe von Terminal eingefügt'));
-  await ev((id) => window.cadide.term.write(id, '\x03'), tid); // Zeile verwerfen
+  await ev((id) => window.soma.term.write(id, '\x03'), tid); // Zeile verwerfen
 
-  // Markierung (E16): Viewer-Bild einfrieren, zeichnen, als PNG nach .cadide/feedback/, Pfad in die Eingabe
-  const dirtyBefore = (await ev(() => window.cadide.project.saveState())).dirtyFiles;
+  // Markierung (E16): Viewer-Bild einfrieren, zeichnen, als PNG nach .soma/feedback/, Pfad in die Eingabe
+  const dirtyBefore = (await ev(() => window.soma.project.saveState())).dirtyFiles;
   const lidPos = await ev((l) => { const v = window.__t.viewer, r = document.getElementById('viewer').getBoundingClientRect(), p = v.screenOf(l.id, l.face); return [p.x - r.left, p.y - r.top]; }, lidFace);
   await domClick('btn-mark');
   await waitFor('Zeichenfläche offen', () => window.__t.markup().active, 5000).catch(() => {});
@@ -173,19 +173,19 @@ try {
   const px = (await ev(() => window.__t.markup())).pixels;
   await domClick('btn-mark-send');
   await waitFor('Markierung gespeichert', () => !window.__t.markup().active, 10000).catch(() => {});
-  const fbDir = path.join(proj.dir, '.cadide', 'feedback');
+  const fbDir = path.join(proj.dir, '.soma', 'feedback');
   const fbFiles = fs.existsSync(fbDir) ? fs.readdirSync(fbDir) : [];
   const png = fbFiles.length === 1 ? fs.readFileSync(path.join(fbDir, fbFiles[0])) : Buffer.alloc(0);
   if (process.env.SMOKE_SHOTS && png.length) fs.writeFileSync(path.join(APP, 'test', 'shots', '7b-markierung-bild.png'), png); // so sieht der Agent es
-  check('„An Agent geben": PNG in .cadide/feedback/, so groß wie der Viewer in Gerätepixeln', /^markierung-\d{8}-\d{4}\.png$/.test(fbFiles[0] ?? '') && png.length > 2000
+  check('„An Agent geben": PNG in .soma/feedback/, so groß wie der Viewer in Gerätepixeln', /^markierung-\d{8}-\d{4}\.png$/.test(fbFiles[0] ?? '') && png.length > 2000
     && png.readUInt32BE(16) === px[0] && png.readUInt32BE(20) === px[1], `${fbFiles.join(',')} ${png.length > 24 ? `${png.readUInt32BE(16)}x${png.readUInt32BE(20)}` : ''}`);
-  await waitFor('Pfad im Terminal', (id) => window.__t.termText(id).includes('[Markierung: .cadide/feedback/markierung-'), 10000, tid).catch(() => {});
-  check('Pfad steht in der Eingabe des Terminals, nicht abgeschickt', (await ev((id) => window.__t.termText(id), tid)).includes(`[Markierung: .cadide/feedback/${fbFiles[0]}]`));
+  await waitFor('Pfad im Terminal', (id) => window.__t.termText(id).includes('[Markierung: .soma/feedback/markierung-'), 10000, tid).catch(() => {});
+  check('Pfad steht in der Eingabe des Terminals, nicht abgeschickt', (await ev((id) => window.__t.termText(id), tid)).includes(`[Markierung: .soma/feedback/${fbFiles[0]}]`));
   const tst = await ev(() => window.__t.toast());
-  check('Meldung nennt Datei und Ziel, Bauteilkarte ist zurück', tst.text.includes(`Markierung gespeichert: .cadide/feedback/${fbFiles[0]}`) && tst.text.includes('In die Eingabe von Terminal eingefügt')
+  check('Meldung nennt Datei und Ziel, Bauteilkarte ist zurück', tst.text.includes(`Markierung gespeichert: .soma/feedback/${fbFiles[0]}`) && tst.text.includes('In die Eingabe von Terminal eingefügt')
     && await ev(() => getComputedStyle(document.getElementById('parts')).display !== 'none'), tst.text.replace(/\s+/g, ' ').slice(0, 70));
-  await ev((id) => window.cadide.term.write(id, '\x03'), tid);
-  check('Markierung zählt nicht als ungespeicherte Änderung (nicht in Git, E11)', (await ev(() => window.cadide.project.saveState())).dirtyFiles === dirtyBefore);
+  await ev((id) => window.soma.term.write(id, '\x03'), tid);
+  check('Markierung zählt nicht als ungespeicherte Änderung (nicht in Git, E11)', (await ev(() => window.soma.project.saveState())).dirtyFiles === dirtyBefore);
   await domClick('btn-ins-mark');
   await waitFor('Zeichenfläche über die Übergabeleiste', () => window.__t.markup().active, 5000).catch(() => {});
   const viaHandoff = await ev(() => window.__t.markup().active);
@@ -232,8 +232,8 @@ try {
   await waitFor('Auto an baut nach', () => window.__t.partCount() === 2 && window.__t.status().state === 'ok', 60000).catch(() => {});
   check('Auto-Build wieder an: veralteter Stand wird gleich gebaut', await ev(() => window.__t.partCount()) === 2);
 
-  // Export über das Menü (cadide export): jedes Bauteil eine Datei in exports/
-  const exp = await ev(() => window.cadide.build.export('stl', null));
+  // Export über das Menü (soma export): jedes Bauteil eine Datei in exports/
+  const exp = await ev(() => window.soma.build.export('stl', null));
   check('Export STL: alle Bauteile nach exports/', exp.ok && ['exports/Body.stl', 'exports/Lid.stl'].every((f) => exp.files.includes(f) && fs.existsSync(path.join(proj.dir, f))), exp.error ?? exp.files.join(','));
 
   // 7b) Ansicht: Würfel (Seite, Ecke, Ziehen), Drehpunkt per Doppelklick, Zoom zur Maus, Ansichten im Menü

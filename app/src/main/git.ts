@@ -11,17 +11,17 @@ export interface GitStatus { dirty: boolean; changed: number; head: string | nul
  * Markiert Commits der App, damit die Verlaufsleiste sie von Commits des Agenten unterscheiden kann. Der Autor taugt dafür
  * nicht: Agent und App committen mit derselben Git-Identität. Ältere Projekte ohne Trailer erkennt die Leiste am Betreff.
  */
-const APP_TRAILER = ['--trailer', 'Erstellt-von: CAD-IDE'];
+const APP_TRAILER = ['--trailer', 'Erstellt-von: SOMA'];
 const APP_SUBJECT = /^(Neues Modell angelegt|Automatischer Snapshot beim Speichern|Sicherung vor Wiederherstellung|Stand wiederhergestellt: )/;
 
 /** Gilt für jeden Aufruf: UTF-8-Pfade lesbar, keine Zeilenenden-Umwandlung (ZIPs wandern zwischen Systemen). */
 const COMMON = ['-c', 'core.quotepath=false', '-c', 'core.autocrlf=false'];
 /**
  * `output/` zählt nicht als Änderung: STEP-Dateien sind nicht byte-stabil (Zeitstempel, teils Reihenfolge).
- * `.cadide/geometry/` (Geometrie für das Messen) ist ein Zwischenergebnis. Ältere Projekte haben es noch nicht in der
+ * `.soma/geometry/` (Geometrie für das Messen) ist ein Zwischenergebnis. Ältere Projekte haben es noch nicht in der
  * .gitignore, deshalb klammert die App es selbst aus, beim Status und beim Hinzufügen (siehe addAll).
  */
-const NOT_OUTPUT = ['--', '.', ':(exclude)output', ':(exclude).cadide/geometry'];
+const NOT_OUTPUT = ['--', '.', ':(exclude)output', ':(exclude).soma/geometry'];
 const HASH = /^[0-9a-f]{7,40}$/;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -52,12 +52,12 @@ export class GitRepo {
   }
 
   /**
-   * Alles vormerken außer `.cadide/geometry/`. Ein Ausschluss im Pfad (`:(exclude)…`) ginge nicht: Steht der Ordner in
+   * Alles vormerken außer `.soma/geometry/`. Ein Ausschluss im Pfad (`:(exclude)…`) ginge nicht: Steht der Ordner in
    * der .gitignore (neue Projekte), bricht `git add` dann mit Fehler ab. Deshalb danach aus dem Index nehmen, was dort liegt.
    */
   private async addAll(): Promise<void> {
     await this.mustRun(['add', '-A'], true);
-    await this.mustRun(['rm', '-r', '--cached', '--ignore-unmatch', '-q', '--', '.cadide/geometry'], true);
+    await this.mustRun(['rm', '-r', '--cached', '--ignore-unmatch', '-q', '--', '.soma/geometry'], true);
   }
 
   private async mustRun(args: string[], write = false): Promise<string> {
@@ -85,8 +85,8 @@ export class GitRepo {
       // Ohne eingerichtete Identität würden auch die Commits des Agenten scheitern.
       const name = await this.run(['config', 'user.name']);
       const email = await this.run(['config', 'user.email']);
-      if (!name.out.trim()) await this.mustRun(['config', '--local', 'user.name', 'CAD-IDE'], true);
-      if (!email.out.trim()) await this.mustRun(['config', '--local', 'user.email', 'cadide@localhost'], true);
+      if (!name.out.trim()) await this.mustRun(['config', '--local', 'user.name', 'SOMA'], true);
+      if (!email.out.trim()) await this.mustRun(['config', '--local', 'user.email', 'soma@localhost'], true);
       await this.addAll();
       await this.mustRun(['commit', '--allow-empty', '--no-verify', '-m', message, ...APP_TRAILER], true);
       return (await this.mustRun(['rev-parse', 'HEAD'])).trim();
@@ -121,7 +121,7 @@ export class GitRepo {
     if (!r.ok) return [];
     return r.out.split('\x1e').map((e) => e.trim()).filter(Boolean).map((e) => {
       const [hash, short, author, date, subject, by = ''] = e.split('\x1f');
-      return { hash, short, author, date, subject, byApp: by.includes('CAD-IDE') || APP_SUBJECT.test(subject) };
+      return { hash, short, author, date, subject, byApp: by.includes('SOMA') || APP_SUBJECT.test(subject) };
     }).reverse();
   }
 

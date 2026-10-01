@@ -199,7 +199,7 @@ try {
   check('Reiter schließen, „Verwerfen": Datei unverändert, Eingabe in der Sicherung', fs.readFileSync(model2, 'utf8').includes('LENGTH = 60.0') && back2.some((b) => b.includes('LENGTH = 65.0')));
 
   // 14) Späte Schreibanfrage für ein schon gewechseltes Modell: nicht ins neue schreiben, sondern sichern
-  const late = await ev((id) => window.cadide.fs.writeText(id, 'model.py', 'X = 1\n', null, true), proj.id);
+  const late = await ev((id) => window.soma.fs.writeText(id, 'model.py', 'X = 1\n', null, true), proj.id);
   check('Späte Eingabe für das alte Modell: nicht ins neue geschrieben, sondern gesichert', !late.ok && /Sicherung/.test(late.error ?? '') && fs.readFileSync(model2, 'utf8').includes('LENGTH = 60.0')
     && backups().includes('X = 1\n'), (late.error ?? '').slice(0, 60));
 

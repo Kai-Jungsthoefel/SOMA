@@ -12,7 +12,7 @@ import { VersionsBar } from './versions';
 import { PickResult, Viewer, ViewName } from './viewer';
 
 hydrateIcons();
-const api = window.cadide;
+const api = window.soma;
 
 const viewer = new Viewer($('viewer'));
 viewer.attachCube($('cube-view'));
@@ -374,7 +374,7 @@ async function loadModel(): Promise<void> {
   const seq = ++loadSeq;
   const msg = $('viewer-msg');
   try {
-    const [mapText, glb] = await Promise.all([api.fs.readText('.cadide/model.map.json'), api.fs.readBinary('.cadide/model.glb')]);
+    const [mapText, glb] = await Promise.all([api.fs.readText('.soma/model.map.json'), api.fs.readBinary('.soma/model.glb')]);
     if (seq !== loadSeq) return; // neuerer Build ist schon unterwegs
     map = JSON.parse(mapText) as ModelMap;
     textCache.clear();
@@ -441,7 +441,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   void renderSelection();
   partsCard.message('Modell wird gebaut …');
   $('doc-name').textContent = p.name;
-  document.title = `CAD-IDE – ${p.name}`;
+  document.title = `SOMA – ${p.name}`;
   $<HTMLInputElement>('chk-auto').checked = p.autoBuild;
   renderAuto();
   showProblems(p.problems);
@@ -483,7 +483,7 @@ function renderSaveState(st: SaveState): void {
   b.replaceChildren(dot, text);
   b.title = st.zipPath ? `ZIP: ${st.zipPath}` : 'Noch nicht als ZIP gespeichert. Strg+S speichert.';
   versions.setSaved(st.zipPath ? st.savedHead : null);
-  document.title = `CAD-IDE – ${project?.name ?? ''}${unsaved ? ' ●' : ''}`;
+  document.title = `SOMA – ${project?.name ?? ''}${unsaved ? ' ●' : ''}`;
 }
 
 async function refreshSaveState(): Promise<void> {
@@ -701,7 +701,7 @@ function setAgentCollapsed(on: boolean): void {
   $('agent-strip').hidden = !on;
   $('split-right').hidden = on;
   if (!on) terminals.refit();
-  store.set('cadide.agentCollapsed', on ? '1' : '0');
+  store.set('soma.agentCollapsed', on ? '1' : '0');
 }
 $('btn-agent-collapse').addEventListener('click', () => setAgentCollapsed(true));
 $('btn-agent-expand').addEventListener('click', () => setAgentCollapsed(false));
@@ -748,7 +748,7 @@ async function showStart(on: boolean): Promise<void> {
   if (!on) return;
   menus.close();
   $('btn-start-close').hidden = !project;
-  $('start-note').hidden = store.get('cadide.noteSeen') === '1';
+  $('start-note').hidden = store.get('soma.noteSeen') === '1';
   let list: { id: string; name: string; modified: number }[] = [];
   try { list = await api.project.list(); } catch { /* ohne Liste */ }
   list.sort((a, b) => b.modified - a.modified);
@@ -770,7 +770,7 @@ async function showStart(on: boolean): Promise<void> {
 $('btn-start-close').addEventListener('click', () => showStart(false));
 $('start-new').addEventListener('click', () => { void doNew(); showStart(false); });
 $('start-open').addEventListener('click', () => { void doOpen().then((ok) => { if (ok) showStart(false); }); });
-$('btn-note-ok').addEventListener('click', () => { store.set('cadide.noteSeen', '1'); $('start-note').hidden = true; });
+$('btn-note-ok').addEventListener('click', () => { store.set('soma.noteSeen', '1'); $('start-note').hidden = true; });
 
 // ---- Ereignisse vom Hauptprozess --------------------------------------------------------------------------------
 
@@ -793,9 +793,9 @@ api.versions.onChanged(() => void versions.refresh());
 api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (der Hauptprozess öffnet es beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
-if (store.get('cadide.agentCollapsed') === '1') setAgentCollapsed(true);
+if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
 // Beim allerersten Start die Startseite zeigen (mit dem Hinweis auf die Rechte des Agenten). Tests überspringen das.
-if (!api.testMode && store.get('cadide.startSeen') !== '1') { store.set('cadide.startSeen', '1'); void showStart(true); }
+if (!api.testMode && store.get('soma.startSeen') !== '1') { store.set('soma.startSeen', '1'); void showStart(true); }
 
 // Prüfschnittstelle, nur im Testmodus
 if (api.testMode) {

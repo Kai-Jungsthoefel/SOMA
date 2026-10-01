@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { CadideApi } from '../shared/types';
+import type { SomaApi } from '../shared/types';
 
 /** Schmale, feste Schnittstelle zwischen Renderer und Hauptprozess. Der Renderer hat keinen Node-Zugriff. */
-const api: CadideApi = {
-  testMode: process.env.CADIDE_TEST === '1',
+const api: SomaApi = {
+  testMode: process.env.SOMA_TEST === '1',
   project: {
     current: () => ipcRenderer.invoke('project:current'),
     create: () => ipcRenderer.invoke('project:create'),
@@ -58,9 +58,9 @@ const api: CadideApi = {
   measure: { query: (source, req) => ipcRenderer.invoke('measure:query', source, req) },
   dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
-  test: process.env.CADIDE_TEST === '1'
+  test: process.env.SOMA_TEST === '1'
     ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f) }
     : undefined,
 };
 
-contextBridge.exposeInMainWorld('cadide', api);
+contextBridge.exposeInMainWorld('soma', api);

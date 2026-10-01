@@ -22,7 +22,7 @@ interface Hooks {
   beforeRestore(): Promise<boolean>;
 }
 
-const who = (c: CommitInfo) => (c.byApp ? 'CAD-IDE' : c.author);
+const who = (c: CommitInfo) => (c.byApp ? 'SOMA' : c.author);
 
 /**
  * Verlaufsleiste unter dem Viewer (E7, E35): jeder Commit ein Punkt, ganz rechts „Jetzt“ (der Arbeitsstand).
@@ -67,7 +67,7 @@ export class VersionsBar {
     // veralteter Stand stehen, und weil sich danach nichts mehr ändert, käme auch keine neue Abfrage.
     const seq = ++this.logSeq;
     let log: GitLog;
-    try { log = await window.cadide.versions.log(); } catch { return; }
+    try { log = await window.soma.versions.log(); } catch { return; }
     if (seq !== this.logSeq) return;
     this.log = log;
     // Existiert der angezeigte Stand nicht mehr (Verlauf umgebaut), zurück zum Arbeitsstand
@@ -94,7 +94,7 @@ export class VersionsBar {
     }
     const commit = this.log.commits[i];
     this.ui.info.textContent = 'Lade Vorschau …';
-    const res = await window.cadide.versions.preview(commit.hash);
+    const res = await window.soma.versions.preview(commit.hash);
     if (seq !== this.seq) return; // inzwischen etwas anderes gewählt
     if (res.error) {
       this.hooks.toast(res.error, 'error');
@@ -109,7 +109,7 @@ export class VersionsBar {
   private async restore(): Promise<void> {
     if (!this.previewHash) return;
     if (!(await this.hooks.beforeRestore())) return;
-    const r = await window.cadide.versions.restore(this.previewHash);
+    const r = await window.soma.versions.restore(this.previewHash);
     if (r.cancelled) return;
     if (r.error) { this.hooks.toast(r.error, 'error'); return; }
     this.hooks.toast(r.commit ? 'Stand wiederhergestellt und als neuer Stand im Verlauf abgelegt.' : 'Dieser Stand war schon der aktuelle.', 'ok');

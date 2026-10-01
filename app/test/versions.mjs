@@ -11,7 +11,7 @@ import { checker, cleanup, sleep, startApp } from './harness.mjs';
 
 const t = checker();
 const { check } = t;
-const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cadide-vt-'));
+const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-vt-'));
 let app;
 
 const listZip = (p) => new Promise((resolve, reject) => yauzl.open(p, { lazyEntries: true }, (e, z) => {
@@ -32,7 +32,7 @@ try {
   const g = async (...args) => (await exec(args, dir)).stdout.trim();
   const modelPy = path.join(dir, 'model.py');
   const term = () => ev(() => window.__t.terminals.activeId);
-  const type = async (cmd) => { const id = await term(); await ev(([i, c]) => window.cadide.term.write(i, c + '\r'), [id, cmd]); };
+  const type = async (cmd) => { const id = await term(); await ev(([i, c]) => window.soma.term.write(i, c + '\r'), [id, cmd]); };
   const termText = async () => ev((i) => window.__t.termText(i), await term());
   const zipPath = path.join(workDir, 'Testmodell.zip');
   const versions = () => ev(() => window.__t.versions());
@@ -61,7 +61,7 @@ try {
   check('Commit des Agenten erscheint in der Verlaufsleiste', (await versions()).subjects.includes('Laenge auf 80'));
   const kinds = (await versions()).byApp;
   check('Leiste unterscheidet App-Stand (Start) und Agenten-Stand', kinds[0] === true && kinds[1] === false, JSON.stringify(kinds));
-  check('App-Commits tragen den Trailer „Erstellt-von: CAD-IDE"', (await g('log', '--format=%(trailers:key=Erstellt-von,valueonly)', 'HEAD~1')).includes('CAD-IDE'));
+  check('App-Commits tragen den Trailer „Erstellt-von: SOMA"', (await g('log', '--format=%(trailers:key=Erstellt-von,valueonly)', 'HEAD~1')).includes('SOMA'));
   check('Commit enthält die STEP-Datei des gebauten Standes', (await g('show', '--stat', '--format=', 'HEAD')).includes('output/model.step'));
 
   // ---- 3) Speichern: Snapshot + ZIP ----
@@ -73,7 +73,7 @@ try {
   await waitFor('gespeichert', () => window.__t.saveState() && !window.__t.saveState().unsaved && window.__t.saveState().zipPath, 60000);
   check('ZIP wurde geschrieben', fs.existsSync(zipPath), `${Math.round(fs.statSync(zipPath).size / 1024)} KB`);
   const names = await listZip(zipPath);
-  check('ZIP enthält Modell, .git, Projektdaten und Marker', ['model.py', '.git/HEAD', '.cadide/project.json', '.cadide/zip-info.json', 'AGENTS.md'].every((n) => names.includes(n)));
+  check('ZIP enthält Modell, .git, Projektdaten und Marker', ['model.py', '.git/HEAD', '.soma/project.json', '.soma/zip-info.json', 'AGENTS.md'].every((n) => names.includes(n)));
   check('ZIP enthält keine Caches (GLB, Mapping, build.json, __pycache__)', !names.some((n) => /model\.glb|model\.map\.json|build\.json|__pycache__/.test(n)));
   await waitFor('Meldung und Name', () => window.__t.toast().text.startsWith('Gespeichert') && window.__t.project().name === 'Testmodell', 20000);
   check('Auto-Snapshot beim Speichern hat die Notiz gesichert', (await g('log', '-1', '--format=%s')) === 'Automatischer Snapshot beim Speichern');
@@ -110,10 +110,10 @@ try {
   await waitFor('Zeichenfläche', () => window.__t.markup().active, 5000).catch(() => {});
   await domClick('btn-mark-send');
   const firstShort = await g('rev-parse', '--short', first);
-  await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markierung: .cadide/feedback/'), 10000, await term()).catch(() => {});
+  await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markierung: .soma/feedback/'), 10000, await term()).catch(() => {});
   check('Markierung in der Vorschau nennt den alten Stand', (await termText()).includes(`zeigt den älteren Stand ${firstShort} "Neues Modell angelegt"]`), (await termText()).match(/\[Markierung:[^\]]*\]/)?.[0]?.slice(0, 90) ?? '');
   check('Nach der Markierung läuft die Vorschau weiter', !!(await versions()).previewing && await ev(() => document.getElementById('viewer').classList.contains('preview')));
-  await ev((i) => window.cadide.term.write(i, '\x03'), await term()); // Zeile verwerfen
+  await ev((i) => window.soma.term.write(i, '\x03'), await term()); // Zeile verwerfen
 
   // ---- 5) Wiederherstellen als neuer Commit ----
   await app.answers([0]);
@@ -129,8 +129,8 @@ try {
   // ---- 6) Störfall: .git verschwindet (Agent hat es gelöscht/verschoben) ----
   await app.domClick('btn-save');
   await waitFor('gespeichert nach Restore', () => !window.__t.saveState().unsaved, 60000);
-  check('ZIP enthält die Markierung aus .cadide/feedback/ (in Git ist sie nicht)', (await listZip(zipPath)).some((n) => /^\.cadide\/feedback\/markierung-\d{8}-\d{4}\.png$/.test(n))
-    && (await g('ls-files', '.cadide/feedback')) === '');
+  check('ZIP enthält die Markierung aus .soma/feedback/ (in Git ist sie nicht)', (await listZip(zipPath)).some((n) => /^\.soma\/feedback\/markierung-\d{8}-\d{4}\.png$/.test(n))
+    && (await g('ls-files', '.soma/feedback')) === '');
   fs.renameSync(path.join(dir, '.git'), path.join(dir, '.git_weg'));
   await waitFor('Problem gemeldet', () => window.__t.versions().problems.some((p) => p.includes('Kein Git-Verlauf')), 20000);
   check('Ohne .git: Verlauf meldet das Problem verständlich', (await versions()).problems[0].includes('Kein Git-Verlauf'), (await versions()).problems[0].slice(0, 50));
@@ -177,7 +177,7 @@ try {
   // D) böse ZIP (Zip-Slip)
   const evil = path.join(workDir, 'boese.zip');
   const z = new yazl.ZipFile();
-  z.addBuffer(Buffer.from(JSON.stringify({ id: randomUUID() })), '.cadide/project.json');
+  z.addBuffer(Buffer.from(JSON.stringify({ id: randomUUID() })), '.soma/project.json');
   z.addBuffer(Buffer.from('böse'), 'xx/evil.txt');
   z.end();
   const chunks = [];

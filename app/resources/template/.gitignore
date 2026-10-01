@@ -6,9 +6,9 @@ __pycache__/
 *.pyc
 
 # Viewer cache and app-internal files (regenerated)
-.cadide/model.glb
-.cadide/model.map.json
-.cadide/build.json
-.cadide/zip-info.json
-.cadide/feedback/
-.cadide/geometry/
+.soma/model.glb
+.soma/model.map.json
+.soma/build.json
+.soma/zip-info.json
+.soma/feedback/
+.soma/geometry/

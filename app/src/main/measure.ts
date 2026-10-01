@@ -8,7 +8,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 interface Pending { resolve: (r: MeasureResponse) => void; timer: NodeJS.Timeout }
 
 /**
- * Langlebiger Python-Dienst pro Projekt für exakte Messungen (E24): `python -m cadide serve`, JSON-Zeilen über
+ * Langlebiger Python-Dienst pro Projekt für exakte Messungen (E24): `python -m soma serve`, JSON-Zeilen über
  * stdin/stdout. Er startet erst bei der ersten Messung (cadquery zu laden kostet Sekunden) und bleibt dann offen.
  * Stürzt er ab, gilt die laufende Anfrage als fehlgeschlagen, die nächste startet ihn neu. Fehler sind Ergebnisse,
  * keine Ausnahmen: Die Oberfläche zeigt sie an.
@@ -45,7 +45,7 @@ export class MeasureService {
   private start(): Promise<void> {
     if (this.proc && this.ready) return this.ready;
     this.buf = '';
-    const child = spawn(pythonExe(), ['-m', 'cadide', 'serve'], {
+    const child = spawn(pythonExe(), ['-m', 'soma', 'serve'], {
       cwd: this.cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
     });

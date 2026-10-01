@@ -1,8 +1,8 @@
 {
-  "name": "cadide-app",
+  "name": "soma-app",
   "version": "0.1.0",
   "private": true,
-  "description": "CAD-IDE (Arbeitsname): Desktop-App fuer 3D-Modelle mit KI-Agenten",
+  "description": "SOMA (Solid Object Modeling with Agents): Desktop-App fuer 3D-Modelle mit KI-Agenten",
   "main": "dist/main/main.js",
   "scripts": {
     "typecheck": "tsc --noEmit",

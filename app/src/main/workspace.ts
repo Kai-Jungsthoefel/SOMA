@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ProjectListEntry } from '../shared/types';
-import { runCadide } from './build';
+import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, projectStateDir, templateDir, workspacesDir } from './paths';
 import { extractZip } from './zip';
@@ -39,7 +39,7 @@ export function projectDir(id: string): string {
 }
 
 const stateFile = (id: string) => path.join(projectStateDir(), `${id}.json`);
-export const readProjectJson = (id: string) => readJson<ProjectJson>(path.join(projectDir(id), '.cadide', 'project.json'));
+export const readProjectJson = (id: string) => readJson<ProjectJson>(path.join(projectDir(id), '.soma', 'project.json'));
 
 /** Neues Projekt: UUID-Ordner in den App-Daten (E21), Vorlage kopieren, Zustand doppelt ablegen (E27), Git-Verlauf anlegen (E7). */
 export async function createProject(name = 'Neues Modell'): Promise<{ id: string; dir: string }> {
@@ -48,16 +48,16 @@ export async function createProject(name = 'Neues Modell'): Promise<{ id: string
   fs.mkdirSync(dir, { recursive: true });
   fs.cpSync(templateDir(), dir, { recursive: true });
   const pj: ProjectJson = { id, name, api_version: API_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString() };
-  writeJson(path.join(dir, '.cadide', 'project.json'), pj);
+  writeJson(path.join(dir, '.soma', 'project.json'), pj);
   writeJson(stateFile(id), { ...pj, app: {} } satisfies ProjectState);
   // Einmal bauen, bevor der Startcommit entsteht: So enthält auch der erste Stand eine output/model.step
   // und lässt sich im Verlauf als Vorschau öffnen. Scheitert der Build, geht das Anlegen trotzdem weiter.
-  await runCadide(['build', '--project', dir], dir, 90000);
+  await runSoma(['build', '--project', dir], dir, 90000);
   try {
     await new GitRepo(dir).init('Neues Modell angelegt');
   } catch (e) {
     // Ohne Git bleibt das Projekt benutzbar. Der Verlauf meldet den Grund (Projekt-Check), statt das Anlegen scheitern zu lassen.
-    console.error('[cadide] Git-Verlauf konnte nicht angelegt werden:', e);
+    console.error('[soma] Git-Verlauf konnte nicht angelegt werden:', e);
   }
   setLastProject(id);
   return { id, dir };
@@ -76,7 +76,7 @@ export function patchAppState(id: string, patch: AppState): void {
 
 /** Benennt das Projekt um (project.json und App-Kopie). Die Änderung landet beim nächsten Snapshot im Verlauf. */
 export function renameProject(id: string, name: string): void {
-  const file = path.join(projectDir(id), '.cadide', 'project.json');
+  const file = path.join(projectDir(id), '.soma', 'project.json');
   const pj = readJson<ProjectJson>(file);
   if (!pj || pj.name === name) return;
   writeJson(file, { ...pj, name });
@@ -89,14 +89,14 @@ export function inspectProject(id: string): { name: string; problems: string[] }
   const dir = projectDir(id);
   const problems: string[] = [];
   if (!fs.existsSync(dir)) return { name: id, problems: ['Der Arbeitsordner existiert nicht.'] };
-  const pj = readJson<ProjectJson>(path.join(dir, '.cadide', 'project.json'));
+  const pj = readJson<ProjectJson>(path.join(dir, '.soma', 'project.json'));
   const backup = readJson<ProjectState>(stateFile(id));
   if (!pj) {
     problems.push(backup
-      ? '.cadide/project.json fehlt oder ist unlesbar. Eine Kopie liegt in den App-Daten (nicht automatisch wiederhergestellt).'
-      : '.cadide/project.json fehlt oder ist unlesbar, und es gibt keine Kopie.');
+      ? '.soma/project.json fehlt oder ist unlesbar. Eine Kopie liegt in den App-Daten (nicht automatisch wiederhergestellt).'
+      : '.soma/project.json fehlt oder ist unlesbar, und es gibt keine Kopie.');
   } else if (pj.id !== id) {
-    problems.push('Die ID in .cadide/project.json passt nicht zum Arbeitsordner.');
+    problems.push('Die ID in .soma/project.json passt nicht zum Arbeitsordner.');
   } else if (pj.api_version > API_VERSION) {
     problems.push(`Das Projekt nutzt api_version ${pj.api_version}, diese App kennt nur ${API_VERSION}.`);
   }
@@ -115,7 +115,7 @@ export function listProjects(): ProjectListEntry[] {
   for (const id of fs.readdirSync(root)) {
     if (!isProjectId(id)) continue;
     const dir = path.join(root, id);
-    const pj = readJson<ProjectJson>(path.join(dir, '.cadide', 'project.json'));
+    const pj = readJson<ProjectJson>(path.join(dir, '.soma', 'project.json'));
     out.push({ id, name: pj?.name ?? id.slice(0, 8), modified: fs.statSync(dir).mtimeMs });
   }
   return out.sort((a, b) => b.modified - a.modified);
@@ -159,7 +159,7 @@ export async function extractProject(zipPath: string, id: string): Promise<strin
   try {
     await extractZip(zipPath, tmp);
     // Der Marker ist nur fürs Öffnen da. Bliebe er liegen, wäre er für Git eine unversionierte Datei ("ungespeichert").
-    fs.rmSync(path.join(tmp, '.cadide', 'zip-info.json'), { force: true });
+    fs.rmSync(path.join(tmp, '.soma', 'zip-info.json'), { force: true });
     fs.renameSync(tmp, dst);
   } catch (e) {
     fs.rmSync(tmp, { recursive: true, force: true });

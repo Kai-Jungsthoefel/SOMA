@@ -17,9 +17,9 @@ export async function startApp({ port = 9333, userData, watchdogMs = 6 * 60 * 10
   // SMOKE_VISIBLE=1 sichtbar, =offscreen angezeigt außerhalb des Bildschirms (frische Screenshots, kein Fokusklau), sonst unsichtbar
   const mode = process.env.SMOKE_VISIBLE;
   const visible = mode === '1';
-  const ud = userData ?? fs.mkdtempSync(path.join(os.tmpdir(), `cadide-${name}-`));
+  const ud = userData ?? fs.mkdtempSync(path.join(os.tmpdir(), `soma-${name}-`));
   const child = spawn(electronExe(APP), ['.', `--remote-debugging-port=${port}`], {
-    cwd: APP, env: { ...process.env, CADIDE_USER_DATA: ud, CADIDE_TEST: '1', CADIDE_HIDDEN: visible ? '0' : mode === 'offscreen' ? 'offscreen' : '1' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: APP, env: { ...process.env, SOMA_USER_DATA: ud, SOMA_TEST: '1', SOMA_HIDDEN: visible ? '0' : mode === 'offscreen' ? 'offscreen' : '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
   child.stdout.on('data', (d) => { log += d; });
@@ -48,9 +48,9 @@ export async function startApp({ port = 9333, userData, watchdogMs = 6 * 60 * 10
     },
     domClick: (id) => ev((i) => document.getElementById(i).click(), id),
     /** Antworten für die nächsten nativen Dialoge (Pfade, Knopf-Indizes). */
-    answers: (list) => ev((a) => window.cadide.test.answers(a), list),
+    answers: (list) => ev((a) => window.soma.test.answers(a), list),
     /** Screenshot des Fensters (über Electron, funktioniert auch bei unsichtbarem Fenster). */
-    screenshot: (file) => ev((f) => window.cadide.test.screenshot(f), file),
+    screenshot: (file) => ev((f) => window.soma.test.screenshot(f), file),
     /** Beendet die App hart (wie ein Absturz). */
     crash() { clearTimeout(dog); page.close(); kill(); },
     async stop() { clearTimeout(dog); page.close(); kill(); await sleep(600); },

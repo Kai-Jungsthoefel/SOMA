@@ -11,7 +11,7 @@ let app;
 
 // Bekannte Maße: Platte 40 × 30 × 5 mit zwei Bohrungen Ø 6 bei x = ±10, Block 20 × 20 × 5 auf z = 15..20
 const MODEL = `import cadquery as cq
-from cadide import add_part
+from soma import add_part
 
 plate = (cq.Workplane("XY").box(40, 30, 5, centered=(True, True, False))
          .faces(">Z").workplane().pushPoints([(-10, 0), (10, 0)]).hole(6))
@@ -97,7 +97,7 @@ try {
   check('„An Agent geben": Text mit Bauteil, Elementen und Wert (Punkt als Dezimalzeichen), steht im Terminal',
     agentText.startsWith('[Messung: Bauteil "Platte" Kante Kreis und Bauteil "Platte" Kante Kreis: Abstand der Mittelpunkte 20.000 mm') && txt.includes('[Messung: Bauteil'),
     agentText.slice(0, 90));
-  await ev((id) => window.cadide.term.write(id, '\x03'), tid);
+  await ev((id) => window.soma.term.write(id, '\x03'), tid);
 
   // 6) Verdeckte Kante: Die untere hintere Kante der Platte liegt hinter der Oberseite und darf nicht getroffen werden
   const hidden = await ev((pid) => window.__t.viewer.edgesOf(pid).find((e) => e.curve === 'LINE' && Math.abs(e.mid[2]) < 1e-3 && Math.abs(e.mid[1] - 15) < 1e-3), ids.Platte);

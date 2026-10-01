@@ -354,7 +354,7 @@ export class CodePanel {
     const text = this.textOf(d);
     d.writing = true;
     let r;
-    try { r = await window.cadide.fs.writeText(id, d.file, text, d.base, force); } catch (e) { r = { ok: false, error: errText(e) }; }
+    try { r = await window.soma.fs.writeText(id, d.file, text, d.base, force); } catch (e) { r = { ok: false, error: errText(e) }; }
     d.writing = false;
     if (this.docs.get(d.file) !== d) return false;
     if (r.ok) {
@@ -377,7 +377,7 @@ export class CodePanel {
     const id = this.deps.projectId();
     if (!id) return false;
     try {
-      const b = await window.cadide.fs.backupText(id, d.file, this.textOf(d));
+      const b = await window.soma.fs.backupText(id, d.file, this.textOf(d));
       this.deps.toast(`Deine Fassung von ${d.file} liegt als Sicherung unter ${b}`, 'info');
       return true;
     } catch (e) {
