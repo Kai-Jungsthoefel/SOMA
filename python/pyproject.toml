@@ -14,3 +14,7 @@ soma = "soma.cli:main"
 
 [tool.setuptools]
 packages = ["soma"]
+
+[tool.setuptools.package-data]
+# Masstabellen der Normteile (aus bd_warehouse, Apache 2.0)
+soma = ["data/fasteners/*"]

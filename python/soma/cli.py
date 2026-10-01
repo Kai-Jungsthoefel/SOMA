@@ -75,7 +75,11 @@ def cmd_export(args):
         print(f"Export nicht moeglich, das Modell laesst sich nicht bauen: {e.message}", file=sys.stderr)
         return 1
     if args.all:
-        chosen = [p for p in parts if p["role"] != "reference"]  # Referenzteile sind nicht Teil von --all (E34)
+        # Referenzen (E34) und Zukaufteile wie Schrauben (E48) gehoeren nicht zu --all, einzeln gehen sie
+        chosen = [p for p in parts if p["role"] not in ("reference", "hardware")]
+        skipped = len(parts) - len(chosen)
+        if skipped:
+            print(f"nicht exportiert: {skipped} Referenz- und Zukaufteil(e)")
     else:
         chosen = [p for p in parts if p["name"] == args.part or p["step_name"] == args.part]
         if not chosen:
@@ -129,7 +133,7 @@ def main(argv=None):
     e = sub.add_parser("export", help="Einzelne Bauteile exportieren")
     g = e.add_mutually_exclusive_group(required=True)
     g.add_argument("part", nargs="?", help="Name des Bauteils")
-    g.add_argument("--all", action="store_true", help="alle Bauteile (ohne Referenzteile)")
+    g.add_argument("--all", action="store_true", help="alle Bauteile (ohne Referenz- und Zukaufteile)")
     e.add_argument("--format", required=True, help=", ".join(EXPORT_FORMATS))
     e.add_argument("--out", help="Zielordner relativ zum Projekt (Standard: exports)")
     e.add_argument("--project", default=".")

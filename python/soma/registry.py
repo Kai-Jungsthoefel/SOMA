@@ -5,9 +5,9 @@ import unicodedata
 import cadquery as cq
 
 REGISTRY = []  # wird pro Build geleert (siehe build.py)
-DEFAULT_COLORS = {"part": (0.62, 0.66, 0.72), "reference": (0.1, 0.65, 0.3)}
+DEFAULT_COLORS = {"part": (0.62, 0.66, 0.72), "reference": (0.1, 0.65, 0.3), "hardware": (0.45, 0.46, 0.49)}
 REFERENCE_ALPHA = 0.45
-ROLES = ("part", "reference")
+ROLES = ("part", "reference", "hardware")
 
 _TRANSLIT = {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss", "×": "x"}
 
@@ -21,6 +21,8 @@ def ascii_name(name):
 
 
 def to_shape(obj):
+    if hasattr(obj, "__soma_shape__"):  # Normteile aus soma.fasteners
+        return obj.__soma_shape__()
     if isinstance(obj, cq.Workplane):
         vals = obj.vals()
         if not vals:
@@ -28,7 +30,7 @@ def to_shape(obj):
         return vals[0] if len(vals) == 1 else cq.Compound.makeCompound(vals)
     if isinstance(obj, cq.Shape):
         return obj
-    raise TypeError(f"add_part erwartet cq.Workplane oder cq.Shape, nicht {type(obj).__name__}")
+    raise TypeError(f"add_part erwartet cq.Workplane, cq.Shape oder ein Normteil aus soma.fasteners, nicht {type(obj).__name__}")
 
 
 def _group_path(group):
@@ -60,16 +62,24 @@ def _unique(name, taken):
     return f"{name} ({i})"
 
 
-def add_part(name, obj, role="part", color=None, group=None):
+def add_part(name, obj, role=None, color=None, group=None):
     """Registriert ein Bauteil. Pflicht fuer jedes Bauteil, sonst kennen Viewer und Export es nicht.
 
     name   eindeutiger Name (Umlaute erlaubt, in der STEP-Datei wird er als ASCII geschrieben)
-    obj    cq.Workplane oder cq.Shape, oder eine Baugruppe aus import_assembly(): Dann wird jeder Koerper ein eigenes
-           Bauteil mit seinem Namen und seiner Farbe, die Unterbaugruppen werden Gruppen unter `name`
-    role   "part" (Standard) oder "reference" (mitgebrachtes Teil: halbtransparent, eigener Ast, nicht im Export)
-    color  optional (r, g, b) mit Werten 0..1 (bei einer Baugruppe fuer alle Teile)
+    obj    cq.Workplane oder cq.Shape, ein Normteil aus soma.fasteners (Screw, Nut ...) oder eine Baugruppe aus
+           import_assembly(): Dann wird jeder Koerper ein eigenes Bauteil mit seinem Namen und seiner Farbe, die
+           Unterbaugruppen werden Gruppen unter `name`
+    role   "part" (eigenes Teil, Standard), "reference" (mitgebrachtes Teil: halbtransparent, eigener Ast, nicht im
+           Export) oder "hardware" (Zukaufteil wie Schrauben: deckend, in der STEP bei seiner Gruppe, nicht in
+           export --all). Normteile aus soma.fasteners sind ohne Angabe "hardware"
+    color  optional (r, g, b) mit Werten 0..1 (bei einer Baugruppe fuer alle Teile). Normteile haben eine eigene
     group  optional, Gruppe im Bauteilbaum und in der STEP-Datei, verschachtelt mit "/", z. B. "Gehaeuse/Schrauben"
     """
+    standard_part = hasattr(obj, "__soma_shape__")
+    if role is None:
+        role = getattr(obj, "role", "part") if standard_part else "part"
+    if color is None and standard_part:
+        color = getattr(obj, "color", None)
     if role not in ROLES:
         raise ValueError(f"role muss einer von {ROLES} sein, nicht {role!r}")
     if not isinstance(name, str) or not name.strip():
