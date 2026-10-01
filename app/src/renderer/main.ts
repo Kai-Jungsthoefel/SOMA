@@ -5,6 +5,8 @@ import { FileTree, TEXT_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
 import { MeasureTool } from './measuretool';
+import { SectionTool } from './sectiontool';
+import { SkillsPanel } from './skills';
 import { PartsCard } from './parts';
 import { TerminalTabs } from './terminals';
 import { $, el, fmtWhen, menuItem, menus, toast } from './ui';
@@ -48,9 +50,9 @@ const SURFACE: Record<string, string> = {
 const surfaceName = (s: string | null) => (s ? SURFACE[s] ?? s.toLowerCase() : 'Fläche');
 const ERROR_KIND: Record<string, string> = { Timeout: 'Zeitlimit überschritten', PythonStart: 'Python ließ sich nicht starten', NoResult: 'Build ohne Ergebnis' };
 
-// ---- Seitenpanels: Dateien, Code --------------------------------------------------------------------------------
+// ---- Seitenpanels: Dateien, Code, Skills ------------------------------------------------------------------------
 
-type PanelName = 'files' | 'code';
+type PanelName = 'files' | 'code' | 'skills';
 let panel: PanelName | null = null;
 let filesDirty = true;
 
@@ -61,8 +63,10 @@ function showPanel(p: PanelName | null): void {
   $('side').classList.toggle('code', p === 'code');
   $('panel-files').hidden = p !== 'files';
   $('panel-code').hidden = p !== 'code';
+  $('panel-skills').hidden = p !== 'skills';
   document.querySelectorAll<HTMLButtonElement>('#rail [data-panel]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.panel === p)));
   if (p === 'files' && filesDirty) void refreshFiles();
+  if (p === 'skills') void skills.refresh();
 }
 
 const code = new CodePanel(
@@ -79,6 +83,15 @@ async function openCode(file: string, mark?: Mark): Promise<void> {
   showPanel('code');
   await code.open(file, mark);
 }
+
+const skills = new SkillsPanel($('skills-list'), {
+  list: () => api.skills.list(),
+  set: (id, on) => api.skills.set(id, on),
+  open: (file) => void openCode(file),
+  insert: (text) => insertToAgent(text),
+  toast,
+  changed: () => { filesDirty = true; textCache.clear(); void refreshSaveState(); void code.refresh(); },
+});
 
 const files = new FileTree($('tab-files'), (n) => {
   if (TEXT_EXT.test(n.name)) void openCode(n.path);
@@ -161,7 +174,7 @@ async function renderSelection(): Promise<void> {
   $('sel-swatch').style.background = p?.color ?? '';
   const bits = pick?.faceId != null
     ? ['Fläche', surfaceName(pick.surface), ...(pick.area != null ? [`${num(pick.area)} mm²`] : [])]
-    : ['ganzes Bauteil'];
+    : pick?.cut ? ['Schnittfläche', 'ganzes Bauteil'] : ['ganzes Bauteil'];
   $('info').textContent = bits.join(' · ');
   const peek = $('code');
   const hasCode = !!(e?.file && e.line);
@@ -225,6 +238,14 @@ const measureTool = new MeasureTool({
   insert: (t) => insertToAgent(t),
 });
 
+// ---- Schnitt ----------------------------------------------------------------------------------------------------
+
+const sectionTool = new SectionTool({
+  card: $('section-card'), button: $<HTMLButtonElement>('btn-section'), close: $<HTMLButtonElement>('btn-section-close'),
+  axes: $('section-axes'), label: $('section-label'), range: $<HTMLInputElement>('section-range'), value: $<HTMLInputElement>('section-value'),
+  hint: $('section-hint'), flip: $<HTMLButtonElement>('btn-section-flip'), look: $<HTMLButtonElement>('btn-section-look'),
+}, { viewer });
+
 // ---- Markierung (E16) -------------------------------------------------------------------------------------------
 
 const markup = new Markup({
@@ -251,8 +272,10 @@ async function sendMarkup(): Promise<void> {
     if (!r.ok || !r.path) { toast(`Die Markierung ließ sich nicht speichern: ${r.error ?? 'unbekannter Fehler'}`, 'error'); return; }
     const old = versions.previewed;
     markup.close();
-    // Zeigt das Bild einen alten Stand, soll der Agent das wissen (sonst vergleicht er es mit dem aktuellen Code)
-    const note = old ? `, zeigt den älteren Stand ${old.short} "${old.subject.slice(0, 80)}"` : '';
+    // Zeigt das Bild einen alten Stand oder einen Schnitt, soll der Agent das wissen (sonst vergleicht er es mit dem aktuellen Code
+    // oder hält die Schnittfläche für eine echte Fläche)
+    const cut = sectionTool.agentText();
+    const note = (old ? `, zeigt den älteren Stand ${old.short} "${old.subject.slice(0, 80)}"` : '') + (cut ? `, ${cut}` : '');
     insertToAgent(`[Markierung: ${r.path}${note}] `, `Markierung gespeichert: ${r.path}`);
   } catch (e) {
     toast(`Die Markierung ließ sich nicht speichern: ${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -380,6 +403,7 @@ async function loadModel(): Promise<void> {
     textCache.clear();
     await viewer.load(glb);
     measureTool.reset(); // neuer Build: die Nummern der Flächen und Kanten gelten nicht mehr
+    sectionTool.refresh();
     msg.className = ''; msg.textContent = '';
     refreshPartsCard();
     // Flächen-IDs gelten nur für einen Build: nach dem Neuladen bleibt das Bauteil gewählt, die Fläche nicht
@@ -414,6 +438,7 @@ const versions = new VersionsBar({
       textCache.clear();
       await viewer.load(res.glb);
       measureTool.reset();
+      sectionTool.refresh();
       refreshPartsCard();
       selectPart(null, null);
       void renderErrorCard();
@@ -433,10 +458,13 @@ async function onProject(p: ProjectInfo): Promise<void> {
   textCache.clear();
   markup.close();
   if (measureTool.isActive) measureTool.setActive(false);
+  sectionTool.setActive(false);
   viewer.clear();
   versions.reset();
   terminals.closeAll();
   code.reset();
+  skills.reset();
+  if (panel === 'skills') void skills.refresh();
   selection = null;
   void renderSelection();
   partsCard.message('Modell wird gebaut …');
@@ -818,6 +846,9 @@ if (api.testMode) {
     selectionText, errorText,
     markup: () => markup.state(),
     measure: () => measureTool.state(),
+    section: () => sectionTool.state(),
+    skills: () => skills.state(),
+    pick: () => selection?.pick ?? null,
     markPixel: (x: number, y: number) => markup.pixel(x, y),
     markHandles: () => markup.handles(),
     insert: (text: string) => insertToAgent(text),

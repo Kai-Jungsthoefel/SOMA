@@ -77,6 +77,8 @@ function registerIpc(ctl: ProjectController): void {
 
   ipcMain.handle('agents:detect', () => detectAgents(terminalEnv(dir())));
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
+  ipcMain.handle('skills:list', () => ctl.skills());
+  ipcMain.handle('skills:set', (_e, id: unknown, on: unknown) => ctl.setSkill(id, !!on));
   // Rückfragen aus dem Renderer (etwa ungespeicherte Eingaben im Editor) laufen über dieselben Dialoge wie im Hauptprozess
   ipcMain.handle('dialog:choose', (_e, o: { title?: unknown; message?: unknown; detail?: unknown; buttons?: unknown }) => {
     const buttons = Array.isArray(o?.buttons) ? o.buttons.slice(0, 4).map(String) : [];

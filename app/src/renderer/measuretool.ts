@@ -61,6 +61,8 @@ export class MeasureTool {
   private busy = false;
   private seq = 0;
   private warm = false;
+  /** Einmaliger Hinweis, etwa nach einem Klick auf die Schnittfläche. Verschwindet beim nächsten Klick. */
+  private note = '';
 
   constructor(private ui: Ui, private deps: Deps) {
     ui.button.addEventListener('click', () => this.setActive(!this.active));
@@ -68,8 +70,10 @@ export class MeasureTool {
     ui.again.addEventListener('click', () => this.reset());
     ui.agent.addEventListener('click', () => { const t = this.agentText(); if (t) deps.insert(t); });
     deps.viewer.onMeasurePick = (h) => void this.pick(h);
+    // Die Schnittfläche hat keine exakte Geometrie. Der Klick verwirft nichts, ein Hinweis sagt, was geht.
+    deps.viewer.onMeasureCut = () => { this.note = 'Die Schnittfläche selbst lässt sich nicht messen. Ein Klick nahe ihrem Rand wählt die geschnittene Fläche.'; this.render(); };
     window.addEventListener('keydown', (e) => {
-      if (!this.active || e.key !== 'Escape') return;
+      if (!this.active || e.key !== 'Escape' || e.defaultPrevented) return;
       const t = e.target as HTMLElement | null;
       if (t?.closest?.('#terminals, #code-view, input, textarea, .menu')) return;
       e.preventDefault();
@@ -103,7 +107,8 @@ export class MeasureTool {
   }
 
   private async pick(h: ProbeHit | null): Promise<void> {
-    if (!h) { if (this.a) this.reset(); return; } // daneben geklickt: von vorn
+    this.note = '';
+    if (!h) { if (this.a) this.reset(); else this.render(); return; } // daneben geklickt: von vorn
     const sameAsA = this.a && !this.b && this.a.partId === h.partId && this.a.kind === h.kind && this.a.id === h.id;
     if (!this.a || this.b || sameAsA) { this.a = h; this.b = null; } else this.b = h;
     this.result = null;
@@ -211,6 +216,7 @@ export class MeasureTool {
       rows.push(el('div', { className: 'mc-sep' }));
       rows.push(this.entityLine('A', r.a), this.entityLine('B', r.b!));
     }
+    if (this.note) rows.push(el('div', { className: 'mc-hint warn', textContent: this.note }));
     body.replaceChildren(...rows);
     again.disabled = !this.a;
     agent.disabled = !this.result;

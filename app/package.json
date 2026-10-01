@@ -13,8 +13,10 @@
     "test:editor": "npm run build && node test/editor.mjs",
     "test:measure": "npm run build && node test/measure.mjs",
     "test:groups": "npm run build && node test/groups.mjs",
+    "test:section": "npm run build && node test/section.mjs",
+    "test:skills": "npm run build && node test/skills.mjs",
     "test:unit": "node test/unit.mjs",
-    "test": "npm run build && node test/unit.mjs && node test/smoke.mjs && node test/versions.mjs && node test/editor.mjs && node test/measure.mjs && node test/groups.mjs"
+    "test": "npm run build && node test/unit.mjs && node test/smoke.mjs && node test/versions.mjs && node test/editor.mjs && node test/measure.mjs && node test/groups.mjs && node test/section.mjs && node test/skills.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

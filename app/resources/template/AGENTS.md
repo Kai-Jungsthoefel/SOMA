@@ -13,7 +13,7 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 | `inputs/` | Files the user brought (STEP, images). Never modify them, load them from `model.py` |
 | `output/model.step` | Main result with all parts, written by `soma build`. Never write it yourself |
 | `exports/` | Single-part exports written by `soma export` |
-| `.soma/` | App data (viewer cache, build status, feedback images). Do not edit, except reading files in `.soma/feedback/` when the user points you to them |
+| `.soma/` | App data (viewer cache, build status, feedback images, skills). Do not edit. Read the skills in `.soma/skills/` listed at the end of this file, and files in `.soma/feedback/` when the user points you to them |
 
 ## Rules for model.py
 
@@ -59,5 +59,12 @@ The app pastes short notes into your input. The user adds their own words and se
 - `[Markierung: .soma/feedback/markierung-20260930-1405.png]`: a picture of the 3D view (or a blank sketch) with the user's drawings: arrows, circles, handwritten text, often with dimensions. **Open the image file and look at it**, compare it with the model, then change the code. If the note says `zeigt den älteren Stand <hash>`, the picture shows that older commit, not the current code (`git show <hash>:model.py`). Leave the images where they are.
 - `[Auswahl: Bauteil "…", model.py Zeile …]`: the part the user clicked, with the lines of its `add_part` call and the clicked face.
 - `[Build-Fehler: …]`: the message of the last failed build.
+- `[Skill: .soma/skills/<name>.md]`: the user switched on this rule set. Read the file now and follow it from here on. When the user switches a skill off, it disappears from the list below: stop applying it.
 
 The user can also edit files directly in the app's editor. Read a file again right before you change it, do not rely on an older copy.
+
+<!-- soma:skills -->
+## Skills
+
+No skills are active for this model. The user can switch on rule sets (for example 3D printing) in the app.
+<!-- /soma:skills -->

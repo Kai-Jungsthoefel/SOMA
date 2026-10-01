@@ -108,6 +108,31 @@ code { font-family:var(--mono); font-size:.95em; }
 .frow.dim { color:var(--tx2); }
 .ftree .gap { height:8px; }
 .ftree .hint { color:var(--tx3); padding:6px 14px; }
+/* Skills (E17): eine Karte je Skill mit Schalter. Eingeschaltet in Orange (Auswahl), Auffälligkeiten in Gelb. */
+.sk-intro { padding:10px 14px 4px; font-size:12px; color:var(--tx2); }
+.sk-intro code, .sk-row code { font:11.5px var(--mono); color:var(--tx); }
+.sk-list { flex:1; overflow:auto; padding:6px 10px 12px; display:flex; flex-direction:column; gap:8px; }
+.sk-list .hint { color:var(--tx3); padding:6px 4px; }
+.sk-row { border:1px solid var(--line2); border-radius:9px; background:var(--s2); }
+.sk-row.on { border-color:var(--acc-line); background:linear-gradient(var(--acc-tint), var(--acc-tint)), var(--s2); }
+.sk-head { display:flex; align-items:flex-start; gap:10px; padding:10px 8px 8px 12px; }
+.sk-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.sk-text b { font-size:13px; font-weight:600; }
+.sk-text span { font-size:12px; color:var(--tx2); }
+.sk-switch { position:relative; width:34px; height:20px; flex-shrink:0; margin-top:1px; border-radius:10px; background:var(--s3); box-shadow:inset 0 0 0 1px var(--line2); transition:background .15s; }
+.sk-switch::after { content:''; position:absolute; left:3px; top:3px; width:14px; height:14px; border-radius:50%; background:var(--tx2); transition:transform .15s, background .15s; }
+.sk-switch[aria-checked=true] { background:var(--acc); box-shadow:none; }
+.sk-switch[aria-checked=true]::after { transform:translateX(14px); background:#1b1206; }
+.sk-switch:disabled { opacity:.5; }
+.sk-more { color:var(--tx3); display:flex; width:24px; height:24px; align-items:center; justify-content:center; border-radius:5px; flex-shrink:0; }
+.sk-more:hover { background:var(--s3); color:var(--tx); }
+.sk-more.open { transform:rotate(180deg); }
+.sk-body { padding:0 12px 10px; font-size:12px; color:var(--tx2); }
+.sk-body ul { margin:2px 0 8px; padding-left:18px; }
+.sk-body li { margin:1px 0; }
+.sk-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.sk-note { padding:0 12px 8px 56px; font-size:12px; color:var(--tx3); }
+.sk-warn { padding:0 12px 8px 56px; font-size:12px; color:var(--warn); }
 .dropzone { margin:12px; padding:16px 14px; border:1.5px dashed var(--line2); border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; color:var(--tx2); font-size:12px; flex-shrink:0; }
 .dropzone b { color:var(--tx); font-size:13px; font-weight:600; }
 .dropzone.over, body.dragging .dropzone { border-color:var(--acc); background:var(--acc-tint); }
@@ -259,6 +284,23 @@ code { font-family:var(--mono); font-size:.95em; }
 .mc-ent b { color:var(--acc-tx); }
 .mc-ent span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .v-overlay { position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
+
+/* Schnitt: Karte unten rechts, neben Auswahl- und Messkarte. Im schmalen Viewer rückt sie unter den Würfel. */
+.sectcard { right:14px; bottom:12px; width:300px; overflow:hidden; }
+@container viewer (max-width: 760px) { .sectcard { bottom:auto; top:212px; width:272px; } }
+.seg { display:flex; gap:2px; margin:2px 12px 8px; padding:3px; border:1px solid var(--line2); border-radius:8px; background:var(--term); }
+.seg button { flex:1; display:flex; align-items:center; justify-content:center; gap:5px; height:26px; border-radius:5px; color:var(--tx2); font-weight:500; }
+.seg button:hover { background:var(--s3); color:var(--tx); }
+.seg button[aria-checked=true] { background:var(--acc-tint); color:var(--acc-tx); box-shadow:inset 0 0 0 1px var(--acc-line); }
+.seg button.waiting { animation:pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { background:transparent; } }
+.sx-pos { display:flex; align-items:center; gap:8px; padding:0 12px 2px 14px; }
+.sx-pos label { width:38px; flex-shrink:0; color:var(--tx2); font-size:12px; white-space:nowrap; }
+.sx-pos input[type=range] { flex:1; min-width:0; accent-color:var(--acc); height:18px; }
+.sx-val { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+.sx-val input { width:72px; height:26px; padding:0 6px; border-radius:5px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--mono); text-align:right; }
+.sx-val input:disabled, .sx-pos input[type=range]:disabled { opacity:.45; }
+.mc-hint.warn { color:var(--warn); }
 .v-pt { position:absolute; left:-5px; top:-5px; width:10px; height:10px; border-radius:50%; background:var(--acc); box-shadow:0 0 0 2px var(--bg); }
 .v-label { position:absolute; left:0; top:0; margin:-32px 0 0 10px; padding:3px 8px; border-radius:6px; background:rgba(24,27,31,.95);
   border:1px solid var(--acc-line); color:var(--acc-tx); font:600 12.5px var(--mono); white-space:nowrap; }

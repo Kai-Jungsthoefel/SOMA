@@ -83,6 +83,24 @@ export interface MeasurePair {
 export interface MeasureResult { build: string; a: MeasureInfo; b?: MeasureInfo; pair?: MeasurePair }
 /** `stale`: Die Anfrage gehört zu einem älteren Build, die Auswahl ist neu zu treffen. */
 export interface MeasureResponse { ok: boolean; result?: MeasureResult; error?: string; stale?: boolean }
+
+/** Ein Skill (E17): Regelwerk für den Agenten, pro Modell zuschaltbar. */
+export interface SkillInfo {
+  id: string;
+  /** Titel und Kurzbeschreibung für die Oberfläche, Themen aus den Zwischenüberschriften. */
+  title: string; summary: string; topics: string[]; order: number;
+  /** Bringt diese App mit (sonst liegt er nur im Projekt, etwa aus einer neueren App). */
+  bundled: boolean;
+  /** Laut project.json eingeschaltet. */
+  active: boolean;
+  /** Kopie im Projekt (`.soma/skills/<id>.md`), null wenn keine da ist. */
+  file: string | null;
+  /** Die Kopie im Projekt weicht von der mitgelieferten Fassung ab. */
+  changed: boolean;
+  /** Auffälligkeiten, nur gemeldet (E28). */
+  problems: string[];
+}
+export interface SkillResult { ok: boolean; error?: string; warning?: string; backup?: string | null; skills: SkillInfo[] }
 /** Was vermessen wird: der aktuelle Stand oder die Vorschau eines alten Stands. */
 export type MeasureSource = 'live' | { preview: string };
 
@@ -172,6 +190,8 @@ export interface SomaApi {
   agents: { detect(): Promise<AgentInfo[]> };
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: { query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse> };
+  /** Skills des offenen Modells (E17): auflisten, ein- und ausschalten. */
+  skills: { list(): Promise<SkillInfo[]>; set(id: string, on: boolean): Promise<SkillResult> };
   /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
   dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };
 }

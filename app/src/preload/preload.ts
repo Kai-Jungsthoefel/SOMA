@@ -56,6 +56,7 @@ const api: SomaApi = {
   },
   agents: { detect: () => ipcRenderer.invoke('agents:detect') },
   measure: { query: (source, req) => ipcRenderer.invoke('measure:query', source, req) },
+  skills: { list: () => ipcRenderer.invoke('skills:list'), set: (id, on) => ipcRenderer.invoke('skills:set', id, on) },
   dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'

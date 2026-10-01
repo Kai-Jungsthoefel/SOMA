@@ -1,17 +1,18 @@
 import { shell, type BrowserWindow, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ExportResult, GitLog, MeasureEntity, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult, ProjectInfo, RestoreResult, SaveResult, SaveState } from '../shared/types';
+import type { ExportResult, GitLog, MeasureEntity, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult, ProjectInfo, RestoreResult, SaveResult, SaveState, SkillInfo, SkillResult } from '../shared/types';
 import { BuildManager, buildIsStale, newestSourceMtime, runSoma } from './build';
 import { choose, choosePath } from './dialogs';
 import { GitRepo } from './git';
 import { MeasureService } from './measure';
-import { previewsDir } from './paths';
+import { previewsDir, skillBackupsDir, skillsDir } from './paths';
+import { copySkill, isSkillId, listSkills, removeSkill, skillName, writeAgentsList } from './skills';
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
   backupWorkspace, createProject, extractProject, getAppState, inspectProject, isProjectId, patchAppState, projectDir,
-  readProjectJson, renameProject, setLastProject,
+  readProjectJson, renameProject, setLastProject, setProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
 
@@ -335,6 +336,40 @@ export class ProjectController {
    * Darf das Fenster schließen? Bei ungespeicherten Änderungen fragt die App. Der Arbeitsstand bleibt in jedem Fall erhalten,
    * Eingaben im Editor (`editor.dirty`) aber nur, wenn sie gespeichert werden. „Nicht speichern“ legt sie als Sicherung ab.
    */
+  // ---- Skills (E17) -----------------------------------------------------------------------------------------------
+
+  /** Aktive Skills laut project.json, null wenn sie unlesbar ist. */
+  private activeSkills(id: string): string[] | null {
+    const pj = readProjectJson(id);
+    return pj ? (Array.isArray(pj.skills) ? pj.skills.filter(isSkillId) : []) : null;
+  }
+
+  skills(): SkillInfo[] {
+    const s = this.need();
+    return listSkills(s.dir, skillsDir(), this.activeSkills(s.id));
+  }
+
+  /**
+   * Skill ein- oder ausschalten: Kopie in .soma/skills/ anlegen oder entfernen (Abweichendes vorher in die Sicherung),
+   * project.json und den Abschnitt in AGENTS.md nachziehen. Erst die Prüfung, dann die Änderungen.
+   */
+  setSkill(skill: unknown, on: unknown): SkillResult {
+    const s = this.need();
+    const active = this.activeSkills(s.id);
+    const list = () => this.skills();
+    if (!isSkillId(skill)) return { ok: false, error: 'Unbekannter Skill.', skills: list() };
+    if (!active) return { ok: false, error: '.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill ein- oder ausschalten.', skills: list() };
+    try {
+      const backup = on ? copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id)) : removeSkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id));
+      const next = on ? [...new Set([...active, skill])] : active.filter((x) => x !== skill);
+      setProjectSkills(s.id, next);
+      const warning = writeAgentsList(s.dir, next.map((id) => ({ id, name: skillName(s.dir, skillsDir(), id) })));
+      return { ok: true, backup, ...(warning ? { warning } : {}), skills: list() };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
+    }
+  }
+
   async confirmClose(editor: { dirty: string[]; save(): Promise<boolean>; discard(): Promise<void> }): Promise<boolean> {
     if (!this.session || process.env.SOMA_TEST === '1') return true;
     const st = await this.saveState();

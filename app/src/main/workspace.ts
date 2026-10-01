@@ -5,6 +5,7 @@ import type { ProjectListEntry } from '../shared/types';
 import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, projectStateDir, templateDir, workspacesDir } from './paths';
+import { SKILLS_DIR, isSkillId } from './skills';
 import { extractZip } from './zip';
 
 export const API_VERSION = 1;
@@ -17,6 +18,8 @@ export interface ProjectJson {
   entry: string;
   main_output: string;
   created: string;
+  /** Aktive Skills (E17), ihre Kopien liegen in .soma/skills/. */
+  skills?: string[];
 }
 
 /** Zweite Kopie des Projektzustands in den App-Daten (E27) plus Angaben, die nur die App braucht. */
@@ -84,6 +87,16 @@ export function renameProject(id: string, name: string): void {
   if (cur) writeJson(stateFile(id), { ...cur, name });
 }
 
+/** Aktive Skills ins Projekt schreiben, in project.json und die App-Kopie (E27). Wirft, wenn project.json unlesbar ist. */
+export function setProjectSkills(id: string, skills: string[]): void {
+  const file = path.join(projectDir(id), '.soma', 'project.json');
+  const pj = readJson<ProjectJson>(file);
+  if (!pj) throw new Error('.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill eintragen.');
+  writeJson(file, { ...pj, skills });
+  const cur = readJson<ProjectState>(stateFile(id));
+  if (cur) writeJson(stateFile(id), { ...cur, skills });
+}
+
 /** Prüft ein Projekt und MELDET Auffälligkeiten. Repariert nichts (E28). */
 export function inspectProject(id: string): { name: string; problems: string[] } {
   const dir = projectDir(id);
@@ -102,6 +115,9 @@ export function inspectProject(id: string): { name: string; problems: string[] }
   }
   const entry = pj?.entry ?? 'model.py';
   if (!fs.existsSync(path.join(dir, entry))) problems.push(`Einstiegspunkt ${entry} fehlt.`);
+  for (const s of (Array.isArray(pj?.skills) ? pj.skills : []).filter(isSkillId)) {
+    if (!fs.existsSync(path.join(dir, SKILLS_DIR, `${s}.md`))) problems.push(`Der Skill „${s}“ ist eingeschaltet, aber ${SKILLS_DIR}/${s}.md fehlt.`);
+  }
   for (const bad of ['.venv', 'venv', 'env']) {
     if (fs.existsSync(path.join(dir, bad, 'pyvenv.cfg'))) problems.push(`Im Projekt liegt eine eigene Python-Umgebung (${bad}/). Sie wird ignoriert und nicht in die ZIP gepackt.`);
   }

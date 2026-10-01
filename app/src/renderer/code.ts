@@ -187,7 +187,11 @@ export class CodePanel {
       if (d.writing) continue;
       let disk: string | null;
       try { disk = await this.deps.read(d.file); } catch { disk = null; }
-      if (this.docs.get(d.file) !== d || d.writing || disk === d.base) continue;
+      if (this.docs.get(d.file) !== d || d.writing) continue;
+      // Wieder so wie zuletzt gelesen (etwa gelöscht und neu angelegt): Der Konflikt hat sich erledigt
+      if (disk === d.base) { d.conflict = null; continue; }
+      // Nur lesbare Dateien haben nie Eingaben: Ist die Datei weg, geht der Reiter zu, sonst wird neu geladen
+      if (d.locked) { if (disk === null) await this.close(d.file); else this.takeExternal(d, disk); continue; }
       // Hier liegt Ungespeichertes oder die Datei ist weg: nicht still ersetzen, sondern fragen
       if (d.dirty || disk === null) d.conflict = { disk };
       else this.takeExternal(d, disk);
