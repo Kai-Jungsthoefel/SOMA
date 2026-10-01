@@ -23,7 +23,8 @@ npm run test:measure    # Messen: Fläche, Kante, Punkt, Abstand paralleler Eben
 npm run test:groups     # Gruppen: eigene und importierte (STEP-Baugruppe), Baum, Aus-/Einblenden und Transparenz je Gruppe, Klick durch transparente Teile, Ausgabe-STEP (17 Prüfungen)
 npm run test:section    # Schnitt: X/Y/Z und an Fläche, Eingabe der Lage, Seite wechseln, gefüllte und schraffierte Schnittfläche, Klicks durch den Schnitt, Wandstärke an der Kontur messen, neuer Build (26 Prüfungen)
 npm run test:skills     # Skills: Panel, Ein-/Ausschalten (Kopie, project.json, AGENTS.md), Einstellungen (Werte in der Kopie, Prüfung, Standard, vorab bei ausgeschaltetem Skill), Ansehen, An Agent geben, Sicherung geänderter Kopien, fehlende Dateien nur gemeldet, Snapshot und ZIP, Kategorien, Skills für neue Modelle (41 Prüfungen)
-npm test                # alle acht
+npm run test:fasteners  # Normteile: Maße aus den Tabellen, Lage (at, direction, on, sunk), Bohrungen und Mutternfallen ohne Überschneidung, Einsätze, Fehlermeldungen, Rolle hardware, Codeblock des Skills „Normteile“, in der App Baum, Auswahl und export --all (35 Prüfungen)
+npm test                # alle neun
 ```
 
 `SMOKE_VISIBLE=1` zeigt das Fenster. `SMOKE_VISIBLE=offscreen` zeigt es weit außerhalb des Bildschirms ohne Fokus, dann sind Screenshots (`test/versions.png`) frisch. Ein unsichtbares Fenster zeichnet nicht neu, seine Screenshots sind veraltet, die DOM-Prüfungen sind davon nicht betroffen. Mit `SMOKE_VISIBLE=offscreen` und zusätzlich `SMOKE_SHOTS=1` legt der Smoke-Test Bilder der wichtigsten Zustände in `test/shots/` ab (Arbeitsbereich, Code, Dateien, Fehler, Startseite, Agent eingeklappt, Markieren mit Textfeld, leerer Fläche, Auswahl und Farbmenü, dazu das gespeicherte Bild, wie der Agent es sieht), zum Prüfen von Änderungen an der Oberfläche.
@@ -41,7 +42,7 @@ npm test                # alle acht
 | `resources/template/` | Vorlage für neue Projekte: `model.py`, `AGENTS.md`, `CLAUDE.md`, `NOTES.md`, `.gitignore` |
 | `resources/skills/` | Mitgelieferte Skills (E17), je eine Markdown-Datei: Kopf mit `title`, `summary`, `topics`, `category` (deutsch, Oberfläche), `name` (englisch, für `AGENTS.md`), `order`, `default: on` (bei neuen Modellen an) und optional Einstellungen als `var name: Standard \| Einheit \| Bezeichnung \| 10..85` oder `\| a, b=Anzeige`, darunter die Regeln für den Agenten auf Englisch mit Platzhaltern `{{name}}` |
 | `resources/icon.*` | App-Icon (E44) für Fenster und Taskleiste: `icon.svg` als Vorlage, `icon.ico` (16 bis 256 px) und `icon.png`. Neu erzeugen mit `python scripts/make-icon.py` (braucht Edge und Pillow, kleine Größen bekommen einen dickeren Strich) |
-| `../python/soma/` | Hilfsbibliothek und Kommandozeile (`soma build`, `soma export`, `soma glb` für Vorschauen, `soma serve` Messdienst, `measure.py` exakte Werte mit OCC) |
+| `../python/soma/` | Hilfsbibliothek und Kommandozeile (`soma build`, `soma export`, `soma glb` für Vorschauen, `soma serve` Messdienst, `measure.py` exakte Werte mit OCC, `fasteners.py` Normteile mit Tabellen aus bd_warehouse in `data/fasteners/`) |
 | `test/` | `smoke.mjs`, `versions.mjs`, `editor.mjs`, `measure.mjs`, `groups.mjs`, `section.mjs`, `skills.mjs` (Ende-zu-Ende), `unit.mjs` (ohne Electron), `harness.mjs` (App starten und steuern), `cdp.mjs` (kleiner DevTools-Client, puppeteer scheitert an Electron 44) |
 
 ## Noch nicht enthalten (siehe PLAN.md, Abschnitt 10)
