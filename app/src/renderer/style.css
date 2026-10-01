@@ -264,7 +264,6 @@ code { font-family:var(--mono); font-size:.95em; }
 .dock { top:12px; left:256px; display:flex; align-items:center; gap:2px; padding:4px; }
 .dock button { display:flex; align-items:center; gap:7px; height:32px; padding:0 10px; border-radius:7px; white-space:nowrap; }
 .dock button:hover:not(:disabled), .dock button[aria-expanded=true] { background:var(--s3); }
-.dock button.hot { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
 .dock button:disabled { color:#5d6671; }
 .vsep { width:1px; height:20px; background:var(--line2); margin:0 3px; flex-shrink:0; }
 @container viewer (max-width: 900px) { .dock .lbl { display:none; } .dock button { padding:0 8px; gap:3px; } }
