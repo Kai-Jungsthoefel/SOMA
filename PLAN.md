@@ -248,9 +248,10 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Transparent:** deutlich durchsichtig, ohne zu verdecken. Klicks und Messungen gehen durch transparente Teile hindurch, sie selbst werden nur getroffen, wenn dahinter nichts liegt.
 - **Nebenbei behoben:** Die Verlaufsleiste konnte einen veralteten Stand behalten, wenn sich zwei Abfragen überholten (fiel im Gesamtlauf der Tests auf, als `.git` verschwand).
 
-*Name (E43):*
+*Name und Icon (E43, E44):*
 
 - **SOMA** (*Solid Object Modeling with Agents*) ersetzt den Arbeitsnamen CAD-IDE überall: Oberfläche, Paket und Befehl `soma`, Projektordner `.soma/`, Umgebungsvariablen `SOMA_*`, App-Daten unter `%LOCALAPPDATA%\soma`. Ohne Rückfallweg: Projekte mit `.cadide/` öffnet die App nicht mehr, ein `model.py` mit `from cadide import` baut nicht mehr. Die alten Ordner `%LOCALAPPDATA%\cadide` (App-Daten mit Arbeitsordnern) und `%LOCALAPPDATA%\cadide-dev` (lokale Electron-Kopie) bleiben liegen und werden nicht mehr benutzt.
+- **Icon „Dialog“ (E44):** der Würfel als Sprechblase mit orangem Deckel. In Kopfzeile und Startseite als Symbol `logo` (`icons.ts`), für Fenster und Taskleiste als `resources/icon.ico` (16 bis 256 px, kleine Größen mit dickerem Strich), erzeugt mit `app/scripts/make-icon.py`. Ins Programm selbst (EXE) kommt das Icon erst mit dem Installer.
 
 *Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
@@ -297,6 +298,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - Die fünf Robustheitsregeln in Abschnitt 9
 - `project.json` bei Verlust automatisch aus der App-Kopie wiederherstellen und anzeigen, oder nur melden (E27, E28)
 - Auto-Start des Agenten ohne Resume so verstanden, dass der Start bleibt (E19)
+- App-Icon auf einer Graphit-Fläche mit runden Ecken, kleine Größen mit dickerem Strich und größerem Zeichen (E44)
 
 **Zu klären**
 

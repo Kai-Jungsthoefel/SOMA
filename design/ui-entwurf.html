@@ -188,6 +188,7 @@ body.solo .screen{border-radius:0;box-shadow:none}
 // ---------- Symbole ----------
 const I = {
   cube:'<path d="M12 2.5 20.5 7.2v9.6L12 21.5l-8.5-4.7V7.2z"/><path d="M3.5 7.2 12 12l8.5-4.8M12 12v9.5"/>',
+  logo:'<path d="M12 2.6 19.9 7.1 12 11.6 4.1 7.1z" fill="currentColor"/><path d="M12 2.6 19.9 7.1v9L12 20.6l-4.3-2.45-5.3 3.2 1.7-7.5V7.1z"/><path d="M4.1 7.1 12 11.6l7.9-4.5M12 11.6v9"/>',
   down:'<path d="m6 9 6 6 6-6"/>', up:'<path d="m6 15 6-6 6 6"/>', right:'<path d="m9 6 6 6-6 6"/>',
   refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/>',
   export:'<path d="M12 15V4M7 9l5-5 5 5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/>',
@@ -233,7 +234,7 @@ function topbar(o = {}) {
     ? `<span class="dot" style="background:var(--err)"></span><span style="font-weight:500;color:#ffb8b3">Build fehlgeschlagen</span><span class="c2">model.py, Zeile 47</span>`
     : `<span class="dot" style="background:var(--ok)"></span><span style="font-weight:500">Gebaut</span><span class="c2">6 Bauteile · 0,9 s</span>`;
   return `<header class="top">
-    <button class="logo" data-go="7" title="Startseite" aria-label="Startseite">${ic('cube', 22)}</button>
+    <button class="logo" data-go="7" title="Startseite" aria-label="Startseite">${ic('logo', 22, 1.6)}</button>
     <button class="docname" data-go="8" title="Neu, Öffnen, Zuletzt geöffnet, Speichern unter"><b>Wanduhr</b>${ic('down', 14, 2)}</button>
     <span class="savestate"><span class="dot" style="width:7px;height:7px;background:var(--warn)"></span>Nicht gespeichert · zuletzt 13:41</span>
     <span class="grow"></span>
@@ -523,7 +524,7 @@ const recent = (t, name, when, file, warn) => `<button class="recent" ${t === 'u
 const agrow = (name, found, extra) => `<div class="agrow"><span style="color:${found ? 'var(--ok)' : 'var(--tx3)'}">${ic(found ? 'check' : 'x', 16, 2.2)}</span>
   <div style="display:flex;flex-direction:column;flex-grow:1"><b>${name}</b><span class="c3" style="font-size:12px">${found ? 'gefunden' : 'nicht installiert'}</span></div>${extra || ''}</div>`;
 S[7] = () => `<div class="app">
-  <header class="top"><div class="logo">${ic('cube', 22)}</div><b style="font-size:14px">SOMA</b><span class="grow"></span>
+  <header class="top"><div class="logo">${ic('logo', 22, 1.6)}</div><b style="font-size:14px">SOMA</b><span class="grow"></span>
     <button class="btn ghost">${ic('help', 15)}Hilfe</button><button class="btn ghost">${ic('sliders', 15)}Optionen</button></header>
   <div style="flex-grow:1;display:flex;justify-content:center;overflow:hidden">
     <div style="width:1100px;padding:52px 0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:44px;align-content:start">

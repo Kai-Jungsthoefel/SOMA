@@ -15,7 +15,7 @@ Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. 
 npm install
 npm start            # baut und startet
 npm run typecheck
-npm run test:unit       # Bausteine ohne Electron: Dateien nach inputs/, Markierung nach .soma/feedback/, Pfadschutz, Schreiben aus dem Editor mit Konfliktprüfung (15 Prüfungen)
+npm run test:unit       # Bausteine ohne Electron: Dateien nach inputs/, Markierung nach .soma/feedback/, Pfadschutz, Schreiben aus dem Editor mit Konfliktprüfung, App-Icon (16 Prüfungen)
 npm run test:smoke      # echte App, unsichtbar: Projekt, Viewer, Auswahl, Panels, Terminal, Übergabe an den Agenten, Markierung (Zeichnen, Auswählen, Verschieben, Drehen, Skalieren, Farben), Auto-Build, Fehlerfall, Export, Ansichtswürfel und Drehpunkt (61 Prüfungen)
 npm run test:versions   # Git-Verlauf, Speichern, Öffnen, Vorschau (auch markiert), Wiederherstellen, Störfälle (53 Prüfungen)
 npm run test:editor     # Editor: Höhe und Scrollen, Speichern nur auf Wunsch mit genau einem Build (nur bei Python und inputs/), Änderungen des Agenten, Konflikte mit Sicherung, Nur lesen, CRLF, Rückfragen bei Modellwechsel und Reiter schließen (29 Prüfungen)
@@ -37,6 +37,7 @@ npm test                # alle sechs
 | `src/renderer/` | Oberfläche: `main.ts` (Verdrahtung: Kopfzeile, Menüs, Auswahl, Übergabe an den Agenten, Startseite), `viewer.ts` (three.js, Klick auf Code, Ansichten, Drehpunkt, Vorschaubild, Bild für die Markierung), `viewcube.ts` (Ansichtswürfel in 3D), `markup.ts` (Zeichenfläche der Markierung, Formen als bearbeitbare Objekte), `measuretool.ts` (Messen: Ablauf, Karte, Text für den Agenten), `parts.ts` (Bauteilkarte als Baum mit Gruppen, Auge und Transparenz), `code.ts` (Code-Panel mit Editor: CodeMirror 6, Speichern auf Wunsch, Abgleich mit Änderungen des Agenten, Konflikte), `filetree.ts` (Dateien-Panel), `versions.ts` (Verlaufsleiste), `terminals.ts` (xterm.js, Tabs, Einklappen, Einfügen), `ui.ts` (Menüs, Meldungen, Helfer), `icons.ts` (Symbole), `style.css` (Farben mit fester Bedeutung, siehe Kopf der Datei) |
 | `src/shared/` | `types.ts` Typen des IPC-Vertrags, `editable.ts` welche Dateien der Editor nur zeigt (gilt in Renderer und Hauptprozess) |
 | `resources/template/` | Vorlage für neue Projekte: `model.py`, `AGENTS.md`, `CLAUDE.md`, `NOTES.md`, `.gitignore` |
+| `resources/icon.*` | App-Icon (E44) für Fenster und Taskleiste: `icon.svg` als Vorlage, `icon.ico` (16 bis 256 px) und `icon.png`. Neu erzeugen mit `python scripts/make-icon.py` (braucht Edge und Pillow, kleine Größen bekommen einen dickeren Strich) |
 | `../python/soma/` | Hilfsbibliothek und Kommandozeile (`soma build`, `soma export`, `soma glb` für Vorschauen, `soma serve` Messdienst, `measure.py` exakte Werte mit OCC) |
 | `test/` | `smoke.mjs`, `versions.mjs` (Ende-zu-Ende), `unit.mjs` (ohne Electron), `harness.mjs` (App starten und steuern), `cdp.mjs` (kleiner DevTools-Client, puppeteer scheitert an Electron 44) |
 
