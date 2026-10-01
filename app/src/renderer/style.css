@@ -147,6 +147,10 @@ code { font-family:var(--mono); font-size:.95em; }
 .sk-reset:hover { background:var(--s3); color:var(--tx); }
 .sk-reset[hidden] { display:flex; visibility:hidden; }
 .sk-warn { padding:0 12px 8px 56px; font-size:12px; color:var(--warn); }
+.sk-cat { margin:8px 2px -2px; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); }
+.sk-cat:first-child { margin-top:2px; }
+.sk-text .sk-defnote { margin-top:2px; font-size:11.5px; color:var(--tx3); }
+.sk-defrow { display:flex; align-items:center; gap:8px; min-height:28px; margin-bottom:8px; color:var(--tx2); cursor:pointer; }
 .dropzone { margin:12px; padding:16px 14px; border:1.5px dashed var(--line2); border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; color:var(--tx2); font-size:12px; flex-shrink:0; }
 .dropzone b { color:var(--tx); font-size:13px; font-weight:600; }
 .dropzone.over, body.dragging .dropzone { border-color:var(--acc); background:var(--acc-tint); }

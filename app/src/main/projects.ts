@@ -12,7 +12,7 @@ import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
   backupWorkspace, createProject, extractProject, getAppState, inspectProject, isProjectId, patchAppState, projectDir,
-  readProjectJson, renameProject, setLastProject, updateProjectSkills,
+  getSkillDefaults, readProjectJson, renameProject, setLastProject, setSkillDefault, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
 
@@ -346,7 +346,21 @@ export class ProjectController {
 
   skills(): SkillInfo[] {
     const s = this.need();
-    return listSkills(s.dir, skillsDir(), this.activeSkills(s.id), readProjectJson(s.id)?.skill_settings ?? null);
+    return listSkills(s.dir, skillsDir(), this.activeSkills(s.id), readProjectJson(s.id)?.skill_settings ?? null, getSkillDefaults());
+  }
+
+  /** Festlegen, ob neue Modelle den Skill eingeschaltet bekommen (E46). Gilt für die App, das offene Modell bleibt, wie es ist. */
+  setSkillDefault(skill: unknown, on: boolean): SkillResult {
+    this.need();
+    const list = () => this.skills();
+    const b = isSkillId(skill) ? bundledSkill(skillsDir(), skill) : undefined;
+    if (!b) return { ok: false, error: 'Diesen Skill bringt die App nicht mit. Neue Modelle können ihn nicht bekommen.', skills: list() };
+    try {
+      setSkillDefault(b.id, on, b.defaultOn);
+      return { ok: true, skills: list() };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
+    }
   }
 
   /** Gültige, vom Standard abweichende Werte eines Skills laut project.json. */

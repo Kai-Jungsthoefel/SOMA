@@ -104,8 +104,12 @@ export interface SkillInfo {
   id: string;
   /** Titel und Kurzbeschreibung für die Oberfläche, Themen aus den Zwischenüberschriften. */
   title: string; summary: string; topics: string[]; order: number;
+  /** Überschrift im Panel, leer: ohne Kategorie (steht unter „Weitere“). */
+  category: string;
   /** Bringt diese App mit (sonst liegt er nur im Projekt, etwa aus einer neueren App). */
   bundled: boolean;
+  /** Wird bei neuen Modellen eingeschaltet (E46), gilt für die ganze App, nicht für dieses Modell. */
+  defaultOn: boolean;
   /** Laut project.json eingeschaltet. */
   active: boolean;
   /** Kopie im Projekt (`.soma/skills/<id>.md`), null wenn keine da ist. */
@@ -213,6 +217,8 @@ export interface SomaApi {
     set(id: string, on: boolean): Promise<SkillResult>;
     /** Einstellungen ändern, null setzt auf den Standard zurück. Ein aktiver Skill wird im Projekt neu geschrieben. */
     configure(id: string, values: Record<string, SkillValue | null>): Promise<SkillResult>;
+    /** Festlegen, ob neue Modelle den Skill eingeschaltet bekommen (für die ganze App, das offene Modell bleibt, wie es ist). */
+    setDefault(id: string, on: boolean): Promise<SkillResult>;
   };
   /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
   dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };

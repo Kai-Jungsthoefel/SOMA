@@ -4,8 +4,8 @@ import path from 'node:path';
 import type { ProjectListEntry } from '../shared/types';
 import { runSoma } from './build';
 import { GitRepo } from './git';
-import { appStateFile, backupsDir, projectStateDir, templateDir, workspacesDir } from './paths';
-import { SKILLS_DIR, isSkillId } from './skills';
+import { appStateFile, backupsDir, projectStateDir, skillBackupsDir, skillsDir, templateDir, workspacesDir } from './paths';
+import { SKILLS_DIR, applyDefaultSkills, isSkillId, type SkillDefaults } from './skills';
 import { extractZip } from './zip';
 
 export const API_VERSION = 1;
@@ -52,7 +52,10 @@ export async function createProject(name = 'Neues Modell'): Promise<{ id: string
   const dir = projectDir(id);
   fs.mkdirSync(dir, { recursive: true });
   fs.cpSync(templateDir(), dir, { recursive: true });
-  const pj: ProjectJson = { id, name, api_version: API_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString() };
+  // Skills für neue Modelle (E46) vor dem ersten Build und dem Startcommit: Der erste Stand enthält sie schon
+  const skills = applyDefaultSkills(dir, skillsDir(), skillBackupsDir(id), getSkillDefaults());
+  const pj: ProjectJson = { id, name, api_version: API_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString(),
+    ...(skills.length ? { skills } : {}) };
   writeJson(path.join(dir, '.soma', 'project.json'), pj);
   writeJson(stateFile(id), { ...pj, app: {} } satisfies ProjectState);
   // Einmal bauen, bevor der Startcommit entsteht: So enthält auch der erste Stand eine output/model.step
@@ -155,6 +158,23 @@ export function getLastProject(): string | null {
 export function setLastProject(id: string): void {
   const s = readJson<Record<string, unknown>>(appStateFile()) ?? {};
   writeJson(appStateFile(), { ...s, lastProject: id });
+}
+
+/** Welche Skills neue Modelle bekommen, soweit der Nutzer es abweichend vom Kopf der Skills festgelegt hat (E46). */
+export function getSkillDefaults(): SkillDefaults {
+  const raw = readJson<{ skill_defaults?: unknown }>(appStateFile())?.skill_defaults;
+  if (!raw || typeof raw !== 'object') return {};
+  return Object.fromEntries(Object.entries(raw).filter(([id, on]) => isSkillId(id) && typeof on === 'boolean')) as SkillDefaults;
+}
+
+/** Legt fest, ob neue Modelle den Skill bekommen. Entspricht das dem Kopf des Skills (`factory`), fällt der Eintrag weg. */
+export function setSkillDefault(id: string, on: boolean, factory: boolean): void {
+  const s = readJson<Record<string, unknown>>(appStateFile()) ?? {};
+  const next = { ...getSkillDefaults() };
+  if (on === factory) delete next[id]; else next[id] = on;
+  const out: Record<string, unknown> = { ...s, skill_defaults: next };
+  if (!Object.keys(next).length) delete out.skill_defaults;
+  writeJson(appStateFile(), out);
 }
 
 /**

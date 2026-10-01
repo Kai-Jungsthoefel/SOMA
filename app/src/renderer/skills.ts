@@ -6,6 +6,8 @@ interface Deps {
   list(): Promise<SkillInfo[]>;
   set(id: string, on: boolean): Promise<SkillResult>;
   configure(id: string, values: Record<string, SkillValue | null>): Promise<SkillResult>;
+  /** Für neue Modelle ein- oder ausschalten (gilt für die App, E46). */
+  setDefault(id: string, on: boolean): Promise<SkillResult>;
   /** Kopie im Projekt im Code-Panel zeigen (nur lesen). */
   open(file: string): void;
   /** Text in die Eingabe des Agenten einfügen (E11). */
@@ -76,7 +78,35 @@ export class SkillsPanel {
   private render(): void {
     if (this.error) { this.list.replaceChildren(el('div', { className: 'hint', textContent: `Skills nicht lesbar: ${this.error}` })); return; }
     if (!this.skills.length) { this.list.replaceChildren(el('div', { className: 'hint', textContent: this.loaded ? 'Diese App bringt keine Skills mit.' : 'Lädt …' })); return; }
-    this.list.replaceChildren(...this.skills.map((s) => this.row(s)));
+    // Der Hauptprozess liefert die Skills nach Kategorien sortiert: Überschrift, wo eine neue beginnt
+    const out: HTMLElement[] = [];
+    let cat: string | null = null;
+    for (const s of this.skills) {
+      const c = s.category || 'Weitere';
+      if (c !== cat) {
+        const h = el('div', { className: 'sk-cat', textContent: c });
+        h.setAttribute('role', 'heading');
+        h.setAttribute('aria-level', '3');
+        out.push(h);
+        cat = c;
+      }
+      out.push(this.row(s));
+    }
+    this.list.replaceChildren(...out);
+  }
+
+  /** Festlegen, ob neue Modelle den Skill bekommen. Am offenen Modell ändert sich nichts. */
+  private async setDefault(s: SkillInfo, on: boolean): Promise<void> {
+    if (this.busy.has(s.id)) return;
+    this.busy.add(s.id);
+    this.render();
+    let r: SkillResult;
+    try { r = await this.deps.setDefault(s.id, on); } catch (e) { r = { ok: false, error: e instanceof Error ? e.message : String(e), skills: this.skills }; }
+    this.busy.delete(s.id);
+    this.skills = r.skills;
+    this.render();
+    if (!r.ok) { this.deps.toast(r.error ?? 'Die Vorgabe für neue Modelle ließ sich nicht ändern.', 'error'); return; }
+    this.deps.toast(`„${s.title}“ ${on ? 'wird bei neuen Modellen eingeschaltet' : 'bleibt bei neuen Modellen aus'}. Dieses Modell bleibt, wie es ist.`);
   }
 
   private row(s: SkillInfo): HTMLElement {
@@ -91,7 +121,8 @@ export class SkillsPanel {
     more.setAttribute('aria-expanded', String(open));
     more.setAttribute('aria-label', `${s.title}: ${open ? 'weniger zeigen' : 'Inhalt zeigen'}`);
     more.addEventListener('click', () => { if (open) this.expanded.delete(s.id); else this.expanded.add(s.id); this.render(); });
-    const text = el('div', { className: 'sk-text' }, el('b', { textContent: s.title }), el('span', { textContent: s.summary }));
+    const text = el('div', { className: 'sk-text' }, el('b', { textContent: s.title }), el('span', { textContent: s.summary }),
+      s.defaultOn ? el('span', { className: 'sk-defnote', textContent: 'Bei neuen Modellen an' }) : null);
     const row = el('div', { className: 'sk-row' + (s.active ? ' on' : '') }, el('div', { className: 'sk-head' }, sw, text, more));
     row.setAttribute('role', 'listitem');
     row.dataset.id = s.id;
@@ -105,6 +136,14 @@ export class SkillsPanel {
         body.append(el('div', { className: 'sk-h', textContent: 'Einstellungen' }), el('div', { className: 'sk-vars' }, ...s.vars.map((v) => this.field(s, v))));
       }
       if (s.topics.length) body.append(el('div', { className: 'sk-h', textContent: 'Darauf achtet der Agent' }), el('ul', {}, ...s.topics.map((t) => el('li', { textContent: t }))));
+      if (s.bundled) {
+        const id = `sk-${s.id}-default`;
+        const chk = el('input', { id, type: 'checkbox', className: 'switch', checked: s.defaultOn, disabled: this.busy.has(s.id) });
+        chk.addEventListener('change', () => void this.setDefault(s, chk.checked));
+        body.append(el('div', { className: 'sk-h', textContent: 'Neue Modelle' }),
+          el('label', { className: 'sk-defrow', htmlFor: id, title: 'Gilt für alle Modelle, die ab jetzt angelegt werden. Dieses Modell bleibt, wie es ist.' },
+            el('span', { textContent: 'Bei neuen Modellen einschalten' }), chk));
+      }
       const actions = el('div', { className: 'sk-actions' });
       if (s.file) {
         const view = el('button', { className: 'btn sm', title: 'Die Kopie im Projekt im Code-Panel zeigen' }, icon('file', 14, 1.9), 'Ansehen');
@@ -176,7 +215,7 @@ export class SkillsPanel {
   /** Für Tests. */
   state() {
     return {
-      skills: this.skills.map((s) => ({ id: s.id, title: s.title, summary: s.summary, active: s.active, file: s.file, changed: s.changed, problems: s.problems,
+      skills: this.skills.map((s) => ({ id: s.id, title: s.title, summary: s.summary, category: s.category, defaultOn: s.defaultOn, active: s.active, file: s.file, changed: s.changed, problems: s.problems,
         vars: Object.fromEntries(s.vars.map((v) => [v.name, v.value])) })),
       busy: [...this.busy], text: this.list.innerText,
     };

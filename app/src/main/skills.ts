@@ -12,6 +12,9 @@ import { backupText, resolveInside } from './files';
  * Platzhalter verwenden (`{{overhang}}`). Der Nutzer stellt die Werte im Panel ein, sie stehen in `project.json`
  * (`skill_settings`). Die Kopie im Projekt enthält die eingesetzten Werte: Der Agent liest konkrete Zahlen.
  * Die Kopie bleibt, wie sie ist, auch wenn eine neuere App eine neuere Fassung mitbringt.
+ *
+ * Kategorien und Standard (E46): `category` ordnet den Skill im Panel unter eine Überschrift, `default: on` schaltet ihn bei
+ * neuen Modellen ein. Der Nutzer kann das je Skill für die ganze App umstellen (`skill_defaults` in state.json).
  */
 
 /** Kennung = Dateiname ohne .md. Nur Kleinbuchstaben, Ziffern und Bindestrich: Sie landet in Pfaden und in AGENTS.md. */
@@ -28,7 +31,13 @@ const PLACEHOLDER = /\{\{\s*([a-z][a-z0-9_]{0,30})\s*\}\}/g;
 export type SkillValues = Record<string, SkillValue>;
 /** Kopf einer Variablen ohne aktuellen Wert. */
 type VarDef = Omit<SkillVar, 'value'>;
-interface Parsed { id: string; title: string; name: string; summary: string; order: number; topics: string[]; vars: VarDef[]; text: string }
+interface Parsed {
+  id: string; title: string; name: string; summary: string; order: number; topics: string[]; vars: VarDef[]; text: string;
+  /** Überschrift im Panel (deutsch), leer: „Weitere“. */
+  category: string;
+  /** Bei neuen Modellen eingeschaltet, solange der Nutzer in der App nichts anderes festlegt (E46). */
+  defaultOn: boolean;
+}
 
 /** Zeilenenden vereinheitlichen: Eine Kopie mit CRLF (etwa nach einem Git-Checkout) gilt nicht als geändert. */
 const norm = (t: string) => t.replace(/\r\n?/g, '\n');
@@ -85,7 +94,20 @@ export function parseSkill(id: string, raw: string): Parsed {
     summary: meta.summary ?? '',
     order: Number(meta.order) || 100,
     topics,
+    category: meta.category ?? '',
+    defaultOn: /^(on|an|yes|ja|true)$/i.test(meta.default ?? ''),
   };
+}
+
+/**
+ * Reihenfolge im Panel: nach Kategorien (eine Kategorie steht dort, wo ihr erster Skill laut `order` steht, ohne Kategorie
+ * am Ende), darin nach `order` und Titel. So bleibt eine Kategorie beisammen, auch wenn die Nummern sich überschneiden.
+ */
+function sortSkills<T extends { category: string; order: number; title: string }>(list: T[]): T[] {
+  const first = new Map<string, number>();
+  for (const s of list) if (s.category) first.set(s.category, Math.min(first.get(s.category) ?? Infinity, s.order));
+  const rank = (s: T) => (s.category ? first.get(s.category)! : Infinity);
+  return [...list].sort((a, b) => rank(a) - rank(b) || a.category.localeCompare(b.category, 'de') || a.order - b.order || a.title.localeCompare(b.title, 'de'));
 }
 
 /** Zahl für den Agenten: Punkt als Dezimalzeichen, ohne Rundungsreste. */
@@ -201,7 +223,7 @@ function agentsList(text: string): string {
  * Alle Skills für die Oberfläche: die mitgelieferten und solche, die nur im Projekt liegen (etwa aus einer neueren App).
  * `active` und `settings` stammen aus project.json (active null: unlesbar). Auffälligkeiten werden gemeldet, nicht behoben (E28).
  */
-export function listSkills(root: string, bundledDir: string, active: string[] | null, settings: unknown): SkillInfo[] {
+export function listSkills(root: string, bundledDir: string, active: string[] | null, settings: unknown, defaults: SkillDefaults = {}): SkillInfo[] {
   const bundled = bundledSkills(bundledDir);
   const on = new Set((active ?? []).filter(isSkillId));
   let files: string[] = [];
@@ -219,7 +241,9 @@ export function listSkills(root: string, bundledDir: string, active: string[] | 
     const values = cleanValues(vars, (settings as Record<string, unknown> | null)?.[id]);
     const info: SkillInfo = {
       id, title: meta?.title ?? id, summary: showText(meta?.summary ?? '', vars, values), topics: (meta?.topics ?? []).map((x) => showText(x, vars, values)),
-      order: meta?.order ?? 100, bundled: !!b, active: isOn, file: copy != null ? relOf(id) : null,
+      order: meta?.order ?? 100, category: meta?.category ?? '', bundled: !!b, active: isOn, file: copy != null ? relOf(id) : null,
+      // Für neue Modelle gibt es nur, was die App mitbringt
+      defaultOn: !!b && (defaults[id] ?? b.defaultOn),
       changed: !!b && copy != null && norm(copy) !== renderSkill(b.text, values),
       vars: vars.map((v) => ({ ...v, value: values[v.name] ?? v.default })),
       problems: [],
@@ -230,7 +254,35 @@ export function listSkills(root: string, bundledDir: string, active: string[] | 
     if (!b && isOn) info.problems.push('Diese App bringt den Skill nicht mit. Die Kopie im Projekt gilt weiter.');
     return info;
   });
-  return out.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, 'de'));
+  return sortSkills(out);
+}
+
+/** Vom Nutzer festgelegt, welche Skills neue Modelle eingeschaltet bekommen (nur Abweichungen vom Kopf der Skills). */
+export type SkillDefaults = Record<string, boolean>;
+
+/** Skills für ein neues Modell: die mitgelieferten, die laut Nutzer oder Kopf (`default: on`) an sein sollen, in Panel-Reihenfolge. */
+export function defaultSkills(bundledDir: string, defaults: SkillDefaults): string[] {
+  return sortSkills([...bundledSkills(bundledDir).values()]).filter((s) => defaults[s.id] ?? s.defaultOn).map((s) => s.id);
+}
+
+/**
+ * Schaltet in einem neuen Projekt die Standard-Skills ein: Kopie mit den Standardwerten, Abschnitt in AGENTS.md.
+ * Ein Skill, der sich nicht kopieren lässt, bleibt aus (der Rest geht weiter). Rückgabe: die eingeschalteten Kennungen,
+ * project.json trägt der Aufrufer ein.
+ */
+export function applyDefaultSkills(root: string, bundledDir: string, backupDir: string, defaults: SkillDefaults): string[] {
+  const done: string[] = [];
+  for (const id of defaultSkills(bundledDir, defaults)) {
+    try { copySkill(root, bundledDir, id, backupDir, {}); done.push(id); } catch (e) { console.error(`[soma] Skill „${id}“ ließ sich nicht einschalten:`, e); }
+  }
+  if (done.length) {
+    // Scheitert das, meldet die Karte des Skills später „AGENTS.md nennt diesen Skill nicht“. Das Anlegen geht weiter.
+    try {
+      const warning = writeAgentsList(root, done.map((id) => ({ id, name: skillName(root, bundledDir, id) })));
+      if (warning) console.error('[soma]', warning);
+    } catch (e) { console.error('[soma] AGENTS.md ließ sich nicht schreiben:', e); }
+  }
+  return done;
 }
 
 /** Text atomar schreiben: erst eine Nebendatei, dann umbenennen. */

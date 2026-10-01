@@ -88,6 +88,7 @@ const skills = new SkillsPanel($('skills-list'), {
   list: () => api.skills.list(),
   set: (id, on) => api.skills.set(id, on),
   configure: (id, values) => api.skills.configure(id, values),
+  setDefault: (id, on) => api.skills.setDefault(id, on),
   open: (file) => void openCode(file),
   insert: (text) => insertToAgent(text),
   toast,
@@ -170,7 +171,8 @@ async function renderSelection(): Promise<void> {
   const p = partInfo(partId);
   const e = partEntry(partId);
   const name = e?.name ?? p?.name ?? partId;
-  $('sel-name').textContent = name + (p?.role === 'reference' ? ' (Referenz)' : '');
+  // Zukaufteile (Normteile aus soma.fasteners, E46) sehen aus wie eigene Teile, der Zusatz unterscheidet sie
+  $('sel-name').textContent = name + (p?.role === 'reference' ? ' (Referenz)' : p?.role === 'hardware' ? ' (Zukaufteil)' : '');
   $('sel-name').title = p?.group ? `Gruppe ${p.group}` : '';
   $('sel-swatch').style.background = p?.color ?? '';
   const bits = pick?.faceId != null

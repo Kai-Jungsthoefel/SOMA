@@ -100,7 +100,7 @@ try {
   // Skills mit Einstellungen (E17): Variablen im Kopf, Platzhalter im Text, Prüfung der Werte
   const sk = path.join(tmp, 'skills.mjs');
   await build({ entryPoints: [path.join(APP, 'src', 'main', 'skills.ts')], outfile: sk, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
-  const { parseSkill, renderSkill, checkValue, cleanValues, bundledSkills } = await import(pathToFileURL(sk).href);
+  const { parseSkill, renderSkill, checkValue, cleanValues, bundledSkills, defaultSkills } = await import(pathToFileURL(sk).href);
   const SRC = '---\ntitle: Test\nvar angle: 45 | ° | Winkel | 10..80\nvar mat: PLA | | Material | PLA, PETG=Petg-Filament\n---\n# Skill\n\nUp to {{angle}}° in {{mat}}, {{unknown}} stays.\n';
   const ps = parseSkill('t', SRC);
   check('Skill-Kopf: Zahl mit Einheit und Bereich, Auswahl mit Anzeigenamen', ps.vars.length === 2 && ps.vars[0].kind === 'number' && ps.vars[0].min === 10 && ps.vars[0].max === 80 && ps.vars[0].unit === '°'
@@ -114,7 +114,19 @@ try {
     && JSON.stringify(cleanValues(ps.vars, { angle: '60' })) === '{"angle":60}');
   const shipped = [...bundledSkills(path.join(APP, 'resources', 'skills')).values()];
   const leftover = shipped.map((s) => renderSkill(s.text, {})).filter((x) => /\{\{/.test(x));
-  check('Mitgelieferte Skills: jeder Platzhalter hat eine Variable', shipped.length >= 3 && shipped.every((s) => s.vars.length) && !leftover.length, shipped.map((s) => `${s.id}:${s.vars.length}`).join(','));
+  // Einstellungen sind freiwillig (etwa „Normteile“ hat keine), der Kopf aber nicht
+  check('Mitgelieferte Skills: Kopf vollständig, jeder Platzhalter hat eine Variable, Standardwerte gültig', shipped.length >= 12
+    && shipped.every((s) => s.title !== s.id && s.name !== s.title && s.summary && s.topics.length && s.order < 100)
+    && shipped.every((s) => s.vars.every((v) => 'value' in checkValue(v, v.default))) && !leftover.length, shipped.map((s) => `${s.id}:${s.vars.length}`).join(','));
+  // Kategorien und Standard für neue Modelle (E46)
+  const kp = parseSkill('k', '---\ntitle: K\ncategory: Arbeitsweise\ndefault: on\n---\n# K\n');
+  check('Skill-Kopf: Kategorie und „default: on“, ohne Angabe keine Kategorie und aus', kp.category === 'Arbeitsweise' && kp.defaultOn === true
+    && ps.category === '' && ps.defaultOn === false && parseSkill('x', '---\ndefault: off\n---\n').defaultOn === false);
+  const cats = [...new Set(shipped.map((s) => s.category))];
+  check('Mitgelieferte Skills: jeder mit Kategorie, drei Kategorien', shipped.every((s) => s.category) && cats.length === 3, cats.join(','));
+  const SKD = path.join(APP, 'resources', 'skills');
+  check('Neue Modelle: ohne Vorgabe des Nutzers die Arbeitsweise (Kopf „default: on“)', defaultSkills(SKD, {}).join(',') === 'konstruktionsablauf,cadquery', defaultSkills(SKD, {}).join(','));
+  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels', defaultSkills(SKD, { konstruktionsablauf: false, toleranzen: true, '3d-druck': true }).join(',') === 'cadquery,3d-druck,toleranzen');
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

@@ -56,14 +56,32 @@ try {
   const settings = () => pj().skill_settings ?? {};
   const block = () => { const a = read('AGENTS.md') ?? ''; const m = /<!-- soma:skills -->([\s\S]*?)<!-- \/soma:skills -->/.exec(a); return m ? m[1] : null; };
 
-  // 1) Panel: drei mitgelieferte Skills, alle aus. Die Vorlage hat den leeren Abschnitt in AGENTS.md
-  check('Vorlage: AGENTS.md hat den Abschnitt „Skills" (noch keiner aktiv)', (block() ?? '').includes('No skills are active'), String(block()).slice(0, 80));
+  // 1) Panel: die mitgelieferten Skills nach Kategorien und `order`
   await ev(() => document.querySelector('#rail [data-panel="skills"]').click());
   await waitFor('Skills geladen', () => window.__t.skills().skills.length >= 3, 10000);
   let s = await st();
-  check('Panel „Skills": 3D-Druck, Toleranzen, Gehäusebau, alle aus', s.skills.map((x) => x.id).join(',') === '3d-druck,toleranzen,gehaeuse' && s.skills.every((x) => !x.active && !x.file && !x.problems.length)
-    && s.text.includes('3D-Druck (FDM)') && s.text.includes('Gehäusebau'), s.skills.map((x) => `${x.id}:${x.active}`).join(','));
+  const ORDER = 'konstruktionsablauf,cadquery,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,normteile,festigkeit,baugruppen';
+  const heads = await ev(() => [...document.querySelectorAll('#skills-list .sk-cat')].map((h) => h.textContent).join(','));
+  check('Panel „Skills": Überschriften Arbeitsweise, Fertigungsverfahren, Konstruktionswissen, darunter die Skills nach `order`',
+    s.skills.map((x) => x.id).join(',') === ORDER && heads === 'Arbeitsweise,Fertigungsverfahren,Konstruktionswissen'
+    && s.text.includes('3D-Druck (FDM)') && s.text.includes('Laserschneiden'), `${heads} | ${s.skills.map((x) => x.id).join(',')}`);
   await shot('skills-1-panel');
+
+  // Neues Modell (E46): Die Skills mit „default: on“ (Arbeitsweise) sind von Anfang an an und schon im Startcommit
+  await waitFor('Speicherstand', () => !!window.__t.saveState(), 10000);
+  check('Neues Modell: Konstruktionsablauf und Sauber modellieren an, als „Bei neuen Modellen an“ markiert, die übrigen nicht',
+    JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery"]' && s.skills.filter((x) => x.active).map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery'
+    && s.skills.filter((x) => x.defaultOn).map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery' && s.text.split('Bei neuen Modellen an').length === 3
+    && s.skills.every((x) => !x.problems.length), JSON.stringify(pj().skills));
+  check('Neues Modell: Kopien mit Standardwerten, AGENTS.md nennt beide, alles im Startcommit (nichts ungespeichert)',
+    !(read('.soma/skills/konstruktionsablauf.md') ?? '{{').includes('{{') && (block() ?? '').includes('- `.soma/skills/konstruktionsablauf.md`: Design workflow')
+    && (block() ?? '').includes('- `.soma/skills/cadquery.md`: Clean CadQuery modeling') && (await g('ls-files', '.soma/skills')).split('\n').length === 2
+    && (await ev(() => window.__t.saveState())).dirtyFiles === 0, String((await ev(() => window.__t.saveState())).dirtyFiles));
+  await toggle('konstruktionsablauf', false);
+  await toggle('cadquery', false);
+  s = await st();
+  check('Beide aus: alle Skills aus, AGENTS.md wieder mit „No skills are active"', s.skills.every((x) => !x.active && !x.file && !x.problems.length)
+    && (block() ?? '').includes('No skills are active') && JSON.stringify(pj().skills) === '[]', String(block()).slice(0, 80));
 
   // 2) Einschalten: Kopie, project.json (und App-Kopie), Abschnitt in AGENTS.md, als Änderung sichtbar
   await toggle('3d-druck', true);
@@ -130,10 +148,10 @@ try {
   check('Zurück auf den Standard: Düse 0,4 mm, aus project.json entfernt, Kopie wieder 0.4', settings()['3d-druck']?.overhang === 50 && settings()['3d-druck']?.material === 'PETG' && !('nozzle' in (settings()['3d-druck'] ?? {}))
     && (read('.soma/skills/3d-druck.md') ?? '').includes('| Nozzle | 0.4 mm |'), JSON.stringify(settings()));
   // Ausgeschalteter Skill: Werte lassen sich vorab einstellen und gelten beim Einschalten
-  await ev(() => document.querySelector('#skills-list .sk-row[data-id="gehaeuse"] .sk-more').click());
-  await setVar('gehaeuse', 'wall', '3');
-  await waitFor('Wand 3', () => window.__t.skills().skills.find((x) => x.id === 'gehaeuse')?.vars.wall === 3, 10000);
-  check('Gehäusebau (aus): Wand 3 mm gespeichert, keine Datei angelegt, Hinweis „gilt, sobald an"', settings().gehaeuse?.wall === 3 && read('.soma/skills/gehaeuse.md') === null
+  await ev(() => document.querySelector('#skills-list .sk-row[data-id="laser"] .sk-more').click());
+  await setVar('laser', 'thickness', '4');
+  await waitFor('Platte 4', () => window.__t.skills().skills.find((x) => x.id === 'laser')?.vars.thickness === 4, 10000);
+  check('Laserschneiden (aus): Plattenstärke 4 mm gespeichert, keine Datei angelegt, Hinweis „gilt, sobald an"', settings().laser?.thickness === 4 && read('.soma/skills/laser.md') === null
     && (await ev(() => window.__t.toast())).text.includes('Gilt, sobald der Skill an ist'));
   await shot('skills-3-einstellungen');
 
@@ -176,10 +194,10 @@ try {
   // 7) Älteres Projekt ohne Abschnitt in AGENTS.md: Er wird am Ende angehängt, nicht doppelt
   const agents = read('AGENTS.md');
   fs.writeFileSync(path.join(dir, 'AGENTS.md'), agents.replace(/\n*<!-- soma:skills -->[\s\S]*<!-- \/soma:skills -->\n?/, '\n'));
-  await toggle('gehaeuse', true);
+  await toggle('laser', true);
   const a2 = read('AGENTS.md');
-  check('Gehäusebau an: die vorher eingestellte Wand (3 mm) steht in der Kopie', (read('.soma/skills/gehaeuse.md') ?? '').includes('Wall 3 mm') && (read('.soma/skills/gehaeuse.md') ?? '').includes('WALL = 3'));
-  check('Ohne Abschnitt: am Ende angehängt, genau einmal', a2.trimEnd().endsWith('<!-- /soma:skills -->') && a2.split('<!-- soma:skills -->').length === 2 && (block() ?? '').includes('- `.soma/skills/gehaeuse.md`: Enclosure design'), String(block()));
+  check('Laserschneiden an: die vorher eingestellte Plattenstärke (4 mm) steht in der Kopie', (read('.soma/skills/laser.md') ?? '').includes('4 mm thick') && (read('.soma/skills/laser.md') ?? '').includes('THICKNESS = 4'));
+  check('Ohne Abschnitt: am Ende angehängt, genau einmal', a2.trimEnd().endsWith('<!-- /soma:skills -->') && a2.split('<!-- soma:skills -->').length === 2 && (block() ?? '').includes('- `.soma/skills/laser.md`: Laser cutting'), String(block()));
 
   // 8) AGENTS.md fehlt ganz: Skill geht trotzdem an, Warnung, AGENTS.md wird nicht neu angelegt
   const keep = read('AGENTS.md');
@@ -195,7 +213,7 @@ try {
   check('AGENTS.md ohne Eintrag eines aktiven Skills: gemeldet', (await skill('3d-druck')).problems.some((p) => p.includes('AGENTS.md nennt')), JSON.stringify((await skill('3d-druck')).problems));
   await toggle('3d-druck', false);
   await toggle('3d-druck', true);
-  check('Aus und wieder an trägt ihn ein', !(await skill('3d-druck')).problems.length && (block() ?? '').includes('3d-druck.md') && (block() ?? '').includes('gehaeuse.md'));
+  check('Aus und wieder an trägt ihn ein', !(await skill('3d-druck')).problems.length && (block() ?? '').includes('3d-druck.md') && (block() ?? '').includes('laser.md'));
 
   // 9) Speichern: Skills im Snapshot und in der ZIP
   const zipPath = path.join(workDir, 'Skills.zip');
@@ -204,9 +222,39 @@ try {
   await waitFor('gespeichert', () => window.__t.saveState() && !window.__t.saveState().unsaved && window.__t.saveState().zipPath, 60000)
     .catch(async (e) => { console.log('Stand:', JSON.stringify(await ev(() => ({ save: window.__t.saveState(), toast: window.__t.toast() })))); throw e; });
   const tracked = (await g('ls-files', '.soma/skills')).split('\n');
-  check('Snapshot enthält die Skills (in Git)', tracked.includes('.soma/skills/3d-druck.md') && tracked.includes('.soma/skills/gehaeuse.md'), tracked.join(','));
+  check('Snapshot enthält die Skills (in Git)', tracked.includes('.soma/skills/3d-druck.md') && tracked.includes('.soma/skills/laser.md'), tracked.join(','));
   const names = await listZip(zipPath);
-  check('ZIP enthält die Skills', names.includes('.soma/skills/3d-druck.md') && names.includes('.soma/skills/gehaeuse.md'));
+  check('ZIP enthält die Skills', names.includes('.soma/skills/3d-druck.md') && names.includes('.soma/skills/laser.md'));
+
+  // 10) Vorgabe für neue Modelle (E46): gilt für die App (state.json), das offene Modell bleibt, wie es ist
+  const appState = () => { try { return JSON.parse(fs.readFileSync(path.join(ud, 'state.json'), 'utf8')); } catch { return {}; } };
+  const setDefault = async (id, on) => {
+    if (!(await ev((i) => !!document.getElementById(`sk-${i}-default`), id))) await ev((i) => document.querySelector(`#skills-list .sk-row[data-id="${i}"] .sk-more`).click(), id);
+    await ev((i) => document.getElementById(`sk-${i}-default`).click(), id);
+    await waitFor(`Vorgabe ${id} ${on}`, ([i, o]) => { const x = window.__t.skills(); return !x.busy.length && x.skills.find((k) => k.id === i)?.defaultOn === o; }, 10000, [id, on]);
+  };
+  const before = JSON.stringify(pj().skills);
+  await setDefault('3d-druck', true);
+  check('„Bei neuen Modellen einschalten“ (3D-Druck): in state.json, Meldung, das offene Modell unverändert', JSON.stringify(appState().skill_defaults) === '{"3d-druck":true}'
+    && JSON.stringify(pj().skills) === before && !(await ev(() => window.__t.saveState())).unsaved
+    && (await ev(() => window.__t.toast())).text.includes('wird bei neuen Modellen eingeschaltet. Dieses Modell bleibt, wie es ist.'), JSON.stringify(appState().skill_defaults));
+  await setDefault('konstruktionsablauf', false);
+  await setDefault('cadquery', false);
+  await setDefault('cadquery', true);
+  check('Abwahl eines Standard-Skills steht in state.json, zurück auf den Kopf fällt der Eintrag weg', JSON.stringify(appState().skill_defaults) === '{"3d-druck":true,"konstruktionsablauf":false}'
+    && appState().lastProject === proj.id, JSON.stringify(appState().skill_defaults));
+  await shot('skills-4-neue-modelle');
+  await domClick('btn-new');
+  await waitFor('neues Projekt', (oldId) => window.__t.project().id !== oldId && window.__t.status().state === 'ok', 90000, proj.id);
+  const p2 = await ev(() => window.__t.project());
+  const pj2 = JSON.parse(fs.readFileSync(path.join(p2.dir, '.soma', 'project.json'), 'utf8'));
+  const fdm2 = fs.readFileSync(path.join(p2.dir, '.soma', 'skills', '3d-druck.md'), 'utf8');
+  check('Neues Modell nach der Vorgabe: Sauber modellieren und 3D-Druck, mit Standardwerten statt der Einstellungen des alten Modells (55°, PETG)', JSON.stringify(pj2.skills) === '["cadquery","3d-druck"]'
+    && !pj2.skill_settings && fdm2.includes('Overhangs up to 45°') && fdm2.includes('| Material | PLA |') && !fs.existsSync(path.join(p2.dir, '.soma', 'skills', 'konstruktionsablauf.md'))
+    && fs.readFileSync(path.join(p2.dir, 'AGENTS.md'), 'utf8').includes('- `.soma/skills/3d-druck.md`: 3D printing (FDM)'), JSON.stringify(pj2));
+  await waitFor('Speicherstand neu', () => window.__t.saveState() && !window.__t.saveState().unsaved, 10000).catch(() => {});
+  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 2
+    && (await ev(() => window.__t.saveState())).dirtyFiles === 0, String((await ev(() => window.__t.saveState())).dirtyFiles));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));

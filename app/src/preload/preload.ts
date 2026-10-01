@@ -60,6 +60,7 @@ const api: SomaApi = {
     list: () => ipcRenderer.invoke('skills:list'),
     set: (id, on) => ipcRenderer.invoke('skills:set', id, on),
     configure: (id, values) => ipcRenderer.invoke('skills:configure', id, values),
+    setDefault: (id, on) => ipcRenderer.invoke('skills:setDefault', id, on),
   },
   dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
