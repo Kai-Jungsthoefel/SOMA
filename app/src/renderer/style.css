@@ -132,6 +132,20 @@ code { font-family:var(--mono); font-size:.95em; }
 .sk-body li { margin:1px 0; }
 .sk-actions { display:flex; gap:6px; flex-wrap:wrap; }
 .sk-note { padding:0 12px 8px 56px; font-size:12px; color:var(--tx3); }
+.sk-setline { padding:0 12px 8px 56px; font-size:12px; color:var(--acc-tx); }
+.sk-h { margin:2px 0 4px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); }
+.sk-vars { display:flex; flex-direction:column; gap:3px; margin-bottom:10px; }
+.sk-var { display:flex; align-items:center; gap:6px; min-height:28px; }
+.sk-var label { flex:1; min-width:0; color:var(--tx2); }
+.sk-var.set label { color:var(--tx); }
+.sk-in { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+.sk-in .c3 { width:16px; font-size:11.5px; }
+.sk-num { width:62px; height:26px; padding:0 6px; border-radius:5px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--mono); text-align:right; }
+.sk-var.set .sk-num, .sk-var.set .sk-select { border-color:var(--acc-line); }
+.sk-select { max-width:150px; height:26px; padding:0 4px; border-radius:5px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--sans); }
+.sk-reset { width:22px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:5px; color:var(--tx3); flex-shrink:0; }
+.sk-reset:hover { background:var(--s3); color:var(--tx); }
+.sk-reset[hidden] { display:flex; visibility:hidden; }
 .sk-warn { padding:0 12px 8px 56px; font-size:12px; color:var(--warn); }
 .dropzone { margin:12px; padding:16px 14px; border:1.5px dashed var(--line2); border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; color:var(--tx2); font-size:12px; flex-shrink:0; }
 .dropzone b { color:var(--tx); font-size:13px; font-weight:600; }

@@ -3,7 +3,11 @@ title: Toleranzen und Passungen
 name: Tolerances and fits
 summary: Spiel als benannte Konstanten, Kollisionsprüfung im Code, Durchgangs- und Kernlöcher, Senkungen für Zylinderschrauben, ISO-Passungen.
 order: 20
-topics: Spiel als benannte Konstanten; Kollisionen und Abstände im Code prüfen; Durchgangs- und Kernlöcher (ISO 273); Senkungen für Zylinderschrauben; ISO-Passungen für gefertigte Teile; Laser- und Blechteile
+topics: Fertigung: {{process}}; Spiel als benannte Konstanten; Kollisionen und Abstände im Code prüfen; Durchgangslöcher ({{hole_fit}}) und Kernlöcher; Senkungen für Zylinderschrauben; ISO-Passungen für gefertigte Teile; Laser- und Blechteile
+var process: unknown | | Fertigung | unknown=noch offen (Agent fragt), 3D printing=3D-Druck, CNC milling=CNC-Fräsen, laser cutting=Laserschneiden, sheet metal=Blech
+var hole_fit: medium | | Durchgangslöcher nach ISO 273 | fine=fein, medium=mittel, coarse=grob
+var min_gap: 0.2 | mm | Mindestabstand zwischen Teilen | 0..5
+var kerf: 0.15 | mm | Spiel für Laserteile je Seite | 0..1
 ---
 # Skill: Tolerances and fits
 
@@ -11,11 +15,12 @@ Every real part deviates from its nominal size. Design so that parts still fit w
 
 ## General rules
 
-- If `NOTES.md` does not say how the parts are made (3D printing, CNC milling, laser cutting, sheet metal), ask. The
-  clearances depend on it.
+- Manufacturing process set by the user in the app: **{{process}}**. If it is "unknown" and `NOTES.md` does not say how
+  the parts are made (3D printing, CNC milling, laser cutting, sheet metal), ask. The clearances depend on it.
 - Put every clearance, fit and allowance into a named constant at the top of `model.py` (`SCREW_CLEARANCE`, `LID_GAP`).
   Never hide them in expressions.
 - Mating faces never share the exact same coordinate: leave a defined gap, or a defined overlap for a press fit.
+- Parts that must not touch keep at least {{min_gap}} mm distance (`MIN_GAP = {{min_gap}}`).
 - Dimension from the functional faces: a hole follows the part it has to meet, not an arbitrary outer edge.
 - After building, check the critical gaps (measure them or compute them, see below) and tell the user the values.
 
@@ -23,15 +28,15 @@ Every real part deviates from its nominal size. Design so that parts still fit w
 
 - Interference: `a.intersect(b).val().Volume()` must be (close to) 0 for parts that must not touch, and for a part and
   a reference (`role="reference"`).
-- Smallest gap between two shapes in mm: `a.val().distance(b.val())`.
+- Smallest gap between two shapes in mm: `a.val().distance(b.val())`, at least {{min_gap}} mm.
 - Print such checks only while you work on them and remove the debug output afterwards.
 
 ## Holes for metric screws
 
-Clearance holes after ISO 273 and tap drills (core holes) for coarse threads, in mm. Use "medium" unless the user wants
-otherwise. For printed parts the 3D printing skill adds to these values.
+Clearance holes after ISO 273 and tap drills (core holes) for coarse threads, in mm. The user chose the **{{hole_fit}}**
+column. For printed parts the 3D printing skill adds to these values.
 
-| Thread | Close | Medium | Free | Tap drill |
+| Thread | Fine | Medium | Coarse | Tap drill |
 |---|---|---|---|---|
 | M2 | 2.2 | 2.4 | 2.6 | 1.6 |
 | M2.5 | 2.7 | 2.9 | 3.1 | 2.05 |
@@ -67,4 +72,4 @@ In CadQuery: `.cboreHole(diameter, cboreDiameter, cboreDepth)`. Countersunk scre
 
 ## Laser-cut and sheet parts
 
-- Slots and tabs: 0.1 to 0.2 mm clearance per side, depending on the kerf. Keep the material thickness as a constant.
+- Slots and tabs: {{kerf}} mm clearance per side (`KERF_CLEARANCE = {{kerf}}`). Keep the material thickness as a constant.

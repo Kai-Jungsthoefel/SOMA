@@ -20,6 +20,8 @@ export interface ProjectJson {
   created: string;
   /** Aktive Skills (E17), ihre Kopien liegen in .soma/skills/. */
   skills?: string[];
+  /** Einstellungen der Skills je Kennung, nur vom Standard abweichende Werte (auch für ausgeschaltete Skills). */
+  skill_settings?: Record<string, Record<string, number | string>>;
 }
 
 /** Zweite Kopie des Projektzustands in den App-Daten (E27) plus Angaben, die nur die App braucht. */
@@ -87,14 +89,22 @@ export function renameProject(id: string, name: string): void {
   if (cur) writeJson(stateFile(id), { ...cur, name });
 }
 
-/** Aktive Skills ins Projekt schreiben, in project.json und die App-Kopie (E27). Wirft, wenn project.json unlesbar ist. */
-export function setProjectSkills(id: string, skills: string[]): void {
+/** Skills und ihre Einstellungen ins Projekt schreiben, in project.json und die App-Kopie (E27). Wirft, wenn project.json unlesbar ist. */
+export function updateProjectSkills(id: string, patch: Pick<ProjectJson, 'skills' | 'skill_settings'>): void {
   const file = path.join(projectDir(id), '.soma', 'project.json');
   const pj = readJson<ProjectJson>(file);
   if (!pj) throw new Error('.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill eintragen.');
-  writeJson(file, { ...pj, skills });
+  // Leere Einstellungen fallen weg, damit project.json ohne Änderung auch gleich bleibt
+  const settings = Object.fromEntries(Object.entries(patch.skill_settings ?? pj.skill_settings ?? {}).filter(([, v]) => v && Object.keys(v).length));
+  const next: ProjectJson = { ...pj, ...(patch.skills ? { skills: patch.skills } : {}) };
+  if (Object.keys(settings).length) next.skill_settings = settings; else delete next.skill_settings;
+  writeJson(file, next);
   const cur = readJson<ProjectState>(stateFile(id));
-  if (cur) writeJson(stateFile(id), { ...cur, skills });
+  if (cur) {
+    const copy: ProjectState = { ...cur, skills: next.skills };
+    if (next.skill_settings) copy.skill_settings = next.skill_settings; else delete copy.skill_settings;
+    writeJson(stateFile(id), copy);
+  }
 }
 
 /** Prüft ein Projekt und MELDET Auffälligkeiten. Repariert nichts (E28). */

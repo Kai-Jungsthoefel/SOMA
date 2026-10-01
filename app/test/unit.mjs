@@ -96,6 +96,25 @@ try {
   const icoSizes = Array.from({ length: ico.readUInt16LE(4) }, (_, i) => ico[6 + 16 * i] || 256);
   check('App-Icon: icon.ico mit 16 bis 256 px, icon.png vorhanden', [16, 24, 32, 48, 256].every((s) => icoSizes.includes(s))
     && fs.existsSync(path.join(APP, 'resources', 'icon.png')), icoSizes.join(','));
+
+  // Skills mit Einstellungen (E17): Variablen im Kopf, Platzhalter im Text, Prüfung der Werte
+  const sk = path.join(tmp, 'skills.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'main', 'skills.ts')], outfile: sk, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const { parseSkill, renderSkill, checkValue, cleanValues, bundledSkills } = await import(pathToFileURL(sk).href);
+  const SRC = '---\ntitle: Test\nvar angle: 45 | ° | Winkel | 10..80\nvar mat: PLA | | Material | PLA, PETG=Petg-Filament\n---\n# Skill\n\nUp to {{angle}}° in {{mat}}, {{unknown}} stays.\n';
+  const ps = parseSkill('t', SRC);
+  check('Skill-Kopf: Zahl mit Einheit und Bereich, Auswahl mit Anzeigenamen', ps.vars.length === 2 && ps.vars[0].kind === 'number' && ps.vars[0].min === 10 && ps.vars[0].max === 80 && ps.vars[0].unit === '°'
+    && ps.vars[1].kind === 'choice' && ps.vars[1].options[1].value === 'PETG' && ps.vars[1].options[1].label === 'Petg-Filament', JSON.stringify(ps.vars));
+  const rs = renderSkill(SRC, { angle: 50, mat: 'PETG' });
+  check('Eingesetzt: Text mit Werten, Kopf mit Werten statt Standard, Unbekanntes bleibt', rs.includes('Up to 50° in PETG, {{unknown}} stays.') && rs.includes('var angle: 50 | °') && rs.includes('var mat: PETG |'), rs);
+  check('Ohne Einstellungen: die Standardwerte', renderSkill(SRC, {}).includes('Up to 45° in PLA'));
+  const cv = [checkValue(ps.vars[0], '52,5'), checkValue(ps.vars[0], 95), checkValue(ps.vars[0], 'abc'), checkValue(ps.vars[1], 'ABS')];
+  check('Werte geprüft: Komma geht, außerhalb des Bereichs, keine Zahl und fremde Auswahl abgelehnt', cv[0].value === 52.5 && cv[1].error?.includes('10 bis 80°') && cv[2].error && cv[3].error, JSON.stringify(cv));
+  check('Gespeicherte Werte bereinigt: Ungültiges und Standard fallen weg', JSON.stringify(cleanValues(ps.vars, { angle: 45, mat: 'XYZ', other: 1 })) === '{}'
+    && JSON.stringify(cleanValues(ps.vars, { angle: '60' })) === '{"angle":60}');
+  const shipped = [...bundledSkills(path.join(APP, 'resources', 'skills')).values()];
+  const leftover = shipped.map((s) => renderSkill(s.text, {})).filter((x) => /\{\{/.test(x));
+  check('Mitgelieferte Skills: jeder Platzhalter hat eine Variable', shipped.length >= 3 && shipped.every((s) => s.vars.length) && !leftover.length, shipped.map((s) => `${s.id}:${s.vars.length}`).join(','));
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

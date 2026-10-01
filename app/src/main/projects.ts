@@ -7,12 +7,12 @@ import { choose, choosePath } from './dialogs';
 import { GitRepo } from './git';
 import { MeasureService } from './measure';
 import { previewsDir, skillBackupsDir, skillsDir } from './paths';
-import { copySkill, isSkillId, listSkills, removeSkill, skillName, writeAgentsList } from './skills';
+import { bundledSkill, checkValue, cleanValues, copySkill, isSkillId, listSkills, removeSkill, skillName, writeAgentsList, type SkillValues } from './skills';
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
   backupWorkspace, createProject, extractProject, getAppState, inspectProject, isProjectId, patchAppState, projectDir,
-  readProjectJson, renameProject, setLastProject, setProjectSkills,
+  readProjectJson, renameProject, setLastProject, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
 
@@ -346,7 +346,13 @@ export class ProjectController {
 
   skills(): SkillInfo[] {
     const s = this.need();
-    return listSkills(s.dir, skillsDir(), this.activeSkills(s.id));
+    return listSkills(s.dir, skillsDir(), this.activeSkills(s.id), readProjectJson(s.id)?.skill_settings ?? null);
+  }
+
+  /** Gültige, vom Standard abweichende Werte eines Skills laut project.json. */
+  private skillValues(id: string, skill: string): SkillValues {
+    const b = bundledSkill(skillsDir(), skill);
+    return b ? cleanValues(b.vars, readProjectJson(id)?.skill_settings?.[skill]) : {};
   }
 
   /**
@@ -360,11 +366,44 @@ export class ProjectController {
     if (!isSkillId(skill)) return { ok: false, error: 'Unbekannter Skill.', skills: list() };
     if (!active) return { ok: false, error: '.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill ein- oder ausschalten.', skills: list() };
     try {
-      const backup = on ? copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id)) : removeSkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id));
+      const values = this.skillValues(s.id, skill);
+      const backup = on ? copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), values) : removeSkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), values);
       const next = on ? [...new Set([...active, skill])] : active.filter((x) => x !== skill);
-      setProjectSkills(s.id, next);
+      updateProjectSkills(s.id, { skills: next });
       const warning = writeAgentsList(s.dir, next.map((id) => ({ id, name: skillName(s.dir, skillsDir(), id) })));
       return { ok: true, backup, ...(warning ? { warning } : {}), skills: list() };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
+    }
+  }
+
+  /**
+   * Einstellungen eines Skills ändern (null: zurück zum Standard). Erst alles prüfen, dann speichern. Ist der Skill an,
+   * wird seine Kopie mit den neuen Werten geschrieben (von Hand Geändertes vorher in die Sicherung).
+   */
+  configureSkill(skill: unknown, values: unknown): SkillResult {
+    const s = this.need();
+    const list = () => this.skills();
+    const b = isSkillId(skill) ? bundledSkill(skillsDir(), skill) : undefined;
+    if (!isSkillId(skill) || !b) return { ok: false, error: 'Diesen Skill bringt die App nicht mit, er lässt sich nicht einstellen.', skills: list() };
+    const pj = readProjectJson(s.id);
+    if (!pj) return { ok: false, error: '.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich nichts einstellen.', skills: list() };
+    if (!values || typeof values !== 'object') return { ok: false, error: 'Keine Werte.', skills: list() };
+    const prev = this.skillValues(s.id, skill);
+    const next: SkillValues = { ...prev };
+    for (const [name, raw] of Object.entries(values as Record<string, unknown>)) {
+      const v = b.vars.find((x) => x.name === name);
+      if (!v) return { ok: false, error: `Der Skill hat keine Einstellung „${name}“.`, skills: list() };
+      if (raw === null) { delete next[name]; continue; }
+      const r = checkValue(v, raw);
+      if ('error' in r) return { ok: false, error: r.error, skills: list() };
+      if (r.value === v.default) delete next[name]; else next[name] = r.value;
+    }
+    try {
+      updateProjectSkills(s.id, { skill_settings: { ...(pj.skill_settings ?? {}), [skill]: next } });
+      const active = Array.isArray(pj.skills) && pj.skills.includes(skill);
+      const backup = active ? copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), next, prev) : null;
+      return { ok: true, backup, skills: list() };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
     }

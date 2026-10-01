@@ -84,6 +84,21 @@ export interface MeasureResult { build: string; a: MeasureInfo; b?: MeasureInfo;
 /** `stale`: Die Anfrage gehört zu einem älteren Build, die Auswahl ist neu zu treffen. */
 export interface MeasureResponse { ok: boolean; result?: MeasureResult; error?: string; stale?: boolean }
 
+/** Wert einer Einstellung eines Skills: Zahl oder gewählter Eintrag. */
+export type SkillValue = number | string;
+/** Einstellung eines Skills, im Kopf der Skill-Datei erklärt (`var …`) und im Text als `{{name}}` eingesetzt. */
+export interface SkillVar {
+  name: string; label: string;
+  /** Einheit hinter der Zahl, etwa „mm“ oder „°“, sonst leer. */
+  unit: string;
+  kind: 'number' | 'choice';
+  value: SkillValue; default: SkillValue;
+  /** Erlaubter Bereich (Zahlen). */
+  min?: number; max?: number;
+  /** Auswahl: Wert für den Agenten und Anzeige in der Oberfläche. */
+  options?: { value: string; label: string }[];
+}
+
 /** Ein Skill (E17): Regelwerk für den Agenten, pro Modell zuschaltbar. */
 export interface SkillInfo {
   id: string;
@@ -95,8 +110,10 @@ export interface SkillInfo {
   active: boolean;
   /** Kopie im Projekt (`.soma/skills/<id>.md`), null wenn keine da ist. */
   file: string | null;
-  /** Die Kopie im Projekt weicht von der mitgelieferten Fassung ab. */
+  /** Die Kopie im Projekt weicht von der mitgelieferten Fassung (mit den eingestellten Werten) ab. */
   changed: boolean;
+  /** Einstellungen mit ihren aktuellen Werten (nur bei mitgelieferten Skills). */
+  vars: SkillVar[];
   /** Auffälligkeiten, nur gemeldet (E28). */
   problems: string[];
 }
@@ -191,7 +208,12 @@ export interface SomaApi {
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: { query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse> };
   /** Skills des offenen Modells (E17): auflisten, ein- und ausschalten. */
-  skills: { list(): Promise<SkillInfo[]>; set(id: string, on: boolean): Promise<SkillResult> };
+  skills: {
+    list(): Promise<SkillInfo[]>;
+    set(id: string, on: boolean): Promise<SkillResult>;
+    /** Einstellungen ändern, null setzt auf den Standard zurück. Ein aktiver Skill wird im Projekt neu geschrieben. */
+    configure(id: string, values: Record<string, SkillValue | null>): Promise<SkillResult>;
+  };
   /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
   dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };
 }

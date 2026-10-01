@@ -87,6 +87,7 @@ async function openCode(file: string, mark?: Mark): Promise<void> {
 const skills = new SkillsPanel($('skills-list'), {
   list: () => api.skills.list(),
   set: (id, on) => api.skills.set(id, on),
+  configure: (id, values) => api.skills.configure(id, values),
   open: (file) => void openCode(file),
   insert: (text) => insertToAgent(text),
   toast,
