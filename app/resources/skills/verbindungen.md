@@ -19,7 +19,8 @@ The user set the preferred screw size in the app. It applies unless the user say
 - Thread engagement: 1.5 × d in steel and brass, 2 × d in aluminium, 2.5 × d in plastics.
 - Hole centre at least 1.5 × d from an edge, 2 × d in plastics.
 - Free line along the screw axis for the screwdriver or hex key, also when the other parts are already mounted.
-- Standard lengths (ISO 4762): 4, 5, 6, 8, 10, 12, 16, 20, 25, 30, 35, 40 mm. Choose one, then design around it.
+- Only standard lengths (`lengths("ISO 4762", "M3")` and `pick_length()` from `soma.fasteners`). Choose one, then
+  design around it.
 - Every screw, nut and insert goes into the parts list in `NOTES.md`: size, length, count.
 
 ## Snap fits

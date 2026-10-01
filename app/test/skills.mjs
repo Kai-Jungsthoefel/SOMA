@@ -67,20 +67,22 @@ try {
     && s.text.includes('3D-Druck (FDM)') && s.text.includes('Laserschneiden'), `${heads} | ${s.skills.map((x) => x.id).join(',')}`);
   await shot('skills-1-panel');
 
-  // Neues Modell (E46): Die Skills mit „default: on“ (Arbeitsweise) sind von Anfang an an und schon im Startcommit
+  // Neues Modell (E46, E48): Die Skills mit „default: on“ (Arbeitsweise, Normteile) sind von Anfang an an und schon im Startcommit
   await waitFor('Speicherstand', () => !!window.__t.saveState(), 10000);
-  check('Neues Modell: Konstruktionsablauf und Sauber modellieren an, als „Bei neuen Modellen an“ markiert, die übrigen nicht',
-    JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery"]' && s.skills.filter((x) => x.active).map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery'
-    && s.skills.filter((x) => x.defaultOn).map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery' && s.text.split('Bei neuen Modellen an').length === 3
+  check('Neues Modell: Konstruktionsablauf, Sauber modellieren und Normteile an, als „Bei neuen Modellen an“ markiert, die übrigen nicht',
+    JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","normteile"]' && s.skills.filter((x) => x.active).map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery,normteile'
+    && s.skills.filter((x) => x.defaultOn).map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery,normteile' && s.text.split('Bei neuen Modellen an').length === 4
     && s.skills.every((x) => !x.problems.length), JSON.stringify(pj().skills));
-  check('Neues Modell: Kopien mit Standardwerten, AGENTS.md nennt beide, alles im Startcommit (nichts ungespeichert)',
+  check('Neues Modell: Kopien mit Standardwerten, AGENTS.md nennt alle drei, alles im Startcommit (nichts ungespeichert)',
     !(read('.soma/skills/konstruktionsablauf.md') ?? '{{').includes('{{') && (block() ?? '').includes('- `.soma/skills/konstruktionsablauf.md`: Design workflow')
-    && (block() ?? '').includes('- `.soma/skills/cadquery.md`: Clean CadQuery modeling') && (await g('ls-files', '.soma/skills')).split('\n').length === 2
+    && (block() ?? '').includes('- `.soma/skills/cadquery.md`: Clean CadQuery modeling') && (block() ?? '').includes('- `.soma/skills/normteile.md`: Standard parts')
+    && (await g('ls-files', '.soma/skills')).split('\n').length === 3
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, String((await ev(() => window.__t.saveState())).dirtyFiles));
   await toggle('konstruktionsablauf', false);
   await toggle('cadquery', false);
+  await toggle('normteile', false);
   s = await st();
-  check('Beide aus: alle Skills aus, AGENTS.md wieder mit „No skills are active"', s.skills.every((x) => !x.active && !x.file && !x.problems.length)
+  check('Alle drei aus: alle Skills aus, AGENTS.md wieder mit „No skills are active"', s.skills.every((x) => !x.active && !x.file && !x.problems.length)
     && (block() ?? '').includes('No skills are active') && JSON.stringify(pj().skills) === '[]', String(block()).slice(0, 80));
 
   // 2) Einschalten: Kopie, project.json (und App-Kopie), Abschnitt in AGENTS.md, als Änderung sichtbar
@@ -249,11 +251,11 @@ try {
   const p2 = await ev(() => window.__t.project());
   const pj2 = JSON.parse(fs.readFileSync(path.join(p2.dir, '.soma', 'project.json'), 'utf8'));
   const fdm2 = fs.readFileSync(path.join(p2.dir, '.soma', 'skills', '3d-druck.md'), 'utf8');
-  check('Neues Modell nach der Vorgabe: Sauber modellieren und 3D-Druck, mit Standardwerten statt der Einstellungen des alten Modells (55°, PETG)', JSON.stringify(pj2.skills) === '["cadquery","3d-druck"]'
+  check('Neues Modell nach der Vorgabe: Sauber modellieren, 3D-Druck und Normteile, mit Standardwerten statt der Einstellungen des alten Modells (55°, PETG)', JSON.stringify(pj2.skills) === '["cadquery","3d-druck","normteile"]'
     && !pj2.skill_settings && fdm2.includes('Overhangs up to 45°') && fdm2.includes('| Material | PLA |') && !fs.existsSync(path.join(p2.dir, '.soma', 'skills', 'konstruktionsablauf.md'))
     && fs.readFileSync(path.join(p2.dir, 'AGENTS.md'), 'utf8').includes('- `.soma/skills/3d-druck.md`: 3D printing (FDM)'), JSON.stringify(pj2));
   await waitFor('Speicherstand neu', () => window.__t.saveState() && !window.__t.saveState().unsaved, 10000).catch(() => {});
-  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 2
+  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 3
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, String((await ev(() => window.__t.saveState())).dirtyFiles));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));

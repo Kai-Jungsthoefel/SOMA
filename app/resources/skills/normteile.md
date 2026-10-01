@@ -1,37 +1,55 @@
 ---
 title: Normteile
 name: Standard parts
-summary: Maße von Schrauben, Muttern, Scheiben, Kugellagern, Passstiften und Alu-Profilen, Mutternfallen, Normteile im Modell.
+summary: Schrauben, Muttern, Scheiben und Gewindeeinsätze aus soma.fasteners mit passenden Bohrungen, Mutternfallen, Maße von Kugellagern, Passstiften und Alu-Profilen.
 order: 22
 category: Konstruktionswissen
-default: off
-topics: Schrauben, Muttern, Scheiben; Mutternfallen; Kugellager; Passstifte und Profile; Normteile im Modell
+default: on
+topics: Schrauben, Muttern, Scheiben und Einsätze mit soma.fasteners; Lage und Bohrungen; Mutternfallen; Kugellager; Passstifte und Profile; Normteile im Modell
 ---
 # Skill: Standard parts
 
 Nominal sizes in mm. Real parts vary: if the user has the parts, ask them to measure what matters. Other purchased
 parts (motors, switches, displays): never guess, ask for a datasheet or a STEP file.
 
-## Screws, nuts, washers
+## Screws, nuts, washers, inserts: `soma.fasteners`
 
-| Thread | Pitch | Socket head ISO 4762 Ø × height | Hex key | Countersunk ISO 10642 head Ø | Nut ISO 4032 across flats × height | Washer ISO 7089 Ø × thickness |
-|---|---|---|---|---|---|---|
-| M2 | 0.4 | 3.8 × 2 | 1.5 | – | 4 × 1.6 | 5 × 0.3 |
-| M2.5 | 0.45 | 4.5 × 2.5 | 2 | – | 5 × 2 | 6 × 0.5 |
-| M3 | 0.5 | 5.5 × 3 | 2.5 | 6.7 | 5.5 × 2.4 | 7 × 0.5 |
-| M4 | 0.7 | 7 × 4 | 3 | 9.0 | 7 × 3.2 | 9 × 0.8 |
-| M5 | 0.8 | 8.5 × 5 | 4 | 11.2 | 8 × 4.7 | 10 × 1 |
-| M6 | 1 | 10 × 6 | 5 | 13.4 | 10 × 5.2 | 12 × 1.6 |
-| M8 | 1.25 | 13 × 8 | 6 | 17.9 | 13 × 6.8 | 16 × 1.6 |
+Never model them by hand. `soma.fasteners` builds them simplified (no thread) with dimensions from standard tables and
+brings the matching holes as tools for `cut()`:
+
+```python
+from soma.fasteners import Screw, Nut, Washer, HeatSetInsert, pick_length
+
+s = Screw("ISO 4762", "M3x10", at=(20, 15, LID_TOP))  # head rests on the surface at `at`, shank along -Z
+lid = lid.cut(s.clearance_hole())                      # ISO 273 fit="medium", oversize=0.2 for printed holes
+ins = HeatSetInsert("M3x5.7", at=(20, 15, BOSS_TOP))   # top flush with `at`
+base = base.cut(ins.hole())                            # or base.cut(s.tap_hole()) for a tapped hole
+add_part("Screw 1", s, group="Hardware")               # role "hardware" automatically
+```
+
+- Position: `at` is the point on the axis where the part rests, `direction` (default `"-Z"`) points from there into
+  the material. With `at=(x, y), on=lid` the surface is found along `direction`. `sunk=True` sinks a head, nut or
+  washer flush with `at` (the hole gets the counterbore). Countersunk screws, set screws and inserts always sit flush.
+- Other end: `s.point(d)` is the point `d` mm from the seat along the axis, `.outer` the opposite face. Under a plate
+  of thickness `T`: `w = Washer("ISO 7089", "M3", at=s.point(T), direction="+Z")`, then
+  `Nut("ISO 4032", "M3", at=w.outer, direction="+Z")`.
+- Standards: screws ISO 4762 (socket head, the default), ISO 7380 (button head, low), ISO 10642 (countersunk),
+  ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw). Nuts ISO 4032, thin ISO 4035, high ISO 4033, square
+  DIN 557. Washers ISO 7089, large ISO 7093 on soft material. Inserts by ruthex (default), CNCKitchen, McMaster-Carr,
+  Hilitchi. In prints, heat-set inserts instead of nuts where the screw is opened often.
+- Read sizes from the objects instead of typing numbers: `s.head_diameter`, `s.head_height`, `s.key`, `s.clearance()`,
+  `nut.key`, `nut.height`, `ins.diameter`, `ins.length`.
+- Only standard lengths: `pick_length("ISO 4762", "M3", min_length, max_length)` returns the shortest that fits.
+  Through a nut at least grip + washers + nut height + 2 × pitch, into an insert between grip + half and grip + the
+  whole insert length.
+- Cut each hole only from the part it belongs to. All options are in the docstrings of the file
+  `python -c "import soma.fasteners as f; print(f.__file__)"` prints.
 
 ## Nut traps
 
-`polygon()` takes the diameter across the corners, not across the flats. Hexagonal pocket for a nut with across flats
-`AF`, corners pointing along X, depth nut height + 0.2 mm:
-
-```python
-.polygon(6, (AF + 2 * CLEARANCE) / math.cos(math.radians(30))).cutBlind(-(NUT_H + 0.2))
-```
+`nut.trap(clearance=0.2)` is the pocket for the nut, open to the surface with `sunk=True`. With `slot="+X",
+slot_length=…` the nut slides in from the side. At `angle=0` two flats are parallel to X, so a slot along X is exactly
+as wide as the nut. For a slot along Y use `angle=30`.
 
 ## Ball bearings (d × D × width)
 
@@ -48,6 +66,7 @@ parts (motors, switches, displays): never guess, ask for a datasheet or a STEP f
 
 ## In the model
 
-Purchased parts may be modeled simplified (screw: head and shank without thread, bearing: a ring) with
-`group="Hardware"` and `role="reference"`: visible and checked for collisions, but not exported. List them in the
-parts list in `NOTES.md`.
+Parts from `soma.fasteners` get `role="hardware"` by themselves: opaque, part of `output/model.step`, skipped by
+`soma export --all`. Model other purchased parts (bearings, pins) simplified, also with `role="hardware"`. A heat-set
+insert is wider than its hole (it is melted in): leave it out of interference checks with its part. List every part
+in `NOTES.md` (`s.designation` gives "ISO 4762 M3x10", `ins.part_number` the manufacturer's number).

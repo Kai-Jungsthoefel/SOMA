@@ -125,8 +125,8 @@ try {
   const cats = [...new Set(shipped.map((s) => s.category))];
   check('Mitgelieferte Skills: jeder mit Kategorie, drei Kategorien', shipped.every((s) => s.category) && cats.length === 3, cats.join(','));
   const SKD = path.join(APP, 'resources', 'skills');
-  check('Neue Modelle: ohne Vorgabe des Nutzers die Arbeitsweise (Kopf „default: on“)', defaultSkills(SKD, {}).join(',') === 'konstruktionsablauf,cadquery', defaultSkills(SKD, {}).join(','));
-  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels', defaultSkills(SKD, { konstruktionsablauf: false, toleranzen: true, '3d-druck': true }).join(',') === 'cadquery,3d-druck,toleranzen');
+  check('Neue Modelle: ohne Vorgabe des Nutzers die Arbeitsweise und Normteile (Kopf „default: on“)', defaultSkills(SKD, {}).join(',') === 'konstruktionsablauf,cadquery,normteile', defaultSkills(SKD, {}).join(','));
+  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels', defaultSkills(SKD, { konstruktionsablauf: false, toleranzen: true, '3d-druck': true }).join(',') === 'cadquery,3d-druck,toleranzen,normteile');
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

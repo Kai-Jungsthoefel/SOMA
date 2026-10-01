@@ -171,7 +171,7 @@ async function renderSelection(): Promise<void> {
   const p = partInfo(partId);
   const e = partEntry(partId);
   const name = e?.name ?? p?.name ?? partId;
-  // Zukaufteile (Normteile aus soma.fasteners, E46) sehen aus wie eigene Teile, der Zusatz unterscheidet sie
+  // Zukaufteile (Normteile aus soma.fasteners, E48) sehen aus wie eigene Teile, der Zusatz unterscheidet sie
   $('sel-name').textContent = name + (p?.role === 'reference' ? ' (Referenz)' : p?.role === 'hardware' ? ' (Zukaufteil)' : '');
   $('sel-name').title = p?.group ? `Gruppe ${p.group}` : '';
   $('sel-swatch').style.background = p?.color ?? '';
