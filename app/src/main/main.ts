@@ -6,7 +6,7 @@ import { choose, setTestAnswers } from './dialogs';
 import { backupText, importInputs, listFiles, resolveInside, saveFeedbackImage, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
-import { editBackupsDir, thumbnailsDir } from './paths';
+import { appIcon, editBackupsDir, thumbnailsDir } from './paths';
 import { createProject, getLastProject, isProjectId } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -135,7 +135,7 @@ const testWindowMode = process.env.SOMA_HIDDEN;
 
 function createWindow(): void {
   win = new BrowserWindow({
-    width: 1600, height: 950, title: 'SOMA', backgroundColor: '#121417', show: testWindowMode !== '1' && testWindowMode !== 'offscreen',
+    width: 1600, height: 950, title: 'SOMA', icon: appIcon(), backgroundColor: '#121417', show: testWindowMode !== '1' && testWindowMode !== 'offscreen',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,

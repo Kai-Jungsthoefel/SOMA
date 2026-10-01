@@ -23,6 +23,9 @@ export const thumbnailsDir = () => path.join(userDataDir(), 'thumbnails');
 /** Vorlage fuer neue Projekte (liegt neben dem Programm, spaeter im Installationspaket). */
 export const templateDir = () => path.join(app.getAppPath(), 'resources', 'template');
 
+/** App-Icon (E44) für Fenster und Taskleiste. Windows nimmt die ICO mit allen Größen, andere Systeme das PNG. */
+export const appIcon = () => path.join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+
 /**
  * Python der Basisumgebung. Reihenfolge: SOMA_PYTHON, Entwicklungs-Umgebung aus Phase 0, sonst `python` im PATH.
  * Die mitgelieferte Basisumgebung ersetzt das spaeter (Auslieferung ist noch offen).

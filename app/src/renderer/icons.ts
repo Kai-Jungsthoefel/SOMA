@@ -2,6 +2,8 @@
 // innerHTML ist hier unbedenklich, weil nie Text aus dem Projekt hineinkommt.
 const PATHS: Record<string, string> = {
   cube: '<path d="M12 2.5 20.5 7.2v9.6L12 21.5l-8.5-4.7V7.2z"/><path d="M3.5 7.2 12 12l8.5-4.8M12 12v9.5"/>',
+  // Marke von SOMA (E44): der Würfel als Sprechblase mit gefülltem Deckel
+  logo: '<path d="M12 2.6 19.9 7.1 12 11.6 4.1 7.1z" fill="currentColor"/><path d="M12 2.6 19.9 7.1v9L12 20.6l-4.3-2.45-5.3 3.2 1.7-7.5V7.1z"/><path d="M4.1 7.1 12 11.6l7.9-4.5M12 11.6v9"/>',
   down: '<path d="m6 9 6 6 6-6"/>', up: '<path d="m6 15 6-6 6 6"/>', right: '<path d="m9 6 6 6-6 6"/>',
   refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/>',
   export: '<path d="M12 15V4M7 9l5-5 5 5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/>',

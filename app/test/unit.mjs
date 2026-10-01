@@ -91,6 +91,11 @@ try {
   check('Pfad außerhalb des Projekts: abgelehnt', !w.ok && !fs.existsSync(path.join(tmp, 'draussen.py')), w.error?.slice(0, 60));
   const b1 = backupText(bdir, 'parts/deckel.py', 'eins'), b2 = backupText(bdir, 'parts/deckel.py', 'zwei');
   check('Sicherungen überschreiben einander nicht', b1 !== b2 && fs.readFileSync(b1, 'utf8') === 'eins' && fs.readFileSync(b2, 'utf8') === 'zwei', path.basename(b2));
+  // App-Icon (E44): ICO mit allen Größen für Fenster und Taskleiste (Breite 0 steht für 256), PNG für andere Systeme
+  const ico = fs.readFileSync(path.join(APP, 'resources', 'icon.ico'));
+  const icoSizes = Array.from({ length: ico.readUInt16LE(4) }, (_, i) => ico[6 + 16 * i] || 256);
+  check('App-Icon: icon.ico mit 16 bis 256 px, icon.png vorhanden', [16, 24, 32, 48, 256].every((s) => icoSizes.includes(s))
+    && fs.existsSync(path.join(APP, 'resources', 'icon.png')), icoSizes.join(','));
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();
