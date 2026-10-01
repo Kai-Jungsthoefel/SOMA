@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cadide"
+name = "soma"
 version = "0.1.0"
-description = "Hilfsbibliothek und Kommandozeile der CAD-IDE (Arbeitsname)"
+description = "Hilfsbibliothek und Kommandozeile von SOMA"
 requires-python = ">=3.11"
 # cadquery liegt in der mitgelieferten Basisumgebung und wird hier bewusst nicht als Abhaengigkeit gezogen
 
 [project.scripts]
-cadide = "cadide.cli:main"
+soma = "soma.cli:main"
 
 [tool.setuptools]
-packages = ["cadide"]
+packages = ["soma"]

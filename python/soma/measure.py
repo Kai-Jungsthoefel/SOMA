@@ -4,7 +4,7 @@ Grundlage ist `geometry/<build>.brep` neben model.map.json, aus demselben Build 
 Topologie exakt, daher stimmt die Reihenfolge von Faces()/Edges() mit den IDs des Meshers ueberein. Die Kennung im
 Dateinamen und in model.map.json verbindet beides, zusaetzlich prueft jede Anfrage Flaecheninhalt bzw. Kantenlaenge.
 
-`cadide serve` beantwortet Anfragen als JSON-Zeilen auf stdin/stdout (langlebiger Dienst der App, E24).
+`soma serve` beantwortet Anfragen als JSON-Zeilen auf stdin/stdout (langlebiger Dienst der App, E24).
 """
 import json
 import math

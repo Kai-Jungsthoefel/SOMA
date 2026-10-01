@@ -1,4 +1,4 @@
-"""Build: model.py ausfuehren, dann STEP + GLB + Mapping schreiben und den Stand in .cadide/build.json festhalten.
+"""Build: model.py ausfuehren, dann STEP + GLB + Mapping schreiben und den Stand in .soma/build.json festhalten.
 
 Einmal-Prozess, funktioniert ohne App (E24). Jeder Lauf schreibt build.json, auch bei Fehlern, damit App und
 Agent dieselbe strukturierte Rueckmeldung bekommen (Status, Fehlerort, Warnungen).
@@ -28,7 +28,7 @@ class BuildError(Exception):
 
 
 def read_project_json(root):
-    p = root / ".cadide" / "project.json"
+    p = root / ".soma" / "project.json"
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -44,7 +44,7 @@ def _rel(path, root):
 
 def _error_from_exception(exc, root):
     """Fehlerort bestimmen: SyntaxError traegt ihn selbst, sonst der letzte Traceback-Rahmen im Projektordner.
-    Der Traceback wird auf Projektzeilen gekuerzt (interne cadide-/cadquery-Rahmen sind fuer Agent und Nutzer Rauschen)."""
+    Der Traceback wird auf Projektzeilen gekuerzt (interne soma-/cadquery-Rahmen sind fuer Agent und Nutzer Rauschen)."""
     frames = traceback.extract_tb(exc.__traceback__)
     mine = [f for f in frames if _is_inside(f.filename, root)]
     file = line = None
@@ -77,7 +77,7 @@ def run_model(root, entry=None):
     script = (root / entry)
     if not script.is_file():
         raise BuildError(
-            f"Einstiegspunkt {entry!r} nicht gefunden. Lege {DEFAULT_ENTRY} an oder setze \"entry\" in .cadide/project.json.",
+            f"Einstiegspunkt {entry!r} nicht gefunden. Lege {DEFAULT_ENTRY} an oder setze \"entry\" in .soma/project.json.",
             kind="EntryMissing")
     registry.REGISTRY.clear()
     old_cwd = os.getcwd()
@@ -99,7 +99,7 @@ def run_model(root, entry=None):
     if not registry.REGISTRY:
         raise BuildError(
             "Kein Bauteil registriert. Rufe add_part(name, objekt) fuer jedes Bauteil auf "
-            "(from cadide import add_part).", file=entry, kind="NoParts")
+            "(from soma import add_part).", file=entry, kind="NoParts")
     return list(registry.REGISTRY)
 
 
@@ -151,10 +151,10 @@ def write_outputs(root, parts, project_name):
     timings["step"] = time.perf_counter() - t
 
     t = time.perf_counter()
-    (root / ".cadide").mkdir(exist_ok=True)
+    (root / ".soma").mkdir(exist_ok=True)
     # Kennung dieses Builds: verbindet model.glb, model.map.json und die exakte Geometrie fuer das Messen (E9)
     build_id = uuid.uuid4().hex
-    measure.write_geometry(root / ".cadide", [p["shape"] for p in parts], build_id)
+    measure.write_geometry(root / ".soma", [p["shape"] for p in parts], build_id)
     glb_parts, map_parts = [], []
     for i, p in enumerate(parts):
         pid = f"{i}:{p['step_name']}"
@@ -168,15 +168,15 @@ def write_outputs(root, parts, project_name):
             volume=round(p["shape"].Volume(), 3)))
         glb_parts.append(dict(meta=dict(partId=pid, name=p["name"], role=p["role"], group=group),
                               mesh=mesher.mesh_shape(p["shape"], tol, 0.3), color=p["color"]))
-    glb_size = mesher.write_glb(root / ".cadide" / "model.glb", glb_parts)
-    (root / ".cadide" / "model.map.json").write_text(
+    glb_size = mesher.write_glb(root / ".soma" / "model.glb", glb_parts)
+    (root / ".soma" / "model.map.json").write_text(
         json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
     timings["glb"] = time.perf_counter() - t
     return dict(glb_bytes=glb_size, tolerance=round(tol, 4), timings=timings, map_parts=map_parts)
 
 
 def run_build(project_dir):
-    """Kompletter Build. Schreibt .cadide/build.json und gibt das Ergebnis-Dict zurueck (status ok/error)."""
+    """Kompletter Build. Schreibt .soma/build.json und gibt das Ergebnis-Dict zurueck (status ok/error)."""
     root = Path(project_dir).resolve()
     started = time.time()
     timings = {}
@@ -198,8 +198,8 @@ def run_build(project_dir):
     result["timings"] = {k: round(v, 3) for k, v in timings.items()}
     result["finished"] = time.time()
     try:
-        (root / ".cadide").mkdir(exist_ok=True)
-        (root / ".cadide" / "build.json").write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
+        (root / ".soma").mkdir(exist_ok=True)
+        (root / ".soma" / "build.json").write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
         result["warnings"].append(f"build.json konnte nicht geschrieben werden: {e}")
     return result

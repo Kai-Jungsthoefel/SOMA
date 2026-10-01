@@ -95,7 +95,7 @@ def mesh_shape(shape, tol=0.05, ang=0.3):
 
 def write_glb(path, parts):
     """parts: Liste von Dicts {meta:{...}, mesh:{...aus mesh_shape}, color:(r,g,b,a) in sRGB}.
-    meta wandert 1:1 in node.extras.cadide (z. B. partId, role, faceRanges)."""
+    meta wandert 1:1 in node.extras.soma (z. B. partId, role, faceRanges)."""
     blob = bytearray()
     views, accessors, materials, meshes, nodes = [], [], [], [], []
 
@@ -141,10 +141,10 @@ def write_glb(path, parts):
         meshes.append(dict(name=p["meta"]["partId"], primitives=prims))
         meta = dict(p["meta"])
         meta["faces"] = m["faces"]; meta["edges"] = m["edges"]; meta["vertices"] = m.get("vertices", [])
-        nodes.append(dict(name=p["meta"]["partId"], mesh=len(meshes) - 1, extras=dict(cadide=meta)))
+        nodes.append(dict(name=p["meta"]["partId"], mesh=len(meshes) - 1, extras=dict(soma=meta)))
 
-    root = dict(name="cadide-root", children=list(range(1, len(nodes) + 1)))
-    gltf = dict(asset=dict(version="2.0", generator="cadide-phase0"), scene=0, scenes=[dict(nodes=[0])],
+    root = dict(name="soma-root", children=list(range(1, len(nodes) + 1)))
+    gltf = dict(asset=dict(version="2.0", generator="soma"), scene=0, scenes=[dict(nodes=[0])],
                 nodes=[root] + nodes, meshes=meshes, materials=materials, accessors=accessors,
                 bufferViews=views, buffers=[dict(byteLength=len(blob))])
     js = json.dumps(gltf, separators=(",", ":")).encode("utf-8")

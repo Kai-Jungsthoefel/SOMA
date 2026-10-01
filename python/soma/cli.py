@@ -1,4 +1,4 @@
-"""Kommandozeile: `cadide build` und `cadide export` (Arbeitsnamen)."""
+"""Kommandozeile: `soma build` und `soma export`."""
 import argparse
 import json
 import sys
@@ -117,8 +117,8 @@ def cmd_serve(args):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="cadide", description="CAD-IDE Hilfsprogramm (Arbeitsname)")
-    ap.add_argument("--version", action="version", version=f"cadide {__version__}")
+    ap = argparse.ArgumentParser(prog="soma", description="Hilfsprogramm von SOMA")
+    ap.add_argument("--version", action="version", version=f"soma {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build", help="model.py ausfuehren und STEP, GLB und Mapping schreiben")
