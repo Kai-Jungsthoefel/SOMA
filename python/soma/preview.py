@@ -48,7 +48,7 @@ def step_to_glb(step_path, out_dir):
                               bbox=[[round(bb.xmin, 3), round(bb.ymin, 3), round(bb.zmin, 3)],
                                     [round(bb.xmax, 3), round(bb.ymax, 3), round(bb.zmax, 3)]],
                               volume=round(shape.Volume(), 3)))
-        glb_parts.append(dict(meta=dict(partId=pid, name=name, role="basic", group=groups[i]),
+        glb_parts.append(dict(meta=dict(partId=pid, name=name, role="basic", group=groups[i], solid=bool(shape.Solids())),
                               mesh=mesher.mesh_shape(shape, tol, 0.3), color=rgba))
     mesher.write_glb(out / "model.glb", glb_parts)
     (out / "model.map.json").write_text(json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
