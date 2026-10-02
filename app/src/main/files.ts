@@ -7,32 +7,86 @@ const HIDDEN = new Set(['.git', '.soma', '__pycache__', 'node_modules', '.venv',
 const MAX_ENTRIES = 2000;
 const MAX_DEPTH = 5;
 const MAX_IMPORT_BYTES = 500 * 1024 * 1024;
+const MAX_IMPORT_FILES = 10000;
 const MAX_FEEDBACK_BYTES = 64 * 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /**
- * Kopiert gezogene Dateien nach inputs/ (E33). Der Agent bindet sie danach im Skript ein.
- * Nichts wird überschrieben: bei gleichem Namen entsteht „name (2).ext“. Ordner werden nicht übernommen.
+ * Kopiert gezogene Dateien und Ordner nach inputs/ (E33). Der Agent bindet sie danach im Skript ein.
+ * Nichts wird überschrieben: bei gleichem Namen entsteht „name (2).ext“ bzw. „ordner (2)“. Ein Ordner kommt mit
+ * allem darin, nur Verknüpfungen und .git-Ordner nicht (siehe scanFolder). Ergebnis: Dateien als Pfad, Ordner mit „/“ am Ende.
  */
 export function importInputs(root: string, sources: string[]): ImportResult {
   const res: ImportResult = { files: [], errors: [] };
   for (const src of sources) {
     const base = path.basename(src);
     try {
-      const st = fs.statSync(src);
-      if (!st.isFile()) { res.errors.push(`${base}: Nur einzelne Dateien lassen sich übernehmen, keine Ordner.`); continue; }
-      if (st.size > MAX_IMPORT_BYTES) { res.errors.push(`${base}: größer als 500 MB, nicht übernommen.`); continue; }
+      const st = fs.lstatSync(src);
+      if (st.isSymbolicLink()) { res.errors.push(`${base}: Verknüpfungen werden nicht übernommen.`); continue; }
+      if (!st.isFile() && !st.isDirectory()) { res.errors.push(`${base}: weder Datei noch Ordner, nicht übernommen.`); continue; }
       const dest = resolveInside(root, 'inputs');
       fs.mkdirSync(dest, { recursive: true });
-      const ext = path.extname(base), stem = base.slice(0, base.length - ext.length);
-      let name = base;
-      for (let i = 2; fs.existsSync(path.join(dest, name)); i++) name = `${stem} (${i})${ext}`;
-      // COPYFILE_EXCL: falls zwischen Prüfung und Kopie doch eine Datei entsteht, schlägt die Kopie fehl statt zu überschreiben
-      fs.copyFileSync(src, resolveInside(root, `inputs/${name}`), fs.constants.COPYFILE_EXCL);
-      res.files.push(`inputs/${name}`);
+      if (st.isFile()) {
+        if (st.size > MAX_IMPORT_BYTES) { res.errors.push(`${base}: größer als 500 MB, nicht übernommen.`); continue; }
+        const ext = path.extname(base), stem = base.slice(0, base.length - ext.length);
+        let name = base;
+        for (let i = 2; fs.existsSync(path.join(dest, name)); i++) name = `${stem} (${i})${ext}`;
+        // COPYFILE_EXCL: falls zwischen Prüfung und Kopie doch eine Datei entsteht, schlägt die Kopie fehl statt zu überschreiben
+        fs.copyFileSync(src, resolveInside(root, `inputs/${name}`), fs.constants.COPYFILE_EXCL);
+        res.files.push(`inputs/${name}`);
+      } else {
+        // Erst ganz durchsehen, dann kopieren: Ist der Ordner zu groß, landet gar nichts statt einer halben Kopie
+        const scan = scanFolder(src);
+        if (scan.tooBig) { res.errors.push(`${base}: ${scan.tooBig}, nicht übernommen.`); continue; }
+        let name = base;
+        for (let i = 2; fs.existsSync(path.join(dest, name)); i++) name = `${base} (${i})`;
+        const target = resolveInside(root, `inputs/${name}`);
+        // ohne recursive: gibt es den Ordner inzwischen doch, schlägt das fehl statt in einen fremden Ordner zu kopieren
+        fs.mkdirSync(target);
+        try {
+          for (const d of scan.dirs) fs.mkdirSync(path.join(target, d));
+          for (const f of scan.files) fs.copyFileSync(path.join(src, f), path.join(target, f), fs.constants.COPYFILE_EXCL);
+        } catch (e) {
+          // Der Ordner ist eben erst entstanden und gehört nur zu diesem Import, eine halbe Kopie würde den Agenten irreführen
+          fs.rmSync(target, { recursive: true, force: true });
+          throw e;
+        }
+        res.files.push(`inputs/${name}/`);
+        for (const s of scan.skipped) res.errors.push(`${base}/${s}`);
+      }
     } catch (e) { res.errors.push(`${base}: ${e instanceof Error ? e.message : String(e)}`); }
   }
   return res;
+}
+
+interface FolderScan { dirs: string[]; files: string[]; skipped: string[]; tooBig?: string }
+
+/**
+ * Sammelt Unterordner und Dateien eines gezogenen Ordners (relative Pfade, Eltern vor Kindern).
+ * Verknüpfungen werden nicht verfolgt (sie könnten auf beliebige Stellen des Rechners zeigen). .git-Ordner bleiben
+ * draußen: Git im Projekt würde ein eingebettetes Repository nur als Verweis ablegen, der Inhalt fehlte dann im Verlauf.
+ */
+function scanFolder(src: string): FolderScan {
+  const scan: FolderScan = { dirs: [], files: [], skipped: [] };
+  let bytes = 0;
+  const walk = (rel: string): void => {
+    for (const e of fs.readdirSync(path.join(src, rel), { withFileTypes: true })) {
+      if (scan.tooBig) return;
+      const childRel = rel ? path.join(rel, e.name) : e.name;
+      const shown = childRel.split(path.sep).join('/');
+      if (e.isSymbolicLink()) scan.skipped.push(`${shown}: Verknüpfung, nicht übernommen.`);
+      else if (e.isDirectory() && e.name === '.git') scan.skipped.push(`${shown}: eigener Git-Verlauf, nicht übernommen.`);
+      else if (e.isDirectory()) { scan.dirs.push(childRel); walk(childRel); }
+      else if (e.isFile()) {
+        scan.files.push(childRel);
+        bytes += fs.statSync(path.join(src, childRel)).size;
+        if (bytes > MAX_IMPORT_BYTES) scan.tooBig = 'zusammen größer als 500 MB';
+        else if (scan.files.length > MAX_IMPORT_FILES) scan.tooBig = `mehr als ${MAX_IMPORT_FILES} Dateien`;
+      } else scan.skipped.push(`${shown}: weder Datei noch Ordner, nicht übernommen.`);
+    }
+  };
+  walk('');
+  return scan;
 }
 
 /**

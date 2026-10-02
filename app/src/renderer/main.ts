@@ -107,7 +107,7 @@ async function refreshFiles(): Promise<void> {
   try { files.render(await api.fs.list()); } catch { /* Projekt wechselt gerade */ }
 }
 
-// Dateien ziehen: überall im Fenster ablegen landet in inputs/. Ohne das würde Electron die Datei als Seite öffnen.
+// Dateien und Ordner ziehen: überall im Fenster ablegen landet in inputs/. Ohne das würde Electron die Datei als Seite öffnen.
 let dragDepth = 0;
 const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
 document.addEventListener('dragenter', (e) => {
@@ -129,7 +129,10 @@ async function importFiles(list: File[]): Promise<void> {
   showPanel('files');
   const lines: string[] = [];
   if (r.files.length) lines.push(`In inputs/ abgelegt: ${r.files.map((f) => f.replace(/^inputs\//, '')).join(', ')}`, 'Der Agent kann sie jetzt im Skript einbinden.');
-  if (r.errors.length) lines.push(`Nicht übernommen:\n${r.errors.join('\n')}`);
+  // Ein Ordner voller Verknüpfungen soll die Meldung nicht über den Bildschirm ziehen
+  const shown = r.errors.slice(0, 8);
+  if (r.errors.length > shown.length) shown.push(`… und ${r.errors.length - shown.length} weitere`);
+  if (r.errors.length) lines.push(`Nicht übernommen:\n${shown.join('\n')}`);
   if (lines.length) toast(lines.join('\n'), r.errors.length ? 'error' : 'ok');
 }
 

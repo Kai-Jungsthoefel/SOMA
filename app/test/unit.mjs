@@ -30,8 +30,29 @@ try {
   check('Gleicher Name: nichts überschrieben, neue Namen (2) und (3)', JSON.stringify(r.files) === '["inputs/platine (2).step","inputs/platine (3).step"]'
     && fs.readFileSync(path.join(proj, 'inputs', 'platine.step'), 'utf8').startsWith('ALT'), r.files.join(','));
 
-  r = importInputs(proj, [path.join(src, 'ordner'), path.join(src, 'fehlt.step')]);
-  check('Ordner und fehlende Dateien werden gemeldet, nicht übernommen', r.files.length === 0 && r.errors.length === 2 && /Ordner/.test(r.errors[0]), r.errors.join(' | ').slice(0, 90));
+  r = importInputs(proj, [path.join(src, 'fehlt.step')]);
+  check('Fehlende Datei wird gemeldet, nicht übernommen', r.files.length === 0 && r.errors.length === 1, r.errors.join(' | ').slice(0, 90));
+
+  // Ordner: mit Unterordnern übernommen, .git und Verknüpfungen bleiben draußen, nichts überschrieben
+  const tree = path.join(src, 'ordner');
+  fs.mkdirSync(path.join(tree, 'unter', 'tiefer'), { recursive: true });
+  fs.mkdirSync(path.join(tree, 'leer'));
+  fs.mkdirSync(path.join(tree, '.git'));
+  fs.writeFileSync(path.join(tree, '.git', 'HEAD'), 'ref');
+  fs.writeFileSync(path.join(tree, 'a.step'), 'A');
+  fs.writeFileSync(path.join(tree, 'unter', 'tiefer', 'b.csv'), 'B');
+  let treeLink = true;
+  try { fs.symlinkSync(tmp, path.join(tree, 'verweis'), 'junction'); } catch { treeLink = false; }
+  r = importInputs(proj, [tree]);
+  const got = path.join(proj, 'inputs', 'ordner');
+  check('Ordner landet mit Unterordnern in inputs/', r.files[0] === 'inputs/ordner/' && fs.readFileSync(path.join(got, 'a.step'), 'utf8') === 'A'
+    && fs.readFileSync(path.join(got, 'unter', 'tiefer', 'b.csv'), 'utf8') === 'B' && fs.existsSync(path.join(got, 'leer')), r.files.join(','));
+  check('Ordner: .git und Verknüpfungen bleiben draußen und werden gemeldet', !fs.existsSync(path.join(got, '.git')) && !fs.existsSync(path.join(got, 'verweis'))
+    && r.errors.length === (treeLink ? 2 : 1) && r.errors.every((e) => e.startsWith('ordner/')), r.errors.join(' | ').slice(0, 90));
+  fs.writeFileSync(path.join(got, 'a.step'), 'ALT');
+  r = importInputs(proj, [tree]);
+  check('Ordner mit gleichem Namen: „ordner (2)“, Vorhandenes bleibt', r.files[0] === 'inputs/ordner (2)/' && fs.readFileSync(path.join(got, 'a.step'), 'utf8') === 'ALT'
+    && fs.existsSync(path.join(proj, 'inputs', 'ordner (2)', 'a.step')), r.files.join(','));
 
   // inputs/ als Verweis nach außen: resolveInside lehnt ab (Agent könnte so Dateien außerhalb des Projekts schreiben lassen)
   const outside = path.join(tmp, 'draussen');

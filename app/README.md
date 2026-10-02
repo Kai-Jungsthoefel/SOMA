@@ -15,7 +15,7 @@ Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. 
 npm install
 npm start            # baut und startet
 npm run typecheck
-npm run test:unit       # Bausteine ohne Electron: Dateien nach inputs/, Markierung nach .soma/feedback/, Pfadschutz, Schreiben aus dem Editor mit Konfliktprüfung, App-Icon, Einstellungen, Kategorien und Standard der Skills (26 Prüfungen)
+npm run test:unit       # Bausteine ohne Electron: Dateien und Ordner nach inputs/, Markierung nach .soma/feedback/, Pfadschutz, Schreiben aus dem Editor mit Konfliktprüfung, App-Icon, Einstellungen, Kategorien und Standard der Skills (29 Prüfungen)
 npm run test:smoke      # echte App, unsichtbar: Projekt, Viewer, Auswahl, Panels, Terminal, Übergabe an den Agenten, Markierung (Zeichnen, Auswählen, Verschieben, Drehen, Skalieren, Farben), Auto-Build, Fehlerfall, Export, Ansichtswürfel und Drehpunkt (61 Prüfungen)
 npm run test:versions   # Git-Verlauf, Speichern, Öffnen, Vorschau (auch markiert), Wiederherstellen, Störfälle (53 Prüfungen)
 npm run test:editor     # Editor: Höhe und Scrollen, Speichern nur auf Wunsch mit genau einem Build (nur bei Python und inputs/), Änderungen des Agenten, Konflikte mit Sicherung, Nur lesen, CRLF, Rückfragen bei Modellwechsel und Reiter schließen (29 Prüfungen)
