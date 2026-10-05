@@ -24,6 +24,8 @@ export interface BuildResult {
 export type BuildState = 'idle' | 'building' | 'ok' | 'error';
 export interface BuildStatus {
   state: BuildState; result?: BuildResult; startedAt?: number; queued?: boolean; reason?: string;
+  /** Gesamtdauer des letzten Builds in Sekunden, vom Start bis zum Ergebnis (inkl. Python-Start). */
+  seconds?: number;
   /** Auto-Build ist aus und der Quelltext hat sich seit dem letzten Build geändert. */
   stale?: boolean;
 }

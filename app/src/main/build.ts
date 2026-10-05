@@ -16,11 +16,16 @@ const TIMEOUT_MS = 5 * 60 * 1000;
  * - Kommt eine Aenderung waehrend eines Builds, laeuft dieser fertig und danach genau ein weiterer Build.
  * - Ein haengender Build wird nach dem Zeitlimit abgebrochen, die App bleibt bedienbar.
  * - Fehler sind Ergebnisse, keine Ausnahmen: der zuletzt gute Stand bleibt auf der Platte und im Viewer.
+ *
+ * Python zu starten und cadquery zu laden dauert einige Sekunden, das Bauen selbst oft nur Bruchteile davon.
+ * Deshalb liegt immer ein vorgewärmter Prozess bereit (`soma build --wait`), der erst auf eine Startzeile hin baut.
+ * Jeder Build bleibt trotzdem ein eigener, frischer Prozess.
  */
 export class BuildManager extends EventEmitter {
   status: BuildStatus = { state: 'idle' };
   autoBuild = true;
   private proc: ChildProcess | null = null;
+  private spare: WarmProcess | null = null;
   private timer: NodeJS.Timeout | null = null;
   private rerun = false;
   private disposed = false;
@@ -60,36 +65,43 @@ export class BuildManager extends EventEmitter {
       this.setStatus({ ...this.status, queued: true });
       return;
     }
-    this.setStatus({ state: 'building', startedAt: Date.now(), reason, result: this.status.result });
-    const child = spawn(pythonExe(), ['-m', 'soma', 'build', '--project', this.dir, '--json'], {
-      cwd: this.dir, windowsHide: true,
-      env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
-    });
+    const startedAt = Date.now();
+    this.setStatus({ state: 'building', startedAt, reason, result: this.status.result });
+    // Ein schon beendeter Vorrat (abgestürzt, Python fehlt) wird nicht genommen: frisch starten, damit der Fehler sichtbar wird
+    let w = this.spare && !this.spare.ended ? this.spare : null;
+    if (!w) { this.spare?.child.kill(); w = spawnWarm(this.dir); }
+    this.spare = null;
+    const { child } = w;
     this.proc = child;
-    let out = '';
-    let err = '';
+    let done = false;
     let killedByTimeout = false;
-    child.stdout.on('data', (d: Buffer) => { out += d.toString('utf8'); });
-    child.stderr.on('data', (d: Buffer) => { err += d.toString('utf8'); });
     const timeout = setTimeout(() => { killedByTimeout = true; child.kill(); }, TIMEOUT_MS);
 
     const finish = (result: BuildResult) => {
+      if (done) return;
+      done = true;
       clearTimeout(timeout);
       this.proc = null;
       if (this.disposed) return;
-      this.setStatus({ state: result.status === 'ok' ? 'ok' : 'error', result });
+      this.setStatus({ state: result.status === 'ok' ? 'ok' : 'error', result, seconds: (Date.now() - startedAt) / 1000 });
       if (this.rerun) { this.rerun = false; this.start('Änderung während des Builds'); }
     };
 
-    child.on('error', (e) => finish(errorResult('PythonStart', `Python konnte nicht gestartet werden (${pythonExe()}): ${e.message}`)));
-    child.on('close', (code) => {
+    // Das Ergebnis gilt, sobald seine Zeile vollständig da ist; auf das Prozessende muss niemand warten
+    w.onLine = (l) => {
+      if (!l.startsWith('{')) return;
+      try { finish(JSON.parse(l) as BuildResult); } catch { /* keine Ergebniszeile */ }
+    };
+    for (const l of w.lines) w.onLine(l);
+    w.onError = (e) => finish(errorResult('PythonStart', `Python konnte nicht gestartet werden (${pythonExe()}): ${e.message}`));
+    w.onClose = (code) => {
       if (killedByTimeout) return finish(errorResult('Timeout', `Der Build wurde nach ${TIMEOUT_MS / 1000} s abgebrochen (Zeitlimit).`));
-      const line = out.trim().split(/\r?\n/).reverse().find((l) => l.startsWith('{'));
-      if (line) {
-        try { return finish(JSON.parse(line) as BuildResult); } catch { /* fällt auf Fehlertext zurück */ }
-      }
-      finish(errorResult('NoResult', `Der Build lieferte kein Ergebnis (Exit-Code ${code}).\n${(err || out).slice(-2000)}`));
-    });
+      finish(errorResult('NoResult', `Der Build lieferte kein Ergebnis (Exit-Code ${code}).\n${(w.err || w.out).slice(-2000)}`));
+    };
+    try { child.stdin?.write('go\n'); } catch { /* Prozess schon weg: onClose meldet es */ }
+
+    // Den nächsten Prozess schon jetzt vorwärmen, damit ein Folge-Build (Agent speichert erneut) nicht wieder wartet
+    if (!this.disposed) this.spare = spawnWarm(this.dir);
   }
 
   /** Läuft gerade ein Build oder steht einer an? */
@@ -115,6 +127,8 @@ export class BuildManager extends EventEmitter {
   dispose(): void {
     this.disposed = true;
     this.cancel();
+    this.spare?.child.kill();
+    this.spare = null;
     this.removeAllListeners();
   }
 
@@ -122,6 +136,52 @@ export class BuildManager extends EventEmitter {
     this.status = s;
     this.emit('status', s);
   }
+}
+
+/** Vorgewärmter `soma build --wait`. Ausgaben werden schon gesammelt, bevor ein Build ihn übernimmt. */
+interface WarmProcess {
+  child: ChildProcess;
+  out: string;
+  err: string;
+  /** Vollständige Zeilen von stdout, solange niemand `onLine` gesetzt hat. */
+  lines: string[];
+  ended: boolean;
+  error: Error | null;
+  onLine: ((l: string) => void) | null;
+  onError: ((e: Error) => void) | null;
+  onClose: ((code: number | null) => void) | null;
+}
+
+function spawnWarm(dir: string): WarmProcess {
+  const child = spawn(pythonExe(), ['-m', 'soma', 'build', '--project', dir, '--json', '--wait'], {
+    cwd: dir, windowsHide: true,
+    env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
+  });
+  const w: WarmProcess = { child, out: '', err: '', lines: [], ended: false, error: null, onLine: null, onError: null, onClose: null };
+  let partial = '';
+  child.stdout?.on('data', (d: Buffer) => {
+    const s = d.toString('utf8');
+    w.out += s;
+    const parts = (partial + s).split(/\r?\n/);
+    partial = parts.pop() ?? '';
+    for (const l of parts) emitLine(w, l);
+  });
+  child.stderr?.on('data', (d: Buffer) => { w.err += d.toString('utf8'); });
+  // Ohne Listener würde ein Schreibfehler auf die Startzeile (Prozess schon weg) die App abstürzen lassen
+  child.stdin?.on('error', () => { /* onClose meldet den Grund */ });
+  child.on('error', (e) => { w.ended = true; w.error = e; w.onError?.(e); });
+  child.on('close', (code) => {
+    w.ended = true;
+    if (partial) { emitLine(w, partial); partial = ''; }
+    w.onClose?.(code);
+  });
+  return w;
+}
+
+function emitLine(w: WarmProcess, line: string): void {
+  const l = line.trim();
+  if (w.onLine) w.onLine(l);
+  else w.lines.push(l);
 }
 
 function errorResult(kind: string, message: string): BuildResult {

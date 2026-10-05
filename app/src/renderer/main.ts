@@ -462,7 +462,7 @@ function renderBuild(s: BuildStatus): void {
   $('btn-cancel').hidden = s.state !== 'building';
   $('btn-buildnow').hidden = !(s.stale && s.state !== 'building');
   const count = s.result?.parts?.length ?? 0;
-  const secs = Object.values(s.result?.timings ?? {}).reduce((a, b) => a + b, 0);
+  const secs = s.seconds ?? 0;
   dot.replaceChildren();
   dot.className = 'dot';
   dot.style.background = '';
@@ -750,7 +750,7 @@ $('btn-cancel').addEventListener('click', () => void api.build.cancel());
 $('btn-buildinfo').addEventListener('click', () => {
   const s = buildStatus;
   const count = s.result?.parts?.length ?? 0;
-  const secs = Object.values(s.result?.timings ?? {}).reduce((a, b) => a + b, 0);
+  const secs = s.seconds ?? 0;
   const warn = s.result?.warnings ?? [];
   $('bm-title').textContent = s.state === 'error' ? 'Letzter Build fehlgeschlagen' : s.state === 'building' ? 'Build läuft' : lastOkAt ? `Zuletzt gebaut ${fmtWhen(lastOkAt)}` : 'Noch nicht gebaut';
   $('bm-sub').textContent = s.state === 'ok' ? `${num(secs)} s · ${count} Bauteil${count === 1 ? '' : 'e'} · ${warn.length ? `${warn.length} Warnung${warn.length === 1 ? '' : 'en'}` : 'keine Warnungen'}` : '';
