@@ -9,6 +9,8 @@ const TAGS: Record<string, string> = { 'model.py': 'Modell', 'output/model.step'
 /** Ordner der Markierungen. Der Hauptprozess liefert ihn als einzigen Teil von .soma/ mit. */
 const FEEDBACK = '.soma/feedback';
 export const TEXT_EXT = /\.(py|md|txt|json|toml|cfg|ini|yml|yaml|gitignore|csv)$|^[^.]*$/i;
+/** Bilder, die die Zeichenfläche als Hintergrund laden kann (alles, was Chromium als <img> anzeigt). */
+export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 
 /** Was der Baum vom Rest der App braucht. Die Aktionen liefern true, wenn das Namensfeld zugehen darf. */
 export interface FileTreeDeps {
@@ -18,6 +20,8 @@ export interface FileTreeDeps {
   trash(rel: string): void;
   reveal(rel: string): void;
   openExternal(rel: string): void;
+  /** Bild als Hintergrund der Markierung öffnen (E16). */
+  mark(rel: string): void;
   toAgent(rel: string): void;
   copyPath(rel: string): void;
 }
@@ -103,7 +107,7 @@ export class FileTree {
       rows.push(el('div', { className: 'gap' }));
       const open = !this.collapsed.has(FEEDBACK);
       const head = this.button(0, open ? 'down' : 'right', 'image', 'Markierungen', String(feedback.children.length), 'dim');
-      head.title = 'Bilder aus „Markieren“, abgelegt in .soma/feedback/. Klick öffnet, Rechtsklick gibt den Pfad an den Agenten.';
+      head.title = 'Bilder aus „Markieren“, abgelegt in .soma/feedback/. Klick öffnet zum Markieren, Rechtsklick gibt den Pfad an den Agenten oder öffnet im Bildprogramm.';
       head.setAttribute('aria-expanded', String(open));
       head.dataset.path = FEEDBACK;
       head.addEventListener('click', () => this.toggle(FEEDBACK));
@@ -204,6 +208,7 @@ export class FileTree {
     const items: HTMLElement[] = [el('div', { className: 'mh', textContent: n ? n.name : 'Projektordner' })];
     if (n && !n.dir) {
       if (TEXT_EXT.test(n.name)) items.push(menuItem('Öffnen', { icon: 'code', onClick: () => d.open(n) }));
+      if (IMAGE_EXT.test(n.name)) items.push(menuItem('Markieren', { icon: 'camera', onClick: () => d.mark(n.path) }));
       items.push(menuItem('Mit Standardprogramm öffnen', { icon: 'openext', onClick: () => d.openExternal(n.path) }));
     }
     items.push(menuItem('Im Explorer zeigen', { icon: 'folder', onClick: () => d.reveal(n?.path ?? '') }));
@@ -249,7 +254,7 @@ export class FileTree {
       return b;
     }
     const b = this.button(depth, null, fileIcon(n.name), n.name, TAGS[n.path] ?? '', '');
-    b.title = TEXT_EXT.test(n.name) ? `${n.path} im Code-Panel öffnen` : n.path;
+    b.title = TEXT_EXT.test(n.name) ? `${n.path} im Code-Panel öffnen` : IMAGE_EXT.test(n.name) ? `${n.path} zum Markieren öffnen` : n.path;
     b.dataset.path = n.path;
     b.addEventListener('click', () => this.deps.open(n));
     return b;

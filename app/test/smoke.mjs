@@ -220,7 +220,44 @@ try {
   }, rel);
   const menuItemClick = (label) => ev((l) => [...document.querySelectorAll('#menu-ctx .mi')].find((b) => b.textContent.startsWith(l))?.click(), label);
   const typeName = (name) => ev((n) => { const t = document.querySelector('#tab-files .fedit'); if (!t) return false; t.value = n; t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; }, name);
+  const fbRel = `.soma/feedback/${fbFiles[0]}`;
+  const imgMenu = await ctx(fbRel);
+  await menuItemClick('Markieren');
+  await waitFor('Bild als Zeichenfläche', () => window.__t.markup().active, 5000).catch(() => {});
+  const mkImg = await ev(() => ({ ...window.__t.markup(), hint: document.getElementById('mark-hint').textContent }));
+  await shot('7g-markieren-bild');
+  check('Bild im Dateibaum: „Markieren“ öffnet es als Hintergrund der Zeichenfläche', imgMenu?.includes('Markieren') && mkImg.active && mkImg.source === fbRel && !mkImg.blank
+    && mkImg.hint.includes(fbRel) && mkImg.pixels[0] >= px[0], `${imgMenu?.join(',')} ${mkImg.source} ${mkImg.pixels}`);
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  check('Escape ohne Zeichnung schließt das Bild wieder, keine neue Datei', !(await ev(() => window.__t.markup().active)) && fs.readdirSync(fbDir).length === 1);
+  await ev((rel) => document.querySelector(`#tab-files .frow[data-path="${CSS.escape(rel)}"]`).click(), fbRel);
+  await waitFor('Bild per Klick', () => window.__t.markup().active, 5000).catch(() => {});
+  check('Klick auf das Bild öffnet es ebenfalls zum Markieren (E52)', (await ev(() => window.__t.markup())).source === fbRel);
+  // Von Bild zu Bild: ohne Zeichnung direkt und ohne Meldung, mit Zeichnung erst nach Rückfrage
+  const imgB = path.join(proj.dir, 'skizze-b.png');
+  fs.copyFileSync(path.join(fbDir, fbFiles[0]), imgB);
+  await waitFor('zweites Bild im Baum', () => window.__t.fileRows().includes('skizze-b.png'), 10000).catch(() => {});
+  const clickRow = (rel) => ev((rel) => document.querySelector(`#tab-files .frow[data-path="${CSS.escape(rel)}"]`).click(), rel);
+  const toastBefore = (await ev(() => window.__t.toast())).text;
+  await clickRow('skizze-b.png');
+  await waitFor('Wechsel', () => window.__t.markup().source === 'skizze-b.png', 5000).catch(() => {});
+  const sw = await ev(() => ({ ...window.__t.markup(), toast: window.__t.toast() }));
+  check('Wechsel zu einem anderen Bild ohne Zeichnung: direkt, ohne Meldung', sw.active && sw.source === 'skizze-b.png' && (sw.toast.hidden || sw.toast.text === toastBefore), sw.toast.text.slice(0, 60));
+  await tool('pen'); await drag([[60, 300], [140, 300]]);
+  await app.answers([1]);
+  await clickRow(fbRel);
+  await sleep(500);
+  const kept = await ev(() => window.__t.markup());
+  await app.answers([0]);
+  await clickRow(fbRel);
+  await waitFor('Wechsel nach Verwerfen', (r) => window.__t.markup().source === r, 5000, fbRel).catch(() => {});
+  const swapped = await ev(() => window.__t.markup());
+  check('Mit Zeichnung: Rückfrage, „Abbrechen“ behält sie, „Verwerfen und wechseln“ öffnet das andere Bild', kept.source === 'skizze-b.png' && kept.shapes.length === 1
+    && swapped.source === fbRel && swapped.shapes.length === 0, `${kept.source}/${kept.shapes.length} → ${swapped.source}/${swapped.shapes.length}`);
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  fs.rmSync(imgB);
   const modelMenu = await ctx('model.py');
+  check('Menü auf model.py: kein „Markieren“ (kein Bild)', !modelMenu?.includes('Markieren'));
   check('Menü auf model.py: Öffnen, Explorer, Pfad, Anlegen; Umbenennen und Löschen gesperrt', ['Öffnen', 'Im Explorer zeigen', 'Pfad an Agent geben', 'Pfad kopieren', 'Neue Datei', '-Umbenennen', '-Löschen'].every((x) => modelMenu?.includes(x)), modelMenu?.join(','));
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await domClick('btn-file-new');

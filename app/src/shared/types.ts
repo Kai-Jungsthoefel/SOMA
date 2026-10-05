@@ -235,6 +235,8 @@ export interface SomaApi {
   };
   /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
   dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };
+  /** Öffnet eine Web-Adresse (http, https, mailto) im Browser des Systems. Andere Adressen lehnt der Hauptprozess ab. */
+  openUrl(url: string): Promise<FileOpResult>;
 }
 
 declare global { interface Window { soma: SomaApi } }

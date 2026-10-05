@@ -1,5 +1,6 @@
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { markdown } from '@codemirror/lang-markdown';
 import { python } from '@codemirror/lang-python';
 import { bracketMatching, HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting } from '@codemirror/language';
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
@@ -11,6 +12,7 @@ import {
 import { tags as t } from '@lezer/highlight';
 import { affectsBuild, readOnlyReason } from '../shared/editable';
 import { icon } from './icons';
+import { renderMarkdown } from './markdown';
 import { el } from './ui';
 
 // Einfache Python-Hervorhebung pro Zeile für Codeausschnitte (Auswahl- und Fehlerkarte). Der Editor färbt über CodeMirror,
@@ -66,9 +68,18 @@ interface Doc {
   conflict: { disk: string | null } | null;
   mark: Mark | null;
   scrollTop: number;
+  /** Markdown als Dokument zeigen statt im Editor (E51). Nur bei .md-Dateien. */
+  preview: boolean;
+  previewScroll: number;
 }
 
-interface Ui { tabs: HTMLElement; info: HTMLElement; banner: HTMLElement; view: HTMLElement; link: HTMLButtonElement }
+const isMarkdown = (file: string) => /\.md$/i.test(file);
+
+interface Ui {
+  tabs: HTMLElement; info: HTMLElement; banner: HTMLElement; view: HTMLElement; link: HTMLButtonElement;
+  /** Umschalter „Ansicht / Bearbeiten“ für Markdown, Knöpfe `[data-mode]`. */
+  mode: HTMLElement;
+}
 interface Deps {
   /** Liest eine Datei frisch von der Platte (ohne Zwischenspeicher). */
   read(rel: string): Promise<string>;
@@ -78,6 +89,10 @@ interface Deps {
   ask(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number>;
   /** Die Menge der ungespeicherten Dateien hat sich geändert (für den Speicherstand oben). */
   changed(): void;
+  /** Link in einer Markdown-Ansicht: Web-Adresse oder Pfad im Projekt. */
+  link(href: string): void;
+  /** Bild aus dem Projekt für die Markdown-Ansicht als blob:-Adresse, null wenn es nicht geht. */
+  image(rel: string): Promise<string | null>;
   /** Knopf „Speichern und bauen“ (wie Strg+S im Editor). */
   saveAndBuild(): void;
   /** Nach dem Speichern einer einzelnen Datei, die das Modell betrifft (Konflikt gelöst, Reiter geschlossen): bauen. */
@@ -118,6 +133,14 @@ const HIGHLIGHT = HighlightStyle.define([
   { tag: t.number, class: 'k-num' },
   { tag: [t.comment, t.lineComment], class: 'k-cm' },
   { tag: [t.function(t.variableName), t.function(t.propertyName), t.function(t.definition(t.variableName)), t.definition(t.className)], class: 'k-fn' },
+  // Markdown: Überschriften und Betonung wie im Dokument, Zeichen wie # und * gedämpft
+  { tag: t.heading, class: 'k-mh' },
+  { tag: t.strong, class: 'k-b' },
+  { tag: t.emphasis, class: 'k-i' },
+  { tag: t.strikethrough, class: 'k-s' },
+  { tag: [t.link, t.url], class: 'k-fn' },
+  { tag: t.monospace, class: 'k-str' },
+  { tag: [t.quote, t.processingInstruction, t.contentSeparator, t.meta], class: 'k-cm' },
 ]);
 
 const PHRASES = {
@@ -146,6 +169,11 @@ export class CodePanel {
   private view: EditorView;
   private empty: HTMLElement;
   private saveBtn: HTMLButtonElement;
+  private md: HTMLElement;
+  /** Was die Markdown-Ansicht gerade zeigt, damit nicht bei jeder Kleinigkeit neu gebaut wird. */
+  private mdShown: { file: string; text: string; locked: boolean } | null = null;
+  /** blob:-Adressen der Bilder in der Markdown-Ansicht, freigegeben beim Neuaufbau. */
+  private mdUrls: string[] = [];
   linked = true;
 
   constructor(private ui: Ui, private deps: Deps) {
@@ -155,7 +183,13 @@ export class CodePanel {
     });
     this.view = new EditorView({ parent: ui.view, state: EditorState.create({ doc: '' }) });
     this.empty = el('div', { className: 'hint', textContent: 'Keine Datei geöffnet. Klick auf ein Bauteil oder im Dateien-Panel auf eine Datei.' });
-    ui.view.append(this.empty);
+    this.md = el('div', { className: 'mdview', tabIndex: -1 });
+    this.md.hidden = true;
+    ui.view.append(this.empty, this.md);
+    ui.mode.addEventListener('click', (e) => {
+      const m = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]')?.dataset.mode;
+      if (m) this.setPreview(m === 'view');
+    });
     this.saveBtn = el('button', { id: 'btn-code-save', className: 'btn sm acc', textContent: 'Speichern und bauen', title: 'Geänderte Dateien speichern und das Modell bauen (Strg+S im Editor). Die ZIP-Datei schreibt „Speichern“ oben.' });
     this.saveBtn.addEventListener('click', () => deps.saveAndBuild());
     this.renderChrome();
@@ -260,6 +294,21 @@ export class CodePanel {
     this.renderChrome();
   }
 
+  /** Markdown: zwischen Ansicht und Editor wechseln. Im Editor landet der Cursor am Anfang von `line`, wenn angegeben. */
+  setPreview(on: boolean, line?: number): void {
+    const d = this.active ? this.docs.get(this.active) : undefined;
+    if (!d || !isMarkdown(d.file) || (d.preview === on && line == null)) return;
+    if (d.preview && !on) d.previewScroll = this.md.scrollTop;
+    d.preview = on;
+    this.renderChrome();
+    if (on) { this.md.focus({ preventScroll: true }); return; }
+    if (line != null) {
+      const pos = d.state.doc.line(Math.max(1, Math.min(line, d.state.doc.lines))).from;
+      this.view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 40 }) });
+    }
+    this.view.focus();
+  }
+
   /** Text der aktiven Datei (für Tests und Anzeigen). */
   text(): string { return this.active ? this.docs.get(this.active)?.state.doc.toString() ?? '' : ''; }
 
@@ -274,7 +323,8 @@ export class CodePanel {
         const locked = readOnlyReason(file)
           ?? (text.length > MAX_EDIT_CHARS ? 'Zu groß zum Bearbeiten (über 2 MB).' : null)
           ?? (text.includes('\uFFFD') ? 'Nicht als UTF-8 lesbar. Bearbeiten würde die Datei beschädigen.' : null);
-        const d: Doc = { file, base: text, eol: text.includes('\r\n') ? '\r\n' : '\n', locked, dirty: false, writing: false, queue: Promise.resolve(), conflict: null, mark: null, scrollTop: 0, state: null! };
+        const d: Doc = { file, base: text, eol: text.includes('\r\n') ? '\r\n' : '\n', locked, dirty: false, writing: false, queue: Promise.resolve(), conflict: null, mark: null, scrollTop: 0,
+          preview: isMarkdown(file), previewScroll: 0, state: null! };
         d.state = EditorState.create({ doc: text, extensions: this.extensions(d) });
         this.docs.set(file, d);
         return d;
@@ -289,7 +339,7 @@ export class CodePanel {
     return [
       lineNumbers(), highlightActiveLineGutter(), highlightSpecialChars(), history(), drawSelection(), indentOnInput(),
       syntaxHighlighting(HIGHLIGHT), bracketMatching(), closeBrackets(), highlightActiveLine(), highlightSelectionMatches(), search({ top: false }),
-      py ? [python(), constants] : [],
+      py ? [python(), constants] : isMarkdown(d.file) ? [markdown(), EditorView.lineWrapping] : [],
       indentUnit.of('    '), EditorState.tabSize.of(4), EditorState.phrases.of(PHRASES), EditorState.readOnly.of(!!d.locked),
       keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
       markField,
@@ -309,7 +359,7 @@ export class CodePanel {
   private activate(d: Doc): void {
     const prev = this.active ? this.docs.get(this.active) : undefined;
     if (prev === d && this.view.state === d.state) return;
-    if (prev) prev.scrollTop = this.view.scrollDOM.scrollTop;
+    if (prev) { prev.scrollTop = this.view.scrollDOM.scrollTop; if (prev.preview && this.mdShown) prev.previewScroll = this.md.scrollTop; }
     this.active = d.file;
     this.view.setState(d.state);
     this.view.scrollDOM.scrollTop = d.scrollTop;
@@ -463,8 +513,12 @@ export class CodePanel {
     }));
 
     const d = this.active ? this.docs.get(this.active) : undefined;
-    this.view.dom.hidden = !d;
+    const md = !!d && isMarkdown(d.file);
+    this.ui.mode.hidden = !md;
+    this.ui.mode.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.setAttribute('aria-checked', String((b.dataset.mode === 'view') === !!d?.preview)));
+    this.view.dom.hidden = !d || (md && d.preview);
     this.empty.hidden = !!d;
+    this.renderPreview(md && d.preview ? d : null);
     if (!d) { info.replaceChildren(); banner.hidden = true; return; }
 
     const m = d.mark;
@@ -501,6 +555,39 @@ export class CodePanel {
     }
   }
 
+  /** Baut die Markdown-Ansicht neu, wenn sich Datei, Text oder Schreibschutz geändert haben. Die Scrolllage bleibt. */
+  private renderPreview(d: Doc | null): void {
+    this.md.hidden = !d;
+    if (!d) { this.mdShown = null; return; }
+    const text = d.state.doc.toString(), locked = !!d.locked;
+    const s = this.mdShown;
+    if (s && s.file === d.file && s.text === text && s.locked === locked) return;
+    const top = s?.file === d.file ? this.md.scrollTop : d.previewScroll;
+    for (const u of this.mdUrls.splice(0)) URL.revokeObjectURL(u);
+    this.md.replaceChildren(renderMarkdown(text, d.file, locked, {
+      link: (href) => {
+        if (!href.startsWith('#')) { this.deps.link(href); return; }
+        // Anker: zur Überschrift mit passendem Text springen (Schreibweise wie bei GitHub: klein, Leerzeichen als Bindestrich)
+        const slug = (x: string) => x.trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-');
+        let want = href.slice(1).toLowerCase();
+        try { want = decodeURIComponent(want); } catch { /* bleibt wie geschrieben */ }
+        [...this.md.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')].find((h) => slug(h.textContent ?? '') === want)?.scrollIntoView({ block: 'start' });
+      },
+      image: async (rel) => {
+        const url = await this.deps.image(rel);
+        if (url) this.mdUrls.push(url);
+        return url;
+      },
+      toggleTask: (pos, ch) => {
+        if (d.locked || this.docs.get(d.file) !== d || d.state.doc.sliceString(pos, pos + 1).toLowerCase() === ch) return;
+        this.apply(d, { changes: { from: pos, to: pos + 1, insert: ch }, userEvent: 'input' });
+      },
+      edit: (line) => this.setPreview(false, line),
+    }));
+    this.md.scrollTop = top;
+    this.mdShown = { file: d.file, text, locked };
+  }
+
   // ---- Prüfhilfen (nur für Tests) -------------------------------------------------------------------------------
 
   testApi() {
@@ -509,7 +596,8 @@ export class CodePanel {
         const d = this.active ? this.docs.get(this.active) : undefined;
         return {
           file: this.active, files: [...this.docs.keys()], dirty: !!d?.dirty, conflict: d?.conflict ? (d.conflict.disk === null ? 'gone' : 'changed') : null,
-          locked: d?.locked ?? null, readOnly: this.view.state.readOnly, text: this.text(), focused: this.view.hasFocus, unsaved: this.unsaved(),
+          locked: d?.locked ?? null, readOnly: this.view.state.readOnly, preview: !this.md.hidden, line: this.view.state.doc.lineAt(this.view.state.selection.main.head).number,
+          rendered: this.md.hidden ? null : [...this.md.querySelectorAll<HTMLElement>('.md > *, .md li')].map((x) => `${x.tagName.toLowerCase()}:${(x.textContent ?? '').trim().slice(0, 60)}`), text: this.text(), focused: this.view.hasFocus, unsaved: this.unsaved(),
           marked: [...this.ui.view.querySelectorAll('.cm-line.cm-mark-hl, .cm-line.cm-mark-er')].map((x) => (x.classList.contains('cm-mark-er') ? 'er:' : 'hl:') + x.textContent),
         };
       },

@@ -1,7 +1,7 @@
 import { affectsBuild } from '../shared/editable';
 import type { AgentInfo, BuildStatus, ModelMap, PartMap, PreviewResult, ProjectInfo, SaveState } from '../shared/types';
 import { CodePanel, codeRows, type Mark } from './code';
-import { FileTree, TEXT_EXT } from './filetree';
+import { FileTree, IMAGE_EXT, TEXT_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
 import { MeasureTool } from './measuretool';
@@ -70,14 +70,33 @@ function showPanel(p: PanelName | null): void {
 }
 
 const code = new CodePanel(
-  { tabs: $('code-tabs'), info: $('code-info'), banner: $('code-banner'), view: $('code-view'), link: $<HTMLButtonElement>('btn-codelink') },
+  { tabs: $('code-tabs'), info: $('code-info'), banner: $('code-banner'), view: $('code-view'), link: $<HTMLButtonElement>('btn-codelink'), mode: $('code-mode') },
   {
     read: (rel) => api.fs.readText(rel), projectId: () => project?.id ?? null, toast, ask: (o) => api.dialog.choose(o),
     changed: () => { if (saveState) renderSaveState(saveState); },
     saveAndBuild: () => void saveCode(),
     build: () => void api.build.run(),
+    link: (href) => openLink(href),
+    image: async (rel) => { try { return await imageUrl(rel); } catch { return null; } },
   },
 );
+
+/** Bilddatei aus dem Projekt als blob:-Adresse (die CSP erlaubt blob:). Freigeben muss der Aufrufer. */
+async function imageUrl(rel: string): Promise<string> {
+  const data = await api.fs.readBinary(rel);
+  return URL.createObjectURL(new Blob([data], { type: /\.svg$/i.test(rel) ? 'image/svg+xml' : '' }));
+}
+
+/** Link aus einer Markdown-Ansicht: Web-Adressen im Browser, Dateien im Projekt wie ein Klick im Dateibaum. */
+function openLink(href: string): void {
+  if (/^(https?:|mailto:)/i.test(href)) {
+    void api.openUrl(href).then((r) => { if (!r.ok) toast(r.error ?? `${href} ließ sich nicht öffnen.`, 'error'); });
+    return;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) { toast(`Dieser Link wird aus Sicherheitsgründen nicht geöffnet: ${href.slice(0, 100)}`, 'error'); return; }
+  if (TEXT_EXT.test(href.split('/').pop() ?? '')) void openCode(href);
+  else void openExternal(href);
+}
 
 async function openCode(file: string, mark?: Mark): Promise<void> {
   showPanel('code');
@@ -95,13 +114,11 @@ const skills = new SkillsPanel($('skills-list'), {
   changed: () => { filesDirty = true; textCache.clear(); void refreshSaveState(); void code.refresh(); },
 });
 
-const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
-
 const files = new FileTree($('tab-files'), $('menu-ctx'), {
   open: (n) => {
     if (TEXT_EXT.test(n.name)) void openCode(n.path);
-    // Bilder (etwa Markierungen und Skizzen) zeigt das Bildprogramm des Systems
-    else if (IMAGE_EXT.test(n.name)) void openExternal(n.path);
+    // Bilder (etwa Markierungen und Skizzen) öffnen auf der Zeichenfläche (E52), das Bildprogramm gibt es per Rechtsklick
+    else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
     else if (/\.(step|stp)$/i.test(n.name)) toast('Fremde STEP-Dateien im Viewer ansehen kommt in einem späteren Schritt. Der Agent kann sie schon jetzt im Skript einbinden.', 'info');
     else toast('Für diesen Dateityp gibt es keine Ansicht in der App. Rechtsklick: „Mit Standardprogramm öffnen“.', 'info');
   },
@@ -134,6 +151,7 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
   })(),
   reveal: (rel) => void api.fs.reveal(rel).then((r) => { if (!r.ok) toast(r.error ?? 'Der Explorer ließ sich nicht öffnen.', 'error'); }),
   openExternal: (rel) => void openExternal(rel),
+  mark: (rel) => void markImage(rel),
   toAgent: (rel) => insertToAgent(`[Datei: ${rel}] `),
   copyPath: (rel) => void navigator.clipboard.writeText(rel).then(() => toast(`Pfad kopiert: ${rel}`), (e) => toast(`Der Pfad ließ sich nicht kopieren: ${e instanceof Error ? e.message : String(e)}`, 'error')),
 });
@@ -321,6 +339,52 @@ function startMarkup(): void {
   markup.open(viewer.partList().length ? viewer.snapshot() : null);
 }
 
+/** Größte Kantenlänge der Zeichenfläche in Gerätepixeln: Große Fotos bleiben scharf, ohne dass die Fläche ausufert. */
+const MARK_MAX_PX = 8192;
+
+/**
+ * Öffnet ein Bild aus dem Projekt als Hintergrund der Markierung. Die Zeichenfläche hat das Seitenverhältnis des Viewers,
+ * das Bild wird unverzerrt eingepasst und behält seine Auflösung (so lesen Agenten auch feine Details einer Skizze).
+ */
+async function markImage(rel: string): Promise<void> {
+  if (!project) return;
+  menus.close();
+  if (markup.active) {
+    if (markup.source === rel) return;
+    // Von Bild zu Bild wechseln geht direkt. Nur eine angefangene Zeichnung wird nicht still verworfen.
+    if (markup.drawn) {
+      const c = await api.dialog.choose({ title: 'Markierung', message: 'Die offene Markierung ist noch nicht an den Agenten gegeben.', detail: `Verwerfen und ${rel} öffnen?`, buttons: ['Verwerfen und wechseln', 'Abbrechen'] });
+      if (c !== 0) return;
+    }
+  }
+  let img: HTMLImageElement, url: string;
+  try { url = await imageUrl(rel); } catch (e) { toast(`${rel} lässt sich nicht lesen: ${e instanceof Error ? e.message : String(e)}`, 'error'); return; }
+  try {
+    img = new Image();
+    img.src = url;
+    await img.decode();
+  } catch {
+    toast(`${rel} ließ sich nicht als Bild laden. Rechtsklick: „Mit Standardprogramm öffnen“.`, 'error');
+    return;
+  } finally { URL.revokeObjectURL(url); }
+  const view = $('viewer'), w = view.clientWidth, h = view.clientHeight;
+  // SVG ohne Größenangabe meldet 0: dann einfach in Viewergröße
+  const iw = img.naturalWidth || w, ih = img.naturalHeight || h;
+  if (!w || !h) return;
+  const scale = Math.min(Math.max(window.devicePixelRatio || 1, iw / w, ih / h), MARK_MAX_PX / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * scale);
+  c.height = Math.round(h * scale);
+  const g = c.getContext('2d')!;
+  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--s2').trim() || '#1b1e23';
+  g.fillRect(0, 0, c.width, c.height);
+  const f = Math.min(c.width / iw, c.height / ih);
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(img, (c.width - iw * f) / 2, (c.height - ih * f) / 2, iw * f, ih * f);
+  markup.close();
+  markup.open(c, rel);
+}
+
 async function sendMarkup(): Promise<void> {
   const btn = $<HTMLButtonElement>('btn-mark-send');
   if (btn.disabled || !markup.active) return;
@@ -329,13 +393,15 @@ async function sendMarkup(): Promise<void> {
     const r = await api.fs.saveFeedback(await markup.image());
     // Ging das Speichern schief, bleibt die Zeichnung offen: Nichts geht verloren, der Nutzer kann es noch einmal versuchen
     if (!r.ok || !r.path) { toast(`Die Markierung ließ sich nicht speichern: ${r.error ?? 'unbekannter Fehler'}`, 'error'); return; }
-    const old = versions.previewed;
+    const old = versions.previewed, source = markup.source;
     markup.close();
     void refreshFiles(); // die neue Markierung steht gleich im Dateibaum
     // Zeigt das Bild einen alten Stand oder einen Schnitt, soll der Agent das wissen (sonst vergleicht er es mit dem aktuellen Code
     // oder hält die Schnittfläche für eine echte Fläche)
+    // Auf einem Bild aus dem Projekt gezeichnet: Der Agent soll das Original kennen, Stand und Schnitt spielen dann keine Rolle
     const cut = sectionTool.agentText();
-    const note = (old ? `, zeigt den älteren Stand ${old.short} "${old.subject.slice(0, 80)}"` : '') + (cut ? `, ${cut}` : '');
+    const note = source ? `, gezeichnet auf ${source}`
+      : (old ? `, zeigt den älteren Stand ${old.short} "${old.subject.slice(0, 80)}"` : '') + (cut ? `, ${cut}` : '');
     insertToAgent(`[Markierung: ${r.path}${note}] `, `Markierung gespeichert: ${r.path}`);
   } catch (e) {
     toast(`Die Markierung ließ sich nicht speichern: ${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -911,6 +977,7 @@ if (api.testMode) {
     pick: () => selection?.pick ?? null,
     markPixel: (x: number, y: number) => markup.pixel(x, y),
     markHandles: () => markup.handles(),
+    markImage: (rel: string) => markImage(rel),
     insert: (text: string) => insertToAgent(text),
     showPanel: (p: PanelName | null) => showPanel(p),
     showStart: (on: boolean) => showStart(on),

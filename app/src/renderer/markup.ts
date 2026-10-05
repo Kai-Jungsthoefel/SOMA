@@ -76,6 +76,7 @@ export class Markup {
   private scale = 1;
   private size: Pt = [0, 0];
   private takenAt = Date.now();
+  private sourceFile: string | null = null;
   /** Offenes Textfeld: neuer Text an `p` (oben links) oder ein vorhandener Text (`id`). */
   private editing: { id: number | null; p: Pt; color: string } | null = null;
   private escUntil = 0;
@@ -115,9 +116,16 @@ export class Markup {
   }
 
   get active(): boolean { return !this.ui.layer.hidden; }
+  /** Es ist etwas gezeichnet oder ein Text angefangen, das beim Schließen verloren ginge. */
+  get drawn(): boolean { return this.shapes.length > 0 || (!!this.editing && !!this.ui.text.value.trim()); }
+  /** Bilddatei unter der Zeichnung, null beim Viewer-Bild und auf leerer Fläche. */
+  get source(): string | null { return this.blankBg ? null : this.sourceFile; }
 
-  /** Öffnet die Zeichenfläche über dem Viewer. `snapshot` ist das Bild des Viewers in Gerätepixeln, ohne Bild bleibt nur die leere Fläche. */
-  open(snapshot: HTMLCanvasElement | null): void {
+  /**
+   * Öffnet die Zeichenfläche über dem Viewer. `snapshot` ist das Hintergrundbild in Gerätepixeln, im Seitenverhältnis des
+   * Viewers, ohne Bild bleibt nur die leere Fläche. `source` ist die Bilddatei im Projekt, wenn nicht der Viewer abgebildet ist.
+   */
+  open(snapshot: HTMLCanvasElement | null, source: string | null = null): void {
     const w = this.ui.viewer.clientWidth, h = this.ui.viewer.clientHeight;
     this.bg = snapshot && snapshot.width && snapshot.height ? snapshot : null;
     this.scale = this.bg ? this.bg.width / w : window.devicePixelRatio || 1;
@@ -125,6 +133,7 @@ export class Markup {
     this.reset();
     this.blankBg = !this.bg;
     this.takenAt = Date.now();
+    this.sourceFile = this.bg ? source : null;
     const c = this.ui.canvas;
     // Feste Größe für die ganze Sitzung: Ändert sich das Fenster, bleibt das Bild, wie es aufgenommen wurde
     c.width = this.bg ? this.bg.width : Math.round(w * this.scale);
@@ -629,7 +638,9 @@ export class Markup {
     u.blank.setAttribute('aria-pressed', String(this.blankBg));
     u.grid.setAttribute('aria-pressed', String(this.grid));
     u.canvas.style.cursor = this.tool === 'select' ? 'default' : this.tool === 'text' ? 'text' : 'crosshair';
-    u.hint.replaceChildren(this.blankBg ? 'Leere Fläche. Das Bild landet in ' : `Bild des Viewers von ${fmtWhen(this.takenAt)}. Es landet in `,
+    const what = this.blankBg ? 'Leere Fläche. Das Bild landet in '
+      : this.sourceFile ? `Bild ${this.sourceFile}. Die Markierung landet als neue Datei in ` : `Bild des Viewers von ${fmtWhen(this.takenAt)}. Es landet in `;
+    u.hint.replaceChildren(what,
       el('code', { textContent: '.soma/feedback/' }), ', der Pfad in der Eingabe des Agenten.');
   }
 
@@ -638,7 +649,7 @@ export class Markup {
   state() {
     const r = (v: number, n = 2) => +v.toFixed(n);
     return {
-      active: this.active, tool: this.tool, color: this.color, blank: this.blankBg, grid: this.grid, size: this.size, pixels: [this.ui.canvas.width, this.ui.canvas.height],
+      active: this.active, source: this.source, tool: this.tool, color: this.color, blank: this.blankBg, grid: this.grid, size: this.size, pixels: [this.ui.canvas.width, this.ui.canvas.height],
       shapes: this.shapes.map((s) => s.tool),
       items: this.shapes.map((s) => ({ tool: s.tool, color: s.color, text: s.text ?? null, x: r(s.x), y: r(s.y), rot: r(s.rot, 4), sx: r(s.sx, 3), sy: r(s.sy, 3) })),
       selected: this.shapes.findIndex((s) => s.id === this.selected), editing: !!this.editing, undo: this.history.length, redo: this.future.length,

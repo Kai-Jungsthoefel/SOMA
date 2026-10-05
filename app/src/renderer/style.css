@@ -173,6 +173,42 @@ code { font-family:var(--mono); font-size:.95em; }
 .code-info:empty { display:none; }
 .codeview { flex:1; min-height:0; position:relative; background:var(--term); }
 .codeview .hint { color:var(--tx3); padding:14px; }
+
+/* Markdown: Umschalter im Kopf und Dokumentansicht (E51) */
+.cmode { display:flex; align-self:center; gap:2px; padding:2px; margin-right:4px; border:1px solid var(--line2); border-radius:7px; background:var(--term); }
+.cmode button { display:flex; align-items:center; justify-content:center; width:28px; height:22px; border-radius:5px; color:var(--tx2); font:500 12px var(--sans); }
+.cmode button:hover { background:var(--s3); color:var(--tx); }
+.cmode button[aria-checked=true] { background:var(--acc-tint); color:var(--acc-tx); box-shadow:inset 0 0 0 1px var(--acc-line); }
+.mdview { position:absolute; inset:0; overflow:auto; outline:none; }
+.md { max-width:760px; padding:14px 22px 40px; font:13.5px/1.62 var(--sans); color:#c9ced4; overflow-wrap:anywhere; }
+.md > :first-child { margin-top:0; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { color:var(--tx); font-weight:600; line-height:1.3; margin:1.3em 0 .5em; }
+.md h1 { font-size:22px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+.md h2 { font-size:18px; padding-bottom:4px; border-bottom:1px solid var(--line); }
+.md h3 { font-size:15.5px; } .md h4 { font-size:14px; } .md h5, .md h6 { font-size:13px; color:var(--tx2); }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md .md-table { margin:0 0 .8em; }
+.md ul, .md ol { padding-left:1.5em; }
+.md li { margin:.15em 0; }
+.md li > p { margin:0 0 .4em; }
+.md li.md-task { list-style:none; margin-left:-1.3em; }
+.md li.md-task > input { margin:0 .5em 0 0; vertical-align:-2px; accent-color:var(--acc); }
+.md strong { color:var(--tx); font-weight:600; }
+.md code { font:12px var(--mono); background:var(--s3); color:#e3c8a0; border-radius:4px; padding:1px 5px; }
+.md pre { background:var(--s1); border:1px solid var(--line); border-radius:7px; padding:10px 12px; overflow:auto; }
+.md pre code { background:none; color:#c9ced4; padding:0; font-size:12px; line-height:1.6; white-space:pre; }
+.md pre.md-html { font:12px/1.6 var(--mono); color:var(--tx3); white-space:pre-wrap; }
+.md blockquote { border-left:3px solid var(--line2); padding:2px 0 2px 12px; color:var(--tx2); }
+.md hr { border:0; border-top:1px solid var(--line2); margin:1.2em 0; }
+.md .md-link { color:#7fb4ff; cursor:pointer; text-decoration:underline; text-decoration-color:rgba(127,180,255,.4); text-underline-offset:2px; }
+.md .md-link:hover { text-decoration-color:currentColor; }
+.md .md-img { max-width:100%; border-radius:5px; }
+.md .md-imgmiss, .md .md-empty { color:var(--tx3); font-style:italic; }
+.md .md-err { color:var(--err); }
+.md .md-table { overflow:auto; }
+.md table { border-collapse:collapse; font-size:12.5px; }
+.md th, .md td { border:1px solid var(--line2); padding:4px 10px; text-align:left; }
+.md th { background:var(--s2); color:var(--tx); font-weight:600; }
+.md tr:nth-child(even) td { background:rgba(255,255,255,.02); }
 .code-info .ci-main { display:flex; align-items:center; gap:8px; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .code-info.locked { color:var(--tx3); }
 .code-info.locked .ci-main { white-space:normal; align-items:flex-start; }
@@ -221,6 +257,7 @@ code { font-family:var(--mono); font-size:.95em; }
 .cl.hl { background:rgba(242,154,56,.11); }
 .cl.er { background:rgba(240,116,112,.15); }
 .codeview .cl { width:max-content; min-width:100%; }
+.k-mh { color:var(--tx); font-weight:600; } .k-b { font-weight:600; } .k-i { font-style:italic; } .k-s { text-decoration:line-through; }
 .k-fn { color:#7fb4ff; } .k-str { color:#9fd28a; } .k-num { color:#e0b36a; } .k-cm { color:#7f8994; } .k-kw { color:#c69cf5; }
 
 /* ---- Viewer ---------------------------------------------------------------------------------------------------- */

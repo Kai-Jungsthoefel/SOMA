@@ -85,6 +85,13 @@ function registerIpc(ctl: ProjectController): void {
     const err = await shell.openPath(r.abs);
     return err ? { ok: false, error: err } : { ok: true, path: String(rel ?? '') };
   });
+  // Links aus Markdown-Dateien (E51). Nur Web und Mail: file:, Programme und eigene Protokolle könnten etwas ausführen.
+  ipcMain.handle('app:openUrl', async (_e, url: unknown): Promise<FileOpResult> => {
+    const u = String(url ?? '');
+    if (!/^(https?:\/\/|mailto:)/i.test(u)) return { ok: false, error: `Nur Web- und Mail-Adressen lassen sich öffnen: ${u.slice(0, 100)}` };
+    if (process.env.SOMA_TEST === '1') return { ok: true, path: u };
+    try { await shell.openExternal(u); return { ok: true, path: u }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  });
   ipcMain.handle('fs:saveFeedback', (_e, png: unknown) => saveFeedbackImage(dir(), png));
   ipcMain.handle('fs:writeText', (_e, id: string, rel: string, text: string, base: string | null, force?: boolean) => {
     const s = ctl.session;

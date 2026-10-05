@@ -149,6 +149,50 @@ try {
   check('Strg+S in NOTES.md: gespeichert, aber nicht gebaut', !(await ed()).dirty && await builds() === b2, `${await builds() - b2} Builds`);
   check('Datei mit CRLF: Zeilenenden bleiben erhalten', fs.readFileSync(notes, 'utf8') === '# Notizen\r\n\r\nWunsch: Deckel mit Lippe\r\n', JSON.stringify(fs.readFileSync(notes, 'utf8')).slice(0, 60));
 
+  // 9b) Markdown als Dokument (E51): Ansicht zuerst, Aufgaben abhaken, Doppelklick führt in den Editor, kein HTML aus der Datei
+  fs.mkdirSync(path.join(proj.dir, 'docs'), { recursive: true });
+  const mdFile = path.join(proj.dir, 'docs', 'plan.md');
+  fs.writeFileSync(mdFile, '# Plan\n\nText mit **fett** und `code`.\n\n- [ ] Deckel\n- [x] Boden\n\n| Teil | Maß |\n|---|--:|\n| Deckel | 80 |\n\n'
+    + '<img src=x onerror="window.__xss=1">\n\nSiehe [Notizen](../NOTES.md) und [Web](https://example.com).\n\n## Ende\n');
+  await open('docs/plan.md');
+  await waitFor('Ansicht', () => window.__t.editor.state().preview, 10000).catch(() => {});
+  s = await ed();
+  const md = await ev(() => ({
+    mode: document.getElementById('code-mode').hidden ? null : document.querySelector('#code-mode [aria-checked=true]').dataset.mode,
+    cm: getComputedStyle(document.querySelector('#code-view .cm-editor')).display, imgs: document.querySelectorAll('.mdview img').length,
+    html: document.querySelector('.mdview pre.md-html')?.textContent ?? '', th: document.querySelector('.mdview th:last-child')?.style.textAlign,
+  }));
+  await sleep(300);
+  check('Markdown öffnet als Dokument: Überschrift, Liste mit Kästchen, Tabelle, Umschalter auf „Ansicht"', s.preview && md.mode === 'view' && md.cm === 'none'
+    && s.rendered.includes('h1:Plan') && s.rendered.includes('li:Deckel') && s.rendered.some((x) => x.startsWith('div:Teil')) && md.th === 'right', s.rendered.join(' | ').slice(0, 120));
+  check('HTML aus der Datei wird gezeigt, nicht ausgeführt', md.imgs === 0 && md.html.includes('onerror') && !(await ev(() => window.__xss)));
+  await ev(() => { const b = document.querySelector('.mdview li.md-task input'); b.checked = true; b.dispatchEvent(new Event('change', { bubbles: true })); });
+  s = await ed();
+  check('Kästchen abhaken ändert den Text (ungespeichert), die Ansicht bleibt', s.dirty && s.text.includes('- [x] Deckel') && s.preview && !fs.readFileSync(mdFile, 'utf8').includes('[x] Deckel'));
+  await ev(() => document.querySelector('.mdview .md').dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true })));
+  await until('plan.md geschrieben', () => fs.readFileSync(mdFile, 'utf8').includes('- [x] Deckel'));
+  check('Strg+S in der Ansicht speichert', !(await ed()).dirty && fs.readFileSync(mdFile, 'utf8').includes('- [x] Deckel'));
+  await ev(() => { const p = [...document.querySelectorAll('.mdview h2')].pop(); p.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+  await sleep(200);
+  const cur = await ev(() => { const st = document.querySelector('#code-view .cm-editor'); return { shown: getComputedStyle(st).display !== 'none', mode: document.querySelector('#code-mode [aria-checked=true]').dataset.mode }; });
+  s = await ed();
+  const endLine = s.text.split('\n').indexOf('## Ende') + 1;
+  check('Doppelklick auf „## Ende": Editor an dieser Stelle, Umschalter auf „Bearbeiten"', cur.shown && cur.mode === 'edit' && !s.preview && endLine > 1 && s.line === endLine,
+    `${JSON.stringify(cur)} Zeile ${s.line} statt ${endLine}`);
+  await replace('## Ende', '## Schluss');
+  await ev(() => document.querySelector('#code-mode [data-mode=view]').click());
+  s = await ed();
+  check('Zurück zur Ansicht: zeigt die ungespeicherte Eingabe', s.preview && s.rendered.includes('h2:Schluss') && s.dirty);
+  await ctrlS();
+  await until('plan.md wieder geschrieben', () => fs.readFileSync(mdFile, 'utf8').includes('## Schluss'));
+  await shot('9b-markdown-ansicht');
+  await ev(() => [...document.querySelectorAll('.mdview .md-link')].find((a) => a.textContent === 'Notizen').click());
+  await waitFor('NOTES.md über Link', () => window.__t.editor.state().file === 'NOTES.md', 10000).catch(() => {});
+  check('Link auf ../NOTES.md öffnet die Datei im Code-Panel', (await ed()).file === 'NOTES.md');
+  await open('AGENTS.md');
+  s = await ed();
+  check('AGENTS.md (nur lesen) als Dokument: Kästchen wären gesperrt, Ansicht da', s.preview && s.rendered.length > 3 && await ev(() => [...document.querySelectorAll('.mdview li.md-task input')].every((b) => b.disabled)));
+
   // 10) Build-Fehler: „Code öffnen" markiert die Zeile rot
   await open('model.py');
   await replace('LENGTH = 79.0', 'LENGTH = 79.0 +');

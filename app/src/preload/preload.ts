@@ -68,6 +68,7 @@ const api: SomaApi = {
     setDefault: (id, on) => ipcRenderer.invoke('skills:setDefault', id, on),
   },
   dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
+  openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'
     ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f) }
