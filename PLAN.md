@@ -38,7 +38,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
 ```
 
 - **Desktop:** Electron, TypeScript (E23). Editor: CodeMirror 6 (Phase 1, Schritt 5).
-- **Python-Dienst:** Pro Projekt ein langlebiger Prozess für die App (schnelle Messungen, Modell im Speicher). Der Build-Befehl des Agenten läuft zusätzlich als eigenständiger Einmal-Prozess und funktioniert auch ohne App (E24). **Umgesetzt für das Messen** (`soma serve`), gebaut wird weiter im Einmal-Prozess.
+- **Python-Dienst:** Pro Projekt ein langlebiger Prozess für die App (schnelle Messungen, Modell im Speicher). Der Build-Befehl des Agenten läuft zusätzlich als eigenständiger Einmal-Prozess und funktioniert auch ohne App (E24). **Umgesetzt für das Messen** (`soma serve`), gebaut wird weiter im Einmal-Prozess. Damit der Start von Python und der Import von cadquery (rund 3 bis 4 s) nicht bei jedem Build anfallen, hält die App einen vorgewärmten `soma build --wait` bereit, der erst auf eine Startzeile hin baut. Jeder Build bleibt ein frischer Prozess, ein warmer Build dauert rund 0,5 s statt 4 bis 5 s.
 - **CAD-Framework:** **CadQuery**, fest (E12). OpenSCAD ist ausgeschlossen (kein STEP, kein B-Rep).
 - **Viewer:** three.js zeigt ein GLB, das nach jedem Build aus der STEP-Datei erzeugt wird (Bauteilnamen, Farben, Flächen- und Kanten-IDs). Exakte Messwerte (Radius, Flächenabstand) fragt die App beim Python-Dienst ab. Es gibt keinen zweiten CAD-Kern im Frontend (E9).
 
@@ -323,6 +323,8 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - Die ZIP enthält `.git` und Feedback-Bilder, aber weder Umgebungen noch GLB-Cache, Mapping und `build.json`
 - Ohne `.git` gibt es **keinen** Knopf „Verlauf neu anlegen“, nur die Meldung (sonst widerspricht es E28). Offene Frage: Für Nicht-Programmierer wäre ein ausdrücklicher Knopf freundlicher
 - Änderung während eines Builds: laufenden Build fertig laufen lassen, danach genau ein weiterer (statt abbrechen und neu starten)
+- Vorgewärmter Build-Prozess: pro offenem Projekt läuft ein zusätzlicher Python-Prozess mit geladenem cadquery (Speicher gegen rund 3,5 s je Build). Er wird beim Start eines Builds für den nächsten angelegt und beendet sich, wenn die App ihn verwirft oder abstürzt (stdin geschlossen). Nach dem Ergebnis beendet sich `soma build` sofort (`os._exit`), das Aufräumen von OCP und vtk kostete knapp 1 s
+- Angezeigt wird nur die Gesamtdauer eines Builds vom Start bis zum Ergebnis, nicht mehr die Summe der Teilzeiten (die zeigte 0,1 s, obwohl man 4 s wartete). `soma build` im Terminal meldet ebenfalls die Gesamtzeit
 - Oberfläche (E38): Funktionen, die noch fehlen (inzwischen nur noch Pakete, Hilfe, Optionen), stehen schon ausgegraut mit Hinweis da. Nur dunkles Farbschema. Das „⋯“-Menü aus dem Entwurf entfällt (alles steht im Dokumentmenü)
 - Dateien, die man irgendwo ins Fenster zieht, landen in `inputs/` (Electron würde sie sonst als Seite öffnen). Bei gleichem Namen „name (2).ext“
 - Gezogene Ordner kommen mit allen Unterordnern nach `inputs/<Ordner>/` (bei gleichem Namen „Ordner (2)“). Verknüpfungen und `.git`-Ordner darin bleiben draußen und werden gemeldet (ein eingebettetes Repository würde Git nur als Verweis ablegen). Grenze wie bei Dateien 500 MB, dazu höchstens 10 000 Dateien. Ist der Ordner zu groß, wird gar nichts kopiert
