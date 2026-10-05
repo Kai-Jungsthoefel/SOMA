@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { readOnlyReason } from '../shared/editable';
-import type { FeedbackResult, FileNode, ImportResult, WriteResult } from '../shared/types';
+import { fileOpBlockReason, readOnlyReason } from '../shared/editable';
+import type { FeedbackResult, FileNode, FileOpResult, ImportResult, WriteResult } from '../shared/types';
 
 const HIDDEN = new Set(['.git', '.soma', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
 const MAX_ENTRIES = 2000;
@@ -87,6 +87,113 @@ function scanFolder(src: string): FolderScan {
   };
   walk('');
   return scan;
+}
+
+// ---- Dateibaum: anlegen, umbenennen, löschen, öffnen ---------------------------------------------------------
+
+/** Unter Windows verbotene Namen (auch mit Endung, etwa „con.txt“). */
+const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
+/**
+ * Dateien, die beim Öffnen mit dem Standardprogramm etwas ausführen würden. Der Arbeitsordner ist nicht vertrauenswürdig
+ * (der Agent schreibt dort), ein Klick im Dateibaum darf kein Programm starten. Python-Dateien öffnet das Code-Panel.
+ */
+const RUNNABLE = /\.(exe|com|bat|cmd|ps1|psm1|psd1|vbs|vbe|js|jse|mjs|wsf|wsh|msi|msp|scr|pif|lnk|url|hta|cpl|jar|reg|py|pyw|pyz|sh|appref-ms|application|msc|scf|inf|settingcontent-ms)$/i;
+
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** Fehler im Namen einer neuen oder umbenannten Datei, sonst null. Nur ein Name, kein Pfad. */
+export function nameError(name: string): string | null {
+  if (!name.trim()) return 'Der Name ist leer.';
+  if (name !== name.trim()) return 'Der Name beginnt oder endet mit einem Leerzeichen.';
+  if (/[\\/:*?"<>|\x00-\x1f]/.test(name)) return 'Diese Zeichen gehen in Namen nicht: \\ / : * ? " < > |';
+  if (name === '.' || name === '..') return 'Dieser Name geht nicht.';
+  if (/\.$/.test(name)) return 'Der Name darf nicht mit einem Punkt enden.';
+  if (RESERVED.test(name)) return `„${name}“ ist unter Windows ein reservierter Name.`;
+  if (name.length > 200) return 'Der Name ist zu lang.';
+  return null;
+}
+
+/** Pfad aus dem Renderer in die feste Form „a/b“ bringen. „..“ wird abgelehnt, damit die Regeln nicht umgangen werden. */
+function cleanRel(rel: string): string {
+  // normalize nimmt „./“ vorne schon weg. Nur „.“ allein ist der Projektordner, „.soma“ bleibt „.soma“.
+  const p = path.posix.normalize(String(rel).replace(/\\/g, '/')).replace(/\/$/, '');
+  if (p === '.' || p === '') return '';
+  if (p === '..' || p.startsWith('../') || path.posix.isAbsolute(p) || /^[a-z]:/i.test(p)) throw new Error(`Pfad liegt ausserhalb des Projekts: ${rel}`);
+  return p;
+}
+
+const joinRel = (parent: string, name: string) => (parent ? `${parent}/${name}` : name);
+
+/** Neue, leere Datei oder neuer Ordner. Gibt es den Namen schon, wird nichts angelegt. */
+export function createEntry(root: string, parent: string, name: string, dir: boolean): FileOpResult {
+  try {
+    const base = cleanRel(parent);
+    const bad = nameError(name);
+    if (bad) return { ok: false, error: bad };
+    const rel = joinRel(base, name);
+    const block = fileOpBlockReason(base, 'create') ?? fileOpBlockReason(rel, 'create');
+    if (block) return { ok: false, error: `Hier lässt sich nichts anlegen. ${block}` };
+    const parentAbs = resolveInside(root, base || '.');
+    if (!fs.statSync(parentAbs).isDirectory()) return { ok: false, error: `${base} ist kein Ordner.` };
+    const abs = resolveInside(root, rel);
+    // Ohne recursive bzw. mit „wx“: Entsteht der Name gleichzeitig, schlägt das fehl statt zu überschreiben
+    if (dir) fs.mkdirSync(abs); else fs.writeFileSync(abs, '', { flag: 'wx' });
+    return { ok: true, path: rel };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return { ok: false, error: `„${name}“ gibt es dort schon.` };
+    return { ok: false, error: errMsg(e) };
+  }
+}
+
+/** Umbenennen im selben Ordner. Gibt es den neuen Namen schon, bleibt alles, wie es ist. Nur Groß-/Kleinschreibung ändern geht. */
+export function renameEntry(root: string, rel: string, name: string): FileOpResult {
+  try {
+    const from = cleanRel(rel);
+    const block = fileOpBlockReason(from, 'rename');
+    if (block) return { ok: false, error: `${from} lässt sich nicht umbenennen. ${block}` };
+    const bad = nameError(name);
+    if (bad) return { ok: false, error: bad };
+    const old = path.posix.basename(from);
+    const to = joinRel(path.posix.dirname(from) === '.' ? '' : path.posix.dirname(from), name);
+    if (name === old) return { ok: true, path: from };
+    const blockTo = fileOpBlockReason(to, 'create');
+    if (blockTo) return { ok: false, error: `Dieser Name geht hier nicht. ${blockTo}` };
+    const abs = resolveInside(root, from);
+    if (fs.lstatSync(abs).isSymbolicLink()) return { ok: false, error: 'Verknüpfungen lassen sich hier nicht umbenennen.' };
+    const target = resolveInside(root, to);
+    // Windows und macOS unterscheiden Groß und klein nicht: „Teil.py“ → „teil.py“ findet sich selbst als vorhanden
+    const caseOnly = name.toLowerCase() === old.toLowerCase();
+    if (!caseOnly && exists(target)) return { ok: false, error: `„${name}“ gibt es dort schon.` };
+    fs.renameSync(abs, target);
+    return { ok: true, path: to };
+  } catch (e) { return { ok: false, error: errMsg(e) }; }
+}
+
+/**
+ * Verschiebt in den Papierkorb (`trash`, im Hauptprozess `shell.trashItem`). Klappt das nicht, wird nichts gelöscht:
+ * endgültiges Löschen gibt es im Dateibaum nicht (Grundsatz: nichts still löschen).
+ */
+export async function trashEntry(root: string, rel: string, trash: (abs: string) => Promise<void>): Promise<FileOpResult> {
+  try {
+    const p = cleanRel(rel);
+    const block = fileOpBlockReason(p, 'delete');
+    if (block) return { ok: false, error: `${p} lässt sich nicht löschen. ${block}` };
+    const abs = resolveInside(root, p);
+    fs.lstatSync(abs);
+    try { await trash(abs); } catch (e) { return { ok: false, error: `${p} ließ sich nicht in den Papierkorb verschieben, es wurde nichts gelöscht: ${errMsg(e)}` }; }
+    return { ok: true, path: p };
+  } catch (e) { return { ok: false, error: errMsg(e) }; }
+}
+
+/** Prüft einen Pfad zum Zeigen oder Öffnen und gibt den absoluten Pfad zurück. */
+export function entryPath(root: string, rel: string, forOpen: boolean): { abs?: string; error?: string } {
+  try {
+    const p = cleanRel(rel);
+    const abs = resolveInside(root, p || '.');
+    const st = fs.statSync(abs);
+    if (forOpen && st.isFile() && RUNNABLE.test(p)) return { error: `${path.posix.basename(p)} könnte beim Öffnen ein Programm starten. SOMA öffnet solche Dateien nicht, „Im Explorer zeigen“ geht.` };
+    return { abs };
+  } catch (e) { return { error: errMsg(e) }; }
 }
 
 /**
@@ -192,5 +299,14 @@ export function listFiles(root: string): FileNode[] {
     }
     return nodes.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   };
-  return walk(root, '', 0);
+  const nodes = walk(root, '', 0);
+  // Markierungen (E16) liegen versteckt in .soma/feedback/. Der Nutzer soll sie wiederfinden und erneut an den Agenten
+  // geben können, deshalb kommt nur dieser Ordner mit. Neueste zuerst (der Name beginnt mit Datum und Uhrzeit).
+  const fb = path.join(root, '.soma', 'feedback');
+  try {
+    if (fs.lstatSync(fb).isDirectory() && !fs.lstatSync(path.join(root, '.soma')).isSymbolicLink()) {
+      nodes.push({ name: 'feedback', path: '.soma/feedback', dir: true, children: walk(fb, '.soma/feedback', 1).reverse() });
+    }
+  } catch { /* noch keine Markierung */ }
+  return nodes;
 }

@@ -95,17 +95,70 @@ const skills = new SkillsPanel($('skills-list'), {
   changed: () => { filesDirty = true; textCache.clear(); void refreshSaveState(); void code.refresh(); },
 });
 
-const files = new FileTree($('tab-files'), (n) => {
-  if (TEXT_EXT.test(n.name)) void openCode(n.path);
-  else if (/\.(step|stp)$/i.test(n.name)) toast('Fremde STEP-Dateien im Viewer ansehen kommt in einem späteren Schritt. Der Agent kann sie schon jetzt im Skript einbinden.', 'info');
-  else toast('Für diesen Dateityp gibt es keine Ansicht in der App.', 'info');
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+
+const files = new FileTree($('tab-files'), $('menu-ctx'), {
+  open: (n) => {
+    if (TEXT_EXT.test(n.name)) void openCode(n.path);
+    // Bilder (etwa Markierungen und Skizzen) zeigt das Bildprogramm des Systems
+    else if (IMAGE_EXT.test(n.name)) void openExternal(n.path);
+    else if (/\.(step|stp)$/i.test(n.name)) toast('Fremde STEP-Dateien im Viewer ansehen kommt in einem späteren Schritt. Der Agent kann sie schon jetzt im Skript einbinden.', 'info');
+    else toast('Für diesen Dateityp gibt es keine Ansicht in der App. Rechtsklick: „Mit Standardprogramm öffnen“.', 'info');
+  },
+  create: async (parent, name, dir) => {
+    const r = await api.fs.create(parent, name, dir);
+    if (!r.ok || !r.path) { toast(r.error ?? `${name} ließ sich nicht anlegen.`, 'error'); return false; }
+    await refreshFiles();
+    if (!dir && TEXT_EXT.test(name)) void openCode(r.path);
+    return true;
+  },
+  rename: async (rel, name) => {
+    if (!fileOpAllowed(rel, 'umbenennen')) return true;
+    const wasOpen = code.openUnder(rel);
+    const r = await api.fs.rename(rel, name);
+    if (!r.ok || !r.path) { toast(r.error ?? `${rel} ließ sich nicht umbenennen.`, 'error'); return false; }
+    // Reiter wandern mit: der alte zu, die Datei unter neuem Namen wieder auf (ohne das Panel zu wechseln)
+    code.forget(rel);
+    for (const f of wasOpen) void code.open(r.path + f.slice(rel.length), undefined, false);
+    await refreshFiles();
+    return true;
+  },
+  trash: (rel) => void (async () => {
+    if (!fileOpAllowed(rel, 'löschen')) return;
+    const r = await api.fs.trash(rel);
+    if (r.canceled) return;
+    if (!r.ok) { toast(r.error ?? `${rel} ließ sich nicht löschen.`, 'error'); return; }
+    code.forget(rel);
+    await refreshFiles();
+    toast(`${rel} liegt im Papierkorb.`);
+  })(),
+  reveal: (rel) => void api.fs.reveal(rel).then((r) => { if (!r.ok) toast(r.error ?? 'Der Explorer ließ sich nicht öffnen.', 'error'); }),
+  openExternal: (rel) => void openExternal(rel),
+  toAgent: (rel) => insertToAgent(`[Datei: ${rel}] `),
+  copyPath: (rel) => void navigator.clipboard.writeText(rel).then(() => toast(`Pfad kopiert: ${rel}`), (e) => toast(`Der Pfad ließ sich nicht kopieren: ${e instanceof Error ? e.message : String(e)}`, 'error')),
 });
+
+async function openExternal(rel: string): Promise<void> {
+  const r = await api.fs.openExternal(rel);
+  if (!r.ok) toast(r.error ?? `${rel} ließ sich nicht öffnen.`, 'error');
+}
+
+/** Umbenennen und Löschen nur ohne ungespeicherte Eingaben im Editor, sonst gingen sie unter dem alten Namen verloren. */
+function fileOpAllowed(rel: string, what: string): boolean {
+  const open = code.unsaved().filter((f) => f === rel || f.startsWith(`${rel}/`));
+  if (!open.length) return true;
+  toast(`Zum ${what === 'löschen' ? 'Löschen' : 'Umbenennen'} erst speichern oder die Änderungen verwerfen: ${open.join(', ')}`, 'error');
+  return false;
+}
 
 async function refreshFiles(): Promise<void> {
   if (panel !== 'files') { filesDirty = true; return; }
   filesDirty = false;
   try { files.render(await api.fs.list()); } catch { /* Projekt wechselt gerade */ }
 }
+
+$('btn-file-new').addEventListener('click', () => files.startCreate('', false));
+$('btn-folder-new').addEventListener('click', () => files.startCreate('', true));
 
 // Dateien und Ordner ziehen: überall im Fenster ablegen landet in inputs/. Ohne das würde Electron die Datei als Seite öffnen.
 let dragDepth = 0;
@@ -228,7 +281,7 @@ function insertToAgent(text: string | null, done?: string): void {
   setAgentCollapsed(false);
   const title = terminals.insert(text);
   if (title) toast(`${pre}In die Eingabe von ${title} eingefügt. Enter schickt ab.`);
-  else toast(`${pre}Das Terminal ist beendet. Öffne über + ein neues.`, 'error');
+  else toast(`${pre}Alle Terminals sind beendet. Öffne über + ein neues.`, 'error');
 }
 
 // ---- Messen (E9) ------------------------------------------------------------------------------------------------
@@ -257,7 +310,7 @@ const sectionTool = new SectionTool({
 const markup = new Markup({
   viewer: $('viewer'), layer: $('markup'), canvas: $<HTMLCanvasElement>('mark-canvas'), text: $<HTMLInputElement>('mark-text'),
   hint: $('mark-hint'), tools: $('mark-tools'), undo: $<HTMLButtonElement>('btn-mark-undo'), del: $<HTMLButtonElement>('btn-mark-delete'),
-  blank: $<HTMLButtonElement>('btn-mark-blank'), colorBtn: $<HTMLButtonElement>('btn-mark-color'), colorSwatch: $('mark-color-sw'),
+  blank: $<HTMLButtonElement>('btn-mark-blank'), grid: $<HTMLButtonElement>('btn-mark-grid'), colorBtn: $<HTMLButtonElement>('btn-mark-color'), colorSwatch: $('mark-color-sw'),
   palette: $('menu-mark-color'), custom: $<HTMLInputElement>('mark-color-custom'),
 });
 
@@ -278,6 +331,7 @@ async function sendMarkup(): Promise<void> {
     if (!r.ok || !r.path) { toast(`Die Markierung ließ sich nicht speichern: ${r.error ?? 'unbekannter Fehler'}`, 'error'); return; }
     const old = versions.previewed;
     markup.close();
+    void refreshFiles(); // die neue Markierung steht gleich im Dateibaum
     // Zeigt das Bild einen alten Stand oder einen Schnitt, soll der Agent das wissen (sonst vergleicht er es mit dem aktuellen Code
     // oder hält die Schnittfläche für eine echte Fläche)
     const cut = sectionTool.agentText();

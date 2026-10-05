@@ -14,7 +14,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-unit-'));
 try {
   const out = path.join(tmp, 'files.mjs');
   await build({ entryPoints: [path.join(APP, 'src', 'main', 'files.ts')], outfile: out, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
-  const { importInputs, saveFeedbackImage, writeProjectText, backupText } = await import(pathToFileURL(out).href);
+  const { importInputs, saveFeedbackImage, writeProjectText, backupText, createEntry, renameEntry, trashEntry, entryPath, listFiles } = await import(pathToFileURL(out).href);
 
   const proj = path.join(tmp, 'projekt');
   const src = path.join(tmp, 'quelle');
@@ -85,6 +85,56 @@ try {
     const r3 = saveFeedbackImage(proj3, png, when);
     check('.soma zeigt nach außen: Markierung abgelehnt, draußen landet nichts', !r3.ok && fs.readdirSync(outside).length === 0, r3.error?.slice(0, 70) ?? '');
   } else check('.soma als Verweis nach außen (übersprungen, Verweis nicht anlegbar)', true);
+
+  // Dateibaum: anlegen, umbenennen, Papierkorb, öffnen. Nichts überschrieben, App-Dateien gesperrt, nie endgültig gelöscht.
+  const ops = path.join(tmp, 'ops');
+  fs.mkdirSync(path.join(ops, 'parts'), { recursive: true });
+  fs.mkdirSync(path.join(ops, '.soma', 'feedback'), { recursive: true });
+  fs.writeFileSync(path.join(ops, 'model.py'), 'M');
+  fs.writeFileSync(path.join(ops, 'AGENTS.md'), 'A');
+  fs.writeFileSync(path.join(ops, '.soma', 'feedback', 'markierung-20260930-1405.png'), 'P');
+  let o = createEntry(ops, 'parts', 'deckel.py', false);
+  const o2 = createEntry(ops, '', 'skizzen', true);
+  check('Neue Datei und neuer Ordner', o.ok && o.path === 'parts/deckel.py' && fs.readFileSync(path.join(ops, 'parts', 'deckel.py'), 'utf8') === ''
+    && o2.ok && fs.statSync(path.join(ops, 'skizzen')).isDirectory(), `${o.path} ${o2.path}`);
+  fs.writeFileSync(path.join(ops, 'parts', 'deckel.py'), 'INHALT');
+  o = createEntry(ops, 'parts', 'deckel.py', false);
+  check('Neue Datei mit vorhandenem Namen: abgelehnt, Inhalt bleibt', !o.ok && /schon/.test(o.error) && fs.readFileSync(path.join(ops, 'parts', 'deckel.py'), 'utf8') === 'INHALT', o.error);
+  const badNames = ['', ' x', 'a/b', 'a:b', 'con', 'NUL.txt', 'x.', '..'].map((n) => createEntry(ops, '', n, false));
+  check('Ungültige Namen (leer, Leerzeichen, / : , reservierte Namen, Punkt am Ende) abgelehnt', badNames.every((x) => !x.ok), badNames.map((x) => x.error).join(' | ').slice(0, 90));
+  const blockedCreate = [createEntry(ops, 'output', 'x.step', false), createEntry(ops, '.soma', 'x', false), createEntry(ops, '.soma/feedback', 'x.png', false), createEntry(ops, '', 'AGENTS.md', false), createEntry(ops, '../draussen', 'x', false)];
+  check('Anlegen in output/, .soma/ und außerhalb sowie als App-Datei: abgelehnt', blockedCreate.every((x) => !x.ok) && !fs.existsSync(path.join(tmp, 'draussen', 'x')), blockedCreate.map((x) => x.error).join(' | ').slice(0, 90));
+
+  o = renameEntry(ops, 'parts/deckel.py', 'lid.py');
+  check('Umbenennen im selben Ordner', o.ok && o.path === 'parts/lid.py' && fs.readFileSync(path.join(ops, 'parts', 'lid.py'), 'utf8') === 'INHALT' && !fs.existsSync(path.join(ops, 'parts', 'deckel.py')), o.path ?? o.error);
+  fs.writeFileSync(path.join(ops, 'parts', 'body.py'), 'BODY');
+  o = renameEntry(ops, 'parts/lid.py', 'body.py');
+  check('Umbenennen auf vorhandenen Namen: abgelehnt, beide bleiben', !o.ok && fs.readFileSync(path.join(ops, 'parts', 'body.py'), 'utf8') === 'BODY' && fs.existsSync(path.join(ops, 'parts', 'lid.py')), o.error);
+  o = renameEntry(ops, 'parts/lid.py', 'Lid.py');
+  check('Nur Groß-/Kleinschreibung ändern geht', o.ok && fs.readdirSync(path.join(ops, 'parts')).includes('Lid.py'), fs.readdirSync(path.join(ops, 'parts')).join(','));
+  const blockedRename = [renameEntry(ops, 'model.py', 'haupt.py'), renameEntry(ops, 'AGENTS.md', 'x.md'), renameEntry(ops, 'parts', 'teile'), renameEntry(ops, 'parts/../model.py', 'x.py'), renameEntry(ops, 'skizzen', 'AGENTS.md')];
+  check('Umbenennen gesperrt: model.py, App-Dateien, parts/, Umweg über „..“, App-Name als Ziel', blockedRename.every((x) => !x.ok) && fs.existsSync(path.join(ops, 'model.py')) && fs.existsSync(path.join(ops, 'parts')),
+    blockedRename.map((x) => x.error).join(' | ').slice(0, 90));
+  o = renameEntry(ops, '.soma/feedback/markierung-20260930-1405.png', 'griff-zu-dick.png');
+  check('Markierung in .soma/feedback/ lässt sich umbenennen', o.ok && fs.existsSync(path.join(ops, '.soma', 'feedback', 'griff-zu-dick.png')), o.path ?? o.error);
+
+  const binned = [];
+  const fakeTrash = async (abs) => { binned.push(path.basename(abs)); fs.rmSync(abs, { recursive: true }); };
+  o = await trashEntry(ops, 'skizzen', fakeTrash);
+  const o3 = await trashEntry(ops, 'model.py', fakeTrash), o4 = await trashEntry(ops, 'AGENTS.md', fakeTrash), o5 = await trashEntry(ops, '.soma', fakeTrash);
+  check('Löschen geht in den Papierkorb, model.py, App-Dateien und .soma gesperrt', o.ok && !fs.existsSync(path.join(ops, 'skizzen')) && JSON.stringify(binned) === '["skizzen"]'
+    && !o3.ok && !o4.ok && !o5.ok && fs.existsSync(path.join(ops, 'model.py')), binned.join(','));
+  o = await trashEntry(ops, 'parts/body.py', async () => { throw new Error('Papierkorb nicht erreichbar'); });
+  check('Papierkorb klappt nicht: nichts gelöscht, Meldung', !o.ok && fs.existsSync(path.join(ops, 'parts', 'body.py')) && /nichts gelöscht/.test(o.error), o.error?.slice(0, 80));
+
+  fs.writeFileSync(path.join(ops, 'start.bat'), '@echo off');
+  fs.writeFileSync(path.join(ops, 'parts', 'foto.png'), 'P');
+  const runnable = [entryPath(ops, 'start.bat', true), entryPath(ops, 'parts/Lid.py', true)], fine = entryPath(ops, 'parts/foto.png', true), shown = entryPath(ops, 'start.bat', false);
+  check('Mit Standardprogramm öffnen: Ausführbares (.bat, .py) abgelehnt, Bild und Zeigen im Explorer gehen', runnable.every((x) => !x.abs && x.error) && !!fine.abs && !!shown.abs, runnable[0].error?.slice(0, 70));
+  const tree2 = listFiles(ops);
+  const fbNode = tree2.find((n) => n.path === '.soma/feedback');
+  check('Dateiliste: .soma/feedback/ als einziger Teil von .soma, sonst bleibt .soma verborgen', !!fbNode && fbNode.children.map((c) => c.name).join() === 'griff-zu-dick.png'
+    && !tree2.some((n) => n.path === '.soma'), tree2.map((n) => n.path).join(','));
 
   // Editor: schreiben nur, wenn die Platte noch dem gelesenen Stand entspricht (der Agent schreibt an denselben Dateien)
   const bdir = path.join(tmp, 'sicherungen');

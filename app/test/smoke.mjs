@@ -168,6 +168,20 @@ try {
   await key('Escape');
   check('Escape hebt zuerst nur die Auswahl auf', (await mk()).selected === -1 && (await mk()).active);
 
+  // Linie und Raster: Das Raster steht im Bild, Linien rasten an den Kreuzungen ein
+  const gridOff = await ev(() => window.__t.markPixel(600, 10));
+  await domClick('btn-mark-grid');
+  const gridOn = await ev(() => window.__t.markPixel(600, 10));
+  await tool('line'); await drag([[101, 203], [150, 205], [189, 207]]);
+  st = await mk();
+  const ln = st.items[st.items.length - 1];
+  await shot('7f-markieren-raster');
+  check('Raster an: im Bild zu sehen, Knopf gedrückt', st.grid && gridOn.slice(0, 3).join() !== gridOff.slice(0, 3).join()
+    && await ev(() => document.getElementById('btn-mark-grid').getAttribute('aria-pressed')) === 'true', `${gridOff.slice(0, 3)} → ${gridOn.slice(0, 3)}`);
+  check('Linie: gerade, Endpunkte am Raster (100,200 bis 180,200)', st.shapes.length === 5 && ln.tool === 'line' && ln.x === 140 && ln.y === 200, `${ln.tool} ${ln.x},${ln.y}`);
+  await domClick('btn-mark-grid');
+  check('Raster wieder aus: Bild ohne Raster', !(await mk()).grid && (await ev(() => window.__t.markPixel(600, 10))).slice(0, 3).join() === gridOff.slice(0, 3).join());
+
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   check('Escape mit Zeichnung verwirft nicht sofort (erst beim zweiten Mal)', (await ev(() => window.__t.markup())).active && (await ev(() => window.__t.toast())).text.includes('Noch einmal Escape'));
   const px = (await ev(() => window.__t.markup())).pixels;
@@ -191,6 +205,55 @@ try {
   const viaHandoff = await ev(() => window.__t.markup().active);
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   check('„Markierung" in der Übergabeleiste öffnet die Zeichenfläche, Escape ohne Zeichnung schließt', viaHandoff && !(await ev(() => window.__t.markup().active)) && fs.readdirSync(fbDir).length === 1);
+
+  // Dateibaum: Markierungen sichtbar, anlegen, umbenennen, löschen über Menü und Tasten
+  await ev(() => window.__t.showPanel('files'));
+  await waitFor('Markierungen im Dateibaum', (f) => window.__t.fileRows().includes(f), 10000, fbFiles[0]).catch(() => {});
+  const rows2 = await ev(() => window.__t.fileRows());
+  check('Dateibaum: Gruppe „Markierungen“ mit dem Bild aus .soma/feedback/, sonst nichts aus .soma', rows2.includes('Markierungen') && rows2.includes(fbFiles[0]) && !rows2.includes('project.json'), rows2.slice(-6).join(','));
+  const ctx = (rel) => ev((rel) => {
+    const row = document.querySelector(`#tab-files .frow[data-path="${CSS.escape(rel)}"]`);
+    if (!row) return null;
+    const r = row.getBoundingClientRect();
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 5 }));
+    return [...document.querySelectorAll('#menu-ctx .mi')].map((b) => (b.disabled ? '-' : '') + b.textContent.replace(/(F2|Entf)$/, ''));
+  }, rel);
+  const menuItemClick = (label) => ev((l) => [...document.querySelectorAll('#menu-ctx .mi')].find((b) => b.textContent.startsWith(l))?.click(), label);
+  const typeName = (name) => ev((n) => { const t = document.querySelector('#tab-files .fedit'); if (!t) return false; t.value = n; t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; }, name);
+  const modelMenu = await ctx('model.py');
+  check('Menü auf model.py: Öffnen, Explorer, Pfad, Anlegen; Umbenennen und Löschen gesperrt', ['Öffnen', 'Im Explorer zeigen', 'Pfad an Agent geben', 'Pfad kopieren', 'Neue Datei', '-Umbenennen', '-Löschen'].every((x) => modelMenu?.includes(x)), modelMenu?.join(','));
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await domClick('btn-file-new');
+  await sleep(50);
+  const typed = await typeName('notiz.txt');
+  const notiz = path.join(proj.dir, 'notiz.txt');
+  await waitFor('Datei angelegt und offen', () => window.__t.editor.state().file === 'notiz.txt', 5000).catch(() => {});
+  check('„Neue Datei“: Namensfeld im Baum, Enter legt sie an und öffnet sie im Editor', typed && fs.existsSync(notiz) && (await ev(() => window.__t.editor.state())).file === 'notiz.txt');
+  await ev(() => window.__t.showPanel('files'));
+  await waitFor('notiz.txt im Baum', () => window.__t.fileRows().includes('notiz.txt'), 5000).catch(() => {});
+  await ctx('notiz.txt'); await menuItemClick('Umbenennen'); await sleep(50);
+  await typeName('model.py'); await sleep(300);
+  const dupErr = await ev(() => ({ toast: window.__t.toast().text, open: !!document.querySelector('#tab-files .fedit') }));
+  check('Umbenennen auf vorhandenen Namen: Meldung, Feld bleibt offen, nichts überschrieben', dupErr.open && dupErr.toast.includes('gibt es dort schon') && fs.existsSync(notiz)
+    && fs.readFileSync(path.join(proj.dir, 'model.py'), 'utf8').includes('add_part'), dupErr.toast.slice(0, 60));
+  await typeName('skizze.txt');
+  const skizze = path.join(proj.dir, 'skizze.txt');
+  await waitFor('umbenannt', () => window.__t.editor.state().files.includes('skizze.txt'), 5000).catch(() => {});
+  const es = await ev(() => window.__t.editor.state());
+  check('Umbenennen: Datei heißt neu, der offene Reiter zieht mit', fs.existsSync(skizze) && !fs.existsSync(notiz) && es.files.includes('skizze.txt') && !es.files.includes('notiz.txt'), es.files.join(','));
+  await waitFor('skizze.txt im Baum', () => window.__t.fileRows().includes('skizze.txt'), 5000).catch(() => {});
+  await app.answers([0]);
+  await ev(() => { const r = document.querySelector('#tab-files .frow[data-path="skizze.txt"]'); r.focus(); r.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })); });
+  await waitFor('gelöscht', () => !window.__t.fileRows().includes('skizze.txt'), 5000).catch(() => {});
+  const bin = path.join(ud, 'test-papierkorb');
+  check('Entf mit Rückfrage: in den Papierkorb, Reiter zu', !fs.existsSync(skizze) && fs.existsSync(bin) && fs.readdirSync(bin).some((f) => f.endsWith('skizze.txt'))
+    && !(await ev(() => window.__t.editor.state())).files.includes('skizze.txt'), fs.existsSync(bin) ? fs.readdirSync(bin).join(',') : 'kein Papierkorb');
+  await ctx(`.soma/feedback/${fbFiles[0]}`); await menuItemClick('Pfad an Agent geben');
+  await waitFor('Pfad der Markierung im Terminal', (f) => window.__t.termText(f[0]).includes(`[Datei: .soma/feedback/${f[1]}]`), 5000, [tid, fbFiles[0]]).catch(() => {});
+  check('Markierung: Rechtsklick „Pfad an Agent geben“ fügt den Pfad ein', (await ev((id) => window.__t.termText(id), tid)).includes(`[Datei: .soma/feedback/${fbFiles[0]}]`));
+  await ev((id) => window.soma.term.write(id, '\x03'), tid);
+  await shot('3b-dateien-menue');
+  await ev(() => window.__t.showPanel(null));
 
   // 4) Auto-Build: Änderung an model.py -> neuer Build -> drittes Bauteil
   const modelPy = path.join(proj.dir, 'model.py');
@@ -288,6 +351,26 @@ try {
   check('„Neu" legt ein zweites Projekt mit eigener UUID an', p2.id !== proj.id, p2.id.slice(0, 8));
   await sleep(600);
   check('Projektwechsel: genau ein frisches Terminal', await ev(() => window.__t.terminals.count) === 1);
+  // Die alte Shell meldet ihr Ende erst nach dem Wechsel. Das darf das neue Terminal nicht als beendet markieren,
+  // sonst lässt sich nichts mehr einfügen („Das Terminal ist beendet“), obwohl darin ein Agent läuft.
+  await sleep(2500);
+  await ev(() => window.__t.insert('[Test nach Wechsel] '));
+  const afterSwitch = await ev(() => window.__t.toast());
+  check('Nach dem Wechsel: Einfügen ins neue Terminal geht', !afterSwitch.error && afterSwitch.text.includes('In die Eingabe von Terminal eingefügt'), afterSwitch.text.slice(0, 60));
+  await ev(() => window.soma.term.write(window.__t.terminals.activeId, '\x03'));
+  // Aktives Terminal beendet, ein anderes läuft noch: Der Text geht dorthin, und dieses kommt nach vorn
+  const firstTid = await ev(() => window.__t.terminals.activeId);
+  const secondTid = await ev(() => window.__t.terminals.add({ title: 'Zweites' }));
+  await sleep(1500);
+  await ev((id) => window.soma.term.write(id, 'exit\r'), secondTid);
+  await waitFor('zweites Terminal beendet', (id) => window.__t.termText(id).includes('Prozess beendet'), 10000, secondTid).catch(() => {});
+  await ev(() => window.__t.insert('[Test Ersatzterminal] '));
+  const fallback = await ev(() => window.__t.toast());
+  await waitFor('Text im ersten Terminal', (id) => window.__t.termText(id).includes('[Test Ersatzterminal]'), 5000, firstTid).catch(() => {});
+  check('Aktives Terminal beendet: Text geht ins zuletzt benutzte laufende, das nach vorn kommt', !fallback.error && await ev(() => window.__t.terminals.activeId) === firstTid
+    && (await ev((id) => window.__t.termText(id), firstTid)).includes('[Test Ersatzterminal]'), fallback.text.slice(0, 60));
+  await ev((id) => window.soma.term.write(id, '\x03'), firstTid);
+  await ev((id) => window.__t.terminals.close(id), secondTid);
   check('Beide Arbeitsordner existieren getrennt', fs.existsSync(proj.dir) && fs.existsSync(p2.dir) && proj.dir !== p2.dir);
 
   if (app.visible) { await sleep(500); await page.screenshot(path.join(APP, 'test', 'smoke.png')); }

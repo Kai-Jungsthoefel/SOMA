@@ -12,6 +12,8 @@ interface Tab { id: number; term: Terminal; fit: FitAddon; pane: HTMLElement; ta
 export class TerminalTabs {
   private tabs = new Map<number, Tab>();
   private active: number | null = null;
+  /** Reihenfolge des Aktivierens (zuletzt aktiviert hinten), damit Einfügen das zuletzt benutzte Terminal findet. */
+  private used: number[] = [];
   /** Klick auf einen Tab der eingeklappten Leiste: der Bereich soll aufgehen. */
   onStripClick: () => void = () => {};
 
@@ -66,6 +68,7 @@ export class TerminalTabs {
       t.tab.classList.toggle('on', on);
     }
     this.active = id;
+    this.used = [...this.used.filter((x) => x !== id), id];
     this.renderStrip();
     requestAnimationFrame(() => { this.fitActive(); this.tabs.get(id)?.term.focus(); });
   }
@@ -76,6 +79,7 @@ export class TerminalTabs {
     window.soma.term.kill(id);
     t.term.dispose(); t.pane.remove(); t.tab.remove();
     this.tabs.delete(id);
+    this.used = this.used.filter((x) => x !== id);
     if (this.active === id) {
       const next = [...this.tabs.keys()].pop();
       this.active = null;
@@ -89,13 +93,20 @@ export class TerminalTabs {
   get activeId(): number | null { return this.active; }
   get activeTitle(): string | null { return this.active != null ? this.tabs.get(this.active)?.title ?? null : null; }
 
+  /** Laufende Terminals, zuletzt benutztes zuerst: das aktive, dann die übrigen in umgekehrter Reihenfolge des Aktivierens. */
+  private live(): Tab[] {
+    return [...this.used].reverse().map((id) => this.tabs.get(id)).filter((t): t is Tab => !!t && !t.exited);
+  }
+
   /**
-   * Text in die Eingabezeile des aktiven Terminals einfügen, ohne abzuschicken (E11). Läuft als Einfügen (bracketed paste),
-   * damit Agenten den Text nicht als Tastenkürzel deuten. Liefert den Tab-Titel oder null, wenn kein Terminal offen ist.
+   * Text in die Eingabezeile einfügen, ohne abzuschicken (E11). Läuft als Einfügen (bracketed paste), damit Agenten den
+   * Text nicht als Tastenkürzel deuten. Ziel ist das aktive Terminal. Ist es beendet, das zuletzt benutzte, das noch läuft:
+   * Es kommt nach vorn, damit man sieht, wo der Text gelandet ist. Liefert den Tab-Titel oder null, wenn keines mehr läuft.
    */
   insert(text: string): string | null {
-    const t = this.active != null ? this.tabs.get(this.active) : undefined;
-    if (!t || t.exited) return null;
+    const t = this.live()[0];
+    if (!t) return null;
+    if (t.id !== this.active) this.activate(t.id);
     t.term.paste(text);
     t.term.focus();
     return t.title;

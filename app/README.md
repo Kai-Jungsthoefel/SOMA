@@ -15,8 +15,8 @@ Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. 
 npm install
 npm start            # baut und startet
 npm run typecheck
-npm run test:unit       # Bausteine ohne Electron: Dateien und Ordner nach inputs/, Markierung nach .soma/feedback/, Pfadschutz, Schreiben aus dem Editor mit Konfliktprüfung, App-Icon, Einstellungen, Kategorien und Standard der Skills (29 Prüfungen)
-npm run test:smoke      # echte App, unsichtbar: Projekt, Viewer, Auswahl, Panels, Terminal, Übergabe an den Agenten, Markierung (Zeichnen, Auswählen, Verschieben, Drehen, Skalieren, Farben), Auto-Build, Fehlerfall, Export, Ansichtswürfel und Drehpunkt (61 Prüfungen)
+npm run test:unit       # Bausteine ohne Electron: Dateien und Ordner nach inputs/, Anlegen, Umbenennen und Papierkorb im Dateibaum, Markierung nach .soma/feedback/, Pfadschutz, Schreiben aus dem Editor mit Konfliktprüfung, App-Icon, Einstellungen, Kategorien und Standard der Skills (42 Prüfungen)
+npm run test:smoke      # echte App, unsichtbar: Projekt, Viewer, Auswahl, Panels, Terminal, Übergabe an den Agenten, Markierung (Zeichnen, Linie, Raster, Auswählen, Verschieben, Drehen, Skalieren, Farben, Bild aus dem Dateibaum), Dateibaum (Markierungen, Menü, Anlegen, Umbenennen, Papierkorb), Auto-Build, Fehlerfall, Export, Ansichtswürfel und Drehpunkt (76 Prüfungen)
 npm run test:versions   # Git-Verlauf, Speichern, Öffnen, Vorschau (auch markiert), Wiederherstellen, Störfälle (53 Prüfungen)
 npm run test:editor     # Editor: Höhe und Scrollen, Speichern nur auf Wunsch mit genau einem Build (nur bei Python und inputs/), Änderungen des Agenten, Konflikte mit Sicherung, Nur lesen, CRLF, Rückfragen bei Modellwechsel und Reiter schließen (29 Prüfungen)
 npm run test:measure    # Messen: Fläche, Kante, Punkt, Abstand paralleler Ebenen, zweier Bohrungen, zweier Punkte, Punkt zur Ebene, Verdecktes, neuer Build, Vorschau (21 Prüfungen)

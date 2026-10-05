@@ -1,12 +1,14 @@
-import { app, BrowserWindow, dialog, ipcMain, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { detectAgents } from './agents';
 import { choose, setTestAnswers } from './dialogs';
-import { backupText, importInputs, listFiles, resolveInside, saveFeedbackImage, writeProjectText } from './files';
+import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
 import { appIcon, editBackupsDir, thumbnailsDir } from './paths';
+import { fileOpBlockReason } from '../shared/editable';
+import type { FileOpResult } from '../shared/types';
 import { createProject, getLastProject, isProjectId } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -50,6 +52,39 @@ function registerIpc(ctl: ProjectController): void {
 
   ipcMain.handle('fs:list', () => listFiles(dir()));
   ipcMain.handle('fs:import', (_e, paths: string[]) => importInputs(dir(), Array.isArray(paths) ? paths.map(String) : []));
+  ipcMain.handle('fs:create', (_e, parent: string, name: string, isDir: boolean) => createEntry(dir(), String(parent ?? ''), String(name ?? ''), !!isDir));
+  ipcMain.handle('fs:rename', (_e, rel: string, name: string) => renameEntry(dir(), String(rel ?? ''), String(name ?? '')));
+  ipcMain.handle('fs:trash', async (_e, rel: string): Promise<FileOpResult> => {
+    const root = dir();
+    const r = entryPath(root, String(rel ?? ''), false);
+    if (!r.abs) return { ok: false, error: r.error };
+    // Gesperrtes gar nicht erst zur Rückfrage bringen (trashEntry prüft danach noch einmal mit bereinigtem Pfad)
+    const block = fileOpBlockReason(String(rel), 'delete');
+    if (block) return { ok: false, error: `${rel} lässt sich nicht löschen. ${block}` };
+    const isDir = fs.statSync(r.abs).isDirectory();
+    // Die Rückfrage stellt der Hauptprozess: So beantworten Tests sie wie alle anderen Dialoge (dialogs.ts)
+    const c = await choose(win, {
+      title: 'Löschen',
+      message: isDir ? `Den Ordner „${path.basename(r.abs)}“ mit allem darin in den Papierkorb verschieben?` : `„${path.basename(r.abs)}“ in den Papierkorb verschieben?`,
+      detail: 'Aus dem Papierkorb lässt es sich wiederherstellen. Gespeicherte Stände im Verlauf bleiben ohnehin erhalten.',
+      buttons: ['In den Papierkorb', 'Abbrechen'],
+    });
+    if (c !== 0) return { ok: false, canceled: true };
+    return trashEntry(root, String(rel), (abs) => trashItem(abs));
+  });
+  ipcMain.handle('fs:reveal', (_e, rel: string): FileOpResult => {
+    const r = entryPath(dir(), String(rel ?? ''), false);
+    if (!r.abs) return { ok: false, error: r.error };
+    if (process.env.SOMA_TEST !== '1') shell.showItemInFolder(r.abs);
+    return { ok: true, path: String(rel ?? '') };
+  });
+  ipcMain.handle('fs:openExternal', async (_e, rel: string): Promise<FileOpResult> => {
+    const r = entryPath(dir(), String(rel ?? ''), true);
+    if (!r.abs) return { ok: false, error: r.error };
+    if (process.env.SOMA_TEST === '1') return { ok: true, path: String(rel ?? '') };
+    const err = await shell.openPath(r.abs);
+    return err ? { ok: false, error: err } : { ok: true, path: String(rel ?? '') };
+  });
   ipcMain.handle('fs:saveFeedback', (_e, png: unknown) => saveFeedbackImage(dir(), png));
   ipcMain.handle('fs:writeText', (_e, id: string, rel: string, text: string, base: string | null, force?: boolean) => {
     const s = ctl.session;
@@ -111,6 +146,17 @@ function onRendererGone(wc: WebContents, reason: string, exitCode: number): void
     app.quit();
   }
   void wc;
+}
+
+/**
+ * Papierkorb. Im Testmodus ein eigener Ordner in den App-Daten: Tests sollen den Papierkorb des Nutzers nicht füllen
+ * und prüfen können, was dort gelandet ist.
+ */
+async function trashItem(abs: string): Promise<void> {
+  if (process.env.SOMA_TEST !== '1') { await shell.trashItem(abs); return; }
+  const bin = path.join(app.getPath('userData'), 'test-papierkorb');
+  fs.mkdirSync(bin, { recursive: true });
+  fs.renameSync(abs, path.join(bin, `${Date.now()}-${path.basename(abs)}`));
 }
 
 let editorReq = 0;

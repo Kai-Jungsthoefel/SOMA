@@ -39,6 +39,11 @@ const api: SomaApi = {
     onChanged: (cb) => { ipcRenderer.on('fs:changed', () => cb()); },
     // Der Renderer kennt keine Dateipfade. Nur die Pfade gezogener Dateien gehen an den Hauptprozess, der prüft und kopiert.
     importFiles: (files) => ipcRenderer.invoke('fs:import', files.map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
+    create: (parent, name, dir) => ipcRenderer.invoke('fs:create', parent, name, dir),
+    rename: (rel, name) => ipcRenderer.invoke('fs:rename', rel, name),
+    trash: (rel) => ipcRenderer.invoke('fs:trash', rel),
+    reveal: (rel) => ipcRenderer.invoke('fs:reveal', rel),
+    openExternal: (rel) => ipcRenderer.invoke('fs:openExternal', rel),
     saveFeedback: (png) => ipcRenderer.invoke('fs:saveFeedback', png),
     writeText: (id, rel, text, base, force) => ipcRenderer.invoke('fs:writeText', id, rel, text, base, force),
     backupText: (id, rel, text) => ipcRenderer.invoke('fs:backupText', id, rel, text),

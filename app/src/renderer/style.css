@@ -108,6 +108,10 @@ code { font-family:var(--mono); font-size:.95em; }
 .frow.dim { color:var(--tx2); }
 .ftree .gap { height:8px; }
 .ftree .hint { color:var(--tx3); padding:6px 14px; }
+.frow.editing { cursor:default; }
+.frow.editing:hover { background:none; }
+.fedit { flex:1; min-width:0; height:22px; padding:0 6px; border:1px solid var(--acc-line); border-radius:4px; background:var(--s1); color:var(--tx); font:inherit; outline:none; }
+.fedit:focus { border-color:var(--acc); }
 /* Skills (E17): eine Karte je Skill mit Schalter. Eingeschaltet in Orange (Auswahl), Auffälligkeiten in Gelb. */
 .sk-intro { padding:10px 14px 4px; font-size:12px; color:var(--tx2); }
 .sk-intro code, .sk-row code { font:11.5px var(--mono); color:var(--tx); }
@@ -364,7 +368,7 @@ code { font-family:var(--mono); font-size:.95em; }
 .mk-frame { position:absolute; inset:6px; border:2px dashed var(--acc-line); border-radius:8px; pointer-events:none; }
 .mk-tools { left:12px; top:12px; }
 .mk-title { display:flex; align-items:center; gap:7px; padding:0 10px 0 8px; color:var(--acc-tx); }
-.mk-tools [data-tool][aria-pressed=true], #btn-mark-blank[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
+.mk-tools [data-tool][aria-pressed=true], #btn-mark-blank[aria-pressed=true], #btn-mark-grid[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
 .mk-tools .mk-colorbtn { gap:5px; padding:0 7px 0 9px; }
 .mk-tools .swatch { width:16px; height:16px; border-radius:50%; background:var(--c); box-shadow:inset 0 0 0 1px rgba(255,255,255,.25); }
 .mk-palette { display:grid; grid-template-columns:repeat(5, 28px); gap:10px; padding:6px 10px 10px; }

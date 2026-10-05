@@ -1,32 +1,115 @@
+import { fileOpBlockReason } from '../shared/editable';
 import type { FileNode } from '../shared/types';
 import { icon } from './icons';
-import { el } from './ui';
+import { el, menuItem, menus } from './ui';
 
 /** Dateien, die die App verwaltet. Sie stehen eingeklappt unter „Vom Programm verwaltet“, damit der Baum ruhig bleibt. */
 const MANAGED = new Set(['AGENTS.md', 'CLAUDE.md', '.gitignore']);
 const TAGS: Record<string, string> = { 'model.py': 'Modell', 'output/model.step': 'Ergebnis', 'NOTES.md': 'Notizen', 'requirements.txt': 'Pakete' };
+/** Ordner der Markierungen. Der Hauptprozess liefert ihn als einzigen Teil von .soma/ mit. */
+const FEEDBACK = '.soma/feedback';
 export const TEXT_EXT = /\.(py|md|txt|json|toml|cfg|ini|yml|yaml|gitignore|csv)$|^[^.]*$/i;
 
-/** Dateien-Panel: kompakter Baum, Ordner einklappbar. Ein Klick auf eine Textdatei öffnet sie im Code-Panel. */
+/** Was der Baum vom Rest der App braucht. Die Aktionen liefern true, wenn das Namensfeld zugehen darf. */
+export interface FileTreeDeps {
+  open(node: FileNode): void;
+  create(parent: string, name: string, dir: boolean): Promise<boolean>;
+  rename(rel: string, name: string): Promise<boolean>;
+  trash(rel: string): void;
+  reveal(rel: string): void;
+  openExternal(rel: string): void;
+  toAgent(rel: string): void;
+  copyPath(rel: string): void;
+}
+
+/** Offenes Namensfeld: neue Datei oder neuer Ordner in `parent`, oder Umbenennen von `node`. */
+type Edit = { mode: 'file' | 'dir'; parent: string } | { mode: 'rename'; node: FileNode };
+
+/**
+ * Symbol nach Dateityp, damit man Skripte, Tabellen, CAD-Dateien und Bilder auf einen Blick unterscheidet. Nur die Form
+ * unterscheidet sich, nicht die Farbe: Farben haben in der Oberfläche feste Bedeutungen (Aktion, Vorschau, Status).
+ */
+const FILE_ICONS: [RegExp, string][] = [
+  [/\.(py|pyw)$/i, 'f-py'],
+  [/\.(md|txt|rst|log)$|^[^.]*$/i, 'f-text'],
+  [/\.(csv|tsv|xlsx?|ods)$/i, 'f-table'],
+  [/\.(json|toml|ya?ml|ini|cfg|xml)$/i, 'f-data'],
+  [/\.(step|stp|iges|igs|brep|x_t|sat)$/i, 'f-cad'],
+  [/\.(stl|3mf|obj|glb|gltf|ply|amf)$/i, 'f-mesh'],
+  [/\.(dxf|dwg|svg)$/i, 'f-draw'],
+  [/\.(png|jpe?g|gif|webp|bmp|tiff?)$/i, 'f-image'],
+  [/\.pdf$/i, 'f-pdf'],
+  [/\.(zip|7z|rar|tar|gz)$/i, 'f-zip'],
+  [/^\.gitignore$/i, 'f-lock'],
+];
+export const fileIcon = (name: string) => FILE_ICONS.find(([re]) => re.test(name))?.[1] ?? 'file';
+
+const parentOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
+
+/**
+ * Dateien-Panel: kompakter Baum, Ordner einklappbar. Ein Klick auf eine Textdatei öffnet sie im Code-Panel.
+ * Rechtsklick (oder Umschalt+F10) öffnet das Menü mit Anlegen, Umbenennen (F2), Löschen (Entf), Öffnen und Pfad.
+ * Was gesperrt ist, regelt `fileOpBlockReason`, dieselbe Regel prüft der Hauptprozess noch einmal.
+ */
 export class FileTree {
   private collapsed = new Set<string>(['#managed']);
   private nodes: FileNode[] = [];
+  private edit: Edit | null = null;
+  private input: HTMLInputElement | null = null;
+  /** Ein Name wird gerade angelegt oder umbenannt: kein zweites Absenden, auch nicht aus einem neu gezeichneten Feld. */
+  private submitting = false;
 
-  constructor(private root: HTMLElement, private onOpen: (node: FileNode) => void) {}
+  constructor(private root: HTMLElement, private menu: HTMLElement, private deps: FileTreeDeps) {
+    root.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.frow[data-path]');
+      this.openMenu(row ? this.find(row.dataset.path!) : null, e.clientX, e.clientY);
+    });
+    root.addEventListener('keydown', (e) => {
+      if (e.target === this.input) return;
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.frow[data-path]');
+      const n = row ? this.find(row.dataset.path!) : null;
+      if (!n) return;
+      if (e.key === 'F2') { e.preventDefault(); this.startRename(n); }
+      else if (e.key === 'Delete') { e.preventDefault(); if (!fileOpBlockReason(n.path, 'delete')) deps.trash(n.path); }
+      else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+        e.preventDefault();
+        const r = row!.getBoundingClientRect();
+        this.openMenu(n, r.left + 24, r.bottom);
+      }
+    });
+  }
 
   render(nodes: FileNode[] = this.nodes): void {
     this.nodes = nodes;
+    // Verschwindet die Datei, deren Name gerade bearbeitet wird (etwa durch den Agenten), geht das Feld zu
+    if (this.edit?.mode === 'rename' && !this.find(this.edit.node.path) && !this.submitting) { this.edit = null; this.input = null; }
     const managed = nodes.filter((n) => !n.dir && MANAGED.has(n.name));
-    const rest = nodes.filter((n) => !managed.includes(n));
+    const feedback = nodes.find((n) => n.path === FEEDBACK);
+    const rest = nodes.filter((n) => !managed.includes(n) && n !== feedback);
     const rows: HTMLElement[] = [];
-    const walk = (list: FileNode[], depth: number) => {
+    const ed = this.edit;
+    const walk = (list: FileNode[], depth: number, parent: string) => {
+      if (ed && ed.mode !== 'rename' && ed.parent === parent) rows.push(this.inputRow(depth, ed.mode === 'dir' ? 'folder' : 'file', ''));
       for (const n of list) {
-        rows.push(this.row(n, depth));
-        if (n.dir && n.children && !this.collapsed.has(n.path)) walk(n.children, depth + 1);
+        rows.push(ed?.mode === 'rename' && ed.node.path === n.path ? this.inputRow(depth, n.dir ? 'folder' : fileIcon(n.name), n.name) : this.row(n, depth));
+        if (n.dir && n.children && !this.collapsed.has(n.path)) walk(n.children, depth + 1, n.path);
       }
     };
-    walk(rest, 0);
-    if (!rest.length) rows.push(el('div', { className: 'hint', textContent: 'Noch keine Dateien.' }));
+    walk(rest, 0, '');
+    if (!rest.length && !ed) rows.push(el('div', { className: 'hint', textContent: 'Noch keine Dateien.' }));
+    // Markierungen (E16) aus .soma/feedback/: eigene Gruppe, neueste zuerst. Zum Wiederfinden und erneut an den Agenten geben.
+    if (feedback?.children?.length) {
+      rows.push(el('div', { className: 'gap' }));
+      const open = !this.collapsed.has(FEEDBACK);
+      const head = this.button(0, open ? 'down' : 'right', 'image', 'Markierungen', String(feedback.children.length), 'dim');
+      head.title = 'Bilder aus „Markieren“, abgelegt in .soma/feedback/. Klick öffnet, Rechtsklick gibt den Pfad an den Agenten.';
+      head.setAttribute('aria-expanded', String(open));
+      head.dataset.path = FEEDBACK;
+      head.addEventListener('click', () => this.toggle(FEEDBACK));
+      rows.push(head);
+      if (open) walk(feedback.children, 1, FEEDBACK);
+    }
     if (managed.length) {
       rows.push(el('div', { className: 'gap' }));
       const open = !this.collapsed.has('#managed');
@@ -37,7 +120,117 @@ export class FileTree {
       rows.push(head);
       if (open) for (const n of managed) rows.push(this.row(n, 1));
     }
+    const hadFocus = !!this.input && document.activeElement === this.input;
     this.root.replaceChildren(...rows);
+    // Neu gezeichnet, während getippt wird (Dateiänderung von außen): Fokus und Eingabe bleiben
+    if (hadFocus || this.input?.dataset.fresh) this.focusInput();
+  }
+
+  // ---- Anlegen und Umbenennen -----------------------------------------------------------------------------------
+
+  /** Namensfeld für eine neue Datei oder einen neuen Ordner in `parent` ('' = Projektordner). */
+  startCreate(parent: string, dir: boolean): void {
+    if (fileOpBlockReason(parent, 'create') || this.submitting) return;
+    this.edit = { mode: dir ? 'dir' : 'file', parent };
+    this.input = null;
+    if (parent) this.collapsed.delete(parent); // Ordner aufklappen, damit das Feld zu sehen ist
+    this.render();
+  }
+
+  startRename(n: FileNode): void {
+    if (fileOpBlockReason(n.path, 'rename') || this.submitting) return;
+    this.edit = { mode: 'rename', node: n };
+    this.input = null;
+    this.render();
+  }
+
+  private inputRow(depth: number, ico: string, value: string): HTMLElement {
+    const prev = this.input;
+    // Neu gezeichnet, während das Feld offen ist: das Getippte übernehmen
+    const input = el('input', { className: 'fedit', type: 'text', spellcheck: false, autocomplete: 'off', value: prev ? prev.value : value });
+    input.setAttribute('aria-label', this.edit?.mode === 'rename' ? 'Neuer Name' : this.edit?.mode === 'dir' ? 'Name des neuen Ordners' : 'Name der neuen Datei');
+    if (!prev) input.dataset.fresh = '1';
+    const finish = async (fromBlur: boolean) => {
+      if (this.submitting || this.input !== input) return;
+      const ed = this.edit;
+      const name = input.value;
+      // Unverändert oder leer: einfach zu
+      if (!ed || !name.trim() || (ed.mode === 'rename' && name === ed.node.name)) { this.cancelEdit(); return; }
+      this.submitting = true;
+      let ok = false;
+      try { ok = ed.mode === 'rename' ? await this.deps.rename(ed.node.path, name) : await this.deps.create(ed.parent, name, ed.mode === 'dir'); }
+      finally { this.submitting = false; }
+      if (this.edit !== ed) return;
+      // Abgelehnt nach Enter: Feld bleibt offen, damit der Name korrigiert werden kann. Nach dem Verlassen geht es zu.
+      if (ok || fromBlur) this.cancelEdit();
+      else this.input?.focus();
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation(); // Entf, F2 und Escape gehören hier dem Feld
+      if (e.key === 'Enter') { e.preventDefault(); void finish(false); }
+      else if (e.key === 'Escape') { e.preventDefault(); this.cancelEdit(); }
+    });
+    input.addEventListener('blur', () => { if (input.isConnected) void finish(true); });
+    this.input = input;
+    const row = el('div', { className: 'frow editing' }, el('span', { className: 'chev' }), el('span', { className: 'fi' }, icon(ico, 15)), input);
+    row.style.paddingLeft = `${8 + depth * 18}px`;
+    return row;
+  }
+
+  private focusInput(): void {
+    const t = this.input;
+    if (!t) return;
+    const fresh = !!t.dataset.fresh;
+    delete t.dataset.fresh;
+    t.focus();
+    // Beim Umbenennen den Namen ohne Endung markieren, wie im Explorer
+    if (fresh) { const dot = t.value.lastIndexOf('.'); t.setSelectionRange(0, dot > 0 && this.edit?.mode === 'rename' ? dot : t.value.length); }
+  }
+
+  private cancelEdit(): void {
+    const had = !!this.edit;
+    this.edit = null;
+    this.input = null;
+    if (had) this.render();
+  }
+
+  // ---- Menü -----------------------------------------------------------------------------------------------------
+
+  private openMenu(n: FileNode | null, x: number, y: number): void {
+    const d = this.deps;
+    const folder = n ? (n.dir ? n.path : parentOf(n.path)) : '';
+    const blockCreate = fileOpBlockReason(folder, 'create');
+    const blocked = (item: HTMLButtonElement, reason: string | null) => { if (reason) { item.disabled = true; item.title = reason; } return item; };
+    const items: HTMLElement[] = [el('div', { className: 'mh', textContent: n ? n.name : 'Projektordner' })];
+    if (n && !n.dir) {
+      if (TEXT_EXT.test(n.name)) items.push(menuItem('Öffnen', { icon: 'code', onClick: () => d.open(n) }));
+      items.push(menuItem('Mit Standardprogramm öffnen', { icon: 'openext', onClick: () => d.openExternal(n.path) }));
+    }
+    items.push(menuItem('Im Explorer zeigen', { icon: 'folder', onClick: () => d.reveal(n?.path ?? '') }));
+    if (n) {
+      items.push(el('div', { className: 'msep' }),
+        menuItem('Pfad an Agent geben', { icon: 'send', onClick: () => d.toAgent(n.path) }),
+        menuItem('Pfad kopieren', { icon: 'copy', onClick: () => d.copyPath(n.path) }));
+    }
+    items.push(el('div', { className: 'msep' }),
+      blocked(menuItem(n?.dir ? 'Neue Datei hier' : 'Neue Datei', { icon: 'fileplus', onClick: () => this.startCreate(folder, false) }), blockCreate),
+      blocked(menuItem(n?.dir ? 'Neuer Ordner hier' : 'Neuer Ordner', { icon: 'folderplus', onClick: () => this.startCreate(folder, true) }), blockCreate));
+    if (n) {
+      items.push(blocked(menuItem('Umbenennen', { icon: 'pen', kbd: 'F2', onClick: () => this.startRename(n) }), fileOpBlockReason(n.path, 'rename')),
+        blocked(menuItem('Löschen', { icon: 'trash', kbd: 'Entf', onClick: () => d.trash(n.path) }), fileOpBlockReason(n.path, 'delete')));
+    }
+    this.menu.replaceChildren(...items);
+    menus.at(this.menu, x, y);
+  }
+
+  // ---- Zeilen ---------------------------------------------------------------------------------------------------
+
+  private find(rel: string, list: FileNode[] = this.nodes): FileNode | null {
+    for (const n of list) {
+      if (n.path === rel) return n;
+      if (n.children) { const c = this.find(rel, n.children); if (c) return c; }
+    }
+    return null;
   }
 
   private toggle(key: string): void {
@@ -51,12 +244,14 @@ export class FileTree {
       const b = this.button(depth, open ? 'down' : 'right', 'folder', n.name, '', 'dir');
       b.setAttribute('aria-expanded', String(open));
       b.title = n.path;
+      b.dataset.path = n.path;
       b.addEventListener('click', () => this.toggle(n.path));
       return b;
     }
-    const b = this.button(depth, null, 'file', n.name, TAGS[n.path] ?? '', '');
+    const b = this.button(depth, null, fileIcon(n.name), n.name, TAGS[n.path] ?? '', '');
     b.title = TEXT_EXT.test(n.name) ? `${n.path} im Code-Panel öffnen` : n.path;
-    b.addEventListener('click', () => this.onOpen(n));
+    b.dataset.path = n.path;
+    b.addEventListener('click', () => this.deps.open(n));
     return b;
   }
 

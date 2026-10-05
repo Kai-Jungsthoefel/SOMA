@@ -40,6 +40,9 @@ export interface WriteResult { ok: boolean; conflict?: boolean; disk?: string | 
 /** Gespeicherte Markierung (E16). `path` relativ zum Projekt, z. B. `.soma/feedback/markierung-20260930-1405.png`. */
 export interface FeedbackResult { ok: boolean; path?: string; error?: string }
 
+/** Anlegen, Umbenennen oder Löschen im Dateibaum. `path` relativ zum Projekt (neuer Pfad), `canceled`: Rückfrage abgelehnt. */
+export interface FileOpResult { ok: boolean; path?: string; error?: string; canceled?: boolean }
+
 export interface FileNode { name: string; path: string; dir: boolean; children?: FileNode[] }
 
 export interface AgentInfo { id: string; label: string; command: string; found: boolean }
@@ -188,6 +191,16 @@ export interface SomaApi {
     onChanged(cb: () => void): void;
     /** Kopiert gezogene Dateien nach inputs/. Vorhandenes wird nie überschrieben. */
     importFiles(files: File[]): Promise<ImportResult>;
+    /** Neue, leere Datei oder neuer Ordner in `parent` ('' = Projektordner). Vorhandenes wird nie überschrieben. */
+    create(parent: string, name: string, dir: boolean): Promise<FileOpResult>;
+    /** Benennt eine Datei oder einen Ordner im selben Ordner um. Vorhandenes wird nie überschrieben. */
+    rename(rel: string, name: string): Promise<FileOpResult>;
+    /** Fragt nach und verschiebt dann in den Papierkorb. Endgültig gelöscht wird nie. */
+    trash(rel: string): Promise<FileOpResult>;
+    /** Zeigt die Datei im Explorer ('' = Projektordner). */
+    reveal(rel: string): Promise<FileOpResult>;
+    /** Öffnet die Datei mit dem Standardprogramm des Systems. Ausführbares lehnt der Hauptprozess ab. */
+    openExternal(rel: string): Promise<FileOpResult>;
     /** Legt ein PNG der Markierung in .soma/feedback/ ab. Vorhandenes wird nie überschrieben. */
     saveFeedback(png: Uint8Array): Promise<FeedbackResult>;
     /**

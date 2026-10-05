@@ -43,6 +43,8 @@
     <aside id="side" hidden>
       <section id="panel-files" class="panel" aria-label="Dateien" hidden>
         <div class="side-hd"><b>Dateien</b><span class="grow"></span>
+          <button id="btn-file-new" class="ibtn s" title="Neue Datei (Rechtsklick im Baum: auch in einem Ordner)" aria-label="Neue Datei"><i data-icon="fileplus" data-size="15"></i></button>
+          <button id="btn-folder-new" class="ibtn s" title="Neuer Ordner" aria-label="Neuer Ordner"><i data-icon="folderplus" data-size="15"></i></button>
           <button id="btn-reveal" class="ibtn s" title="Im Explorer zeigen" aria-label="Im Explorer zeigen"><i data-icon="openext" data-size="15"></i></button>
           <button class="ibtn s side-close" aria-label="Dateien schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="tab-files" class="ftree"></div>
@@ -179,7 +181,8 @@
             <span class="mk-title"><i data-icon="camera" data-size="15"></i><b>Markieren</b></span><span class="vsep"></span>
             <button data-tool="select" aria-pressed="false" aria-label="Auswählen" title="Auswählen: Form anklicken und ziehen. Ecken skalieren (Umschalt: Seitenverhältnis), der Punkt oben dreht (Umschalt: 15°-Schritte), Entf löscht, Doppelklick bearbeitet Text"><i data-icon="pointer"></i></button>
             <button data-tool="pen" aria-pressed="true" aria-label="Stift" title="Stift: frei zeichnen"><i data-icon="pen"></i></button>
-            <button data-tool="arrow" aria-pressed="false" aria-label="Pfeil" title="Pfeil: vom Anfang zur Spitze ziehen"><i data-icon="arrow"></i></button>
+            <button data-tool="line" aria-pressed="false" aria-label="Linie" title="Linie: vom Anfang zum Ende ziehen (mit Umschalt: in 15°-Schritten)"><i data-icon="line"></i></button>
+            <button data-tool="arrow" aria-pressed="false" aria-label="Pfeil" title="Pfeil: vom Anfang zur Spitze ziehen (mit Umschalt: in 15°-Schritten)"><i data-icon="arrow"></i></button>
             <button data-tool="rect" aria-pressed="false" aria-label="Rechteck" title="Rechteck (mit Umschalt: Quadrat)"><i data-icon="square"></i></button>
             <button data-tool="ellipse" aria-pressed="false" aria-label="Kreis" title="Kreis oder Ellipse (mit Umschalt: Kreis)"><i data-icon="circle"></i></button>
             <button data-tool="text" aria-pressed="false" aria-label="Text" title="Text: an die Stelle klicken, schreiben, Enter. Klick auf einen Text bearbeitet ihn"><i data-icon="text"></i></button>
@@ -189,6 +192,7 @@
             <button id="btn-mark-undo" aria-label="Rückgängig" title="Rückgängig (Strg Z), wiederholen mit Strg Y" disabled><i data-icon="undo"></i></button>
             <button id="btn-mark-delete" aria-label="Löschen" title="Ausgewählte Form löschen (Entf)" disabled><i data-icon="trash"></i></button>
             <span class="vsep"></span>
+            <button id="btn-mark-grid" aria-pressed="false" title="Raster ein- und ausschalten. Es steht mit im Bild, Linien, Pfeile und Formen rasten ein (Alt beim Ziehen: frei)"><i data-icon="grid"></i><span class="lbl">Raster</span></button>
             <button id="btn-mark-blank" aria-pressed="false" title="Auf leerer Fläche zeichnen statt auf dem Viewer-Bild"><i data-icon="image"></i><span class="lbl">Leere Fläche</span></button>
           </div>
           <div id="mark-hint" class="float mk-hint"></div>

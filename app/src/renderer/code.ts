@@ -203,6 +203,26 @@ export class CodePanel {
   /** Dateien mit ungespeicherten Eingaben (auch solche mit Konflikt). */
   unsaved(): string[] { return [...this.docs.values()].filter((d) => d.dirty || d.conflict).map((d) => d.file); }
 
+  /** Offene Dateien, die `rel` ist oder die in diesem Ordner liegen. */
+  openUnder(rel: string): string[] { return [...this.docs.keys()].filter((f) => f === rel || f.startsWith(`${rel}/`)); }
+
+  /**
+   * Schließt Reiter ohne Rückfrage, nachdem ihre Datei umbenannt oder gelöscht wurde. Nur für Reiter ohne ungespeicherte
+   * Eingaben: Der Dateibaum lehnt Umbenennen und Löschen vorher ab, solange hier etwas ungespeichert ist.
+   */
+  forget(rel: string): void {
+    const gone = this.openUnder(rel);
+    if (!gone.length) return;
+    for (const f of gone) this.docs.delete(f);
+    if (this.active && gone.includes(this.active)) {
+      this.active = null;
+      const next = [...this.docs.values()].pop();
+      if (next) this.activate(next); else this.view.setState(EditorState.create({ doc: '' }));
+    }
+    this.renderChrome();
+    this.deps.changed();
+  }
+
   /**
    * Ungespeicherte Dateien schreiben (Strg+S, Knöpfe, vor dem Bauen). `ok` ist false, wenn etwas nicht geschrieben
    * werden konnte, etwa wegen eines Konflikts: Dann soll auch nicht gebaut oder als ZIP gespeichert werden.

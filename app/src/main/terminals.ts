@@ -16,10 +16,16 @@ export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
   return env;
 }
 
+/**
+ * Nummern der Terminals, fortlaufend über alle Projekte. Beim Modellwechsel endet die alte Shell erst nach dem Wechsel,
+ * ihre Daten und ihr „beendet“ kommen dann noch an. Finge jedes Projekt wieder bei 1 an, landeten sie beim neuen Terminal
+ * mit derselben Nummer: Es galt als beendet, und Auswahl oder Markierung ließen sich nicht mehr einfügen.
+ */
+let nextId = 1;
+
 /** Verwaltet die Terminals eines Projekts. Jedes ist eine normale Shell im Projektordner (E19). */
 export class TerminalManager {
   private terms = new Map<number, pty.IPty>();
-  private next = 1;
 
   constructor(private readonly wc: WebContents, private readonly dir: string) {}
 
@@ -29,7 +35,7 @@ export class TerminalManager {
     const p = pty.spawn(shell, win ? ['-NoLogo'] : [], {
       name: 'xterm-256color', cols: 100, rows: 30, cwd: this.dir, env: terminalEnv(this.dir) as Record<string, string>,
     });
-    const id = this.next++;
+    const id = nextId++;
     this.terms.set(id, p);
     p.onData((d) => { if (!this.wc.isDestroyed()) this.wc.send('term:data', id, d); });
     p.onExit(({ exitCode }) => {

@@ -1,7 +1,7 @@
 import { el, fmtWhen, menus, toast } from './ui';
 
 /** Werkzeuge der Markierung (E16). Nichts ist maßhaltig, Maße schreibt man als Text daneben. */
-export type MarkTool = 'select' | 'pen' | 'arrow' | 'rect' | 'ellipse' | 'text';
+export type MarkTool = 'select' | 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text';
 type DrawTool = Exclude<MarkTool, 'select'>;
 type Pt = [number, number];
 
@@ -29,6 +29,8 @@ interface Ui {
   undo: HTMLButtonElement;
   del: HTMLButtonElement;
   blank: HTMLButtonElement;
+  /** Raster ein und aus. */
+  grid: HTMLButtonElement;
   /** Knopf mit der aktuellen Farbe, darunter das Menü mit Knöpfen `[data-color]` und der eigenen Farbe. */
   colorBtn: HTMLButtonElement;
   colorSwatch: HTMLElement;
@@ -42,6 +44,8 @@ const FONT = 19;
 const TEXT_PAD: Pt = [5, 3];
 /** Abstand des Auswahlrahmens zur Form, Abstand des Drehgriffs über dem Rahmen, Fangradius der Griffe und der Linien (CSS-Pixel). */
 const SEL_PAD = 6, ROT_GAP = 24, GRAB = 9, TOL = 6;
+/** Rasterweite in CSS-Pixeln, jede fünfte Linie kräftiger. */
+const GRID = 20, GRID_MAJOR = 5;
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const clone = <T>(v: T): T => structuredClone(v);
 const turn = (a: number, u: number, v: number): Pt => [u * Math.cos(a) - v * Math.sin(a), u * Math.sin(a) + v * Math.cos(a)];
@@ -67,6 +71,8 @@ export class Markup {
   private colorName: string | null = 'orange';
   private bg: HTMLCanvasElement | null = null;
   private blankBg = false;
+  /** Raster an: Es steht im Bild (wie Karopapier) und Linien, Pfeile und Formen rasten an den Kreuzungen ein. Bleibt für die nächste Markierung. */
+  private grid = false;
   private scale = 1;
   private size: Pt = [0, 0];
   private takenAt = Date.now();
@@ -88,6 +94,7 @@ export class Markup {
     ui.undo.addEventListener('click', () => this.undo());
     ui.del.addEventListener('click', () => this.removeSelected());
     ui.blank.addEventListener('click', () => { this.blankBg = !this.blankBg || !this.bg; this.renderUi(); this.draw(); });
+    ui.grid.addEventListener('click', () => { this.grid = !this.grid; this.renderUi(); this.draw(); });
     this.installPointer();
     ui.text.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); this.commitText(); }
@@ -261,9 +268,9 @@ export class Markup {
     return [s.x + u, s.y + v];
   }
 
-  /** Punkte auf der Zeichenfläche: die Linie (Stift, Pfeil) bzw. der geschlossene Umriss (Rechteck, Ellipse). */
+  /** Punkte auf der Zeichenfläche: die Linie (Stift, Linie, Pfeil) bzw. der geschlossene Umriss (Rechteck, Ellipse). */
   private outline(s: Shape): Pt[] {
-    if (s.tool === 'pen' || s.tool === 'arrow') return s.pts.map((p) => this.world(s, p));
+    if (s.tool === 'pen' || s.tool === 'line' || s.tool === 'arrow') return s.pts.map((p) => this.world(s, p));
     const [x0, y0, x1, y1] = this.bounds(s);
     if (s.tool === 'rect') return ([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]] as Pt[]).map((p) => this.world(s, p));
     // Die Ellipse als Vieleck: So bleibt die Strichstärke beim Skalieren gleich
@@ -347,20 +354,20 @@ export class Markup {
         const t = this.hit(p);
         if (t?.tool === 'text') this.editText(t); else this.openText(p);
         return;
-      } else this.drag = { kind: 'draw', tool: this.tool, color: this.color, raw: [p] };
+      } else this.drag = { kind: 'draw', tool: this.tool, color: this.color, raw: [this.tool === 'pen' ? p : this.snap(p, e.altKey)] };
       if (this.drag) try { c.setPointerCapture(e.pointerId); } catch { /* synthetische Ereignisse (Tests) haben keinen aktiven Zeiger */ }
       this.draw();
     });
     c.addEventListener('pointermove', (e) => {
       const p = this.at(e);
       if (!this.drag) { if (this.tool === 'select') c.style.cursor = this.cursorAt(p); return; }
-      this.dragTo(p, e.shiftKey);
+      this.dragTo(p, e.shiftKey, e.altKey);
       this.draw();
     });
     c.addEventListener('pointerup', (e) => {
       const d = this.drag;
       if (!d) return;
-      this.dragTo(this.at(e), e.shiftKey);
+      this.dragTo(this.at(e), e.shiftKey, e.altKey);
       this.drag = null;
       if (d.kind === 'draw') {
         const [a, b = a] = d.raw;
@@ -397,11 +404,17 @@ export class Markup {
     this.renderUi();
   }
 
-  private dragTo(p: Pt, shift: boolean): void {
+  /**
+   * Ziehen. Linie und Pfeil mit Umschalt: Winkel in 15-Grad-Schritten (waagerecht, senkrecht, 45° …). Rechteck und
+   * Ellipse mit Umschalt: Quadrat bzw. Kreis. Bei eingeschaltetem Raster rasten die Endpunkte ein, Alt hebt das auf.
+   */
+  private dragTo(p: Pt, shift: boolean, alt = false): void {
     const d = this.drag!;
     if (d.kind === 'draw') {
       if (d.tool === 'pen') { if (dist(p, d.raw[d.raw.length - 1]) >= 1.5) d.raw.push(p); }
-      else d.raw[1] = shift && (d.tool === 'rect' || d.tool === 'ellipse') ? square(d.raw[0], p) : p;
+      else if (shift && (d.tool === 'line' || d.tool === 'arrow')) d.raw[1] = angled(d.raw[0], p);
+      else if (shift) d.raw[1] = square(d.raw[0], this.snap(p, alt));
+      else d.raw[1] = this.snap(p, alt);
       return;
     }
     const s = this.shapes.find((x) => x.id === d.id);
@@ -414,6 +427,13 @@ export class Markup {
       if (shift) r = Math.round(r / (Math.PI / 12)) * (Math.PI / 12); // Umschalt: in 15-Grad-Schritten
       s.rot = r;
     } else this.scaleTo(s, o, d.corner, p, shift);
+  }
+
+  /** Nächste Rasterkreuzung, solange das Raster an ist und Alt nicht gedrückt. Bleibt auf der Zeichenfläche. */
+  private snap(p: Pt, alt: boolean): Pt {
+    if (!this.grid || alt) return p;
+    const r = (v: number, max: number) => Math.max(0, Math.min(max, Math.round(v / GRID) * GRID));
+    return [r(p[0], this.size[0]), r(p[1], this.size[1])];
   }
 
   private cursorAt(p: Pt): string {
@@ -501,6 +521,7 @@ export class Markup {
     if (this.bg && !this.blankBg) g.drawImage(this.bg, 0, 0);
     else { g.fillStyle = css('--s2') || '#1b1e23'; g.fillRect(0, 0, c.width, c.height); }
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    if (this.grid) this.paintGrid(g);
     for (const s of this.shapes) if (s.id !== this.editing?.id) this.paint(g, s);
     const d = this.drag;
     if (d?.kind === 'draw') this.paint(g, this.makeShape(d.tool, d.color, d.raw));
@@ -538,6 +559,8 @@ export class Markup {
       // Durch die Mittelpunkte geglättet, sonst wirkt Freihand eckig
       for (let i = 1; i < p.length - 1; i++) g.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2);
       if (p.length > 1) g.lineTo(p[p.length - 1][0], p[p.length - 1][1]);
+    } else if (s.tool === 'line') {
+      g.lineTo(b[0], b[1]);
     } else if (s.tool === 'arrow') {
       const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
       const head = Math.min(16, dist(a, b) * 0.4);
@@ -548,6 +571,26 @@ export class Markup {
       g.closePath();
     }
     g.stroke();
+    g.restore();
+  }
+
+  /**
+   * Raster wie Karopapier. Es kommt mit ins Bild: Der Agent sieht dann dieselben Kästchen wie der Nutzer und kann
+   * Größenverhältnisse daran abzählen. Halbtransparent, damit es auf dunklem und hellem Grund zu sehen ist, ohne das Modell zu verdecken.
+   */
+  private paintGrid(g: CanvasRenderingContext2D): void {
+    const [w, h] = this.size;
+    g.save();
+    // Auf halbe Gerätepixel gelegt, damit dünne Linien scharf bleiben
+    const crisp = (v: number) => (Math.round(v * this.scale) + 0.5) / this.scale;
+    for (const major of [false, true]) {
+      g.beginPath();
+      for (let i = 0; i * GRID <= w; i++) if ((i % GRID_MAJOR === 0) === major) { const x = crisp(i * GRID); g.moveTo(x, 0); g.lineTo(x, h); }
+      for (let i = 0; i * GRID <= h; i++) if ((i % GRID_MAJOR === 0) === major) { const y = crisp(i * GRID); g.moveTo(0, y); g.lineTo(w, y); }
+      g.strokeStyle = major ? 'rgba(150,158,170,.42)' : 'rgba(150,158,170,.2)';
+      g.lineWidth = 1 / this.scale;
+      g.stroke();
+    }
     g.restore();
   }
 
@@ -584,6 +627,7 @@ export class Markup {
     u.undo.disabled = !this.history.length && !this.editing;
     u.del.disabled = this.selected == null;
     u.blank.setAttribute('aria-pressed', String(this.blankBg));
+    u.grid.setAttribute('aria-pressed', String(this.grid));
     u.canvas.style.cursor = this.tool === 'select' ? 'default' : this.tool === 'text' ? 'text' : 'crosshair';
     u.hint.replaceChildren(this.blankBg ? 'Leere Fläche. Das Bild landet in ' : `Bild des Viewers von ${fmtWhen(this.takenAt)}. Es landet in `,
       el('code', { textContent: '.soma/feedback/' }), ', der Pfad in der Eingabe des Agenten.');
@@ -594,7 +638,7 @@ export class Markup {
   state() {
     const r = (v: number, n = 2) => +v.toFixed(n);
     return {
-      active: this.active, tool: this.tool, color: this.color, blank: this.blankBg, size: this.size, pixels: [this.ui.canvas.width, this.ui.canvas.height],
+      active: this.active, tool: this.tool, color: this.color, blank: this.blankBg, grid: this.grid, size: this.size, pixels: [this.ui.canvas.width, this.ui.canvas.height],
       shapes: this.shapes.map((s) => s.tool),
       items: this.shapes.map((s) => ({ tool: s.tool, color: s.color, text: s.text ?? null, x: r(s.x), y: r(s.y), rot: r(s.rot, 4), sx: r(s.sx, 3), sy: r(s.sy, 3) })),
       selected: this.shapes.findIndex((s) => s.id === this.selected), editing: !!this.editing, undo: this.history.length, redo: this.future.length,
@@ -620,6 +664,13 @@ export class Markup {
 function square(a: Pt, p: Pt): Pt {
   const d = Math.max(Math.abs(p[0] - a[0]), Math.abs(p[1] - a[1]));
   return [a[0] + Math.sign(p[0] - a[0] || 1) * d, a[1] + Math.sign(p[1] - a[1] || 1) * d];
+}
+
+/** Mit Umschalt bei Linie und Pfeil: Richtung auf 15-Grad-Schritte gerundet, Länge bleibt. */
+function angled(a: Pt, p: Pt): Pt {
+  const step = Math.PI / 12;
+  const ang = Math.round(Math.atan2(p[1] - a[1], p[0] - a[0]) / step) * step, len = dist(a, p);
+  return [a[0] + len * Math.cos(ang), a[1] + len * Math.sin(ang)];
 }
 
 /** Abstand eines Punkts von einer Strecke. */

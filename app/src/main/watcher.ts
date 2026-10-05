@@ -5,6 +5,8 @@ import { affectsBuild } from '../shared/editable';
 const IGNORED_TOP = new Set(['.git', '.soma', 'output', 'exports', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
 
 const topSegment = (rel: string) => rel.split(/[\\/]/)[0] ?? '';
+/** Markierungen (E16) stehen im Dateibaum: Änderungen dort frischen die Liste auf, bauen aber nie. */
+const isFeedback = (rel: string) => /^\.soma[\\/]feedback([\\/]|$)/i.test(rel);
 const isIgnored = (rel: string) => IGNORED_TOP.has(topSegment(rel)) || rel.split(/[\\/]/).includes('__pycache__');
 /** Quelltext-Aenderung: dieselbe Regel wie beim Speichern im Editor (src/shared/editable.ts). */
 const isSource = affectsBuild;
@@ -19,8 +21,8 @@ export function watchProject(dir: string, onSource: (rel: string | null) => void
   try {
     watcher = fs.watch(dir, { recursive: true }, (_evt, filename) => {
       const rel = filename ? String(filename) : '';
-      if (rel && isIgnored(rel)) return;
-      if (!rel || isSource(rel)) onSource(rel || null);
+      if (rel && isIgnored(rel) && !isFeedback(rel)) return;
+      if (!rel || (isSource(rel) && !isFeedback(rel))) onSource(rel || null);
       if (filesTimer) clearTimeout(filesTimer);
       filesTimer = setTimeout(onFiles, 250);
     });
