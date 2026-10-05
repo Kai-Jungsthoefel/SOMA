@@ -1,22 +1,23 @@
 """Kommandozeile: `soma build` und `soma export`."""
 import argparse
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
-from . import __version__, build, registry
+from . import _STARTED, __version__, build, registry
 
 EXPORT_FORMATS = ["step", "stl", "3mf", "amf", "brep", "iges", "obj", "vrml", "glb", "gltf", "dxf", "svg"]
 
 
-def _print_build(res, as_json):
+def _print_build(res, as_json, seconds):
     if as_json:
         print(json.dumps(res, ensure_ascii=False))
         return
     if res["status"] == "ok":
         n = len(res.get("parts", []))
-        t = res.get("timings", {})
-        print(f"Build ok: {n} Bauteil(e), {sum(t.values()):.2f} s -> output/model.step")
+        print(f"Build ok: {n} Bauteil(e), {seconds:.1f} s -> output/model.step")
         for w in res.get("warnings", []):
             print("Warnung:", w)
     else:
@@ -28,9 +29,20 @@ def _print_build(res, as_json):
 
 
 def cmd_build(args):
+    t0 = _STARTED
+    if args.wait:
+        # Vorgewaermter Prozess der App: cadquery ist geladen, gebaut wird erst auf eine Zeile hin.
+        # EOF (App beendet oder Prozess verworfen) heisst: nicht bauen.
+        if not sys.stdin.readline():
+            return 0
+        t0 = time.perf_counter()
     res = build.run_build(args.project)
-    _print_build(res, args.json)
-    return 0 if res["status"] == "ok" else 1
+    _print_build(res, args.json, time.perf_counter() - t0)
+    # Das Aufraeumen von OCP und vtk beim normalen Beenden kostet fast eine Sekunde und bringt nichts:
+    # alle Dateien sind geschrieben und geschlossen, also Puffer leeren und sofort beenden
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0 if res["status"] == "ok" else 1)
 
 
 def _export_one(shape, fmt, path):
@@ -128,6 +140,7 @@ def main(argv=None):
     b = sub.add_parser("build", help="model.py ausfuehren und STEP, GLB und Mapping schreiben")
     b.add_argument("--project", default=".", help="Projektordner (Standard: aktueller Ordner)")
     b.add_argument("--json", action="store_true", help="Ergebnis als JSON ausgeben")
+    b.add_argument("--wait", action="store_true", help=argparse.SUPPRESS)  # nur fuer die App: auf Startzeile warten
     b.set_defaults(func=cmd_build)
 
     e = sub.add_parser("export", help="Einzelne Bauteile exportieren")
