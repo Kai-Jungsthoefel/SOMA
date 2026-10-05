@@ -207,7 +207,7 @@ export class FileTree {
     const blocked = (item: HTMLButtonElement, reason: string | null) => { if (reason) { item.disabled = true; item.title = reason; } return item; };
     const items: HTMLElement[] = [el('div', { className: 'mh', textContent: n ? n.name : 'Projektordner' })];
     if (n && !n.dir) {
-      if (TEXT_EXT.test(n.name)) items.push(menuItem('Öffnen', { icon: 'code', onClick: () => d.open(n) }));
+      if (TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name)) items.push(menuItem('Öffnen', { icon: 'code', onClick: () => d.open(n) }));
       if (IMAGE_EXT.test(n.name)) items.push(menuItem('Markieren', { icon: 'camera', onClick: () => d.mark(n.path) }));
       items.push(menuItem('Mit Standardprogramm öffnen', { icon: 'openext', onClick: () => d.openExternal(n.path) }));
     }
@@ -254,7 +254,7 @@ export class FileTree {
       return b;
     }
     const b = this.button(depth, null, fileIcon(n.name), n.name, TAGS[n.path] ?? '', '');
-    b.title = TEXT_EXT.test(n.name) ? `${n.path} im Code-Panel öffnen` : IMAGE_EXT.test(n.name) ? `${n.path} zum Markieren öffnen` : n.path;
+    b.title = TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name) ? `${n.path} im Code-Panel öffnen` : IMAGE_EXT.test(n.name) ? `${n.path} zum Markieren öffnen` : n.path;
     b.dataset.path = n.path;
     b.addEventListener('click', () => this.deps.open(n));
     return b;

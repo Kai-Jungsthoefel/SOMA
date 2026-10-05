@@ -1,9 +1,10 @@
 import { affectsBuild } from '../shared/editable';
 import type { AgentInfo, BuildStatus, ModelMap, PartMap, PreviewResult, ProjectInfo, SaveState } from '../shared/types';
-import { CodePanel, codeRows, type Mark } from './code';
+import { CodePanel, codeRows, isPdf, type Mark } from './code';
 import { FileTree, IMAGE_EXT, TEXT_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
+import { MAX_QUOTE } from './pdfview';
 import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { SkillsPanel } from './skills';
@@ -72,12 +73,18 @@ function showPanel(p: PanelName | null): void {
 const code = new CodePanel(
   { tabs: $('code-tabs'), info: $('code-info'), banner: $('code-banner'), view: $('code-view'), link: $<HTMLButtonElement>('btn-codelink'), mode: $('code-mode') },
   {
-    read: (rel) => api.fs.readText(rel), projectId: () => project?.id ?? null, toast, ask: (o) => api.dialog.choose(o),
+    read: (rel) => api.fs.readText(rel), readBinary: (rel) => api.fs.readBinary(rel), projectId: () => project?.id ?? null, toast, ask: (o) => api.dialog.choose(o),
     changed: () => { if (saveState) renderSaveState(saveState); },
     saveAndBuild: () => void saveCode(),
     build: () => void api.build.run(),
     link: (href) => openLink(href),
     image: async (rel) => { try { return await imageUrl(rel); } catch { return null; } },
+    quote: (file, pages, text) => {
+      // Eine Zeile mit Datei und Seite, wie Auswahl und Markierung. Sehr lange Zitate werden gekürzt, das steht in der Meldung.
+      const cut = text.length > MAX_QUOTE;
+      insertToAgent(`[Zitat: ${file} S. ${pages}: "${cut ? `${text.slice(0, MAX_QUOTE)} …` : text}"] `, cut ? `Zitat auf ${MAX_QUOTE} Zeichen gekürzt.` : undefined);
+    },
+    markPage: (file, page, canvas) => void markSource(`${file} S. ${page}`, canvas, canvas.width, canvas.height),
   },
 );
 
@@ -94,7 +101,7 @@ function openLink(href: string): void {
     return;
   }
   if (/^[a-z][a-z0-9+.-]*:/i.test(href)) { toast(`Dieser Link wird aus Sicherheitsgründen nicht geöffnet: ${href.slice(0, 100)}`, 'error'); return; }
-  if (TEXT_EXT.test(href.split('/').pop() ?? '')) void openCode(href);
+  if (TEXT_EXT.test(href.split('/').pop() ?? '') || isPdf(href)) void openCode(href);
   else void openExternal(href);
 }
 
@@ -116,7 +123,7 @@ const skills = new SkillsPanel($('skills-list'), {
 
 const files = new FileTree($('tab-files'), $('menu-ctx'), {
   open: (n) => {
-    if (TEXT_EXT.test(n.name)) void openCode(n.path);
+    if (TEXT_EXT.test(n.name) || isPdf(n.name)) void openCode(n.path);
     // Bilder (etwa Markierungen und Skizzen) öffnen auf der Zeichenfläche (E52), das Bildprogramm gibt es per Rechtsklick
     else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
     else if (/\.(step|stp)$/i.test(n.name)) toast('Fremde STEP-Dateien im Viewer ansehen kommt in einem späteren Schritt. Der Agent kann sie schon jetzt im Skript einbinden.', 'info');
@@ -347,16 +354,7 @@ const MARK_MAX_PX = 8192;
  * das Bild wird unverzerrt eingepasst und behält seine Auflösung (so lesen Agenten auch feine Details einer Skizze).
  */
 async function markImage(rel: string): Promise<void> {
-  if (!project) return;
-  menus.close();
-  if (markup.active) {
-    if (markup.source === rel) return;
-    // Von Bild zu Bild wechseln geht direkt. Nur eine angefangene Zeichnung wird nicht still verworfen.
-    if (markup.drawn) {
-      const c = await api.dialog.choose({ title: 'Markierung', message: 'Die offene Markierung ist noch nicht an den Agenten gegeben.', detail: `Verwerfen und ${rel} öffnen?`, buttons: ['Verwerfen und wechseln', 'Abbrechen'] });
-      if (c !== 0) return;
-    }
-  }
+  if (!project || !(await mayReplaceMarkup(rel))) return;
   let img: HTMLImageElement, url: string;
   try { url = await imageUrl(rel); } catch (e) { toast(`${rel} lässt sich nicht lesen: ${e instanceof Error ? e.message : String(e)}`, 'error'); return; }
   try {
@@ -367,10 +365,26 @@ async function markImage(rel: string): Promise<void> {
     toast(`${rel} ließ sich nicht als Bild laden. Rechtsklick: „Mit Standardprogramm öffnen“.`, 'error');
     return;
   } finally { URL.revokeObjectURL(url); }
-  const view = $('viewer'), w = view.clientWidth, h = view.clientHeight;
   // SVG ohne Größenangabe meldet 0: dann einfach in Viewergröße
-  const iw = img.naturalWidth || w, ih = img.naturalHeight || h;
-  if (!w || !h) return;
+  const view = $('viewer');
+  await markSource(rel, img, img.naturalWidth || view.clientWidth, img.naturalHeight || view.clientHeight, false);
+}
+
+/** Von Bild zu Bild wechseln geht direkt. Nur eine angefangene Zeichnung wird nicht still verworfen. */
+async function mayReplaceMarkup(source: string): Promise<boolean> {
+  menus.close();
+  if (!markup.active) return true;
+  if (markup.source === source) return false;
+  if (!markup.drawn) return true;
+  const c = await api.dialog.choose({ title: 'Markierung', message: 'Die offene Markierung ist noch nicht an den Agenten gegeben.', detail: `Verwerfen und ${source} öffnen?`, buttons: ['Verwerfen und wechseln', 'Abbrechen'] });
+  return c === 0;
+}
+
+/** Bild (Datei oder PDF-Seite) unverzerrt in eine Zeichenfläche im Seitenverhältnis des Viewers einpassen und öffnen. */
+async function markSource(label: string, img: CanvasImageSource, iw: number, ih: number, ask = true): Promise<void> {
+  if (!project || (ask && !(await mayReplaceMarkup(label)))) return;
+  const view = $('viewer'), w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h || !iw || !ih) return;
   const scale = Math.min(Math.max(window.devicePixelRatio || 1, iw / w, ih / h), MARK_MAX_PX / Math.max(w, h));
   const c = document.createElement('canvas');
   c.width = Math.round(w * scale);
@@ -382,7 +396,7 @@ async function markImage(rel: string): Promise<void> {
   g.imageSmoothingQuality = 'high';
   g.drawImage(img, (c.width - iw * f) / 2, (c.height - ih * f) / 2, iw * f, ih * f);
   markup.close();
-  markup.open(c, rel);
+  markup.open(c, label);
 }
 
 async function sendMarkup(): Promise<void> {

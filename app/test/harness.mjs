@@ -13,7 +13,7 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Startet die App. Standard: Fenster unsichtbar (SMOKE_VISIBLE=1 zeigt es), eigener App-Daten-Ordner,
  * Watchdog (hängt etwas, wird alles hart beendet). `userData` erlaubt einen Neustart mit denselben Daten.
  */
-export async function startApp({ port = 9333, userData, watchdogMs = 6 * 60 * 1000, name = 'test' } = {}) {
+export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 9333, userData, watchdogMs = 6 * 60 * 1000, name = 'test' } = {}) {
   // SMOKE_VISIBLE=1 sichtbar, =offscreen angezeigt außerhalb des Bildschirms (frische Screenshots, kein Fokusklau), sonst unsichtbar
   const mode = process.env.SMOKE_VISIBLE;
   const visible = mode === '1';

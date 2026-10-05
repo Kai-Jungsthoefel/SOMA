@@ -13,6 +13,7 @@ import { tags as t } from '@lezer/highlight';
 import { affectsBuild, readOnlyReason } from '../shared/editable';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
+import { PdfView, type PdfDeps } from './pdfview';
 import { el } from './ui';
 
 // Einfache Python-Hervorhebung pro Zeile für Codeausschnitte (Auswahl- und Fehlerkarte). Der Editor färbt über CodeMirror,
@@ -71,18 +72,22 @@ interface Doc {
   /** Markdown als Dokument zeigen statt im Editor (E51). Nur bei .md-Dateien. */
   preview: boolean;
   previewScroll: number;
+  /** PDF-Reiter (E54): Statt des Editors steht die PDF-Ansicht da, der Text bleibt leer und nur lesbar. */
+  pdf?: PdfView;
 }
 
 const isMarkdown = (file: string) => /\.md$/i.test(file);
+export const isPdf = (file: string) => /\.pdf$/i.test(file);
 
 interface Ui {
   tabs: HTMLElement; info: HTMLElement; banner: HTMLElement; view: HTMLElement; link: HTMLButtonElement;
   /** Umschalter „Ansicht / Bearbeiten“ für Markdown, Knöpfe `[data-mode]`. */
   mode: HTMLElement;
 }
-interface Deps {
+interface Deps extends PdfDeps {
   /** Liest eine Datei frisch von der Platte (ohne Zwischenspeicher). */
   read(rel: string): Promise<string>;
+  readBinary(rel: string): Promise<ArrayBuffer>;
   projectId(): string | null;
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
   /** Rückfrage mit Knöpfen, liefert den Index (letzter Knopf: Abbrechen). */
@@ -218,6 +223,7 @@ export class CodePanel {
   /** Nach Dateiänderungen: offene Dateien mit der Platte abgleichen. */
   async refresh(): Promise<void> {
     for (const d of [...this.docs.values()]) {
+      if (d.pdf) { await this.refreshPdf(d); continue; }
       if (d.writing) continue;
       let disk: string | null;
       try { disk = await this.deps.read(d.file); } catch { disk = null; }
@@ -247,7 +253,7 @@ export class CodePanel {
   forget(rel: string): void {
     const gone = this.openUnder(rel);
     if (!gone.length) return;
-    for (const f of gone) this.docs.delete(f);
+    for (const f of gone) { const p = this.docs.get(f)?.pdf; p?.dispose(); p?.root.remove(); this.docs.delete(f); }
     if (this.active && gone.includes(this.active)) {
       this.active = null;
       const next = [...this.docs.values()].pop();
@@ -287,6 +293,7 @@ export class CodePanel {
   }
 
   reset(): void {
+    for (const d of this.docs.values()) d.pdf?.dispose();
     this.docs.clear();
     this.loading.clear();
     this.active = null;
@@ -318,6 +325,7 @@ export class CodePanel {
     let p = this.loading.get(file);
     if (!p) {
       p = (async () => {
+        if (isPdf(file)) return this.loadPdf(file);
         let text: string;
         try { text = await this.deps.read(file); } catch (e) { this.deps.toast(`${file} lässt sich nicht lesen: ${errText(e)}`, 'error'); return null; }
         const locked = readOnlyReason(file)
@@ -332,6 +340,26 @@ export class CodePanel {
       this.loading.set(file, p);
     }
     return p;
+  }
+
+  private async loadPdf(file: string): Promise<Doc | null> {
+    let data: ArrayBuffer;
+    try { data = await this.deps.readBinary(file); } catch (e) { this.deps.toast(`${file} lässt sich nicht lesen: ${errText(e)}`, 'error'); return null; }
+    const pdf = new PdfView(file, this.deps);
+    pdf.root.hidden = true;
+    this.ui.view.append(pdf.root);
+    const d: Doc = { file, base: '', eol: '\n', locked: 'PDF', dirty: false, writing: false, queue: Promise.resolve(), conflict: null, mark: null, scrollTop: 0,
+      preview: false, previewScroll: 0, pdf, state: EditorState.create({ doc: '', extensions: [EditorState.readOnly.of(true)] }) };
+    this.docs.set(file, d);
+    await pdf.load(data);
+    return d;
+  }
+
+  /** Geänderte PDF neu laden (etwa vom Agenten neu erzeugt), gelöschte schließen. */
+  private async refreshPdf(d: Doc): Promise<void> {
+    let data: ArrayBuffer;
+    try { data = await this.deps.readBinary(d.file); } catch { await this.close(d.file); return; }
+    if (this.docs.get(d.file) === d) await d.pdf!.load(data);
   }
 
   private extensions(d: Doc): Extension[] {
@@ -397,6 +425,8 @@ export class CodePanel {
       if (choice === 'save') { if (!(await this.write(d))) return; if (affectsBuild(d.file)) this.deps.build(); }
       else if (!(await this.backup(d))) return;
     }
+    d.pdf?.dispose();
+    d.pdf?.root.remove();
     this.docs.delete(file);
     if (this.active === file) {
       this.active = null;
@@ -516,14 +546,16 @@ export class CodePanel {
     const md = !!d && isMarkdown(d.file);
     this.ui.mode.hidden = !md;
     this.ui.mode.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.setAttribute('aria-checked', String((b.dataset.mode === 'view') === !!d?.preview)));
-    this.view.dom.hidden = !d || (md && d.preview);
+    this.view.dom.hidden = !d || (md && d.preview) || !!d.pdf;
     this.empty.hidden = !!d;
+    for (const x of this.docs.values()) if (x.pdf && x.pdf.root.hidden !== (x !== d)) { x.pdf.root.hidden = x !== d; if (x !== d) x.pdf.hidden(); else x.pdf.shown(); }
     this.renderPreview(md && d.preview ? d : null);
     if (!d) { info.replaceChildren(); banner.hidden = true; return; }
 
-    const m = d.mark;
+    const m = d.pdf ? null : d.mark;
     const left: (Node | string)[] = [];
-    if (d.locked) left.push(icon('lock', 13, 2), `Nur lesen. ${d.locked}`);
+    if (d.pdf) { /* PDF: eigene Leiste in der Ansicht */ }
+    else if (d.locked) left.push(icon('lock', 13, 2), `Nur lesen. ${d.locked}`);
     else if (m) {
       const sw = m.kind === 'er' ? el('span', { className: 'ci-err' }, icon('alert', 13, 2)) : el('span', { className: 'sw' });
       if (m.color) sw.style.background = m.color;
@@ -537,7 +569,7 @@ export class CodePanel {
     const hint = !d.locked && d.dirty && !d.conflict ? el('span', { className: 'c3 ci-hint', textContent: 'Nicht gespeichert · Strg+S' }) : '';
     if (left.length || pending) info.replaceChildren(el('span', { className: 'ci-main' }, ...left), el('span', { className: 'grow' }), hint, pending ? this.saveBtn : '');
     else info.replaceChildren();
-    info.classList.toggle('locked', !!d.locked);
+    info.classList.toggle('locked', !!d.locked && !d.pdf);
 
     banner.hidden = !d.conflict;
     if (d.conflict) {
@@ -596,7 +628,7 @@ export class CodePanel {
         const d = this.active ? this.docs.get(this.active) : undefined;
         return {
           file: this.active, files: [...this.docs.keys()], dirty: !!d?.dirty, conflict: d?.conflict ? (d.conflict.disk === null ? 'gone' : 'changed') : null,
-          locked: d?.locked ?? null, readOnly: this.view.state.readOnly, preview: !this.md.hidden, line: this.view.state.doc.lineAt(this.view.state.selection.main.head).number,
+          locked: d?.locked ?? null, readOnly: this.view.state.readOnly, preview: !this.md.hidden, pdf: d?.pdf?.state() ?? null, line: this.view.state.doc.lineAt(this.view.state.selection.main.head).number,
           rendered: this.md.hidden ? null : [...this.md.querySelectorAll<HTMLElement>('.md > *, .md li')].map((x) => `${x.tagName.toLowerCase()}:${(x.textContent ?? '').trim().slice(0, 60)}`), text: this.text(), focused: this.view.hasFocus, unsaved: this.unsaved(),
           marked: [...this.ui.view.querySelectorAll('.cm-line.cm-mark-hl, .cm-line.cm-mark-er')].map((x) => (x.classList.contains('cm-mark-er') ? 'er:' : 'hl:') + x.textContent),
         };
@@ -609,6 +641,9 @@ export class CodePanel {
         return true;
       },
       focus: () => this.view.focus(),
+      pdfSelect: (page: number, find: string) => (this.active ? this.docs.get(this.active)?.pdf?.select(page, find) ?? false : false),
+      pdfQuote: () => (this.active ? this.docs.get(this.active)?.pdf?.sendQuote() : undefined),
+      pdfMarkPage: (n?: number) => (this.active ? this.docs.get(this.active)?.pdf?.markPage(n) : undefined),
       /** Lage des Editors im Panel: füllt er die Höhe, und lässt er sich scrollen? */
       layout: () => {
         const e = this.view.dom.getBoundingClientRect(), v = this.ui.view.getBoundingClientRect(), s = this.view.scrollDOM;

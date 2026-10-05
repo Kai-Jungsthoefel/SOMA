@@ -21,6 +21,26 @@ async function until(desc, fn, timeout = 10000) {
   }
 }
 
+/** Kleine, echte PDF mit Helvetica (WinAnsi), eine Textzeile je Eintrag. Reicht für Textebene und Darstellung. */
+function makePdf(pages) {
+  const esc = (t) => t.replace(/[\\()]/g, (c) => `\\${c}`);
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', null, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'];
+  const kids = [];
+  for (const lines of pages) {
+    const stream = 'BT /F1 18 Tf 72 760 Td 24 TL ' + lines.map((l) => `(${esc(l)}) Tj T*`).join(' ') + ' ET';
+    objs.push(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${objs.length} 0 R >>`);
+    kids.push(`${objs.length} 0 R`);
+  }
+  objs[1] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${kids.length} >>`;
+  let out = '%PDF-1.4\n';
+  const offs = objs.map((o, i) => { const at = Buffer.byteLength(out, 'latin1'); out += `${i + 1} 0 obj\n${o}\nendobj\n`; return at; });
+  const xref = Buffer.byteLength(out, 'latin1');
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+
 try {
   app = await startApp({ name: 'editor' });
   const { ev, waitFor, domClick, ud, page } = app;
@@ -192,6 +212,41 @@ try {
   await open('AGENTS.md');
   s = await ed();
   check('AGENTS.md (nur lesen) als Dokument: Kästchen wären gesperrt, Ansicht da', s.preview && s.rendered.length > 3 && await ev(() => [...document.querySelectorAll('.mdview li.md-task input')].every((b) => b.disabled)));
+
+  // 9c) PDF (E54): Seiten mit Textebene, Zitat mit Seite an den Agenten, Seite markieren, Neuladen, kaputte Datei
+  const pdfFile = path.join(proj.dir, 'docs', 'datenblatt.pdf');
+  fs.writeFileSync(pdfFile, makePdf([['Datenblatt NEMA 17', 'Haltemoment 0,45 Nm bei 1,5 A'], ['Welle 5 mm, Länge 24 mm']]));
+  await open('docs/datenblatt.pdf');
+  await waitFor('PDF gezeichnet', () => (window.__t.editor.state().pdf?.text ?? [])[0]?.includes('Haltemoment'), 20000).catch(() => {});
+  s = await ed();
+  check('PDF öffnet im Code-Panel: 2 Seiten, gezeichnet, Text der Seite liegt als Textebene darüber', s.pdf?.pages === 2 && s.pdf.rendered.includes(1) && s.pdf.text[0].includes('Haltemoment 0,45 Nm')
+    && await ev(() => getComputedStyle(document.querySelector('#code-view .cm-editor')).display === 'none' && document.getElementById('code-mode').hidden), JSON.stringify(s.pdf)?.slice(0, 120));
+  const px = await ev(() => { const c = document.querySelector('.pdf-page[data-page="1"] canvas'); const g = c.getContext('2d'); const d = g.getImageData(0, 0, c.width, c.height).data; let dark = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 100) dark++; return { w: c.width, dark }; });
+  check('Seite 1 ist wirklich gezeichnet (Schrift auf weißem Grund)', px.w > 200 && px.dark > 50, JSON.stringify(px));
+  await ev(() => { const tm = window.__t.terminals; const orig = tm.insert.bind(tm); tm.insert = (x) => { window.__inserted = x; return orig(x); }; });
+  const selected = await ev(() => window.__t.editor.pdfSelect(1, 'Haltemoment 0,45 Nm'));
+  await sleep(100);
+  check('Text markiert: schwebender Knopf „Zitat an Agent" erscheint', selected && (await ed()).pdf.float);
+  await ev(() => document.querySelector('.pdf-float').click());
+  await sleep(200);
+  check('Zitat geht mit Datei und Seite an den Agenten', await ev(() => window.__inserted) === '[Zitat: docs/datenblatt.pdf S. 1: "Haltemoment 0,45 Nm"] ',
+    `${await ev(() => window.__inserted)} | ${(await ev(() => window.__t.toast())).text} | ${await ev(() => window.__t.terminals.count)}`);
+  await ev(() => window.__t.editor.pdfMarkPage(2));
+  await waitFor('Seite auf der Zeichenfläche', () => window.__t.markup().active, 10000).catch(() => {});
+  const mk = await ev(() => window.__t.markup());
+  check('„Seite markieren": Seite 2 öffnet auf der Zeichenfläche', mk.active && mk.source === 'docs/datenblatt.pdf S. 2', mk.source);
+  await shot('9d-pdf-seite-markieren');
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  fs.writeFileSync(pdfFile, makePdf([['Datenblatt NEMA 17'], ['Seite zwei'], ['Neue Seite drei']]));
+  await waitFor('PDF neu geladen', () => window.__t.editor.state().pdf?.pages === 3, 15000).catch(() => {});
+  check('PDF auf der Platte geändert (etwa vom Agenten): Ansicht lädt neu', (await ed()).pdf?.pages === 3);
+  await ev(() => window.__t.editor.pdfSelect(1, 'Datenblatt'));
+  await shot('9c-pdf');
+  fs.writeFileSync(path.join(proj.dir, 'docs', 'kaputt.pdf'), '%PDF-1.4 kein echtes PDF');
+  await open('docs/kaputt.pdf');
+  await waitFor('Fehlermeldung', () => !!window.__t.editor.state().pdf?.error, 10000).catch(() => {});
+  s = await ed();
+  check('Kaputte PDF: Meldung in der Ansicht, App läuft weiter', !!s.pdf?.error && await ev(() => [...document.querySelectorAll('.pdf-msg')].some((m) => m.offsetParent && m.textContent.includes('lässt sich nicht lesen'))), s.pdf?.error ?? '');
 
   // 10) Build-Fehler: „Code öffnen" markiert die Zeile rot
   await open('model.py');

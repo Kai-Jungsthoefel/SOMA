@@ -174,6 +174,34 @@ code { font-family:var(--mono); font-size:.95em; }
 .codeview { flex:1; min-height:0; position:relative; background:var(--term); }
 .codeview .hint { color:var(--tx3); padding:14px; }
 
+/* PDF-Ansicht (E54): Seiten auf dunklem Grund, Textebene von pdf.js darüber (unsichtbarer Text, nur zum Markieren) */
+.pdfview { position:absolute; inset:0; display:flex; flex-direction:column; font-family:var(--sans); }
+.pdf-bar { display:flex; align-items:center; gap:2px; flex-shrink:0; padding:4px 8px 4px 14px; border-bottom:1px solid var(--line); background:var(--term); font:12px var(--sans); }
+.pdf-bar .btn { height:24px; }
+.pdf-bar .btn:disabled { opacity:.45; }
+.pdf-zoom { min-width:44px; text-align:center; }
+.pdf-sep { width:1px; height:16px; background:var(--line2); margin:0 6px; }
+/* Platz für die Scrollleiste immer frei: Sonst wird die Breite beim Erscheinen der Leiste schmaler, die Seiten werden neu
+   eingepasst und neu gezeichnet, und eine Textauswahl ginge verloren */
+.pdf-scroll { flex:1; min-height:0; overflow:auto; scrollbar-gutter:stable; outline:none; background:var(--bg); }
+.pdf-pages { display:flex; flex-direction:column; align-items:center; gap:14px; padding:16px; width:max-content; min-width:100%; box-sizing:border-box; }
+.pdf-page { position:relative; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.45); --scale-round-x:1px; --scale-round-y:1px; }
+.pdf-page .pdf-canvas { position:absolute; inset:0; width:100%; height:100%; }
+.pdf-page .pdf-pnum { position:absolute; left:-30px; top:0; font:11px var(--mono); color:var(--tx3); }
+.pdf-msg { color:var(--tx2); padding:20px; max-width:420px; font:13px/1.5 var(--sans); }
+.pdf-float { position:absolute; z-index:5; height:26px; font:500 12px var(--sans); box-shadow:var(--shadow); }
+.textLayer { position:absolute; inset:0; overflow:clip; opacity:1; line-height:1; text-align:initial; letter-spacing:normal; word-spacing:normal; text-size-adjust:none; forced-color-adjust:none; transform-origin:0 0; z-index:0; caret-color:CanvasText;
+  --min-font-size:1; --text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv:calc(1 / var(--min-font-size)); }
+.textLayer :is(span, br) { color:transparent; position:absolute; white-space:pre; cursor:text; transform-origin:0% 0%; user-select:text; }
+.textLayer > :not(.markedContent), .textLayer .markedContent span:not(.markedContent) { z-index:1; --font-height:0; font-size:calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x:1; --rotate:0deg; transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.textLayer .markedContent { display:contents; }
+.textLayer span[role=img] { user-select:none; cursor:default; }
+.textLayer ::selection { background:rgba(242,154,56,.38); color:transparent; }
+.textLayer br::selection { background:transparent; }
+.textLayer .endOfContent { display:block; position:absolute; inset:100% 0 0; z-index:0; cursor:default; user-select:none; }
+.textLayer.selecting .endOfContent { top:0; }
+
 /* Markdown: Umschalter im Kopf und Dokumentansicht (E51) */
 .cmode { display:flex; align-self:center; gap:2px; padding:2px; margin-right:4px; border:1px solid var(--line2); border-radius:7px; background:var(--term); }
 .cmode button { display:flex; align-items:center; justify-content:center; width:28px; height:22px; border-radius:5px; color:var(--tx2); font:500 12px var(--sans); }
