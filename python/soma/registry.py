@@ -6,6 +6,9 @@ import unicodedata
 import cadquery as cq
 
 REGISTRY = []  # wird pro Build geleert (siehe build.py)
+# Beim Ausfuehren von Animationsdateien (animrun.py): Die Bauteile sind schon bekannt. Importiert eine Animation das Modell
+# (`from model import HINGE_Y`), laeuft model.py ein zweites Mal, add_part() bleibt dann wirkungslos.
+IGNORE_ADD = False
 DEFAULT_COLORS = {"part": (0.62, 0.66, 0.72), "reference": (0.1, 0.65, 0.3), "hardware": (0.45, 0.46, 0.49)}
 REFERENCE_ALPHA = 0.45
 ROLES = ("part", "reference", "hardware")
@@ -76,6 +79,8 @@ def add_part(name, obj, role=None, color=None, group=None):
     color  optional (r, g, b) mit Werten 0..1 (bei einer Baugruppe fuer alle Teile). Normteile haben eine eigene
     group  optional, Gruppe im Bauteilbaum und in der STEP-Datei, verschachtelt mit "/", z. B. "Gehaeuse/Schrauben"
     """
+    if IGNORE_ADD:
+        return
     standard_part = hasattr(obj, "__soma_shape__")
     if role is None:
         role = getattr(obj, "role", "part") if standard_part else "part"

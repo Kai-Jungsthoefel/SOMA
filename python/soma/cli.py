@@ -1,4 +1,4 @@
-"""Kommandozeile: `soma build` und `soma export`."""
+"""Kommandozeile: `soma build`, `soma export`, `soma anim`, `soma analyze` und `soma render`."""
 import argparse
 import json
 import os
@@ -132,6 +132,116 @@ def cmd_serve(args):
     return 0
 
 
+def _fail(msg, code=1):
+    print(msg, file=sys.stderr)
+    return code
+
+
+def cmd_anim(args):
+    """Animationen in animations/*.py (E58): bauen, auflisten, beschreiben, auf Kollisionen pruefen."""
+    from . import animrun
+    root = Path(args.project).resolve()
+    try:
+        if args.action == "build":
+            target = None
+            if args.name and args.name.endswith(".py"):
+                target = root / args.name
+                if not target.is_file():
+                    return _fail(f"{args.name} gibt es nicht")
+            res = animrun.build_all(root, target)
+            if args.json:
+                print(json.dumps(dict(built=res["built"], errors=res["errors"]), ensure_ascii=False))
+            else:
+                for b in res["built"]:
+                    print(f"Animation ok: \"{b['name']}\" ({b['duration']:.2f} s, {b['parts']} bewegte(s) Bauteil(e)) aus {b['file']}")
+                for e in res["errors"]:
+                    where = f"{e['file']}{':' + str(e['line']) if e.get('line') else ''}"
+                    print(f"Animation FEHLER ({where}): {e['message']}", file=sys.stderr)
+                    if e.get("traceback"):
+                        print(e["traceback"], file=sys.stderr)
+                if not res["built"] and not res["errors"]:
+                    print(f"Keine Animationen: Lege eine Datei in {animrun.ANIM_DIR}/ an (from soma.anim import Animation).")
+            if args.name and not args.name.endswith(".py") and not animrun.find(root, args.name):
+                return _fail(f"Keine Animation {args.name!r} gefunden")
+            return 1 if res["errors"] else 0
+        if args.action == "list":
+            idx = animrun.read_index(root)
+            rows = [dict(x, stale=animrun.is_stale(root, x)) for x in idx.get("animations", [])]
+            if args.json:
+                print(json.dumps(dict(animations=rows, errors=idx.get("errors", [])), ensure_ascii=False))
+                return 0
+            for x in rows:
+                print(f"\"{x['name']}\"  {x['duration']:.2f} s  {x['file']}{'  (veraltet, soma anim build)' if x['stale'] else ''}")
+            for e in idx.get("errors", []):
+                print(f"FEHLER {e['file']}{':' + str(e['line']) if e.get('line') else ''}: {e['message']}")
+            if not rows and not idx.get("errors"):
+                print("Noch keine Animation gebaut (soma anim build).")
+            return 0
+        if not args.name:
+            return _fail(f"soma anim {args.action} braucht den Namen der Animation")
+        entry = animrun.ensure(root, args.name)
+        if args.action == "info":
+            if args.json:
+                print(json.dumps(dict(meta=animrun.read_meta(root, entry), check=animrun.read_check(root, entry)), ensure_ascii=False))
+            else:
+                print(animrun.info_text(root, entry))
+            return 0
+        res = animrun.check(root, args.name, step=args.step, gap=args.gap)
+        print(json.dumps(res, ensure_ascii=False) if args.json else animrun.check_text(res))
+        return 1 if any(r["kind"] == "Kollision" and not p["atRest"] for p in res["pairs"] for r in p["ranges"]) else 0
+    except animrun.AnimError as e:
+        return _fail(str(e))
+
+
+def cmd_analyze(args):
+    """Auswertung mit einem Wert je Stelle der Oberflaeche (E58)."""
+    from . import analysis
+    root = Path(args.project).resolve()
+    if args.kind == "list":
+        res = analysis.list_results(root)
+        if args.json:
+            print(json.dumps(res, ensure_ascii=False))
+            return 0
+        for m in res:
+            print(f"{m['id']}: {m['title']} ({m['file']})")
+        if not res:
+            print("Noch keine Ergebnisse (soma analyze overhang | thickness | clearance).")
+        return 0
+    try:
+        meta = analysis.run(root, args.kind, args.parts, args.threshold, args.up, args.name)
+    except analysis.AnalysisError as e:
+        return _fail(str(e))
+    if args.json:
+        print(json.dumps(meta, ensure_ascii=False))
+    else:
+        print(meta["summary"])
+        print(f"Ergebnis: {meta['file']}. Als Bild mit Farben: soma render --result {meta['id']}")
+    return 0
+
+
+def cmd_render(args):
+    """Bild oder Video ueber die App (E58)."""
+    from . import render
+    root = Path(args.project).resolve()
+    try:
+        job = render.prepare(root, args)
+        res = render.send(job)
+    except render.RenderError as e:
+        return _fail(f"Render FEHLER: {e}")
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+        return 0
+    for w in res.get("warnings", []):
+        print("Hinweis:", w)
+    for f in res.get("files", []):
+        print(f"geschrieben: {f}")
+    if job["kind"] == "video":
+        print("Das Video selbst kannst du nicht ansehen, die Uebersicht (PNG) zeigt Standbilder mit Zeitstempel.")
+    else:
+        print("Oeffne das Bild, um es anzusehen.")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="soma", description="Hilfsprogramm von SOMA")
     ap.add_argument("--version", action="version", version=f"soma {__version__}")
@@ -157,6 +267,39 @@ def main(argv=None):
     g.add_argument("--out", required=True, help="Zielordner (model.glb und model.map.json)")
     g.add_argument("--json", action="store_true")
     g.set_defaults(func=cmd_glb)
+
+    a = sub.add_parser("anim", help="Animationen aus animations/*.py bauen, auflisten, beschreiben, pruefen")
+    a.add_argument("action", choices=["build", "list", "info", "check"])
+    a.add_argument("name", nargs="?", help="Name der Animation (bei build auch eine Datei animations/x.py)")
+    a.add_argument("--step", type=float, default=0.1, help="check: Abstand der Zeitpunkte in Sekunden (Standard 0.1)")
+    a.add_argument("--gap", type=float, default=0.0, help="check: Mindestabstand in mm, darunter gilt es als zu nah")
+    a.add_argument("--project", default=".")
+    a.add_argument("--json", action="store_true")
+    a.set_defaults(func=cmd_anim)
+
+    z = sub.add_parser("analyze", help="Auswertung: overhang (3D-Druck), thickness (Wandstaerke), clearance (Spalt zu anderen Teilen)")
+    z.add_argument("kind", choices=["overhang", "thickness", "clearance", "list"])
+    z.add_argument("--parts", help="Bauteile oder Gruppen, mit Komma getrennt (Standard: alle eigenen Teile)")
+    z.add_argument("--threshold", type=float, help="Grenzwert (Standard: overhang 45 Grad, thickness 1.2 mm, clearance 0.5 mm)")
+    z.add_argument("--up", default="z", help="overhang: Druckrichtung (z, -z, x, -x, y, -y)")
+    z.add_argument("--name", help="Name des Ergebnisses (Standard: wie die Auswertung)")
+    z.add_argument("--project", default=".")
+    z.add_argument("--json", action="store_true")
+    z.set_defaults(func=cmd_analyze)
+
+    r = sub.add_parser("render", help="Bild oder Video des Modells (ueber die App), nach renders/")
+    r.add_argument("--view", help="iso, front, back, left, right, top, bottom (Standard iso, bei Animationen ihre Kamera)")
+    r.add_argument("--size", help="Breite x Hoehe in Pixeln, z. B. 1280x800")
+    r.add_argument("--anim", help="Name einer Animation")
+    r.add_argument("--at", type=float, help="Zeitpunkt in der Animation (Sekunden)")
+    r.add_argument("--sheet", nargs="?", const=True, help="Uebersicht: Standbilder der Animation mit Zeit, z. B. 3x3")
+    r.add_argument("--video", action="store_true", help="Video (MP4) der Animation")
+    r.add_argument("--fps", type=int, default=30, help="Bilder je Sekunde im Video")
+    r.add_argument("--result", help="Ergebnis einer Auswertung (soma analyze) farbig zeigen")
+    r.add_argument("--out", help="Zieldatei im Projekt (Standard: renders/...)")
+    r.add_argument("--project", default=".")
+    r.add_argument("--json", action="store_true")
+    r.set_defaults(func=cmd_render)
 
     s = sub.add_parser("serve", help="Messdienst fuer die App (JSON-Zeilen auf stdin/stdout)")
     s.set_defaults(func=cmd_serve)
