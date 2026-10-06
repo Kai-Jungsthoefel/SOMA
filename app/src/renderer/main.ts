@@ -2,6 +2,7 @@ import { affectsBuild } from '../shared/editable';
 import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ResultEntry, SaveState } from '../shared/types';
 import { CodePanel, codeRows, isPdf, type Mark } from './code';
 import { AnimTool } from './animtool';
+import { Busy } from './busy';
 import { DRAG_FILE, FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
@@ -384,6 +385,8 @@ const sectionTool = new SectionTool({
 
 // ---- Explosionsansicht (E56) ----------------------------------------------------------------------------------------
 
+/** Ladeanzeige über dem Viewer, solange die Explosion rechnet. */
+const busy = new Busy();
 const explodeTool = new ExplodeTool({
   card: $('explode-card'), button: $<HTMLButtonElement>('btn-explode'), close: $<HTMLButtonElement>('btn-explode-close'),
   range: $<HTMLInputElement>('explode-range'), value: $('explode-value'), hint: $('explode-hint'),
@@ -392,6 +395,7 @@ const explodeTool = new ExplodeTool({
   step: $('explode-step'), send: $<HTMLButtonElement>('btn-explode-agent'),
 }, {
   viewer,
+  busy,
   insert: (t) => insertToAgent(t),
   beforeOn: () => { if (measureTool.isActive) measureTool.setActive(false); },
   settled: () => sectionTool.refresh(), // der Bereich des Schiebers folgt den verschobenen Bauteilen
@@ -1291,6 +1295,7 @@ if (api.testMode) {
     measure: () => measureTool.state(),
     section: () => sectionTool.state(),
     explode: () => explodeTool.state(),
+    busy: () => busy.state(),
     anim: () => animTool.state(),
     animSeek: (t: number) => animTool.testSeek(t),
     animRefresh: () => animTool.refresh(),

@@ -92,6 +92,16 @@
       <section id="viewer" aria-label="3D-Ansicht">
         <div id="viewer-msg"></div>
 
+        <!-- Ladeanzeige (busy.ts): Die Explosion rechnet bei großen Baugruppen einige Sekunden -->
+        <div id="viewer-busy" class="vbusy" hidden>
+          <div class="float vb-card" role="status" aria-live="polite">
+            <div class="vb-hd"><span class="spin"><i data-icon="spin" data-size="16" data-stroke="2.4"></i></span><b id="viewer-busy-title"></b><span class="grow"></span><span id="viewer-busy-time" class="c3 small"></span></div>
+            <div id="viewer-busy-detail" class="vb-sub"></div>
+            <div id="viewer-busy-bar" class="vb-bar indet"><div id="viewer-busy-fill"></div></div>
+            <div class="sc-actions"><button id="btn-busy-cancel" class="btn sm" title="Vorbereitung abbrechen und das Werkzeug beenden (Escape)">Abbrechen</button></div>
+          </div>
+        </div>
+
         <!-- Oben links: was der Viewer zeigt (Modell oder ein Ergebnis des Agenten). In der Mitte die Werkzeuge. -->
         <div id="vtop" class="vtop">
           <div id="view-switch" class="float switcher">

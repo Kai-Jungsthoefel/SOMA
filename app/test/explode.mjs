@@ -91,6 +91,20 @@ try {
     screws.every((id) => JSON.stringify(byId[id].axis) === '[0,0,1]') && side.every((id) => JSON.stringify(byId[id].axis) === '[1,0,0]')
     && JSON.stringify(byId[ids.Mutter].axis) === '[0,0,1]' && byId[ids.Deckel].axis === null, JSON.stringify(byId[ids.Mutter].axis));
 
+  // 0b) Abbrechen während der Analyse (große Baugruppen rechnen Sekunden): Explosion aus, nichts verschoben, Karte zu
+  const cancelled = await ev(() => {
+    document.getElementById('btn-explode').click();
+    const during = { loading: window.__t.explode().loading, busy: window.__t.busy() };
+    document.getElementById('btn-busy-cancel').click();
+    return { during, after: window.__t.explode(), busy: window.__t.busy(), card: document.getElementById('explode-card').hidden };
+  });
+  await sleep(300);
+  check('Abbrechen während der Analyse: Explosion aus, Karte zu, Ladeanzeige weg, nichts verschoben',
+    cancelled.during.loading && cancelled.during.busy?.title === 'Explosion wird vorbereitet' && !cancelled.after.active && !cancelled.after.loading
+    && cancelled.card && cancelled.busy === null && !(await ev(() => window.__t.explode())).active && !Object.keys((await vs()).offsets).length
+    && await ev(() => document.getElementById('viewer-busy').hidden && document.getElementById('btn-explode').getAttribute('aria-pressed') === 'false'),
+    JSON.stringify(cancelled).slice(0, 160));
+
   // 1) Einschalten: Demontage-Analyse, zunächst auf 50 %
   await domClick('btn-explode');
   await settle();
@@ -345,7 +359,7 @@ try {
   // 7) Neuer Build: Die Explosion bleibt, die Analyse läuft neu (Deckel 6 mm dick)
   fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL(26));
   await waitFor('Neuer Build', () => window.__t.status().state === 'ok' && window.__t.partSize('Deckel')?.[2] === 6, 60000);
-  await sleep(200);
+  await settle(); // die Analyse des neuen Stands läuft im Hintergrund
   s = await ex();
   vo = (await vs()).offsets;
   check('Nach dem Build: Explosion aktiv, zwölf Teile verschoben, Schrauben über dem neuen Deckel', s.active && Object.keys(vo).length === 12 && s.forced === 0

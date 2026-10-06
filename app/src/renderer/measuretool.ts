@@ -1,4 +1,5 @@
 import type { MeasureInfo, MeasureResponse, MeasureResult, MeasureSource, MeasureSpan, PartMap } from '../shared/types';
+import { icon } from './icons';
 import { el } from './ui';
 import type { MeasureMarks, ProbeHit, Viewer } from './viewer';
 
@@ -63,6 +64,15 @@ export class MeasureTool {
   private warm = false;
   /** Einmaliger Hinweis, etwa nach einem Klick auf die Schnittfläche. Verschwindet beim nächsten Klick. */
   private note = '';
+  /**
+   * Vorbereitung beim Einschalten: Messdienst starten, den Stand laden (große Baugruppen: Sekunden). Klicks sind schon
+   * möglich, ihre Messung wartet darauf. `phase`: was gerade geschieht, leer wenn bereit.
+   */
+  private prep: Promise<void> | null = null;
+  private prepSeq = 0;
+  private phase = '';
+  private prepT0 = 0;
+  private prepTick: ReturnType<typeof setInterval> | undefined;
 
   constructor(private ui: Ui, private deps: Deps) {
     ui.button.addEventListener('click', () => this.setActive(!this.active));
@@ -91,11 +101,53 @@ export class MeasureTool {
     this.ui.viewerEl.classList.toggle('measuring', on);
     this.deps.viewer.setMode(on ? 'measure' : 'select');
     this.clear();
+    if (on) this.prepare(); else this.endPrepare();
     this.render();
   }
 
-  /** Neuer Build oder anderer Stand: Die IDs der Flächen und Kanten gelten nicht mehr. */
-  reset(): void { this.clear(); this.render(); }
+  /** Neuer Build oder anderer Stand: Die IDs der Flächen und Kanten gelten nicht mehr, den neuen Stand vorab laden. */
+  reset(): void {
+    this.clear();
+    if (this.active) this.prepare();
+    this.render();
+  }
+
+  private prepare(): void {
+    const build = this.deps.build();
+    this.endPrepare();
+    if (!build) return; // ohne Geometrie meldet der erste Klick, was fehlt
+    const seq = this.prepSeq;
+    const source = this.deps.source();
+    const n = this.deps.viewer.partList().length;
+    this.prepT0 = performance.now();
+    // Sekunden mitzählen, nur die Zahl: Neu zeichnen ließe den laufenden Balken jedes Mal von vorn beginnen
+    this.prepTick = setInterval(() => { const t = this.ui.body.querySelector('.mc-load-time'); if (t) t.textContent = this.prepSeconds(); }, 1000);
+    this.phase = 'Messdienst startet …';
+    this.prep = (async () => {
+      // Läuft der Dienst schon, ist start() gleich fertig
+      let r = await window.soma.measure.start().catch((e: unknown) => ({ ok: false, error: String(e), stale: false }));
+      if (seq !== this.prepSeq) return;
+      if (r.ok) {
+        this.phase = `Geometrie wird geladen (${n} ${n === 1 ? 'Bauteil' : 'Bauteile'}) …`;
+        this.render();
+        r = await window.soma.measure.prepare(source, build).catch((e: unknown) => ({ ok: false, error: String(e), stale: false }));
+        if (seq !== this.prepSeq) return;
+      }
+      // Ein veralteter Stand ist kein Fehler: Der neue Build ruft reset() und lädt selbst
+      if (r.ok) this.warm = true;
+      else if (!r.stale && !this.a) this.error = r.error ?? 'Der Messdienst ließ sich nicht vorbereiten.';
+      this.endPrepare();
+      this.render();
+    })();
+  }
+
+  /** Vorbereitung beenden oder verwerfen (der Dienst lädt im Hintergrund zu Ende, das schadet nicht). */
+  private endPrepare(): void {
+    this.prepSeq++;
+    this.prep = null;
+    this.phase = '';
+    clearInterval(this.prepTick);
+  }
 
   private clear(): void {
     this.a = this.b = null;
@@ -127,6 +179,7 @@ export class MeasureTool {
     const seq = ++this.seq;
     this.busy = true;
     this.render();
+    if (this.prep) { await this.prep; if (seq !== this.seq) return; } // erst den Stand fertig laden, sonst läuft das Zeitlimit
     const ent = (x: ProbeHit) => ({ part: x.partId, kind: x.kind, id: x.id, point: x.point, check: x.size ?? undefined });
     let r: MeasureResponse;
     try { r = await window.soma.measure.query(this.deps.source(), { build, a: ent(this.a!), ...(this.b ? { b: ent(this.b) } : {}) }); }
@@ -195,9 +248,10 @@ export class MeasureTool {
     if (!this.active) return;
     const rows: HTMLElement[] = [];
     const hint = (t: string) => el('div', { className: 'mc-hint', textContent: t });
-    if (!this.a) rows.push(hint('Klick auf einen Punkt, eine Kante oder eine Fläche. Ein zweiter Klick misst Abstand und Winkel zum ersten.'));
-    else if (this.busy) rows.push(hint(this.warm ? 'Messe …' : 'Messe … Beim ersten Mal startet der Messdienst, das dauert einige Sekunden.'));
-    else if (this.error) rows.push(el('div', { className: 'mc-err', textContent: this.error }));
+    if (this.phase) rows.push(this.loadingRow());
+    if (this.error && !this.busy) rows.push(el('div', { className: 'mc-err', textContent: this.error }));
+    else if (!this.a) rows.push(hint('Klick auf einen Punkt, eine Kante oder eine Fläche. Ein zweiter Klick misst Abstand und Winkel zum ersten.'));
+    else if (this.busy) rows.push(hint(this.phase ? 'Gemessen wird, sobald die Geometrie geladen ist.' : this.warm ? 'Messe …' : 'Messe … Beim ersten Mal startet der Messdienst, das dauert einige Sekunden.'));
     else if (this.result && !this.result.b) {
       rows.push(...this.entityRows(this.result.a, true));
       rows.push(hint('Zweites Element anklicken für Abstand und Winkel.'));
@@ -220,6 +274,19 @@ export class MeasureTool {
     body.replaceChildren(...rows);
     again.disabled = !this.a;
     agent.disabled = !this.result;
+  }
+
+  /** Was die Vorbereitung gerade tut, mit Sekunden und laufendem Balken. */
+  private loadingRow(): HTMLElement {
+    return el('div', { className: 'mc-load' },
+      el('div', { className: 'mc-load-hd' }, el('span', { className: 'spin' }, icon('spin', 14, 2.4)), el('span', { className: 'grow', textContent: this.phase }),
+        el('span', { className: 'c3 mc-load-time', textContent: this.prepSeconds() })),
+      el('div', { className: 'vb-bar indet' }, el('div')));
+  }
+
+  private prepSeconds(): string {
+    const s = Math.round((performance.now() - this.prepT0) / 1000);
+    return s ? `${s} s` : '';
   }
 
   private row(label: string, value: string): HTMLElement {
@@ -284,6 +351,6 @@ export class MeasureTool {
   // ---- Prüfhilfe (nur Tests) ------------------------------------------------------------------------------------
 
   state() {
-    return { active: this.active, a: this.a, b: this.b, busy: this.busy, error: this.error, result: this.result, text: this.ui.body.textContent, agentText: this.agentText() };
+    return { active: this.active, a: this.a, b: this.b, busy: this.busy, preparing: !!this.prep, phase: this.phase, error: this.error, result: this.result, text: this.ui.body.textContent, agentText: this.agentText() };
   }
 }

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type {
-  AnimBuildResult, AnimList, ExportResult, GitLog, MeasureEntity, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
+  AnimBuildResult, AnimList, ExportResult, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
   ProjectInfo, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
@@ -353,11 +353,8 @@ export class ProjectController {
    */
   async measure(source: unknown, req: unknown): Promise<MeasureResponse> {
     const s = this.need();
-    let folder: string;
-    const hash = (source as { preview?: unknown } | null)?.preview;
-    if (source === 'live') folder = path.join(s.dir, '.soma');
-    else if (typeof hash === 'string' && /^[0-9a-f]{7,40}$/.test(hash)) folder = path.join(previewsDir(), s.id, hash);
-    else return { ok: false, error: 'Unbekannte Quelle für die Messung.' };
+    const folder = this.measureFolder(s, source);
+    if (!folder) return { ok: false, error: 'Unbekannte Quelle für die Messung.' };
     const r = req as { build?: unknown; a?: unknown; b?: unknown } | null;
     const ent = (v: unknown): MeasureEntity | null => {
       const e = v as { part?: unknown; kind?: unknown; id?: unknown; point?: unknown; check?: unknown } | null;
@@ -369,6 +366,27 @@ export class ProjectController {
     if (!a || b === null || typeof r?.build !== 'string') return { ok: false, error: 'Ungültige Messanfrage.' };
     const clean: MeasureRequest = { build: r.build, a, ...(b ? { b } : {}) };
     return s.measure.request(folder, clean);
+  }
+
+  /** Ordner des gemessenen Stands, den bestimmt der Hauptprozess. Unbekannte Quelle: null. */
+  private measureFolder(s: Session, source: unknown): string | null {
+    const hash = (source as { preview?: unknown } | null)?.preview;
+    if (source === 'live') return path.join(s.dir, '.soma');
+    if (typeof hash === 'string' && /^[0-9a-f]{7,40}$/.test(hash)) return path.join(previewsDir(), s.id, hash);
+    return null;
+  }
+
+  /** Messdienst vorab starten, sobald der Nutzer den Messmodus einschaltet. */
+  async measureStart(): Promise<MeasurePrepared> {
+    return this.need().measure.warm();
+  }
+
+  /** Den angezeigten Stand vorab in den Messdienst laden. */
+  async measurePrepare(source: unknown, build: unknown): Promise<MeasurePrepared> {
+    const s = this.need();
+    const folder = this.measureFolder(s, source);
+    if (!folder || typeof build !== 'string') return { ok: false, error: 'Ungültige Messanfrage.' };
+    return s.measure.prepare(folder, build);
   }
 
   async restore(hash: string): Promise<RestoreResult> {

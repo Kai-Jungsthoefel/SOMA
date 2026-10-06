@@ -1,3 +1,4 @@
+import type { Busy } from './busy';
 import { icon } from './icons';
 import type { BlockMap, ExplodePart, Viewer } from './viewer';
 
@@ -24,6 +25,8 @@ interface Ui {
 }
 interface Deps {
   viewer: Viewer;
+  /** Ladeanzeige, solange die Analyse rechnet (große Baugruppen: Sekunden). */
+  busy: Busy;
   /** Vor dem Einschalten: Gemessen wird nur in Einbaulage, die exakte Geometrie kennt keine Explosion. */
   beforeOn: () => void;
   /** Die Bauteile stehen still (Schieber losgelassen, Bewegung zu Ende), etwa für den Bereich des Schnitts. */
@@ -469,6 +472,8 @@ export class ExplodeTool {
   private trails = true;
   /** Laufende Bewegung. Beim Abspielen mit Ziel, damit ein neues Tempo von der aktuellen Lage aus weiterläuft. */
   private anim: { stop(): void; goal?: { target: number; play: boolean } } | null = null;
+  /** Laufende Analyse (Strahltest), abbrechbar. */
+  private loading: AbortController | null = null;
   private ui: Required<Ui>;
 
   constructor(ui: Ui, private deps: Deps) {
@@ -510,11 +515,25 @@ export class ExplodeTool {
     if (on !== this.active) {
       this.active = on;
       this.ui.button.setAttribute('aria-pressed', String(on));
-      this.ui.card.hidden = !on;
       this.ui.viewerEl.classList.toggle('exploding', on);
-      if (on) { this.deps.beforeOn(); this.compute(); }
       this.stepPos = null;
+      if (on) {
+        this.deps.beforeOn();
+        if (!this.analysis) {
+          // Die Karte erscheint erst mit dem Ergebnis, bis dahin zeigt die Ladeanzeige den Fortschritt
+          this.ui.card.hidden = true;
+          void this.prepare(() => { this.compute(); this.ui.card.hidden = false; this.goTo(true, animate); });
+          return;
+        }
+        this.compute();
+      } else this.cancelLoad();
+      this.ui.card.hidden = !on;
     }
+    if (this.loading) return; // noch keine Analyse, prepare() fährt danach auseinander
+    this.goTo(on, animate);
+  }
+
+  private goTo(on: boolean, animate: boolean): void {
     const target = on ? this.amount : 0;
     if (animate) this.moveTo(target);
     else if (this.anim || this.shown !== target) { this.stopAnim(); this.show(target); this.deps.settled(); }
@@ -524,10 +543,55 @@ export class ExplodeTool {
   /** Neues Modell (Build oder anderer Stand): neu analysieren, die Explosion bleibt so weit, wie sie war. */
   refresh(): void {
     this.analysis = null;
-    if (!this.active && this.shown <= 0) { this.plan = null; return; } // erst beim Einschalten rechnen
-    this.compute();
-    if (this.shown > 0) this.show(this.shown);
-    this.render();
+    this.cancelLoad();
+    if (!this.active) { // erst beim Einschalten rechnen. Läuft noch das Zusammenfahren: gleich in Einbaulage
+      if (this.shown > 0) { this.stopAnim(); this.show(0); }
+      this.plan = null;
+      return;
+    }
+    if (this.anim?.goal) this.stopAnim(); // ein laufender Schritt gehört zum alten Plan
+    void this.prepare(() => {
+      this.compute();
+      if (this.shown > 0) this.show(this.shown);
+      this.render();
+      this.deps.settled();
+    });
+  }
+
+  /**
+   * Strahltest im Hintergrund mit Ladeanzeige, danach `then`. Abbrechen (Knopf, Escape) beendet die Explosion. Ein neuer Aufruf
+   * oder cancelLoad() verwirft den laufenden, dessen `then` kommt dann nicht mehr.
+   */
+  private async prepare(then: () => void): Promise<void> {
+    this.cancelLoad();
+    const ctl = new AbortController();
+    this.loading = ctl;
+    const { viewer } = this.deps;
+    const view = this.deps.busy.show('Explosion wird vorbereitet', () => this.setActive(false, false));
+    try {
+      // Strahltest und Hüllquader in Einbaulage
+      if (this.shown > 0) viewer.setOffsets(null);
+      const own = viewer.explodeParts().filter((p) => p.role !== 'reference');
+      const size = diagonal(own);
+      const t0 = performance.now();
+      const { dirs, opp } = directions(own);
+      view.detail(`${own.length} Bauteile: Was steht wem im Weg?`);
+      const block = await viewer.explodeRays(own.map((p) => p.id), dirs, opp,
+        { eps: Math.max(EPS_MIN, EPS * size), touch: Math.max(TOUCH_MIN, TOUCH * size), samples: SAMPLES },
+        { signal: ctl.signal, progress: (f) => view.progress(f) });
+      if (!block || this.loading !== ctl) return;
+      this.analysis = { dirs, opp, block, ms: performance.now() - t0 };
+      this.loading = null;
+      then();
+    } finally {
+      if (this.loading === ctl) this.loading = null;
+      view.close();
+    }
+  }
+
+  private cancelLoad(): void {
+    this.loading?.abort();
+    this.loading = null;
   }
 
   /** Beschreibung für den Agenten, etwa beim Markieren. Ohne Explosion null. */
@@ -537,23 +601,18 @@ export class ExplodeTool {
     return `Explosionsansicht (${Math.round(this.shown * 100)} %${step}): Die Bauteile sind nur zur Darstellung auseinandergezogen, ihre Lage im Bild ist nicht die Einbaulage`;
   }
 
+  /** Plan und Lagen aus der Analyse (prepare() hat sie gerechnet). */
   private compute(): void {
     const { viewer } = this.deps;
+    if (!this.analysis) return;
     // Ein laufender Schritt gehört zum alten Plan (seine Nummern stimmen nicht mehr)
     if (this.anim?.goal) this.stopAnim();
-    // Strahltest und Hüllquader in Einbaulage. Wer danach etwas zeigen will, ruft show() wieder auf.
+    // Hüllquader in Einbaulage. Wer danach etwas zeigen will, ruft show() wieder auf.
     if (this.shown > 0) viewer.setOffsets(null);
     const parts = viewer.explodeParts();
     const own = parts.filter((p) => p.role !== 'reference');
     const size = diagonal(own);
     this.axis = autoAxis(parts);
-    if (!this.analysis) {
-      const t0 = performance.now();
-      const { dirs, opp } = directions(own);
-      const block = viewer.explodeRays(own.map((p) => p.id), dirs, opp,
-        { eps: Math.max(EPS_MIN, EPS * size), touch: Math.max(TOUCH_MIN, TOUCH * size), samples: SAMPLES });
-      this.analysis = { dirs, opp, block, ms: performance.now() - t0 };
-    }
     const { dirs, opp, block } = this.analysis;
     this.plan = disassemble(own, dirs, opp, block, AXES[this.axis]);
     this.near = layout(own, this.plan, GAP * size);
@@ -820,7 +879,8 @@ export class ExplodeTool {
     const plan = this.plan;
     return {
       active: this.active, amount: this.amount, shown: this.shown, trails: this.trails, axis: this.axis,
-      moving: this.moving, forced: this.forced, animating: !!this.anim, analysisMs: this.analysis ? Math.round(this.analysis.ms) : null,
+      // animating auch während der Analyse: Tests warten so auf die fertige Lage
+      moving: this.moving, forced: this.forced, animating: !!this.anim || !!this.loading, loading: !!this.loading, analysisMs: this.analysis ? Math.round(this.analysis.ms) : null,
       base: plan?.base ?? null,
       steps: plan ? flatSteps(plan) : {},
       spreads: vec(this.near.offsets), far: vec(this.far.offsets),

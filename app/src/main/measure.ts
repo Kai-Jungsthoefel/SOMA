@@ -1,15 +1,16 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import type { MeasureRequest, MeasureResponse } from '../shared/types';
+import type { MeasurePrepared, MeasureRequest, MeasureResponse } from '../shared/types';
 import { pythonExe } from './paths';
 
 const START_TIMEOUT_MS = 60_000; // cadquery zu laden dauert beim ersten Mal einige Sekunden
 const REQUEST_TIMEOUT_MS = 30_000;
+const PREPARE_TIMEOUT_MS = 600_000; // große Baugruppen: Das BREP zu lesen kann Minuten dauern
 
 interface Pending { resolve: (r: MeasureResponse) => void; timer: NodeJS.Timeout }
 
 /**
  * Langlebiger Python-Dienst pro Projekt für exakte Messungen (E24): `python -m soma serve`, JSON-Zeilen über
- * stdin/stdout. Er startet erst bei der ersten Messung (cadquery zu laden kostet Sekunden) und bleibt dann offen.
+ * stdin/stdout. Er startet erst mit dem Messmodus (cadquery zu laden kostet Sekunden) und bleibt dann offen.
  * Stürzt er ab, gilt die laufende Anfrage als fehlgeschlagen, die nächste startet ihn neu. Fehler sind Ergebnisse,
  * keine Ausnahmen: Die Oberfläche zeigt sie an.
  */
@@ -23,16 +24,33 @@ export class MeasureService {
 
   constructor(private readonly cwd: string) {}
 
-  async request(folder: string, req: MeasureRequest): Promise<MeasureResponse> {
+  request(folder: string, req: MeasureRequest): Promise<MeasureResponse> {
+    return this.send({ ...req, folder }, REQUEST_TIMEOUT_MS);
+  }
+
+  /** Den Dienst starten, ohne etwas zu messen (der Messmodus startet ihn beim Einschalten). */
+  async warm(): Promise<MeasurePrepared> {
     if (this.disposed) return { ok: false, error: 'Das Modell ist geschlossen.' };
-    try { await this.start(); } catch (e) { return { ok: false, error: `Der Messdienst ließ sich nicht starten: ${e instanceof Error ? e.message : String(e)}` }; }
+    try { await this.start(); return { ok: true }; }
+    catch (e) { return { ok: false, error: `Der Messdienst ließ sich nicht starten: ${e instanceof Error ? e.message : String(e)}` }; }
+  }
+
+  /** Einen Stand vorab laden. Der Dienst arbeitet der Reihe nach: Messungen danach warten, bis er geladen ist. */
+  async prepare(folder: string, build: string): Promise<MeasurePrepared> {
+    const r = await this.send({ prepare: true, build, folder }, PREPARE_TIMEOUT_MS);
+    return { ok: r.ok, error: r.error, stale: r.stale };
+  }
+
+  private async send(payload: Record<string, unknown>, timeoutMs: number): Promise<MeasureResponse> {
+    const warm = await this.warm();
+    if (!warm.ok) return warm;
     const proc = this.proc;
     if (!proc?.stdin) return { ok: false, error: 'Der Messdienst läuft nicht.' };
     const id = ++this.seq;
     return new Promise((resolve) => {
-      const timer = setTimeout(() => { this.pending.delete(id); resolve({ ok: false, error: 'Der Messdienst antwortet nicht (Zeitlimit).' }); }, REQUEST_TIMEOUT_MS);
+      const timer = setTimeout(() => { this.pending.delete(id); resolve({ ok: false, error: 'Der Messdienst antwortet nicht (Zeitlimit).' }); }, timeoutMs);
       this.pending.set(id, { resolve, timer });
-      proc.stdin!.write(JSON.stringify({ ...req, id, folder }) + '\n');
+      proc.stdin!.write(JSON.stringify({ ...payload, id }) + '\n');
     });
   }
 

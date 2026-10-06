@@ -122,6 +122,8 @@ function registerIpc(ctl: ProjectController): void {
 
   ipcMain.handle('agents:detect', () => detectAgents(terminalEnv(dir())));
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
+  ipcMain.handle('measure:start', () => ctl.measureStart());
+  ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));
   ipcMain.handle('skills:list', () => ctl.skills());
   ipcMain.handle('skills:set', (_e, id: unknown, mode: unknown) => ctl.setSkill(id, mode));
   ipcMain.handle('skills:configure', (_e, id: unknown, values: unknown) => ctl.configureSkill(id, values));

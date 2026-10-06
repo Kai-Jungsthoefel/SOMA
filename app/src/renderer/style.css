@@ -327,6 +327,16 @@ code { font-family:var(--mono); font-size:.95em; }
 #viewer.preview::after { content:''; position:absolute; inset:0; border:2px solid var(--vio); pointer-events:none; z-index:6; }
 #viewer-msg { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--tx2); pointer-events:none; white-space:pre-wrap; text-align:center; z-index:1; max-width:70%; }
 #viewer-msg.error { color:var(--err); }
+/* Ladeanzeige (busy.ts): deckt den Viewer ab, bis die Explosion bereit ist. Unter Banner und Markierung */
+.vbusy { position:absolute; inset:0; z-index:5; display:flex; align-items:center; justify-content:center; background:rgba(18,20,23,.45); }
+.vb-card { position:static; width:min(340px, calc(100% - 32px)); }
+.vb-hd { display:flex; align-items:center; gap:9px; padding:12px 14px 4px; }
+.vb-hd b { font-size:14px; }
+.vb-sub { padding:0 14px; min-height:18px; font-size:12px; color:var(--tx2); overflow-wrap:anywhere; }
+.vb-bar { position:relative; height:4px; margin:10px 14px 0; border-radius:2px; background:var(--s3); overflow:hidden; }
+.vb-bar > div { height:100%; width:0; background:var(--acc); transition:width .15s; }
+.vb-bar.indet > div { width:35%; position:absolute; animation:vb-run 1.2s ease-in-out infinite; transition:none; }
+@keyframes vb-run { from { left:-35%; } to { left:100%; } }
 .float { position:absolute; z-index:2; background:rgba(24,27,31,.95); border:1px solid var(--line2); border-radius:10px; box-shadow:var(--shadow); }
 
 /* Bauteile (Entwurf 2): Baum in der Seitenleiste. Kompakte Zeilen, die Knöpfe erscheinen beim Überfahren
@@ -403,6 +413,10 @@ code { font-family:var(--mono); font-size:.95em; }
 .mc-ico { color:var(--acc-tx); display:flex; }
 .mc-body { padding:0 0 4px; }
 .mc-hint { padding:2px 14px 6px; font-size:12px; color:var(--tx3); }
+/* Vorbereitung des Messens (Messdienst, Geometrie): Zeile mit Sekunden und laufendem Balken */
+.mc-load { padding:2px 0 10px; }
+.mc-load-hd { display:flex; align-items:center; gap:8px; padding:0 14px; font-size:12px; color:var(--tx2); }
+.mc-load .vb-bar { margin-top:8px; }
 .mc-err { margin:2px 12px 6px; padding:8px 10px; border-radius:6px; background:var(--err-tint); color:#ffc4c0; font-size:12px; }
 .mc-title { display:flex; align-items:baseline; gap:8px; padding:2px 14px 6px; min-width:0; }
 .mc-title b { font-size:13px; white-space:nowrap; }

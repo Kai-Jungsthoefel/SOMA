@@ -92,6 +92,7 @@ export interface MeasurePair {
 export interface MeasureResult { build: string; a: MeasureInfo; b?: MeasureInfo; pair?: MeasurePair }
 /** `stale`: Die Anfrage gehört zu einem älteren Build, die Auswahl ist neu zu treffen. */
 export interface MeasureResponse { ok: boolean; result?: MeasureResult; error?: string; stale?: boolean }
+export interface MeasurePrepared { ok: boolean; error?: string; stale?: boolean }
 
 /** Wert einer Einstellung eines Skills: Zahl oder gewählter Eintrag. */
 export type SkillValue = number | string;
@@ -286,7 +287,13 @@ export interface SomaApi {
   };
   agents: { detect(): Promise<AgentInfo[]> };
   /** Exakte Messung über den Python-Dienst (E9, E24). */
-  measure: { query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse> };
+  measure: {
+    query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse>;
+    /** Den Messdienst starten (cadquery laden), noch ohne Modell. Dauert beim ersten Mal einige Sekunden. */
+    start(): Promise<MeasurePrepared>;
+    /** Den Stand vorab in den Messdienst laden, damit der erste Klick nicht darauf wartet (große Baugruppen: Sekunden). */
+    prepare(source: MeasureSource, build: string): Promise<MeasurePrepared>;
+  };
   /** Skills des offenen Modells (E17): auflisten, Stufe wählen (E55). */
   skills: {
     list(): Promise<SkillInfo[]>;

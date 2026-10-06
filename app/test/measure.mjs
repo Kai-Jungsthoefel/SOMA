@@ -51,11 +51,15 @@ try {
   check('„Messen": Modus an, Karte mit Hinweis, Auswahlkarte tritt zurück', s.active && s.text.includes('Klick auf einen Punkt, eine Kante oder eine Fläche')
     && await ev(() => document.getElementById('btn-measure').getAttribute('aria-pressed') === 'true' && getComputedStyle(document.getElementById('selcard')).display === 'none'));
 
-  // 2) Eine Fläche: exakte Werte, Maße des Bauteils. Der erste Aufruf startet den Messdienst.
+  check('Beim Einschalten startet die Vorbereitung (Messdienst, dann Geometrie), sichtbar in der Karte', s.preparing && s.text.includes('Messdienst startet'), s.phase);
+  // Der erste Klick kommt noch während der Vorbereitung: Seine Messung wartet darauf statt ins Zeitlimit zu laufen
+
+  // 2) Eine Fläche: exakte Werte, Maße des Bauteils
   const plateTop = await topFace('Platte', 5);
   await clickAt(plateTop.screen);
   await result(() => !!window.__t.measure().result);
   s = await ms();
+  check('Nach der Vorbereitung: keine Ladezeile, kein Fehler', !s.preparing && !s.phase && !s.error, s.error);
   const expArea = 40 * 30 - 2 * Math.PI * 9;
   check('Klick auf die Oberseite der Platte: Fläche eben, exakter Flächeninhalt, Normale +Z', s.result?.a.type === 'PLANE' && Math.abs(s.result.a.area - expArea) < 1e-6
     && s.text.includes('Fläche · eben') && s.text.includes('+Z'), s.error || `${s.result?.a.area}`);

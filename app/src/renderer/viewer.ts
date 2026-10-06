@@ -84,6 +84,8 @@ export interface RayHit { dist: number; touch: number; inside: number }
 /** Je Richtung: Bauteil → (Bauteil, das ihm in dieser Richtung im Weg steht → Treffer). */
 export type BlockMap = Map<string, Map<string, RayHit>>[];
 
+/** So lange rechnet der Strahltest am Stück, bevor er die Oberfläche wieder zeichnen lässt. */
+const YIELD_MS = 30;
 /** Punkte je Dreieck für den Strahltest (baryzentrisch), wichtigste zuerst: Mitte, nahe den Ecken, nahe den Kanten. */
 const SAMPLE_PATTERN = [[1 / 3, 1 / 3, 1 / 3], [0.7, 0.15, 0.15], [0.15, 0.7, 0.15], [0.15, 0.15, 0.7],
   [0.425, 0.425, 0.15], [0.15, 0.425, 0.425], [0.425, 0.15, 0.425]];
@@ -1465,8 +1467,21 @@ export class Viewer {
    * zählen nicht) gehen Strahlen in jede Richtung, gegen alle Bauteile zugleich (BVH). Trifft ein Strahl von P aus Q im Abstand t,
    * stößt P in dieser Richtung nach t gegen Q, und Q stieße in der Gegenrichtung gegen P. Treffer unter `touch` zählen als
    * Berührung: Dort liegt P an. `opp[i]` ist die Gegenrichtung von `dirs[i]`. Höchstens etwa `samples` Punkte je Bauteil.
+   * Bei großen Baugruppen dauert das Sekunden: Die Rechnung gibt regelmäßig die Oberfläche frei, meldet den Fortschritt (0 bis 1)
+   * und hört auf, sobald `signal` abbricht (Ergebnis dann null).
    */
-  explodeRays(ids: string[], dirs: number[][], opp: number[], opts: { eps: number; touch: number; samples: number }): BlockMap {
+  async explodeRays(ids: string[], dirs: number[][], opp: number[], opts: { eps: number; touch: number; samples: number },
+    ctl: { signal?: AbortSignal; progress?: (f: number) => void } = {}): Promise<BlockMap | null> {
+    let last = performance.now();
+    // Freigeben, damit die Ladeanzeige zeichnet und „Abbrechen“ ankommt. false: abgebrochen. Nur aufrufen, wenn `due()`:
+    // Ein await je Strahlpunkt kostete merklich Zeit
+    const due = () => performance.now() - last >= YIELD_MS;
+    const breathe = async (f: number): Promise<boolean> => {
+      ctl.progress?.(f);
+      await new Promise((r) => setTimeout(r, 0));
+      last = performance.now();
+      return !ctl.signal?.aborted;
+    };
     const chunks = ids.flatMap((id) => { const p = this.parts.get(id); return p ? [{ id, p, w: this.worldOf(p) }] : []; });
     // Dreiecke aller Teile in Einbaulage hintereinander. Die BVH ordnet nur den Index um, die Ecken bleiben: Über ihren
     // Bereich findet ein Treffer sein Bauteil.
@@ -1495,12 +1510,17 @@ export class Viewer {
     };
     const out: BlockMap = dirs.map(() => new Map());
     if (!ni) return out;
+    // Vor dem Aufbau der BVH einmal zeichnen lassen, der dauert bei großen Netzen selbst spürbar
+    if (!await breathe(0)) return null;
     // Die BVH sortiert den Index beim Aufbau um: Die Punkte je Bauteil kommen aus einer Kopie
     const tri = index.slice();
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setIndex(new THREE.BufferAttribute(index, 1));
     const bvh = new MeshBVH(g);
+    // Für den Fortschritt: Zahl der Dreiecke, von denen Strahlen ausgehen
+    const total = range.reduce((n, r) => { const t = (r.i1 - r.i0) / 3; return n + (t ? Math.ceil(t / Math.max(1, Math.ceil(t / opts.samples))) : 0); }, 0) || 1;
+    let done = 0;
     const note = (m: Map<string, Map<string, RayHit>>, a: string, b: string, dist: number, touch: number, inside: number) => {
       let row = m.get(a);
       if (!row) { row = new Map(); m.set(a, row); }
@@ -1519,6 +1539,8 @@ export class Viewer {
       const per = Math.max(1, Math.min(SAMPLE_PATTERN.length, Math.floor(opts.samples / tris)));
       const stride = Math.max(1, Math.ceil(tris / opts.samples));
       for (let t = 0; t < tris; t += stride) {
+        if (due() && !await breathe(done / total)) { g.dispose(); return null; }
+        done++;
         const k = r.i0 + t * 3;
         A.fromArray(pos, tri[k] * 3); B.fromArray(pos, tri[k + 1] * 3); C.fromArray(pos, tri[k + 2] * 3);
         // Der Mesher legt die Dreiecke so, dass die Normale nach außen zeigt (gespiegelte Flächen umgedreht)

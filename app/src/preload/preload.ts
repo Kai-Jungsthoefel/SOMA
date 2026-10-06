@@ -60,7 +60,11 @@ const api: SomaApi = {
     onExit: (cb) => { ipcRenderer.on('term:exit', (_e, id, code) => cb(id, code)); },
   },
   agents: { detect: () => ipcRenderer.invoke('agents:detect') },
-  measure: { query: (source, req) => ipcRenderer.invoke('measure:query', source, req) },
+  measure: {
+    query: (source, req) => ipcRenderer.invoke('measure:query', source, req),
+    start: () => ipcRenderer.invoke('measure:start'),
+    prepare: (source, build) => ipcRenderer.invoke('measure:prepare', source, build),
+  },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     set: (id, mode) => ipcRenderer.invoke('skills:set', id, mode),
