@@ -1,5 +1,6 @@
 import { shell, type BrowserWindow, type WebContents } from 'electron';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type {
   AnimBuildResult, AnimList, ExportResult, GitLog, MeasureEntity, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
@@ -9,7 +10,7 @@ import { affectsAnimation } from '../shared/editable';
 import { AnimBuilder, listResults, readAnimList, rerunResult, samePath } from './animations';
 import { BuildManager, buildIsStale, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
-import { choose, choosePath } from './dialogs';
+import { choose, chooseExportTarget, choosePath, documentsDir } from './dialogs';
 import { GitRepo } from './git';
 import { MeasureService } from './measure';
 import { previewsDir, skillBackupsDir, skillsDir } from './paths';
@@ -145,17 +146,62 @@ export class ProjectController {
     else await shell.openPath(s.dir);
   }
 
-  /** Einzelexport über `soma export` (E34). Der Export baut das Modell selbst, der Viewer bleibt davon unberührt. */
+  /**
+   * Export über `soma export` (E34) mit Dateidialog: ein Bauteil in eine gewählte Datei, alle Bauteile (ohne Referenz- und
+   * Zukaufteile) als je eine Datei in einen gewählten Ordner. soma schreibt in einen leeren Ordner unter Temp, die App
+   * kopiert danach. So landet nichts in exports/ des Projekts, und eine vorhandene Datei wird nie ohne Rückfrage ersetzt.
+   */
   async exportModel(format: string, part: string | null): Promise<ExportResult> {
     const s = this.need();
     if (!/^[a-z0-9]{2,5}$/.test(format)) return { ok: false, files: [], error: `Unbekanntes Format: ${format}` };
-    // `--` vor dem Namen: Bauteilnamen dürfen mit einem Minus beginnen, ohne als Option zu gelten
-    const args = ['export', '--format', format, '--project', s.dir, ...(part ? ['--', part] : ['--all'])];
-    const r = await runSoma(args, s.dir, 5 * 60 * 1000);
-    const files = [...r.out.matchAll(/^exportiert: (.+)$/gm)].map((m) => m[1].trim());
-    if (r.ok) return { ok: true, files };
-    const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
-    return { ok: false, files, error: msg || 'Export fehlgeschlagen' };
+    const last = getAppState(s.id).exportDir;
+    const startDir = last && fs.existsSync(last) ? last : documentsDir();
+    const target = await chooseExportTarget(this.getWin(), part
+      ? { kind: 'file', title: `„${part}“ exportieren`, defaultPath: path.join(startDir, `${safeFileName(part)}.${format}`), ext: format }
+      : { kind: 'dir', title: 'Ordner für den Export wählen', defaultPath: startDir });
+    if (!target) return { ok: false, files: [], cancelled: true };
+    let tmp: string | null = null;
+    try {
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-export-'));
+      // `--` vor dem Namen: Bauteilnamen dürfen mit einem Minus beginnen, ohne als Option zu gelten
+      const args = ['export', '--format', format, '--project', s.dir, '--out', tmp, ...(part ? ['--', part] : ['--all'])];
+      const r = await runSoma(args, s.dir, 5 * 60 * 1000);
+      if (!r.ok) {
+        const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
+        return { ok: false, files: [], error: msg || 'Export fehlgeschlagen' };
+      }
+      // Alles aus dem Ordner übernehmen, nicht nur die gemeldeten Dateien (glTF kann eine .bin daneben schreiben)
+      const dir = tmp;
+      const made = fs.readdirSync(dir).filter((n) => fs.statSync(path.join(dir, n)).isFile());
+      if (!made.length) return { ok: false, files: [], error: 'soma hat keine Datei geschrieben.' };
+      const plan: [string, string][] = [];
+      if (part) {
+        const main = made.find((n) => n.toLowerCase().endsWith(`.${format}`)) ?? made[0];
+        const dest = path.extname(target) ? target : `${target}.${format}`;
+        plan.push([path.join(dir, main), dest]);
+        for (const n of made) if (n !== main) plan.push([path.join(dir, n), path.join(path.dirname(dest), n)]);
+      } else for (const n of made) plan.push([path.join(dir, n), path.join(target, n)]);
+      // Beim Einzelexport hat der Speichern-Dialog für die Hauptdatei schon gefragt, alles andere fragt die App
+      const exists = plan.filter(([, d], i) => !(part && i === 0) && fs.existsSync(d)).map(([, d]) => path.basename(d));
+      if (exists.length) {
+        const c = await choose(this.getWin(), {
+          title: 'Exportieren', message: exists.length === 1 ? 'Diese Datei gibt es im Ordner schon:' : `Diese ${exists.length} Dateien gibt es im Ordner schon:`,
+          detail: `${exists.slice(0, 10).join('\n')}${exists.length > 10 ? `\n… und ${exists.length - 10} weitere` : ''}`, buttons: ['Ersetzen', 'Abbrechen'],
+        });
+        if (c !== 0) return { ok: false, files: [], cancelled: true };
+      }
+      for (const [src, dest] of plan) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(src, dest);
+      }
+      const dest = part ? plan[0][1] : target;
+      patchAppState(s.id, { exportDir: part ? path.dirname(dest) : target });
+      return { ok: true, files: plan.map(([, d]) => d), target: dest };
+    } catch (e) {
+      return { ok: false, files: [], error: `Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}` };
+    } finally {
+      if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    }
   }
 
   /** Speichern: Snapshot im Verlauf, dann ZIP. Fragt beim ersten Mal nach dem Ort. */

@@ -31,7 +31,11 @@ export interface BuildStatus {
 }
 
 /** Einzelexport über `soma export` (E34). `files` relativ zum Projekt. */
-export interface ExportResult { ok: boolean; files: string[]; error?: string }
+/**
+ * Export über einen Dateidialog. `files`: geschriebene Dateien mit absolutem Pfad, `target`: gewählte Datei oder gewählter
+ * Ordner. `cancelled`: Dialog oder Rückfrage abgebrochen, nichts geschrieben.
+ */
+export interface ExportResult { ok: boolean; files: string[]; target?: string; cancelled?: boolean; error?: string }
 /** Dateien, die per Ziehen nach inputs/ kopiert wurden (E33). */
 export interface ImportResult { files: string[]; errors: string[] }
 /**

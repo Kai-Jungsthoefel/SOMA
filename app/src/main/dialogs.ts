@@ -28,6 +28,24 @@ export async function choosePath(win: BrowserWindow | null, kind: 'save' | 'open
   return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
 }
 
+/**
+ * Ziel eines Exports: eine Datei (ein Bauteil) oder ein Ordner (alle Bauteile, je eine Datei). Das Betriebssystem fragt
+ * beim Speichern selbst nach, wenn die Datei schon da ist. `defaultPath` ist absolut (Ordner oder Ordner plus Dateiname).
+ */
+export async function chooseExportTarget(win: BrowserWindow | null, o: { kind: 'file' | 'dir'; title: string; defaultPath: string; ext?: string; label?: string }): Promise<string | null> {
+  if (testMode()) return nextAnswer<string | null>(o.title);
+  if (o.kind === 'file') {
+    const opts = { title: o.title, defaultPath: o.defaultPath, filters: o.ext ? [{ name: o.label ?? o.ext.toUpperCase(), extensions: [o.ext] }, { name: 'Alle Dateien', extensions: ['*'] }] : undefined };
+    const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    return r.canceled || !r.filePath ? null : r.filePath;
+  }
+  const opts = { title: o.title, defaultPath: o.defaultPath, buttonLabel: 'Hierhin exportieren', properties: ['openDirectory' as const, 'createDirectory' as const] };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+}
+
+export const documentsDir = () => app.getPath('documents');
+
 /** Liefert den Index des gewählten Knopfs. Der letzte Knopf gilt als Abbrechen (Esc, Fenster schließen). */
 export async function choose(win: BrowserWindow | null, o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> {
   if (testMode()) return nextAnswer<number>(o.title);

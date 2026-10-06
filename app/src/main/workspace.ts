@@ -27,7 +27,8 @@ export interface ProjectJson {
 }
 
 /** Zweite Kopie des Projektzustands in den App-Daten (E27) plus Angaben, die nur die App braucht. */
-export interface AppState { zipPath?: string; savedHead?: string | null; savedAt?: number }
+/** `exportDir`: Ordner des letzten Exports, dort beginnt der nächste Dateidialog. */
+export interface AppState { zipPath?: string; savedHead?: string | null; savedAt?: number; exportDir?: string }
 interface ProjectState extends ProjectJson { app?: AppState }
 
 const readJson = <T>(file: string): T | null => {
