@@ -9,15 +9,36 @@ import struct
 
 import numpy as np
 from OCP.BRep import BRep_Tool
-from OCP.BRepAdaptor import BRepAdaptor_Curve
+from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.GCPnts import GCPnts_TangentialDeflection
+from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Plane
 from OCP.TopAbs import TopAbs_REVERSED
 from OCP.TopLoc import TopLoc_Location
 
 
 def srgb_to_linear(c):
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _direction_of(face):
+    """Normale einer ebenen Flaeche (nach aussen) oder Achse eines Zylinders oder Kegels. Die Explosionsansicht nimmt sie als
+    Richtungen, in denen ein Teil herauskommen kann (schraeg eingesetzte Stifte, Wellen, Platten)."""
+    try:
+        s = BRepAdaptor_Surface(face.wrapped)
+        kind = s.GetType()
+        if kind == GeomAbs_Plane:
+            n = face.normalAt()
+            return dict(normal=[round(n.x, 6) + 0.0, round(n.y, 6) + 0.0, round(n.z, 6) + 0.0])
+        if kind == GeomAbs_Cylinder:
+            d = s.Cylinder().Axis().Direction()
+        elif kind == GeomAbs_Cone:
+            d = s.Cone().Axis().Direction()
+        else:
+            return {}
+        return dict(axis=[round(d.X(), 6) + 0.0, round(d.Y(), 6) + 0.0, round(d.Z(), 6) + 0.0])
+    except Exception:  # unbrauchbare Flaeche: dann eben ohne Richtung, der Rest der Vernetzung geht weiter
+        return {}
 
 
 def mesh_shape(shape, tol=0.05, ang=0.3):
@@ -54,11 +75,13 @@ def mesh_shape(shape, tol=0.05, ang=0.3):
         vn = np.where(ln > 1e-12, vn / np.maximum(ln, 1e-12), 0).astype(np.float32)
 
         c = face.Center()
-        faces.append(dict(
+        entry = dict(
             id=fi, surface=face.geomType(), area=round(face.Area(), 4),
             center=[round(c.x, 4), round(c.y, 4), round(c.z, 4)],
             triStart=tri_total, triCount=int(t.shape[0]),
-        ))
+        )
+        entry.update(_direction_of(face))
+        faces.append(entry)
         pos.append(p); nrm.append(vn); idx.append(t + voff)
         voff += n
         tri_total += t.shape[0]
