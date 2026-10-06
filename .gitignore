@@ -23,3 +23,5 @@ Thumbs.db
 # Testausgaben, die sich bei jedem Lauf ändern
 app/test/versions.png
 app/test/shots/
+
+examples/
