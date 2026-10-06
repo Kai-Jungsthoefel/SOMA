@@ -1,6 +1,6 @@
 import type { ResultEntry } from '../shared/types';
 import { resultColor } from './overlay';
-import { fmtScale, type ResultLayer, type ResultProbe } from './resultview';
+import { fmtScale, type ResultField, type ResultLayer, type ResultProbe } from './resultview';
 import { el } from './ui';
 
 // Ergebnisse von `soma analyze` im Viewer (E58): auswählen, farbig zeigen, Wert unter dem Zeiger, an den Agenten geben.
@@ -12,6 +12,8 @@ interface Ui {
   rerun: HTMLButtonElement; agent: HTMLButtonElement;
   /** Nur FEM: Überhöhung der Verformung und Lastfall ein/aus. */
   femRow: HTMLElement; deform: HTMLSelectElement; bcs: HTMLButtonElement;
+  /** Farbskala: gezeigte Größe (nur FEM), Spanne (automatisch, Min bis Max, eigene) und die eigenen Grenzen. */
+  field: HTMLSelectElement; range: HTMLSelectElement; custom: HTMLElement; lo: HTMLInputElement; hi: HTMLInputElement;
   viewerEl: HTMLElement;
 }
 interface Deps {
@@ -31,10 +33,16 @@ const num = (v: number, unit: string) => (+v.toFixed(unit === '°' ? 1 : 2) + 0)
 const withUnit = (v: number, unit: string) => `${num(v, unit)}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
 const dot = (v: number, unit: string) => `${v.toFixed(unit === '°' ? 1 : 2)}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
 const de = (v: number, digits: number) => (+v.toFixed(digits) + 0).toLocaleString('de-DE');
-/** Spannung und Verschiebung an einer Stelle (FEM). */
-const femAt = (p: ResultProbe) => (p.stress != null ? ` · ${de(p.stress, 1)} MPa` : '') + (p.disp != null ? ` · ${de(p.disp, 3)} mm` : '');
 /** Höchster Sicherheitsfaktor in der Datei (soma.fem VALUE_CAP): Dort ist kaum Spannung, der Wert selbst sagt nichts. */
 const SAFETY_CAP = 99;
+const safety = (v: number) => (v >= SAFETY_CAP ? `über ${SAFETY_CAP}` : de(v, 2));
+/** FEM an einer Stelle: die gezeigte Größe zuerst, dann die andere und die Verschiebung. */
+const femAt = (p: ResultProbe, field: ResultField, label: boolean) => {
+  const stress = p.stress != null ? `${de(p.stress, 1)} MPa` : null;
+  const sf = `${label || field === 'stress' ? 'Sicherheit ' : ''}${safety(p.value)}`;
+  return [...(field === 'stress' && stress ? [stress, sf] : [sf, stress]), p.disp != null ? `${de(p.disp, 3)} mm` : null].filter(Boolean).join(' · ');
+};
+type RangeMode = 'auto' | 'minmax' | 'custom';
 /** Abstand des Schilds vom Zeiger (px): neben den Armen des Fadenkreuzes, nicht darauf. */
 const TIP_GAP = 14;
 
@@ -48,6 +56,11 @@ export class ResultTool {
   private busy = false;
   /** Beim nächsten Laden dieses Ergebnis zeigen (Wahl im Umschalter). */
   private want: string | null = null;
+  // Farbskala: Die Wahl gilt über Ergebnisse hinweg, eigene Grenzen nur für dasselbe Ergebnis und dieselbe Größe
+  // (nach „Neu berechnen“ bleibt die Skala, die Farben bleiben vergleichbar)
+  private field: ResultField = 'value';
+  private mode: RangeMode = 'auto';
+  private custom: { key: string; range: [number, number] } | null = null;
   // Schild am Zeiger: Der Wert steht dort, wo man hinschaut, die Zeile in der Karte bleibt für das Merken per Klick.
   // Ein einziges Element, das nur verschoben und per textContent befüllt wird (Bauteilnamen kommen aus dem Projekt).
   private readonly tipDot = el('span', { className: 'rs-tip-dot' });
@@ -62,6 +75,22 @@ export class ResultTool {
     ui.agent.addEventListener('click', () => { const t = this.agentNote(); if (t) d.insert(t); });
     ui.deform.addEventListener('change', () => { d.layer.setScale(Number(ui.deform.value) || 0); this.hideTip(); });
     ui.bcs.addEventListener('click', () => { d.layer.setBcsVisible(!d.layer.bcsVisible); ui.bcs.setAttribute('aria-pressed', String(d.layer.bcsVisible)); });
+    ui.field.addEventListener('change', () => { this.field = ui.field.value === 'stress' ? 'stress' : 'value'; this.applyScale(); this.render(); });
+    ui.range.addEventListener('change', () => { this.mode = ui.range.value as RangeMode; this.applyScale(); this.render(); });
+    // Eigene Grenzen gelten sofort beim Tippen, solange sie gültig sind (von kleiner als bis), sonst rot umrandet und unverändert
+    const typed = () => {
+      const lo = ui.lo.valueAsNumber, hi = ui.hi.valueAsNumber;
+      const ok = Number.isFinite(lo) && Number.isFinite(hi) && lo < hi;
+      ui.lo.classList.toggle('bad', !ok);
+      ui.hi.classList.toggle('bad', !ok);
+      if (!ok || !this.custom) return;
+      this.custom.range = [lo, hi];
+      this.applyScale();
+      this.renderLegend();
+      this.hideTip();
+    };
+    ui.lo.addEventListener('input', typed);
+    ui.hi.addEventListener('input', typed);
     ui.viewerEl.append(this.tip);
     let queued = false, pos: [number, number] | null = null, away = true;
     // Zeiger nicht mehr über dem Bild: Schild weg, die Karte zeigt wieder die gemerkte Stelle (wichtig vor „An Agent geben“)
@@ -150,6 +179,7 @@ export class ResultTool {
       if (!this.active) { this.d.layer.hide(); return; }
       if (seq !== this.loading) return;
       this.current = e;
+      this.applyScale();
       this.ui.select.value = e.id;
       this.pinned = null;
       this.d.changed();
@@ -169,28 +199,14 @@ export class ResultTool {
     // Anderes Ergebnis oder neu berechnet: Der Wert im Schild gilt nicht mehr, die nächste Bewegung holt den neuen
     this.hideTip();
     this.ui.hint.classList.toggle('warn', !!r?.stale);
+    // Ohne Ergebnis keine Skala zum Einstellen
+    this.ui.range.parentElement!.hidden = !r;
     if (!r) {
       this.ui.hint.textContent = 'Noch kein Ergebnis. Der Agent erzeugt es mit soma analyze (Überhang, Wandstärke, Abstand, Festigkeit mit FEM).';
       return;
     }
     this.ui.hint.textContent = this.busy ? 'Wird neu berechnet …' : r.stale ? 'Älter als der Code. „Neu berechnen“ wertet das aktuelle Modell aus.' : `soma ${r.command.join(' ')}`;
-    // Legende: Verlauf über die Spanne, Grenzwert als Strich
-    const [lo, hi] = r.range;
-    const stops = Array.from({ length: 24 }, (_, i) => {
-      const c = resultColor(lo + ((hi - lo) * i) / 23, r);
-      return `rgb(${c.map(Math.round).join(',')}) ${((i / 23) * 100).toFixed(1)}%`;
-    });
-    const bar = el('div', { className: 'rs-bar' });
-    bar.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
-    const mark = el('div', { className: 'rs-mark' });
-    mark.style.left = `${Math.max(0, Math.min(100, ((r.threshold - lo) / (hi - lo || 1)) * 100))}%`;
-    bar.append(mark);
-    this.ui.legend.append(
-      el('div', { className: 'rs-q', textContent: r.unit ? `${r.quantity} (${r.unit})` : r.quantity }), bar,
-      el('div', { className: 'rs-scale' }, el('span', { textContent: withUnit(lo, r.unit) }),
-        el('span', { className: 'rs-thr', textContent: `Grenze ${withUnit(r.threshold, r.unit)}, kritisch ${r.bad === 'high' ? 'darüber' : 'darunter'}` }),
-        el('span', { textContent: withUnit(hi, r.unit) })),
-    );
+    this.renderLegend();
     for (const p of r.parts) {
       const range = p.min != null && p.max != null ? `${withUnit(p.min, r.unit)} bis ${withUnit(p.max, r.unit)}` : 'keine Werte';
       const crit = p.critical > 0 ? `${(p.critical / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })} cm² kritisch` : 'nichts kritisch';
@@ -204,6 +220,61 @@ export class ResultTool {
     }
     this.renderFem(r);
     this.showProbe(this.pinned, true);
+  }
+
+  /** Legende: Verlauf über die Spanne der gezeigten Größe, Grenzwert als Strich. */
+  private renderLegend(): void {
+    this.ui.legend.replaceChildren();
+    const v = this.d.layer.view;
+    if (!v || !this.current) return;
+    const [lo, hi] = v.range;
+    const stops = Array.from({ length: 24 }, (_, i) => {
+      const c = resultColor(lo + ((hi - lo) * i) / 23, v);
+      return `rgb(${c.map(Math.round).join(',')}) ${((i / 23) * 100).toFixed(1)}%`;
+    });
+    const bar = el('div', { className: 'rs-bar' });
+    bar.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+    const mark = el('div', { className: 'rs-mark' });
+    // Grenzwert außerhalb einer gewählten Spanne: kein Strich am Rand, der dort eine Grenze vortäuschen würde
+    mark.hidden = v.threshold < lo || v.threshold > hi;
+    mark.style.left = `${Math.max(0, Math.min(100, ((v.threshold - lo) / (hi - lo || 1)) * 100))}%`;
+    bar.append(mark);
+    const weakest = this.d.layer.field === 'stress' && this.d.layer.stressLimitMixed ? ' (schwächster Werkstoff)' : '';
+    // Gewählte Spanne: Rot heißt dort „oberes Ende der Skala“, nicht kritisch. Das steht dabei
+    const thr = `Grenze ${withUnit(v.threshold, v.unit)}${weakest}, ${v.ramp ? 'Farbe über die Spanne' : `kritisch ${v.bad === 'high' ? 'darüber' : 'darunter'}`}`;
+    this.ui.legend.append(
+      el('div', { className: 'rs-q', textContent: v.unit ? `${v.quantity} (${v.unit})` : v.quantity }), bar,
+      el('div', { className: 'rs-scale' }, el('span', { textContent: withUnit(lo, v.unit) }),
+        el('span', { className: 'rs-thr', textContent: thr }),
+        el('span', { textContent: withUnit(hi, v.unit) })),
+    );
+  }
+
+  /** Größe und Spanne an die Ebene geben und die Auswahl in der Karte nachziehen. */
+  private applyScale(): void {
+    const l = this.d.layer, r = this.current;
+    if (!l.meta || !r) return;
+    const field: ResultField = this.field === 'stress' && l.canStress ? 'stress' : 'value';
+    let range: [number, number] | null = null;
+    if (this.mode === 'minmax') range = l.dataRange(field);
+    else if (this.mode === 'custom') {
+      const key = `${r.id}/${field}`;
+      if (this.custom?.key !== key) this.custom = { key, range: l.autoRange(field).map((x) => +x.toPrecision(3)) as [number, number] };
+      range = this.custom.range;
+    }
+    l.setDisplay(field, range);
+    this.ui.field.hidden = !l.canStress;
+    this.ui.field.value = field;
+    this.ui.range.value = this.mode;
+    this.ui.custom.hidden = this.mode !== 'custom';
+    // Beim Tippen nicht überschreiben (aus „1.“ würde „1“)
+    const typing = document.activeElement === this.ui.lo || document.activeElement === this.ui.hi;
+    if (this.custom && this.mode === 'custom' && !typing) {
+      this.ui.lo.value = String(this.custom.range[0]);
+      this.ui.hi.value = String(this.custom.range[1]);
+      this.ui.lo.classList.remove('bad');
+      this.ui.hi.classList.remove('bad');
+    }
   }
 
   /** FEM: Lastfall und Hinweise in der Karte, Wahl der Überhöhung. */
@@ -248,9 +319,10 @@ export class ResultTool {
   private showTip(p: ResultProbe | null, at: [number, number]): void {
     const r = this.current;
     if (!p || !r) { this.hideTip(); return; }
-    this.tipVal.textContent = (r.fem && p.value >= SAFETY_CAP ? `über ${SAFETY_CAP}` : withUnit(p.value, r.unit)) + femAt(p);
+    const l = this.d.layer;
+    this.tipVal.textContent = r.fem ? femAt(p, l.field, false) : withUnit(p.value, r.unit);
     this.tipName.textContent = p.name;
-    this.tipDot.style.background = `rgb(${resultColor(p.value, r).map(Math.round).join(',')})`;
+    this.tipDot.style.background = `rgb(${resultColor(l.shown(p), l.view ?? r).map(Math.round).join(',')})`;
     this.tip.hidden = false;
     // Rechts oberhalb wie die Messbeschriftung, am Rand des Viewers auf die andere Seite, damit nichts abgeschnitten wird
     const v = this.ui.viewerEl.getBoundingClientRect();
@@ -268,7 +340,7 @@ export class ResultTool {
 
   private probeText(p: ResultProbe, pinned: boolean): string {
     const r = this.current!;
-    const what = r.fem ? `Sicherheit ${p.value >= SAFETY_CAP ? `über ${SAFETY_CAP}` : withUnit(p.value, r.unit)}${femAt(p)}` : withUnit(p.value, r.unit);
+    const what = r.fem ? femAt(p, this.d.layer.field, true) : withUnit(p.value, r.unit);
     return `${pinned ? 'Gewählt' : 'Zeiger'}: ${p.name}, ${what} bei (${p.point.map((v) => (v + 0).toLocaleString('de-DE')).join('; ')})`;
   }
 
@@ -308,6 +380,8 @@ export class ResultTool {
       rows: [...this.ui.summary.querySelectorAll('.rs-row')].map((x) => x.textContent), probe: this.ui.probe.textContent, hint: this.ui.hint.textContent,
       note: this.agentNote(), meta: this.d.layer.meta ? { threshold: this.d.layer.meta.threshold, unit: this.d.layer.meta.unit } : null,
       tip: this.tip.hidden ? null : `${this.tipVal.textContent} · ${this.tipName.textContent}`,
+      scale: { field: this.d.layer.field, mode: this.mode, canStress: this.d.layer.canStress, range: this.d.layer.view?.range ?? null,
+        threshold: this.d.layer.view?.threshold ?? null, unit: this.d.layer.view?.unit ?? null, legend: this.ui.legend.textContent },
       fem: this.ui.femRow.hidden ? null : {
         deform: this.ui.deform.value, options: [...this.ui.deform.options].map((o) => o.textContent), bcs: this.ui.bcs.getAttribute('aria-pressed') === 'true',
         scale: this.d.layer.scale, notes: [...this.ui.summary.querySelectorAll('.rs-note')].map((x) => x.textContent),

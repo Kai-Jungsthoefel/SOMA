@@ -137,6 +137,50 @@ try {
   check('Unverformt und Lastfall aus', rs.fem.scale === 0 && rs.fem.bcs === false, JSON.stringify(rs.fem));
   await domClick('btn-result-bcs');
 
+  // Farbskala: Spannung statt Sicherheit (Grenze 250 / 2 = 125 MPa, kritisch darüber), Spanne Min bis Max und eigene
+  const pick = (id, v) => ev((a) => { const s = document.getElementById(a.id); s.value = a.v; s.dispatchEvent(new Event('change')); }, { id, v });
+  check('Skala automatisch: Sicherheit, Spanne der Auswertung', rs.scale.field === 'value' && rs.scale.mode === 'auto' && rs.scale.canStress
+    && rs.scale.range[0] === 0 && rs.scale.threshold === 2, JSON.stringify(rs.scale));
+  await pick('result-field', 'stress');
+  rs = await ev(() => window.__t.result());
+  check('Spannung: MPa, Grenze 125 MPa kritisch darüber, Skala 0 bis 250', rs.scale.field === 'stress' && rs.scale.unit === 'MPa'
+    && rs.scale.threshold === 125 && rs.scale.range.join() === '0,250' && rs.scale.legend.includes('Vergleichsspannung (von Mises) (MPa)')
+    && rs.scale.legend.includes('Grenze 125 MPa, kritisch darüber'), JSON.stringify(rs.scale));
+  await ev(() => window.__t.viewer.setView('front'));
+  await sleep(300);
+  const pin2 = await ev((p) => window.__t.resultPin(p.x, p.y), at);
+  await ev(() => window.__t.viewer.setView('iso'));
+  rs = await ev(() => window.__t.result());
+  check('Stelle bei Spannung: MPa zuerst, Sicherheit danach', pin2?.stress != null && /: Balken, \d+,\d MPa · Sicherheit /.test(rs.probe), rs.probe);
+  await pick('result-range', 'minmax');
+  rs = await ev(() => window.__t.result());
+  check('Min bis Max: Spanne der Spannungen im Modell (bis rund 30 MPa)', rs.scale.mode === 'minmax' && rs.scale.range[0] >= 0 && rs.scale.range[0] < 5
+    && near(rs.scale.range[1], 30, 6), JSON.stringify(rs.scale));
+  await pick('result-range', 'custom');
+  rs = await ev(() => window.__t.result());
+  const shownInputs = await ev(() => [document.getElementById('result-custom').hidden, document.getElementById('result-lo').value, document.getElementById('result-hi').value]);
+  check('Eigene Skala: Felder sichtbar, vorbelegt mit der automatischen Spanne', shownInputs[0] === false && shownInputs[1] === '0' && shownInputs[2] === '250'
+    && rs.scale.range.join() === '0,250', JSON.stringify(shownInputs));
+  const typeIn = (id, v) => ev((a) => { const s = document.getElementById(a.id); s.value = a.v; s.dispatchEvent(new Event('input')); }, { id, v });
+  await typeIn('result-hi', '40');
+  await typeIn('result-lo', '10');
+  rs = await ev(() => window.__t.result());
+  // Farben über die Spanne: Das untere Ende ist grau, das obere rot, obwohl der Grenzwert weit darüber liegt
+  const ends = await ev(() => getComputedStyle(document.querySelector('#result-legend .rs-bar')).backgroundImage.match(/rgb\([^)]*\)/g));
+  check('Eigene Skala 10 bis 40 MPa gilt sofort, Farbe über die Spanne bis Rot, Grenze außerhalb ohne Strich', rs.scale.range.join() === '10,40'
+    && rs.scale.legend.includes('Farbe über die Spanne') && ends.at(-1) === 'rgb(240, 116, 112)'
+    && await ev(() => document.querySelector('#result-legend .rs-mark').hidden), JSON.stringify(rs.scale) + ends?.join(' '));
+  await shot('fem-2');
+  await typeIn('result-lo', '50');
+  rs = await ev(() => window.__t.result());
+  check('Von größer als bis: rot umrandet, Skala bleibt', rs.scale.range.join() === '10,40' && await ev(() => document.getElementById('result-lo').classList.contains('bad')), JSON.stringify(rs.scale));
+  await typeIn('result-lo', '10');
+  await pick('result-field', 'value');
+  rs = await ev(() => window.__t.result());
+  check('Zurück zur Sicherheit: eigene Skala neu aus deren Spanne', rs.scale.field === 'value' && rs.scale.range[0] === 0 && rs.scale.threshold === 2
+    && await ev(() => document.getElementById('result-hi').value) === String(rs.scale.range[1]), JSON.stringify(rs.scale));
+  await pick('result-range', 'auto');
+
   // 5) soma render --result: Bild mit Legende
   r = soma(['render', '--result', 'balken']);
   check('soma render --result balken: Bild 1280 x 800', r.status === 0 && JSON.stringify(pngSize(path.join(dir, 'renders', 'ergebnis-balken.png'))) === '[1280,800]', r.stdout + r.stderr);

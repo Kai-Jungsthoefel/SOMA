@@ -113,10 +113,19 @@ export function paintOverlay(g: CanvasRenderingContext2D, w: number, h: number, 
 const OK = [0x5c, 0xc9, 0x8b], WARN = [0xe8, 0xc5, 0x47], ERR = [0xf0, 0x74, 0x70], DEEP = [0xa8, 0x2c, 0x2c], FAR = [0x9a, 0xa4, 0xae], NEUTRAL = [0x6f, 0x8f, 0xb8];
 const mix = (a: number[], b: number[], t: number) => a.map((v, i) => v + (b[i] - v) * Math.max(0, Math.min(1, t)));
 
-/** Farbe eines Werts (RGB 0..255): kritisch rot (tiefer, je weiter), im Übergang gelb, sonst grün bis grau. */
-export function resultColor(v: number, m: Pick<ResultMeta, 'bad' | 'threshold' | 'range' | 'neutral'>): number[] {
+/**
+ * Farbe eines Werts (RGB 0..255): kritisch rot (tiefer, je weiter), im Übergang gelb, sonst grün bis grau. Mit `ramp` (selbst
+ * gewählte Spanne) läuft die Farbe gleichmäßig über die Spanne von Grau (gute Seite) bis Rot (schlechte Seite), unabhängig vom
+ * Grenzwert: So zeigt auch ein sicheres Teil, wo es belastet ist.
+ */
+export function resultColor(v: number, m: Pick<ResultMeta, 'bad' | 'threshold' | 'range' | 'neutral'> & { ramp?: boolean }): number[] {
   if (m.neutral && v >= m.neutral[0] && v <= m.neutral[1]) return NEUTRAL;
   const [lo, hi] = m.range;
+  if (m.ramp) {
+    const t = (v - lo) / (hi - lo || 1);
+    const b = m.bad === 'low' ? 1 - t : t; // 0 gut, 1 schlecht
+    return b < 1 / 3 ? mix(FAR, OK, b * 3) : b < 2 / 3 ? mix(OK, WARN, b * 3 - 1) : mix(WARN, ERR, b * 3 - 2);
+  }
   // Abstand vom Grenzwert in Richtung „gut“ (positiv) bzw. „schlecht“ (negativ), auf die Spanne bezogen
   const good = m.bad === 'low' ? v - m.threshold : m.threshold - v;
   const spanGood = Math.max(1e-9, m.bad === 'low' ? hi - m.threshold : m.threshold - lo);

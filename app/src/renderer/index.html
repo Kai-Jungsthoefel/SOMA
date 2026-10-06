@@ -236,6 +236,17 @@
             <select id="result-select" class="an-select" aria-label="Ergebnis wählen"></select>
             <button id="btn-result-close" class="ibtn s" aria-label="Analyse beenden" title="Analyse beenden (zeigt wieder das Modell)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
           <div id="result-legend" class="rs-legend"></div>
+          <!-- Farbskala: gezeigte Größe (nur FEM: Sicherheit oder Vergleichsspannung) und Spanne der Färbung -->
+          <div id="result-scale" class="an-opts rs-fem rs-opts">
+            <select id="result-field" class="an-speed" aria-label="Größe" title="Gezeigte Größe: Sicherheitsfaktor oder Vergleichsspannung nach von Mises" hidden>
+              <option value="value">Sicherheit</option><option value="stress">Spannung</option></select>
+            <select id="result-range" class="an-speed" aria-label="Spanne der Farbskala" title="Spanne der Färbung: wie von der Auswertung vorgeschlagen, vom kleinsten bis zum größten Wert oder selbst gewählt">
+              <option value="auto">Skala automatisch</option><option value="minmax">Skala Min bis Max</option><option value="custom">Skala selbst wählen</option></select>
+            <span id="result-custom" class="rs-custom" hidden>
+              <input id="result-lo" class="an-speed rs-num" type="number" step="any" aria-label="Skala von" title="Unteres Ende der Farbskala">
+              <span>bis</span>
+              <input id="result-hi" class="an-speed rs-num" type="number" step="any" aria-label="Skala bis" title="Oberes Ende der Farbskala"></span>
+          </div>
           <!-- Nur bei FEM (E65): Verformung überhöht zeigen, Lastfall ein- und ausblenden -->
           <div id="result-fem" class="an-opts rs-fem" hidden>
             <select id="result-deform" class="an-speed" aria-label="Verformung" title="Verformung: unverformt, in echter Größe oder überhöht, damit man sie sieht"></select>

@@ -521,6 +521,8 @@ const resultTool = new ResultTool({
   legend: $('result-legend'), summary: $('result-summary'), probe: $('result-probe'), hint: $('result-hint'),
   rerun: $<HTMLButtonElement>('btn-result-rerun'), agent: $<HTMLButtonElement>('btn-result-agent'), viewerEl: $('viewer'),
   femRow: $('result-fem'), deform: $<HTMLSelectElement>('result-deform'), bcs: $<HTMLButtonElement>('btn-result-bcs'),
+  field: $<HTMLSelectElement>('result-field'), range: $<HTMLSelectElement>('result-range'), custom: $('result-custom'),
+  lo: $<HTMLInputElement>('result-lo'), hi: $<HTMLInputElement>('result-hi'),
 }, {
   layer: resultLayer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
   beforeOn: () => endOthers('result'), insert: (t) => insertToAgent(t), toast,

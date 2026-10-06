@@ -522,6 +522,10 @@ code { font-family:var(--mono); font-size:.95em; }
 .rs-row.bad span { color:var(--err); }
 /* FEM (E65): Lastfall in Blau wie die Markierungen im Bild, Hinweise umbrechend und leiser */
 .rs-fem select { font-family:var(--sans); }
+.rs-opts { flex-wrap:wrap; row-gap:6px; }
+.rs-custom { display:flex; align-items:center; gap:4px; font-size:12px; color:var(--tx3); }
+.rs-num { width:64px; }
+.rs-num.bad { border-color:var(--err); }
 .rs-row.bc b { color:var(--mk-blue); font-weight:500; }
 .rs-note { padding:2px 14px; font-size:11.5px; line-height:1.35; color:var(--tx3); }
 .rs-probe { margin:4px 12px 2px; padding:6px 8px; border-radius:6px; background:var(--term); font-size:12px; color:var(--tx2); min-height:28px; }

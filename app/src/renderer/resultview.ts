@@ -21,6 +21,9 @@ export interface ResultProbe {
   stress?: number; disp?: number;
 }
 
+/** Gezeigte Größe: der Wert der Auswertung (bei FEM die Sicherheit) oder bei FEM die Vergleichsspannung nach von Mises. */
+export type ResultField = 'value' | 'stress';
+
 /** Blau des Lastfalls: keine Statusfarbe, nicht Orange (Aktion) und nicht Violett (Vorschau). */
 const BC_COLOR = 0x5ea8ff;
 
@@ -36,11 +39,65 @@ export class ResultLayer {
   /** Vorschlag: die größte Verschiebung als 5 % der Modellgröße, auf eine runde Zahl. */
   autoScale = 0;
   private showBcs = true;
+  /** Gezeigte Größe und eigene Spanne der Farbskala (null: die der Auswertung). */
+  field: ResultField = 'value';
+  private range: [number, number] | null = null;
+  /** FEM: zulässige Spannung (MPa, Festigkeit durch geforderte Sicherheit), bei mehreren Werkstoffen die kleinste. */
+  private stressLimit = 0;
+  private stressMixed = false;
 
   constructor(private readonly viewer: Viewer) {}
 
   get active(): boolean { return !!this.group; }
   get isFem(): boolean { return !!this.meta?.fem; }
+  /** Spannung zeigbar: FEM mit _STRESS an jedem Netz und Werkstoff mit Festigkeit (für die Grenze). */
+  get canStress(): boolean { return this.isFem && this.stressLimit > 0 && this.meshes.length > 0 && this.meshes.every((m) => m.stress); }
+  /** Grenze der Spannung gilt nur für den schwächsten von mehreren Werkstoffen. */
+  get stressLimitMixed(): boolean { return this.stressMixed; }
+
+  /**
+   * Was gezeigt wird: Größe, Einheit, Grenze und Spanne der Farbskala. Spannung: kritisch über der zulässigen Spannung, so
+   * bleiben die Farben bei beiden Größen gleich gemeint (Rot heißt zu wenig Sicherheit). Gewählte Spanne: Farbverlauf über die
+   * Spanne (`ramp`), nicht mehr am Grenzwert ausgerichtet.
+   */
+  get view(): (ResultMeta & { ramp?: boolean }) | null {
+    const m = this.meta;
+    if (!m) return null;
+    const base: ResultMeta = this.field === 'stress'
+      ? { ...m, quantity: 'Vergleichsspannung (von Mises)', unit: 'MPa', bad: 'high', threshold: this.stressLimit, range: this.autoRange('stress') }
+      : m;
+    return this.range ? { ...base, range: this.range, ramp: true } : base;
+  }
+
+  /**
+   * Spanne der Farbskala, wie die Auswertung sie vorschlägt. Spannung: von 0 bis zum Doppelten der zulässigen, bei höheren
+   * Spitzen bis zur größten Spannung, aber höchstens bis zum Vierfachen: Eine einzelne Spitze soll die Skala nicht stauchen.
+   */
+  autoRange(field: ResultField): [number, number] {
+    if (field === 'value' || !this.meta) return this.meta ? [...this.meta.range] as [number, number] : [0, 1];
+    const [, hi] = this.dataRange('stress');
+    return [0, +Math.max(2 * this.stressLimit, Math.min(hi, 4 * this.stressLimit)).toPrecision(3)];
+  }
+
+  /** Kleinster und größter Wert der Größe über alle Bauteile. */
+  dataRange(field: ResultField): [number, number] {
+    let lo = Infinity, hi = -Infinity;
+    for (const m of this.meshes) {
+      const a = field === 'stress' && m.stress ? m.stress : m.values;
+      for (let i = 0; i < a.count; i++) { const v = a.getX(i); if (v < lo) lo = v; if (v > hi) hi = v; }
+    }
+    return Number.isFinite(lo) ? [lo, hi] : [0, 1];
+  }
+
+  /** Größe und Spanne wählen (null: Spanne der Auswertung) und neu einfärben. */
+  setDisplay(field: ResultField, range: [number, number] | null): void {
+    this.field = field === 'stress' && this.canStress ? 'stress' : 'value';
+    this.range = range;
+    this.recolor();
+  }
+
+  /** Gezeigter Wert an einer Stelle (Spannung oder der Wert der Auswertung). */
+  shown(p: ResultProbe): number { return this.field === 'stress' && p.stress != null ? p.stress : p.value; }
 
   async show(glb: ArrayBuffer): Promise<ResultMeta> {
     const gltf = await new GLTFLoader().parseAsync(glb, '');
@@ -108,6 +165,13 @@ export class ResultLayer {
     const maxDisp = meta.fem?.maxDisp ?? 0, diag = meta.fem?.diag ?? 0;
     this.autoScale = maxDisp > 0 && diag > 0 ? niceScale((0.05 * diag) / maxDisp) : 0;
     this.scale = 0;
+    // Zulässige Spannung je Werkstoff: Festigkeit durch die geforderte Sicherheit (der Grenzwert der Auswertung)
+    const limits = meta.fem && meta.threshold > 0
+      ? meta.parts.map((p) => p.material?.strength ?? 0).filter((s) => s > 0).map((s) => s / meta.threshold) : [];
+    this.stressLimit = limits.length ? Math.min(...limits) : 0;
+    this.stressMixed = new Set(limits).size > 1;
+    this.range = null;
+    if (!this.canStress) this.field = 'value';
     this.recolor();
     this.viewer.setModelHidden(true);
     this.viewer.addLayer(this.group);
@@ -199,13 +263,15 @@ export class ResultLayer {
 
   /** Farben neu aus den Werten (etwa nach geänderter Spanne). */
   recolor(): void {
-    if (!this.meta) return;
+    const view = this.view;
+    if (!view) return;
     const c = new THREE.Color();
     for (const m of this.meshes) {
-      const n = m.values.count;
+      const a = this.field === 'stress' && m.stress ? m.stress : m.values;
+      const n = a.count;
       const col = new Float32Array(n * 3);
       for (let i = 0; i < n; i++) {
-        const rgb = resultColor(m.values.getX(i), this.meta);
+        const rgb = resultColor(a.getX(i), view);
         c.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, THREE.SRGBColorSpace);
         col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
       }
@@ -232,6 +298,9 @@ export class ResultLayer {
     this.meta = null;
     this.scale = 0;
     this.autoScale = 0;
+    this.range = null;
+    this.stressLimit = 0;
+    this.stressMixed = false;
     this.viewer.setModelHidden(false);
   }
 
