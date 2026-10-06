@@ -4,12 +4,14 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { MeshBVH } from 'three-mesh-bvh';
 import { ViewCube } from './viewcube';
 
 // CAD-Konvention: Z ist oben, Einheit mm. Muss vor dem Anlegen von Kamera und Objekten gesetzt sein.
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
-interface FaceEntry { id: number; surface: string; area?: number; center?: number[]; triStart: number; triCount: number }
+/** `normal`: ebene Fläche, nach außen. `axis`: Zylinder oder Kegel. Beides fehlt bei älteren Builds. */
+interface FaceEntry { id: number; surface: string; area?: number; center?: number[]; normal?: number[]; axis?: number[]; triStart: number; triCount: number }
 interface EdgeEntry { id: number; curve: string; length?: number; segStart: number; segCount: number }
 interface VertexEntry { id: number; p: number[] }
 /**
@@ -51,9 +53,29 @@ export interface PlaneHit { partId: string; name: string; faceId: number; surfac
 
 /**
  * Bauteil in Einbaulage, Grundlage der Explosionsansicht. `min`/`max`: Hüllquader. `axis`: nur Normteile, Einheitsvektor aus
- * dem Material heraus, `span` ihre Ausdehnung entlang dieser Achse.
+ * dem Material heraus, `span` ihre Ausdehnung entlang dieser Achse. `dirs`: Richtungen aus der eigenen Form, in denen das Teil
+ * herauskommen könnte (Achsen seiner Zylinder und Kegel, Normalen seiner großen ebenen Flächen), ohne Vorzeichen.
  */
-export interface ExplodePart { id: string; group: string | null; role: string; min: number[]; max: number[]; axis: number[] | null; span: [number, number] | null }
+export interface ExplodePart {
+  id: string; group: string | null; role: string; min: number[]; max: number[]; axis: number[] | null; span: [number, number] | null;
+  dirs: number[][];
+}
+
+/** Ebene Flächen ab diesem Anteil an der größten ebenen Fläche des Teils geben eine Richtung vor (kleine Fasen nicht). */
+const OWN_PLANE_SHARE = 0.2;
+
+/**
+ * Treffer des Strahltests: kürzester Abstand bis zum anderen Teil, Zahl der Strahlen, die es berühren (unter `touch`), und Zahl der
+ * Strahlen, die schon in ihm beginnen (der erste Treffer tritt aus): Die beiden überschneiden sich dort, etwa eine Schraube mit
+ * ihrem Gewinde im Kernloch.
+ */
+export interface RayHit { dist: number; touch: number; inside: number }
+/** Je Richtung: Bauteil → (Bauteil, das ihm in dieser Richtung im Weg steht → Treffer). */
+export type BlockMap = Map<string, Map<string, RayHit>>[];
+
+/** Punkte je Dreieck für den Strahltest (baryzentrisch), wichtigste zuerst: Mitte, nahe den Ecken, nahe den Kanten. */
+const SAMPLE_PATTERN = [[1 / 3, 1 / 3, 1 / 3], [0.7, 0.15, 0.15], [0.15, 0.7, 0.15], [0.15, 0.15, 0.7],
+  [0.425, 0.425, 0.15], [0.15, 0.425, 0.425], [0.425, 0.15, 0.425]];
 
 export type ViewName = 'iso' | 'front' | 'back' | 'top' | 'bottom' | 'right' | 'left' | 'fit';
 
@@ -131,9 +153,11 @@ export class Viewer {
   /** Zu jedem Segment der Schnittkontur Bauteil und Fläche: Beim Messen lässt sich so die Kontur anklicken. */
   private contourOf: { part: PartEntry; face: number }[] = [];
   private contourDirty = false;
-  /** Explosionsansicht: Wege der verschobenen Bauteile, gestrichelt von der Einbaulage zur aktuellen Lage. */
+  /** Explosionsansicht: Wege der verschobenen Bauteile, gestrichelt. */
   private trails = new THREE.Group();
   private showTrails = true;
+  /** Eigener Weg je Bauteil (ohne den seines Elternteils): Dort beginnt sein gestrichelter Weg. Ohne Angabe: die Einbaulage. */
+  private legs: Map<string, number[]> | null = null;
   /** Wartet auf einen Klick auf eine Fläche (Schnitt an Fläche ausrichten). */
   private planePick: ((h: PlaneHit | null) => void) | null = null;
   /** Animation (E58): ausgeblendete, durchsichtige und hervorgehobene Bauteile zu diesem Zeitpunkt (getrennt von den Einstellungen des Nutzers). */
@@ -1307,16 +1331,121 @@ export class Viewer {
         }
         if (lo <= hi) span = [lo, hi];
       }
+      const dirs: number[][] = [];
+      const take = (d?: number[]) => {
+        if (!Array.isArray(d) || d.length !== 3 || !d.every(Number.isFinite)) return;
+        const l = Math.hypot(d[0], d[1], d[2]);
+        if (l < 1e-9) return;
+        const u = d.map((x) => x / l);
+        if (!dirs.some((e) => Math.abs(e[0] * u[0] + e[1] * u[1] + e[2] * u[2]) > 0.9995)) dirs.push(u);
+      };
+      const planes = p.meta.faces.filter((f) => f.surface === 'PLANE' && f.normal && f.area);
+      const big = Math.max(0, ...planes.map((f) => f.area!));
+      for (const f of p.meta.faces) if (f.surface === 'CYLINDER' || f.surface === 'CONE') take(f.axis);
+      for (const f of planes) if (f.area! >= OWN_PLANE_SHARE * big) take(f.normal);
       return { id: p.meta.partId, group: p.meta.group ?? null, role: p.meta.role, min: box.min.toArray(), max: box.max.toArray(),
-        axis: axis ? axis.toArray() : null, span };
+        axis: axis ? axis.toArray() : null, span, dirs };
     });
   }
 
   /**
-   * Bauteile aus der Einbaulage verschieben (nur verschieben, nicht drehen). Fehlende Bauteile und null: Einbaulage.
-   * Klicks, Schnitt und Hervorhebungen arbeiten danach mit der neuen Lage.
+   * Was stünde jedem Bauteil in jeder Richtung im Weg (in Einbaulage)? Grundlage der Demontage-Analyse. Von Punkten knapp unter
+   * der Oberfläche jedes Bauteils (`eps` nach innen: Berührflächen stören sich nicht, kleine Überschneidungen der Vernetzung
+   * zählen nicht) gehen Strahlen in jede Richtung, gegen alle Bauteile zugleich (BVH). Trifft ein Strahl von P aus Q im Abstand t,
+   * stößt P in dieser Richtung nach t gegen Q, und Q stieße in der Gegenrichtung gegen P. Treffer unter `touch` zählen als
+   * Berührung: Dort liegt P an. `opp[i]` ist die Gegenrichtung von `dirs[i]`. Höchstens etwa `samples` Punkte je Bauteil.
    */
-  setOffsets(offsets: Map<string, number[]> | null): void {
+  explodeRays(ids: string[], dirs: number[][], opp: number[], opts: { eps: number; touch: number; samples: number }): BlockMap {
+    const chunks = ids.flatMap((id) => { const p = this.parts.get(id); return p ? [{ id, p, w: this.worldOf(p) }] : []; });
+    // Dreiecke aller Teile in Einbaulage hintereinander. Die BVH ordnet nur den Index um, die Ecken bleiben: Über ihren
+    // Bereich findet ein Treffer sein Bauteil.
+    let nv = 0, ni = 0;
+    for (const c of chunks) for (const w of c.w) { nv += w.pos.length / 3; ni += w.idx.length; }
+    const pos = new Float32Array(nv * 3), index = new Uint32Array(ni);
+    const vStart: number[] = [], range: { id: string; i0: number; i1: number }[] = [];
+    let v = 0, i = 0;
+    for (const c of chunks) {
+      vStart.push(v);
+      const i0 = i, o = c.p.offset;
+      for (const w of c.w) {
+        for (let k = 0; k < w.pos.length; k += 3) {
+          pos[v * 3 + k] = w.pos[k] - o.x; pos[v * 3 + k + 1] = w.pos[k + 1] - o.y; pos[v * 3 + k + 2] = w.pos[k + 2] - o.z;
+        }
+        for (let k = 0; k < w.idx.length; k++) index[i + k] = w.idx[k] + v;
+        v += w.pos.length / 3;
+        i += w.idx.length;
+      }
+      range.push({ id: c.id, i0, i1: i });
+    }
+    const ownerOf = (vertex: number) => {
+      let lo = 0, hi = vStart.length - 1;
+      while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (vStart[mid] <= vertex) lo = mid; else hi = mid - 1; }
+      return chunks[lo].id;
+    };
+    const out: BlockMap = dirs.map(() => new Map());
+    if (!ni) return out;
+    // Die BVH sortiert den Index beim Aufbau um: Die Punkte je Bauteil kommen aus einer Kopie
+    const tri = index.slice();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
+    const bvh = new MeshBVH(g);
+    const note = (m: Map<string, Map<string, RayHit>>, a: string, b: string, dist: number, touch: number, inside: number) => {
+      let row = m.get(a);
+      if (!row) { row = new Map(); m.set(a, row); }
+      const h = row.get(b);
+      if (!h) row.set(b, { dist, touch, inside });
+      else { h.dist = Math.min(h.dist, dist); h.touch += touch; h.inside += inside; }
+    };
+    const seen = new Set<string>();
+    const dv = dirs.map((d) => new THREE.Vector3(d[0], d[1], d[2]).normalize());
+    const ray = new THREE.Ray();
+    const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), n = new THREE.Vector3(), e = new THREE.Vector3(), at = new THREE.Vector3();
+    for (const r of range) {
+      const tris = (r.i1 - r.i0) / 3;
+      if (!tris) continue;
+      // Wenige Dreiecke (ebene Flächen): mehrere Punkte je Dreieck. Viele: jedes n-te Dreieck, je ein Punkt
+      const per = Math.max(1, Math.min(SAMPLE_PATTERN.length, Math.floor(opts.samples / tris)));
+      const stride = Math.max(1, Math.ceil(tris / opts.samples));
+      for (let t = 0; t < tris; t += stride) {
+        const k = r.i0 + t * 3;
+        A.fromArray(pos, tri[k] * 3); B.fromArray(pos, tri[k + 1] * 3); C.fromArray(pos, tri[k + 2] * 3);
+        // Der Mesher legt die Dreiecke so, dass die Normale nach außen zeigt (gespiegelte Flächen umgedreht)
+        n.subVectors(B, A).cross(e.subVectors(C, A));
+        const len = n.length();
+        if (len < 1e-12) continue;
+        n.divideScalar(len);
+        for (let q = 0; q < per; q++) {
+          const [a, b, c] = SAMPLE_PATTERN[q];
+          at.set(0, 0, 0).addScaledVector(A, a).addScaledVector(B, b).addScaledVector(C, c).addScaledVector(n, -opts.eps);
+          for (let di = 0; di < dv.length; di++) {
+            ray.origin.copy(at);
+            ray.direction.copy(dv[di]);
+            seen.clear();
+            for (const h of bvh.raycast(ray, THREE.DoubleSide).sort((x, y) => x.distance - y.distance)) {
+              if (!h.face) continue;
+              const other = ownerOf(h.face.a);
+              if (other === r.id) continue;
+              // Die Normale des Dreiecks zeigt nach außen. Tritt schon der erste Treffer auf einem Teil aus, begann der Strahl in ihm
+              const inside = !seen.has(other) && h.face.normal.dot(dv[di]) > 0 ? 1 : 0;
+              seen.add(other);
+              note(out[di], r.id, other, h.distance, h.distance < opts.touch ? 1 : 0, inside);
+              note(out[opp[di]], other, r.id, h.distance, 0, inside);
+            }
+          }
+        }
+      }
+    }
+    g.dispose();
+    return out;
+  }
+
+  /**
+   * Bauteile aus der Einbaulage verschieben (nur verschieben, nicht drehen). Fehlende Bauteile und null: Einbaulage. `legs`: der
+   * eigene Teil jedes Wegs (ohne den des Elternteils), dort beginnt der gestrichelte Weg. Klicks, Schnitt und Hervorhebungen
+   * arbeiten danach mit der neuen Lage.
+   */
+  setOffsets(offsets: Map<string, number[]> | null, legs: Map<string, number[]> | null = null): void {
     for (const [id, p] of this.parts) {
       const o = offsets?.get(id);
       const next = new THREE.Vector3(o?.[0] ?? 0, o?.[1] ?? 0, o?.[2] ?? 0);
@@ -1326,6 +1455,7 @@ export class Viewer {
       p.group.updateMatrixWorld(true);
       p.world = undefined;
     }
+    this.legs = offsets ? legs : null;
     this.follow();
     this.updateExtent();
     this.syncTrails();
@@ -1337,16 +1467,18 @@ export class Viewer {
   /** Wege der Explosionsansicht zeigen oder nicht. */
   setTrails(on: boolean): void { this.showTrails = on; this.syncTrails(); this.requestRender(); }
 
-  /** Gestrichelte Linie je verschobenem, sichtbarem Bauteil von seiner Mitte in Einbaulage zur aktuellen Mitte. */
+  /** Gestrichelte Linie je verschobenem, sichtbarem Bauteil: sein eigener Weg bis zur aktuellen Mitte. */
   private syncTrails(): void {
     this.clearGroup(this.trails);
     if (!this.showTrails) return;
     const flat: number[] = [];
     const c = new THREE.Vector3();
-    for (const p of this.parts.values()) {
-      if (!p.group.visible || p.offset.length() < this.radius * 1e-3) continue;
+    for (const [id, p] of this.parts) {
+      const l = this.legs?.get(id);
+      const leg = l ? new THREE.Vector3(l[0], l[1], l[2]) : p.offset;
+      if (!p.group.visible || leg.length() < this.radius * 1e-3) continue;
       new THREE.Box3().setFromObject(p.group).getCenter(c);
-      flat.push(c.x - p.offset.x, c.y - p.offset.y, c.z - p.offset.z, c.x, c.y, c.z);
+      flat.push(c.x - leg.x, c.y - leg.y, c.z - leg.z, c.x, c.y, c.z);
     }
     if (!flat.length) return;
     const g = new LineSegmentsGeometry();

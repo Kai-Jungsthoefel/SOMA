@@ -157,6 +157,13 @@
             <input id="explode-range" type="range" min="0" max="100" step="1" aria-label="Abstand der Explosion in Prozent">
             <span id="explode-value" class="ex-val"></span>
           </div>
+          <div class="ex-steps">
+            <button id="btn-explode-back" class="ibtn s" aria-label="Schritt zurück" title="Einen Schritt zurück (zusammenbauen)"><i data-icon="stepback" data-size="15"></i></button>
+            <button id="btn-explode-play" class="ibtn s" aria-label="Abspielen" title="Den Auseinanderbau Schritt für Schritt abspielen"><i data-icon="play" data-size="15"></i></button>
+            <button id="btn-explode-next" class="ibtn s" aria-label="Schritt weiter" title="Einen Schritt weiter (auseinanderbauen)"><i data-icon="stepfwd" data-size="15"></i></button>
+            <span id="explode-step" class="ex-step"></span>
+            <button id="btn-explode-agent" class="ibtn s" aria-label="Reihenfolge an den Agenten geben" title="Die Reihenfolge des Auseinanderbaus in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="15"></i></button>
+          </div>
           <div id="explode-hint" class="mc-hint"></div>
           <div class="sc-actions">
             <button id="btn-explode-trails" class="btn sm" aria-pressed="true" title="Gestrichelte Wege von der Einbaulage zur aktuellen Lage zeigen"><i data-icon="line" data-size="14" data-stroke="1.9"></i>Wege</button>

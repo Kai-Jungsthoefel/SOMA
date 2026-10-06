@@ -620,6 +620,9 @@ code { font-family:var(--mono); font-size:.95em; }
 .excard { right:14px; bottom:12px; width:300px; overflow:hidden; }
 .excard .sx-pos label { width:52px; }
 .ex-val { width:42px; flex-shrink:0; text-align:right; font:12px var(--mono); color:var(--tx2); }
+.ex-steps { display:flex; align-items:center; gap:2px; padding:2px 8px 2px 10px; }
+.ex-step { flex:1; min-width:0; padding:0 4px; font-size:12px; color:var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ex-steps .ibtn:disabled { opacity:.4; }
 .excard .btn[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); border-color:var(--acc-line); }
 @container viewer (min-width: 761px) { #viewer.exploding .sectcard { bottom:calc(var(--excard-h, 176px) + 24px); } }
 @container viewer (max-width: 760px) { .excard { width:272px; } }

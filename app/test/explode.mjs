@@ -1,5 +1,8 @@
-// Test der Explosionsansicht (E56): Richtungen aus Gruppen und Normteil-Achsen, Schieber, Wege, Auswahl in Einbaulage,
-// Hervorhebung wandert mit, Messen setzt zusammen, Schnitt darüber, Ausblenden, neuer Build, Text für den Agenten.
+// Test der Explosionsansicht (E56, E57, E59): Demontage-Analyse mit Strahltest, Richtungen je Teil (Deckel nach oben, Seitenblech
+// zur Seite, Schrauben entlang ihrer Achse, auch durch ihr Kernloch, ein Stift schräg entlang der Achse seiner Bohrung), Baugruppe
+// aus Klotz und eingeschlossener Mutter, Elternteile, Stapeln mit gleicher Lücke, Reihenfolge bei 100 %, Vorzugsachse aus den Normteilen,
+// Abspielen Schritt für Schritt, Reihenfolge an den Agenten, Wege, Auswahl in Einbaulage, Hervorhebung wandert mit, Messen setzt
+// zusammen, Schnitt darüber, Ausblenden, neuer Build, Text für den Agenten.
 // Aufruf: npm run test:explode (baut vorher). SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 legt Bilder ab.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,30 +12,54 @@ const t = checker();
 const { check } = t;
 let app;
 
-// Gehäuse aus Unterteil (z 0..20, oben offen), Deckel (z 20..H) und vier Schrauben M3 in den Ecken der Wand, die auf dem
-// Deckel aufliegen (Achse +Z). Darin eine Platine (Gruppe „Elektronik“), darunter ein Tisch als Referenz.
-const MODEL = (h) => `import cadquery as cq
+// Gehäuse aus Unterteil (z 0..20, oben offen, Wand 3) und Deckel (z 20..H) mit vier Schrauben M3 von oben (Kernloch im Unterteil).
+// An der rechten Außenwand ein Seitenblech (x 30..32) mit zwei Schrauben von der Seite. Innen eine Platine (z 8..9,6) und darunter
+// ein Klotz (z 3..7) mit einer Mutter in einer geschlossenen Tasche, deren Schlitz zur Wand zeigt: Die Mutter kommt erst heraus,
+// wenn der Klotz aus dem Gehäuse ist. An der hinteren Wand ein Sockel mit einer um 30° geneigten Bohrung und einem Stift darin: Er
+// kommt nur entlang der Achse seiner Bohrung heraus. Darunter ein Tisch als Referenz.
+const MODEL = (h) => `import math
+import cadquery as cq
 from soma import add_part
-from soma.fasteners import Screw
+from soma.fasteners import Nut, Screw
 
 base = cq.Workplane("XY").box(60, 40, 20, centered=(True, True, False)).faces(">Z").shell(-3)
 lid = cq.Workplane("XY").box(60, 40, ${h - 20}, centered=(True, True, False)).translate((0, 0, 20))
 screws = [Screw("ISO 4762", "M3x10", at=(x, y, ${h})) for x in (-28.5, 28.5) for y in (-18.5, 18.5)]
 for s in screws:
     lid = lid.cut(s.clearance_hole())
+    base = base.cut(s.tap_hole())
+panel = cq.Workplane("XY").box(2, 20, 10, centered=False).translate((30, -10, 5))
+side = [Screw("ISO 4762", "M3x8", at=(32, y, 10), direction="-X") for y in (-6, 6)]
+for s in side:
+    panel = panel.cut(s.clearance_hole())
+    base = base.cut(s.tap_hole())
 pcb = cq.Workplane("XY").box(40, 25, 1.6, centered=(True, True, False)).translate((0, 0, 8))
+nut = Nut("ISO 4032", "M3", at=(-12, 10, 4), direction="-Z")
+block = cq.Workplane("XY").box(16, 10, 4, centered=False).translate((-20, 5, 3)).cut(nut.trap(slot="+Y", slot_length=6))
 table = cq.Workplane("XY").box(100, 80, 5, centered=(True, True, False)).translate((0, 0, -5))
+axis = (0, -math.sin(math.radians(30)), math.cos(math.radians(30)))
+top = (5, 15, 9)
+rod = lambda d, length, back: cq.Solid.makeCylinder(d / 2, length, cq.Vector(*(top[i] - axis[i] * back for i in range(3))), cq.Vector(*axis))
+base = base.union(cq.Workplane("XY").box(10, 4, 6, centered=False).translate((0, 13, 3))).cut(rod(3.4, 7, 6))
+pin = rod(3, 12, 5)
 
 add_part("Unterteil", base, group="Gehäuse")
 add_part("Deckel", lid, group="Gehäuse", color=(0.3, 0.5, 0.85))
 for i, s in enumerate(screws):
     add_part(f"Schraube {i + 1}", s, group="Gehäuse/Schrauben")
+add_part("Seitenblech", panel, color=(0.75, 0.75, 0.3))
+for i, s in enumerate(side):
+    add_part(f"Seitenschraube {i + 1}", s)
 add_part("Platine", pcb, group="Elektronik", color=(0.2, 0.6, 0.3))
+add_part("Klotz", block, color=(0.8, 0.45, 0.3))
+add_part("Mutter", nut)
+add_part("Stift", pin, color=(0.9, 0.9, 0.95))
 add_part("Tisch", table, role="reference")
 `;
 
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
-const flat = (o, eps = 1e-6) => !!o && near(o[0], 0, eps) && near(o[1], 0, eps);
+const only = (o, k, eps = 1e-6) => !!o && o.every((v, i) => i === k || near(v, 0, eps));
+const sign = (d) => { const k = d.findIndex((v) => Math.abs(v) > 0.999); return k < 0 ? '?' : `${d[k] > 0 ? '+' : '-'}${'XYZ'[k]}`; };
 
 try {
   app = await startApp({ name: 'explode' });
@@ -46,65 +73,146 @@ try {
   await waitFor('Projekt und Build', () => !!window.__t && !!window.__t.project() && window.__t.status().state === 'ok' && window.__t.partCount() > 0);
   const proj = await ev(() => window.__t.project());
   fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL(24));
-  await waitFor('Testmodell gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 8, 60000);
+  await waitFor('Testmodell gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 14, 60000);
   await ev(() => window.__t.viewer.setView('iso'));
   await sleep(300);
   const ids = await ev(() => Object.fromEntries(window.__t.parts().map((p) => [p.name, p.id])));
   const screws = [1, 2, 3, 4].map((i) => ids[`Schraube ${i}`]);
+  const side = [1, 2].map((i) => ids[`Seitenschraube ${i}`]);
   const ex = () => ev(() => window.__t.explode());
   const vs = () => ev(() => window.__t.viewer.explodeState());
-  const settle = () => waitFor('Bewegung zu Ende', () => !window.__t.explode().animating, 5000).then(() => sleep(100));
+  const settle = () => waitFor('Bewegung zu Ende', () => !window.__t.explode().animating, 10000).then(() => sleep(100));
 
-  // 0) Achsen aus dem Build: Schrauben zeigen aus dem Material heraus (+Z), eigene Teile ohne Achse
+  // 0) Achsen aus dem Build: Schrauben zeigen aus dem Material heraus, eigene Teile ohne Achse
   const input = await ev(() => window.__t.viewer.explodeParts());
   const byId = Object.fromEntries(input.map((p) => [p.id, p]));
-  check('Build liefert die Achse der Normteile: Schrauben (0, 0, 1) mit Länge 13 (Kopf 3 + Schaft 10), Deckel ohne Achse',
-    screws.every((id) => JSON.stringify(byId[id].axis) === '[0,0,1]' && near(byId[id].span[1] - byId[id].span[0], 13, 1e-3)) && byId[ids.Deckel].axis === null,
-    JSON.stringify(byId[screws[0]]));
+  check('Build liefert die Achse der Normteile: oben (0, 0, 1), seitlich (1, 0, 0), Mutter (0, 0, 1), Deckel ohne',
+    screws.every((id) => JSON.stringify(byId[id].axis) === '[0,0,1]') && side.every((id) => JSON.stringify(byId[id].axis) === '[1,0,0]')
+    && JSON.stringify(byId[ids.Mutter].axis) === '[0,0,1]' && byId[ids.Deckel].axis === null, JSON.stringify(byId[ids.Mutter].axis));
 
-  // 1) Einschalten: Teile gleiten auseinander, zunächst auf 50 %
+  // 1) Einschalten: Demontage-Analyse, zunächst auf 50 %
   await domClick('btn-explode');
   await settle();
   let s = await ex();
   let v = await vs();
+  const st = s.steps;
+  const dir = (id) => (st[id] ? sign(st[id].dir) : '-');
+  check('„Explosion": Karte offen ohne Richtungsknöpfe, Knopf gedrückt, Schieber 50 %, Vorzugsachse Z (aus den Schrauben), Anker Unterteil, nichts steckt fest',
+    s.active && s.amount === 0.5 && s.shown === 0.5 && s.axis === 'z' && s.base === ids.Unterteil && s.forced === 0
+    && s.text.includes('50 %') && await ev(() => !document.querySelector('#explode-card [data-axis]')
+      && document.getElementById('btn-explode').getAttribute('aria-pressed') === 'true'), `${s.base} ${s.forced} ${s.analysisMs} ms`);
+  check('Reihenfolge: zuerst die Schrauben (oben +Z, seitlich +X, trotz Gewinde im Kernloch), dann Deckel (+Z) und Seitenblech (+X)',
+    screws.every((id) => dir(id) === '+Z' && st[id].level === 0) && side.every((id) => dir(id) === '+X' && st[id].level === 0)
+    && dir(ids.Deckel) === '+Z' && st[ids.Deckel].level === 1 && dir(ids.Seitenblech) === '+X' && st[ids.Seitenblech].level === 1,
+    JSON.stringify(Object.fromEntries(Object.entries(st).map(([k, x]) => [k, `${sign(x.dir)}@${x.level}`]))).slice(0, 200));
+  check('Platine erst nach Deckel und Stift (seine Spitze ragt über sie), nach oben aus dem offenen Unterteil (nicht durch den Boden)',
+    dir(ids.Platine) === '+Z' && st[ids.Platine].level === 3,
+    JSON.stringify(st[ids.Platine]));
+  const unit = Object.entries(st).find(([, x]) => x.members.length > 1);
+  check('Klotz und Mutter kommen als Baugruppe nach oben (die Wand versperrt den Schlitz), darin geht die Mutter zur Seite (+Y)',
+    !!unit && JSON.stringify([...unit[1].members].sort()) === JSON.stringify([ids.Klotz, ids.Mutter].sort()) && sign(unit[1].dir) === '+Z'
+    && unit[1].base === ids.Klotz && dir(ids.Mutter) === '+Y' && st[ids.Mutter].unit === unit[0], JSON.stringify(unit));
+  const tilt = [0, -0.5, Math.sqrt(3) / 2];
+  check('Stift (kein Normteil) kommt nach dem Deckel schräg entlang der Achse seiner Bohrung heraus, aus den Zylinderflächen des Meshers',
+    !!st[ids.Stift] && st[ids.Stift].dir.every((v, k) => near(v, tilt[k], 1e-3)) && st[ids.Stift].level === 2 && !st[ids.Stift].forced
+    && byId[ids.Stift].dirs.some((d) => Math.abs(d[0] * tilt[0] + d[1] * tilt[1] + d[2] * tilt[2]) > 0.9999), JSON.stringify(st[ids.Stift]));
+  check('Die Referenz bleibt stehen und zählt nicht mit', !st[ids.Tisch] && !v.offsets[ids.Tisch] && s.text.includes('Referenzen bleiben stehen'));
+
+  // Abstände: gleiche Lücke g zwischen allem, was übereinander gestapelt ist
   const off = v.offsets;
-  check('„Explosion": Karte offen, Knopf gedrückt, Schieber 50 %', s.active && s.amount === 0.5 && s.shown === 0.5 && s.text.includes('50 %')
-    && await ev(() => document.getElementById('btn-explode').getAttribute('aria-pressed') === 'true' && !document.getElementById('explode-card').hidden), s.text);
-  check('Deckel nach oben, Unterteil nach unten, beide nur in Z (Mitten über der Mitte des Gehäuses)',
-    flat(off[ids.Deckel]) && off[ids.Deckel][2] > 5 && flat(off[ids.Unterteil]) && off[ids.Unterteil][2] < -1, JSON.stringify([off[ids.Deckel], off[ids.Unterteil]]));
-  const lidTop = 24 + off[ids.Deckel][2];
-  check('Schrauben nur entlang ihrer Achse (+Z), gemeinsam und ganz über dem verschobenen Deckel',
-    screws.every((id) => flat(off[id]) && near(off[id][2], off[screws[0]][2], 1e-6) && 14 + off[id][2] > lidTop), JSON.stringify([off[screws[0]], lidTop]));
-  check('Platine (eigene Gruppe) rückt nach unten, die Referenz bleibt stehen', flat(off[ids.Platine]) && off[ids.Platine][2] < 0 && !off[ids.Tisch],
-    JSON.stringify([off[ids.Platine], off[ids.Tisch]]));
-  check('Gestrichelte Wege für die sieben verschobenen Teile, Hinweis nennt die Referenz', v.trails === 7 && s.moving === 7 && s.text.includes('Referenzen bleiben stehen'),
-    `${v.trails} ${s.moving}`);
+  const z = (id) => off[id]?.[2] ?? 0;
+  const g = off[ids.Seitenblech]?.[0];
+  const own = input.filter((p) => p.role !== 'reference');
+  const diag = Math.hypot(...[0, 1, 2].map((i) => Math.max(...own.map((p) => p.max[i])) - Math.min(...own.map((p) => p.min[i]))));
+  check('Seitenblech rückt um eine Lücke (5 % der Modelldiagonale) zur Seite, nur in X', only(off[ids.Seitenblech], 0) && near(g, 0.05 * diag, 1e-3), `${g} ${diag}`);
+  check('Seitenschrauben eine Lücke außerhalb des abgerückten Seitenblechs, nur in X', side.every((id) => only(off[id], 0) && near(24 + off[id][0], 32 + g + g, 1e-3)),
+    JSON.stringify(off[side[0]]));
+  // Der schräg gezogene Stift stünde im Deckel: Der Deckel rückt über das höhere von Platine und Stift
+  const pinTop = (o) => byId[ids.Stift].max[2] + (o[ids.Stift]?.[2] ?? 0);
+  check('Stapel nach oben mit gleicher Lücke: Klotz über dem Unterteil, Platine über der Baugruppe, Deckel über Platine und Stift, Schrauben darüber',
+    near(3 + z(ids.Klotz), 20 + g, 1e-3) && near(8 + z(ids.Platine), 7 + z(ids.Klotz) + g, 1e-3)
+    && near(20 + z(ids.Deckel), Math.max(9.6 + z(ids.Platine), pinTop(off)) + g, 1e-3) && screws.every((id) => near(14 + z(id), 24 + z(ids.Deckel) + g, 1e-3)),
+    JSON.stringify([z(ids.Klotz), z(ids.Platine), z(ids.Deckel), z(screws[0])]));
+  check('Die Mutter wandert mit dem Klotz und rückt aus ihrem Schlitz (+Y) eine Lücke vor den Klotz', near(off[ids.Mutter][2], z(ids.Klotz), 1e-6)
+    && near(off[ids.Mutter][1] - (off[ids.Klotz]?.[1] ?? 0), 15 - byId[ids.Mutter].min[1] + g, 1e-3), JSON.stringify([off[ids.Mutter], off[ids.Klotz]]));
+  const so = off[ids.Stift];
+  check('Der Stift rückt nur entlang seiner Achse', !!so && near(so[0], 0, 1e-6) && near(so[1] / so[2], tilt[1] / tilt[2], 1e-3) && so[2] > 0, JSON.stringify(so));
+  check('Alle Teile außer Anker und Referenz verschoben, gestrichelte Wege für jedes', s.moving === 12 && v.trails === 12, `${s.moving} ${v.trails}`);
   check('Text für den Agenten: Explosionsansicht, nicht die Einbaulage', s.agent?.startsWith('Explosionsansicht (50 %)') && s.agent.includes('nicht die Einbaulage'), s.agent);
   await domClick('btn-explode-fit');
   await waitFor('Kamera steht', () => !window.__t.viewer.viewState().animating, 5000);
   await shot('explosion-1');
 
-  // 2) Schieber auf 100 %: alle Verschiebungen doppelt so groß, ohne Bewegung
+  // 2) Schieber auf 100 %: dreifache Lücke, dieselbe Reihenfolge (nichts holt etwas ein)
   const slide = (pct) => ev((x) => { const r = document.getElementById('explode-range'); r.value = x; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); }, String(pct));
   await slide(100);
   s = await ex();
-  v = await vs();
-  check('Schieber 100 %: Verschiebungen genau doppelt, Anzeige „100 %"', s.amount === 1 && s.shown === 1 && s.text.includes('100 %')
-    && Object.keys(off).every((id) => off[id].every((x, k) => near(v.offsets[id][k], x * 2, 1e-3))), JSON.stringify(v.offsets[ids.Deckel]));
+  let vo = (await vs()).offsets;
+  const zz = (id) => vo[id]?.[2] ?? 0;
+  check('Schieber 100 %: Stapel mit dreifacher Lücke, Reihenfolge bleibt (nichts holt etwas ein), Anzeige „100 %"', s.amount === 1 && s.shown === 1 && s.text.includes('100 %')
+    && near(3 + zz(ids.Klotz), 20 + 3 * g, 1e-3) && near(8 + zz(ids.Platine), 7 + zz(ids.Klotz) + 3 * g, 1e-3)
+    && near(20 + zz(ids.Deckel), Math.max(9.6 + zz(ids.Platine), pinTop(vo)) + 3 * g, 1e-3) && near(vo[ids.Seitenblech][0], 3 * g, 1e-3),
+    JSON.stringify([zz(ids.Klotz), zz(ids.Platine), zz(ids.Deckel)]));
+  await domClick('btn-explode-fit');
+  await waitFor('Kamera steht', () => !window.__t.viewer.viewState().animating, 5000);
   await shot('explosion-2-voll');
 
+  // 2c) Abspielen Schritt für Schritt: Schrauben, Deckel und Seitenblech, Stift, Platine, die Baugruppe, die Mutter
+  const stepDone = () => waitFor('Schritt fertig', () => !window.__t.explode().animating, 15000);
+  const movedIds = async () => Object.keys((await vs()).offsets).sort();
+  const sorted = (xs) => [...xs].sort();
+  check('Sechs Schritte, zunächst alle zugleich', s.order.length === 6 && s.stepPos === null && s.text.includes('6 Schritte, alle zugleich'), JSON.stringify(s.order));
+  await domClick('btn-explode-next');
+  await stepDone();
+  s = await ex();
+  check('„Weiter": Schritt 1, nur die sechs Schrauben sind heraus, die Anzeige nennt sie', s.stepPos === 1
+    && JSON.stringify(await movedIds()) === JSON.stringify(sorted([...screws, ...side])) && s.text.includes('Schritt 1 von 6: Schraube 1'), s.text);
+  await domClick('btn-explode-next');
+  await stepDone();
+  await domClick('btn-explode-next');
+  await stepDone();
+  check('Schritt 3: dazu Deckel, Seitenblech und Stift, Platine, Klotz und Mutter noch drin',
+    JSON.stringify(await movedIds()) === JSON.stringify(sorted([...screws, ...side, ids.Deckel, ids.Seitenblech, ids.Stift])), JSON.stringify(await movedIds()));
+  await domClick('btn-explode-play');
+  check('„Abspielen": läuft weiter, der Knopf heißt jetzt „Anhalten"', (await ex()).playing && await ev(() => document.getElementById('btn-explode-play').getAttribute('aria-label') === 'Anhalten'));
+  await stepDone();
+  s = await ex();
+  const full = (await vs()).offsets;
+  check('Am Ende (Schritt 6) stehen alle Teile wie in der ganzen Explosion bei 100 %', s.stepPos === 6 && !s.playing
+    && Object.keys(s.far).every((id) => (s.far[id].every((x) => near(x, 0, 1e-6)) && !full[id]) || (full[id] && s.far[id].every((x, k) => near(full[id][k], x, 1e-3)))),
+    JSON.stringify(full[ids.Mutter]));
+  await domClick('btn-explode-back');
+  await stepDone();
+  const back = (await vs()).offsets;
+  check('„Zurück": Schritt 5, die Mutter steckt wieder im Klotz (geht mit der Baugruppe)', (await ex()).stepPos === 5
+    && back[ids.Mutter].every((x, k) => near(x, back[ids.Klotz][k], 1e-6)), JSON.stringify([back[ids.Mutter], back[ids.Klotz]]));
+  s = await ex();
+  check('Text für den Agenten nennt den Schritt', s.agent?.includes('Schritt 5 von 6 des Auseinanderbaus'), s.agent);
+  check('Reihenfolge für den Agenten: sechs Zeilen, Deckel nach +Z, Stift schräg, Baugruppe aus Klotz und Mutter, Anker Unterteil',
+    s.orderText.includes('Es bleibt stehen: "Unterteil"') && s.orderText.includes('2. ') && s.orderText.includes('"Deckel" nach +Z')
+    && s.orderText.includes('Baugruppe aus') && s.orderText.includes('3. "Stift" nach (0, -0.5, 0.866)') && s.orderText.includes('6. "Mutter" nach +Y'),
+    s.orderText);
+  await domClick('btn-explode-agent');
+  await sleep(200);
+  const toast = await ev(() => window.__t.toast());
+  check('„Reihenfolge an den Agenten geben" fügt sie in die Eingabe ein', toast.text.includes('eingefügt'), toast.text);
+  await slide(100);
+  check('Der Schieber verlässt das Abspielen: wieder alle zugleich', (await ex()).stepPos === null);
+
   // 3) Auswahl in der Explosion: Klick auf die Deckeloberseite wählt den Deckel, der Punkt steht in Einbaulage (z = 24)
+  const lidUp = zz(ids.Deckel);
   await ev(() => window.__t.viewer.setView('top'));
   await waitFor('Kamera steht', () => !window.__t.viewer.viewState().animating, 5000);
   await sleep(200);
   const top = await ev((id) => window.__t.viewer.facesOf(id).filter((f) => f.surface === 'PLANE' && f.center && Math.abs(f.center[2] - 24) < 1e-3)
     .sort((a, b) => b.area - a.area)[0], ids.Deckel);
-  // Zwischen den Schraubenlöchern, nahe der Mitte (die Mitte selbst liegt über keinem anderen Teil, trifft aber sicher den Deckel)
-  const at = await ev(([id, f]) => window.__t.viewer.screenOf(id, f), [ids.Deckel, top.id]);
+  // Am hinteren Rand, zwischen den Schraubenlöchern
+  const at = await ev((p) => window.__t.viewer.screenAt(p), [0, 18, 24 + lidUp]);
   await page.click(at.x, at.y);
   await waitFor('Deckel gewählt', () => window.__t.info().startsWith('Deckel'), 5000);
   const pk = await ev(() => window.__t.pick());
-  check('Klick auf den verschobenen Deckel: gewählt, Punkt in Einbaulage (z = 24, nicht 24 + Verschiebung)', pk?.faceId === top.id && near(pk.point[2], 24, 0.01), JSON.stringify(pk));
+  check('Klick auf den verschobenen Deckel: gewählt, Punkt in Einbaulage (z = 24, nicht 24 + Verschiebung)', pk?.faceId === top.id && near(pk.point[2], 24, 0.01)
+    && near(pk.point[1], 18, 0.05), JSON.stringify(pk));
   // Schräg von oben, dort verschiebt sich die Fläche im Bild. Der Deckel ist blau, die Hervorhebung orange.
   await ev(() => window.__t.viewer.setView('iso'));
   await waitFor('Kamera steht', () => !window.__t.viewer.viewState().animating, 5000);
@@ -113,7 +221,7 @@ try {
   const blue = (px) => px.rgb[2] > px.rgb[0] + 40;
   // Nahe der hinteren Kante der Deckeloberseite: Senkt sich der Deckel auf 0 %, liegt die alte Stelle über ihm im Leeren
   const rim = (dz) => ev((p) => window.__t.viewer.screenAt(p), [0, 18, 24 + dz]);
-  const was = await rim(off[ids.Deckel][2] * 2);
+  const was = await rim(lidUp);
   const before = await ev((p) => window.__t.viewer.pixels(p.x, p.y, 2), was);
   await shot('explosion-3-auswahl');
   await slide(0);
@@ -121,7 +229,7 @@ try {
   const after = await ev((p) => window.__t.viewer.pixels(p.x, p.y, 2), moved);
   const left = await ev((p) => window.__t.viewer.pixels(p.x, p.y, 2), was);
   check('Hervorgehobene Fläche (Orange) wandert mit dem Deckel, die alte Stelle ist nicht mehr orange',
-    moved.y - was.y > 30 && orange(before) && orange(after) && !orange(left), JSON.stringify([was, moved, before.rgb, after.rgb, left.rgb]));
+    moved.y - was.y > 12 && orange(before) && orange(after) && !orange(left), JSON.stringify([was, moved, before.rgb, after.rgb, left.rgb]));
   await slide(75);
   const mid = await ev(([id, f]) => window.__t.viewer.screenOf(id, f), [ids.Deckel, top.id]);
   await ev(() => window.__t.viewer.select(null));
@@ -131,7 +239,8 @@ try {
   // 4) Ausblenden: Der Weg des ausgeblendeten Teils verschwindet, die Explosion bleibt gleich
   await ev((id) => window.__t.viewer.setVisible(id, false), ids.Platine);
   v = await vs();
-  check('Platine ausgeblendet: sechs Wege, Verschiebungen unverändert', v.trails === 6 && near(v.offsets[ids.Deckel][2], off[ids.Deckel][2] * 1.5, 1e-3), String(v.trails));
+  check('Platine ausgeblendet: elf Wege, Verschiebungen unverändert (75 %: Seitenblech 2g)', v.trails === 11 && near(v.offsets[ids.Seitenblech][0], 2 * g, 1e-3),
+    String(v.trails));
   await ev((id) => window.__t.viewer.setVisible(id, true), ids.Platine);
   await domClick('btn-explode-trails');
   v = await vs();
@@ -139,14 +248,14 @@ try {
   await domClick('btn-explode-trails');
 
   // 5) Schnitt dazu: Die Karten überdecken sich nicht, der Bereich des Schnitts reicht über das auseinandergezogene Modell
-  await ev(() => window.__t.viewer.setView('iso'));
   await domClick('btn-section');
   await sleep(100);
   const rects = await ev(() => ['section-card', 'explode-card'].map((i) => document.getElementById(i).getBoundingClientRect().toJSON()));
   check('Schnitt und Explosion zugleich: Schnittkarte steht über der Explosionskarte', rects[0].bottom <= rects[1].top + 0.5, JSON.stringify(rects.map((r) => [r.top, r.bottom])));
   await ev(() => document.querySelector('#section-axes [data-axis="z"]').click());
   const sec = await ev(() => window.__t.section());
-  check('Bereich des Schnitts in Z reicht bis zu den verschobenen Schrauben', sec.range[1] > 27 + off[screws[0]][2] - 1e-3, JSON.stringify(sec.range));
+  vo = (await vs()).offsets;
+  check('Bereich des Schnitts in Z reicht bis zu den verschobenen Schrauben', sec.range[1] > 27 + vo[screws[0]][2] - 1e-3, JSON.stringify(sec.range));
   await domClick('btn-section');
 
   // 6) Messen setzt sofort zusammen, Explosion schaltet umgekehrt das Messen ab
@@ -158,16 +267,16 @@ try {
   await domClick('btn-explode');
   await settle();
   check('„Explosion" beendet das Messen und zieht wieder auseinander (75 %, wie zuletzt eingestellt)',
-    !(await ev(() => window.__t.measure().active)) && (await ex()).shown === 0.75 && Object.keys((await vs()).offsets).length === 7);
+    !(await ev(() => window.__t.measure().active)) && (await ex()).shown === 0.75 && Object.keys((await vs()).offsets).length === 12);
 
-  // 7) Neuer Build: Die Explosion bleibt, die Richtungen passen zum neuen Modell (Deckel 6 mm dick)
+  // 7) Neuer Build: Die Explosion bleibt, die Analyse läuft neu (Deckel 6 mm dick)
   fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL(26));
   await waitFor('Neuer Build', () => window.__t.status().state === 'ok' && window.__t.partSize('Deckel')?.[2] === 6, 60000);
   await sleep(200);
   s = await ex();
-  v = await vs();
-  check('Nach dem Build: Explosion aktiv, sieben Teile verschoben, Schrauben über dem neuen Deckel', s.active && Object.keys(v.offsets).length === 7
-    && screws.every((id) => v.offsets[id] && 16 + v.offsets[id][2] > 26 + v.offsets[ids.Deckel][2]), JSON.stringify([v.offsets[screws[0]], v.offsets[ids.Deckel]]));
+  vo = (await vs()).offsets;
+  check('Nach dem Build: Explosion aktiv, zwölf Teile verschoben, Schrauben über dem neuen Deckel', s.active && Object.keys(vo).length === 12 && s.forced === 0
+    && screws.every((id) => 16 + vo[id][2] > 26 + vo[ids.Deckel][2]), JSON.stringify([vo[screws[0]], vo[ids.Deckel]]));
 
   // 8) Schließen: Die Teile gleiten zurück in die Einbaulage
   await domClick('btn-explode-close');

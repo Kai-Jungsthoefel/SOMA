@@ -342,8 +342,11 @@ const explodeTool = new ExplodeTool({
   card: $('explode-card'), button: $<HTMLButtonElement>('btn-explode'), close: $<HTMLButtonElement>('btn-explode-close'),
   range: $<HTMLInputElement>('explode-range'), value: $('explode-value'), hint: $('explode-hint'),
   trails: $<HTMLButtonElement>('btn-explode-trails'), fit: $<HTMLButtonElement>('btn-explode-fit'), viewerEl: $('viewer'),
+  back: $<HTMLButtonElement>('btn-explode-back'), play: $<HTMLButtonElement>('btn-explode-play'), next: $<HTMLButtonElement>('btn-explode-next'),
+  step: $('explode-step'), send: $<HTMLButtonElement>('btn-explode-agent'),
 }, {
   viewer,
+  insert: (t) => insertToAgent(t),
   beforeOn: () => { if (measureTool.isActive) measureTool.setActive(false); },
   settled: () => sectionTool.refresh(), // der Bereich des Schiebers folgt den verschobenen Bauteilen
 });
