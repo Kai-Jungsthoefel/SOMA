@@ -1,4 +1,5 @@
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { icon } from './icons';
 import { el } from './ui';
@@ -33,7 +34,7 @@ export class TerminalTabs {
   async add(opts: { command?: string; title?: string } = {}): Promise<number> {
     const id = await window.soma.term.create({ command: opts.command });
     const term = new Terminal({
-      fontFamily: '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace', fontSize: 13, lineHeight: 1.2, cursorBlink: true, scrollback: 5000,
+      fontFamily: '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace', fontSize: 13, lineHeight: 1, cursorBlink: true, scrollback: 5000,
       theme: { background: '#0f1114', foreground: '#c9ced4', cursor: '#e6e8eb', selectionBackground: 'rgba(242,154,56,0.30)', black: '#1b1e23', brightBlack: '#7f8994' },
     });
     const fit = new FitAddon();
@@ -42,7 +43,28 @@ export class TerminalTabs {
     pane.hidden = true;
     this.panes.appendChild(pane);
     term.open(pane);
+    // WebGL zeichnet Block- und Rahmenzeichen selbst über die volle Zellhöhe. Der DOM-Renderer nimmt die Schriftglyphen,
+    // die die Zelle nicht immer ganz füllen (OpenCode-Seitenleisten erscheinen sonst gestrichelt). Ohne WebGL oder nach
+    // Kontextverlust (zu viele Kontexte neben dem 3D-Viewer) bleibt der DOM-Renderer als Rückfallweg.
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch { /* DOM-Renderer */ }
     term.onData((d) => window.soma.term.write(id, d));
+    // Strg+V selbst einfügen: xterm schickt sonst nur das Steuerzeichen ^V. PowerShell liest daraufhin die Zwischenablage
+    // selbst, Agenten wie OpenCode erwarten aber ein echtes Einfügen (bracketed paste). Ohne Text in der Zwischenablage
+    // (etwa ein Bild) geht ^V weiter, damit der Agent sie selbst lesen kann.
+    term.attachCustomKeyEventHandler((e) => {
+      if (!e.ctrlKey || e.altKey || e.metaKey || e.key.toLowerCase() !== 'v') return true;
+      e.preventDefault();
+      if (e.type === 'keydown') {
+        void navigator.clipboard.readText().catch(() => '').then((text) => {
+          if (text) term.paste(text); else window.soma.term.write(id, '\x16');
+        });
+      }
+      return false;
+    });
     term.onResize(({ cols, rows }) => window.soma.term.resize(id, cols, rows));
 
     const agent = !!opts.command;
