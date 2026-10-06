@@ -4,7 +4,8 @@ name: Sheet metal
 summary: {{material}}, {{thickness}} mm, Innenradius {{bend_radius}} mm: Biegungen modellieren, Schenkel, Freistiche, Abstände zur Biegung, Abwicklung mit K-Faktor {{k_factor}}.
 order: 14
 category: Fertigungsverfahren
-default: off
+default: on-demand
+when: parts will be made from bent sheet metal
 topics: Material und Dicke; Biegungen modellieren; Schenkel, Löcher, Freistiche; Abwicklung; Gewinde und Verbindungen
 var material: steel | | Material | steel=Stahl (DC01), stainless steel=Edelstahl, aluminium=Aluminium
 var thickness: 1.5 | mm | Blechdicke | 0.3..10

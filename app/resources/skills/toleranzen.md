@@ -4,7 +4,8 @@ name: Tolerances and fits
 summary: Spiel als benannte Konstanten, Kollisionsprüfung im Code, Durchgangs- und Kernlöcher, Senkungen für Zylinderschrauben, ISO-Passungen.
 order: 20
 category: Konstruktionswissen
-default: off
+default: on-demand
+when: parts must fit together: clearances, holes for screws, sliding or press fits
 topics: Fertigung: {{process}}; Spiel als benannte Konstanten; Kollisionen und Abstände im Code prüfen; Durchgangslöcher ({{hole_fit}}) und Kernlöcher; Senkungen für Zylinderschrauben; ISO-Passungen für gefertigte Teile
 var process: unknown | | Fertigung | unknown=noch offen (Agent fragt), 3D printing=3D-Druck, CNC milling=CNC-Fräsen, laser cutting=Laserschneiden, sheet metal=Blech
 var hole_fit: medium | | Durchgangslöcher nach ISO 273 | fine=fein, medium=mittel, coarse=grob
@@ -16,9 +17,9 @@ Every real part deviates from its nominal size. Design so that parts still fit w
 
 ## General rules
 
-- Manufacturing process set by the user in the app: **{{process}}**. If it is "unknown" and `NOTES.md` does not say how
-  the parts are made, ask: the clearances depend on it. An active skill for the process has more specific values, they
-  take precedence over this one.
+- Manufacturing process from the app: **{{process}}**. If it is "unknown" and `NOTES.md` does not say how the parts
+  are made, ask: the clearances depend on it. The skill for the process (if you follow one) has more specific values,
+  they take precedence over this one.
 - Every clearance, fit and allowance is a named constant at the top of `model.py` (`SCREW_CLEARANCE`, `LID_GAP`), never
   hidden in expressions.
 - Mating faces never share the exact same coordinate: a defined gap, or a defined overlap for a press fit.

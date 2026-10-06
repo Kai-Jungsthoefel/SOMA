@@ -120,9 +120,9 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('agents:detect', () => detectAgents(terminalEnv(dir())));
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('skills:list', () => ctl.skills());
-  ipcMain.handle('skills:set', (_e, id: unknown, on: unknown) => ctl.setSkill(id, !!on));
+  ipcMain.handle('skills:set', (_e, id: unknown, mode: unknown) => ctl.setSkill(id, mode));
   ipcMain.handle('skills:configure', (_e, id: unknown, values: unknown) => ctl.configureSkill(id, values));
-  ipcMain.handle('skills:setDefault', (_e, id: unknown, on: unknown) => ctl.setSkillDefault(id, !!on));
+  ipcMain.handle('skills:setDefault', (_e, id: unknown, mode: unknown) => ctl.setSkillDefault(id, mode));
   // Rückfragen aus dem Renderer (etwa ungespeicherte Eingaben im Editor) laufen über dieselben Dialoge wie im Hauptprozess
   ipcMain.handle('dialog:choose', (_e, o: { title?: unknown; message?: unknown; detail?: unknown; buttons?: unknown }) => {
     const buttons = Array.isArray(o?.buttons) ? o.buttons.slice(0, 4).map(String) : [];

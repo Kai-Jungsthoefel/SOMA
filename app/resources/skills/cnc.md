@@ -4,7 +4,8 @@ name: CNC milling and turning
 summary: {{material}}, kleinster Fräser Ø {{tool_d}} mm, {{axes}}: Innenradien, Taschentiefen, Zugänglichkeit, Bohrungen und Gewinde, Drehteile.
 order: 12
 category: Fertigungsverfahren
-default: off
+default: on-demand
+when: parts will be CNC milled or turned
 topics: Material und Maschine; Innenecken und Taschen; Zugänglichkeit und Aufspannungen; Wände, Bohrungen, Gewinde; Drehteile; Angaben für die Fertigung
 var material: aluminium | | Material | aluminium=Aluminium, steel=Stahl, stainless steel=Edelstahl, brass=Messing, POM=POM, plastic=anderer Kunststoff
 var tool_d: 6 | mm | Kleinster Fräser Ø | 0.5..25
@@ -12,7 +13,7 @@ var axes: 3 | | Maschine | 3=3-Achs, 3+2=3+2-Achs (5 Seiten), 5=5-Achs simultan
 ---
 # Skill: CNC milling and turning
 
-The user set these values in the app. They apply unless the user says otherwise in the chat or in `NOTES.md`:
+Settings from the app, they apply unless the user says otherwise in the chat or in `NOTES.md`:
 material **{{material}}**, smallest end mill Ø {{tool_d}} mm, machine with **{{axes}}** axes. Constants at the top:
 `TOOL_D = {{tool_d}}`, `INNER_R = TOOL_D / 2 + 0.2`.
 

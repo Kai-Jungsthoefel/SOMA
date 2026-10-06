@@ -4,14 +4,15 @@ name: Design workflow
 summary: Erst Anforderungen klären, dann vom Groben ins Feine, in kleinen Schritten, mit kurzem Bericht. Fehlende Angaben: {{ask}}. Detailgrad: {{detail}}.
 order: 1
 category: Arbeitsweise
-default: on
+default: always
+when: you start a new design or a larger change
 topics: Anforderungen klären; Vom Groben ins Feine; Kleine Schritte; Bericht am Ende
 var ask: ask | | Fehlende Angaben | ask=erst fragen, assume=annehmen und notieren
 var detail: prototype | | Detailgrad | concept=Konzept, prototype=Prototyp, production=fertigungsreif
 ---
 # Skill: Design workflow
 
-The user set these values in the app. They apply unless the user says otherwise in the chat or in `NOTES.md`.
+Settings from the app, they apply unless the user says otherwise in the chat or in `NOTES.md`.
 
 ## Before you model
 
@@ -31,8 +32,8 @@ The user set these values in the app. They apply unless the user says otherwise 
 3. Details: fillets, chamfers, text. Only when the shape is accepted.
 
 Level of detail: **{{detail}}**. "concept": main shapes only, no fillets or small holes. "prototype": functional and
-buildable, fits and holes correct, few cosmetic details. "production": complete, edges broken, all checks of the active
-skills done, files exported.
+buildable, fits and holes correct, few cosmetic details. "production": complete, edges broken, all checks of the skills you
+follow done, files exported.
 
 ## Small steps
 

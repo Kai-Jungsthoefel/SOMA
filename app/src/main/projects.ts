@@ -7,12 +7,14 @@ import { choose, choosePath } from './dialogs';
 import { GitRepo } from './git';
 import { MeasureService } from './measure';
 import { previewsDir, skillBackupsDir, skillsDir } from './paths';
-import { bundledSkill, checkValue, cleanValues, copySkill, isSkillId, listSkills, removeSkill, skillName, writeAgentsList, type SkillValues } from './skills';
+import {
+  agentsEntries, bundledSkill, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
+} from './skills';
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
   backupWorkspace, createProject, extractProject, getAppState, inspectProject, isProjectId, patchAppState, projectDir,
-  getSkillDefaults, readProjectJson, renameProject, setLastProject, setSkillDefault, updateProjectSkills,
+  getSkillDefaults, readProjectJson, readSkillModes, renameProject, setLastProject, setSkillDefault, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
 
@@ -338,25 +340,20 @@ export class ProjectController {
    */
   // ---- Skills (E17) -----------------------------------------------------------------------------------------------
 
-  /** Aktive Skills laut project.json, null wenn sie unlesbar ist. */
-  private activeSkills(id: string): string[] | null {
-    const pj = readProjectJson(id);
-    return pj ? (Array.isArray(pj.skills) ? pj.skills.filter(isSkillId) : []) : null;
-  }
-
   skills(): SkillInfo[] {
     const s = this.need();
-    return listSkills(s.dir, skillsDir(), this.activeSkills(s.id), readProjectJson(s.id)?.skill_settings ?? null, getSkillDefaults());
+    return listSkills(s.dir, skillsDir(), readSkillModes(s.id), readProjectJson(s.id)?.skill_settings ?? null, getSkillDefaults());
   }
 
-  /** Festlegen, ob neue Modelle den Skill eingeschaltet bekommen (E46). Gilt für die App, das offene Modell bleibt, wie es ist. */
-  setSkillDefault(skill: unknown, on: boolean): SkillResult {
+  /** Stufe für neue Modelle festlegen (E46, E55). Gilt für die App, das offene Modell bleibt, wie es ist. */
+  setSkillDefault(skill: unknown, mode: unknown): SkillResult {
     this.need();
     const list = () => this.skills();
     const b = isSkillId(skill) ? bundledSkill(skillsDir(), skill) : undefined;
     if (!b) return { ok: false, error: 'Diesen Skill bringt die App nicht mit. Neue Modelle können ihn nicht bekommen.', skills: list() };
+    if (!isSkillMode(mode)) return { ok: false, error: `Unbekannte Stufe „${String(mode)}“.`, skills: list() };
     try {
-      setSkillDefault(b.id, on, b.defaultOn);
+      setSkillDefault(b.id, mode, b.defaultMode);
       return { ok: true, skills: list() };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
@@ -370,21 +367,27 @@ export class ProjectController {
   }
 
   /**
-   * Skill ein- oder ausschalten: Kopie in .soma/skills/ anlegen oder entfernen (Abweichendes vorher in die Sicherung),
-   * project.json und den Abschnitt in AGENTS.md nachziehen. Erst die Prüfung, dann die Änderungen.
+   * Stufe eines Skills setzen (E55): Aus entfernt die Kopie in .soma/skills/, Bei Bedarf und Immer schreiben sie (mit oder
+   * ohne Hinweis für den Agenten). Abweichendes kommt vorher in die Sicherung. Danach project.json und den Abschnitt in
+   * AGENTS.md nachziehen. Erst die Prüfung, dann die Änderungen.
    */
-  setSkill(skill: unknown, on: unknown): SkillResult {
+  setSkill(skill: unknown, mode: unknown): SkillResult {
     const s = this.need();
-    const active = this.activeSkills(s.id);
+    const modes = readSkillModes(s.id);
     const list = () => this.skills();
     if (!isSkillId(skill)) return { ok: false, error: 'Unbekannter Skill.', skills: list() };
-    if (!active) return { ok: false, error: '.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill ein- oder ausschalten.', skills: list() };
+    if (!isSkillMode(mode)) return { ok: false, error: `Unbekannte Stufe „${String(mode)}“.`, skills: list() };
+    if (!modes) return { ok: false, error: '.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill umstellen.', skills: list() };
     try {
       const values = this.skillValues(s.id, skill);
-      const backup = on ? copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), values) : removeSkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), values);
-      const next = on ? [...new Set([...active, skill])] : active.filter((x) => x !== skill);
-      updateProjectSkills(s.id, { skills: next });
-      const warning = writeAgentsList(s.dir, next.map((id) => ({ id, name: skillName(s.dir, skillsDir(), id) })));
+      const was = modeOf(modes, skill);
+      // Von einer eingeschalteten Stufe aus ist die bisherige Kopie der App unverändert ersetzbar, von Aus aus nicht (Reste)
+      const backup = mode === 'off'
+        ? removeSkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), values)
+        : copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), values, mode, was === 'off' ? undefined : values);
+      const next = withMode(modes, skill, mode);
+      updateProjectSkills(s.id, { modes: next });
+      const warning = writeAgentsList(s.dir, agentsEntries(s.dir, skillsDir(), next));
       return { ok: true, backup, ...(warning ? { warning } : {}), skills: list() };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
@@ -392,8 +395,8 @@ export class ProjectController {
   }
 
   /**
-   * Einstellungen eines Skills ändern (null: zurück zum Standard). Erst alles prüfen, dann speichern. Ist der Skill an,
-   * wird seine Kopie mit den neuen Werten geschrieben (von Hand Geändertes vorher in die Sicherung).
+   * Einstellungen eines Skills ändern (null: zurück zum Standard). Erst alles prüfen, dann speichern. Ist der Skill nicht
+   * aus, wird seine Kopie mit den neuen Werten geschrieben (von Hand Geändertes vorher in die Sicherung).
    */
   configureSkill(skill: unknown, values: unknown): SkillResult {
     const s = this.need();
@@ -415,8 +418,9 @@ export class ProjectController {
     }
     try {
       updateProjectSkills(s.id, { skill_settings: { ...(pj.skill_settings ?? {}), [skill]: next } });
-      const active = Array.isArray(pj.skills) && pj.skills.includes(skill);
-      const backup = active ? copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), next, prev) : null;
+      const modes = readSkillModes(s.id);
+      const mode = modes ? modeOf(modes, skill) : 'off';
+      const backup = mode !== 'off' ? copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), next, mode, prev) : null;
       return { ok: true, backup, skills: list() };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };

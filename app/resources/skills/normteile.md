@@ -4,7 +4,8 @@ name: Standard parts
 summary: Schrauben, Muttern, Scheiben und Gewindeeinsätze aus soma.fasteners mit passenden Bohrungen, Mutternfallen, Maße von Kugellagern, Passstiften und Alu-Profilen.
 order: 22
 category: Konstruktionswissen
-default: on
+default: always
+when: the model needs screws, nuts, washers, threaded inserts, bearings, dowel pins or profiles
 topics: Schrauben, Muttern, Scheiben und Einsätze mit soma.fasteners; Lage und Bohrungen; Mutternfallen; Kugellager; Passstifte und Profile; Normteile im Modell
 ---
 # Skill: Standard parts

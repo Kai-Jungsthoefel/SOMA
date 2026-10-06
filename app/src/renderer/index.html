@@ -33,7 +33,7 @@
     <nav id="rail" aria-label="Seitenleisten">
       <button data-panel="files" aria-pressed="false" title="Dateien des Modells"><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Dateien</span></button>
       <button data-panel="code" aria-pressed="false" title="Code ansehen und bearbeiten"><i data-icon="code" data-size="20" data-stroke="1.7"></i><span>Code</span></button>
-      <button data-panel="skills" aria-pressed="false" title="Skills: Regeln für den Agenten, je Modell zuschaltbar (3D-Druck, Toleranzen …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
+      <button data-panel="skills" aria-pressed="false" title="Skills: Regeln für den Agenten, je Modell einstellbar (3D-Druck, Toleranzen …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
       <button disabled title="Die Paketliste kommt in einem späteren Schritt"><i data-icon="pkg" data-size="20" data-stroke="1.7"></i><span>Pakete</span></button>
       <span class="grow"></span>
       <button disabled title="Hilfe kommt in einem späteren Schritt"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Hilfe</span></button>
@@ -53,7 +53,7 @@
       <section id="panel-skills" class="panel" aria-label="Skills" hidden>
         <div class="side-hd"><b>Skills</b><span class="grow"></span>
           <button class="ibtn s side-close" aria-label="Skills schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
-        <div class="sk-intro">Regeln für den Agenten, je Modell zuschaltbar. Aktive Skills liegen in <code>.soma/skills/</code>, stehen in <code>AGENTS.md</code> und wandern mit der ZIP.</div>
+        <div class="sk-intro">Regeln für den Agenten. <b>Bei Bedarf</b> liest er einen Skill, wenn das Gespräch auf das Thema kommt, <b>Immer</b> befolgt er ihn bei jeder Änderung. Beide liegen in <code>.soma/skills/</code>, stehen in <code>AGENTS.md</code> und wandern mit der ZIP.</div>
         <div id="skills-list" class="sk-list" role="list"></div>
       </section>
       <section id="panel-code" class="panel" aria-label="Code" hidden>

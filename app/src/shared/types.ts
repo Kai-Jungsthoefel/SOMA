@@ -104,7 +104,14 @@ export interface SkillVar {
   options?: { value: string; label: string }[];
 }
 
-/** Ein Skill (E17): Regelwerk für den Agenten, pro Modell zuschaltbar. */
+/**
+ * Wie ein Skill für ein Modell gilt (E55): `off` (Aus) der Agent sieht ihn nicht, `demand` (Bei Bedarf) er liegt im Projekt
+ * und `AGENTS.md` nennt ihn mit Anlass, der Agent liest ihn, wenn das Thema aufkommt, `always` (Immer) der Agent befolgt ihn
+ * bei jeder Änderung.
+ */
+export type SkillMode = 'off' | 'demand' | 'always';
+
+/** Ein Skill (E17): Regelwerk für den Agenten, pro Modell einstellbar. */
 export interface SkillInfo {
   id: string;
   /** Titel und Kurzbeschreibung für die Oberfläche, Themen aus den Zwischenüberschriften. */
@@ -113,10 +120,10 @@ export interface SkillInfo {
   category: string;
   /** Bringt diese App mit (sonst liegt er nur im Projekt, etwa aus einer neueren App). */
   bundled: boolean;
-  /** Wird bei neuen Modellen eingeschaltet (E46), gilt für die ganze App, nicht für dieses Modell. */
-  defaultOn: boolean;
-  /** Laut project.json eingeschaltet. */
-  active: boolean;
+  /** Stufe bei neuen Modellen (E46, E55), gilt für die ganze App, nicht für dieses Modell. */
+  defaultMode: SkillMode;
+  /** Stufe laut project.json. */
+  mode: SkillMode;
   /** Kopie im Projekt (`.soma/skills/<id>.md`), null wenn keine da ist. */
   file: string | null;
   /** Die Kopie im Projekt weicht von der mitgelieferten Fassung (mit den eingestellten Werten) ab. */
@@ -226,14 +233,14 @@ export interface SomaApi {
   agents: { detect(): Promise<AgentInfo[]> };
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: { query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse> };
-  /** Skills des offenen Modells (E17): auflisten, ein- und ausschalten. */
+  /** Skills des offenen Modells (E17): auflisten, Stufe wählen (E55). */
   skills: {
     list(): Promise<SkillInfo[]>;
-    set(id: string, on: boolean): Promise<SkillResult>;
-    /** Einstellungen ändern, null setzt auf den Standard zurück. Ein aktiver Skill wird im Projekt neu geschrieben. */
+    set(id: string, mode: SkillMode): Promise<SkillResult>;
+    /** Einstellungen ändern, null setzt auf den Standard zurück. Die Kopie eines eingeschalteten Skills wird neu geschrieben. */
     configure(id: string, values: Record<string, SkillValue | null>): Promise<SkillResult>;
-    /** Festlegen, ob neue Modelle den Skill eingeschaltet bekommen (für die ganze App, das offene Modell bleibt, wie es ist). */
-    setDefault(id: string, on: boolean): Promise<SkillResult>;
+    /** Stufe für neue Modelle festlegen (für die ganze App, das offene Modell bleibt, wie es ist). */
+    setDefault(id: string, mode: SkillMode): Promise<SkillResult>;
   };
   /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
   dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };

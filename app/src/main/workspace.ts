@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ProjectListEntry } from '../shared/types';
+import type { ProjectListEntry, SkillMode } from '../shared/types';
 import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, projectStateDir, skillBackupsDir, skillsDir, templateDir, workspacesDir } from './paths';
-import { SKILLS_DIR, applyDefaultSkills, isSkillId, type SkillDefaults } from './skills';
+import { SKILLS_DIR, applyDefaultSkills, isSkillId, isSkillMode, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
 export const API_VERSION = 1;
@@ -18,8 +18,10 @@ export interface ProjectJson {
   entry: string;
   main_output: string;
   created: string;
-  /** Aktive Skills (E17), ihre Kopien liegen in .soma/skills/. */
+  /** Skills auf „Immer“ (E17, E55), ihre Kopien liegen in .soma/skills/. Vor E55 hießen sie „aktiv“. */
   skills?: string[];
+  /** Skills auf „Bei Bedarf“ (E55), ebenfalls mit Kopie. Was in keiner der beiden Listen steht, ist aus. */
+  skills_on_demand?: string[];
   /** Einstellungen der Skills je Kennung, nur vom Standard abweichende Werte (auch für ausgeschaltete Skills). */
   skill_settings?: Record<string, Record<string, number | string>>;
 }
@@ -55,7 +57,7 @@ export async function createProject(name = 'Neues Modell'): Promise<{ id: string
   // Skills für neue Modelle (E46) vor dem ersten Build und dem Startcommit: Der erste Stand enthält sie schon
   const skills = applyDefaultSkills(dir, skillsDir(), skillBackupsDir(id), getSkillDefaults());
   const pj: ProjectJson = { id, name, api_version: API_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString(),
-    ...(skills.length ? { skills } : {}) };
+    ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) };
   writeJson(path.join(dir, '.soma', 'project.json'), pj);
   writeJson(stateFile(id), { ...pj, app: {} } satisfies ProjectState);
   // Einmal bauen, bevor der Startcommit entsteht: So enthält auch der erste Stand eine output/model.step
@@ -92,19 +94,31 @@ export function renameProject(id: string, name: string): void {
   if (cur) writeJson(stateFile(id), { ...cur, name });
 }
 
+/** Stufen der Skills laut project.json (E55), null wenn sie unlesbar ist. Fehlt eine Liste, ist sie leer. */
+export function readSkillModes(id: string): SkillModes | null {
+  const pj = readProjectJson(id);
+  if (!pj) return null;
+  const list = (x: unknown) => (Array.isArray(x) ? x.filter(isSkillId) : []);
+  const always = list(pj.skills);
+  return { always, demand: list(pj.skills_on_demand).filter((s) => !always.includes(s)) };
+}
+
 /** Skills und ihre Einstellungen ins Projekt schreiben, in project.json und die App-Kopie (E27). Wirft, wenn project.json unlesbar ist. */
-export function updateProjectSkills(id: string, patch: Pick<ProjectJson, 'skills' | 'skill_settings'>): void {
+export function updateProjectSkills(id: string, patch: { modes?: SkillModes; skill_settings?: ProjectJson['skill_settings'] }): void {
   const file = path.join(projectDir(id), '.soma', 'project.json');
   const pj = readJson<ProjectJson>(file);
   if (!pj) throw new Error('.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill eintragen.');
   // Leere Einstellungen fallen weg, damit project.json ohne Änderung auch gleich bleibt
   const settings = Object.fromEntries(Object.entries(patch.skill_settings ?? pj.skill_settings ?? {}).filter(([, v]) => v && Object.keys(v).length));
-  const next: ProjectJson = { ...pj, ...(patch.skills ? { skills: patch.skills } : {}) };
+  // `skills` bleibt auch leer stehen (wie bisher), `skills_on_demand` nur, wenn es welche gibt
+  const next: ProjectJson = { ...pj, ...(patch.modes ? { skills: patch.modes.always, skills_on_demand: patch.modes.demand } : {}) };
+  if (!next.skills_on_demand?.length) delete next.skills_on_demand;
   if (Object.keys(settings).length) next.skill_settings = settings; else delete next.skill_settings;
   writeJson(file, next);
   const cur = readJson<ProjectState>(stateFile(id));
   if (cur) {
     const copy: ProjectState = { ...cur, skills: next.skills };
+    if (next.skills_on_demand) copy.skills_on_demand = next.skills_on_demand; else delete copy.skills_on_demand;
     if (next.skill_settings) copy.skill_settings = next.skill_settings; else delete copy.skill_settings;
     writeJson(stateFile(id), copy);
   }
@@ -128,7 +142,7 @@ export function inspectProject(id: string): { name: string; problems: string[] }
   }
   const entry = pj?.entry ?? 'model.py';
   if (!fs.existsSync(path.join(dir, entry))) problems.push(`Einstiegspunkt ${entry} fehlt.`);
-  for (const s of (Array.isArray(pj?.skills) ? pj.skills : []).filter(isSkillId)) {
+  for (const s of [pj?.skills, pj?.skills_on_demand].flatMap((x) => (Array.isArray(x) ? x : [])).filter(isSkillId)) {
     if (!fs.existsSync(path.join(dir, SKILLS_DIR, `${s}.md`))) problems.push(`Der Skill „${s}“ ist eingeschaltet, aber ${SKILLS_DIR}/${s}.md fehlt.`);
   }
   for (const bad of ['.venv', 'venv', 'env']) {
@@ -160,18 +174,26 @@ export function setLastProject(id: string): void {
   writeJson(appStateFile(), { ...s, lastProject: id });
 }
 
-/** Welche Skills neue Modelle bekommen, soweit der Nutzer es abweichend vom Kopf der Skills festgelegt hat (E46). */
+/**
+ * Stufen für neue Modelle, soweit der Nutzer sie abweichend vom Kopf der Skills festgelegt hat (E46, E55). Einträge von
+ * vor E55 waren an/aus: an gilt als „Immer“, aus als „Bei Bedarf“ (nicht an hieß damals nur: nicht bei jeder Änderung).
+ */
 export function getSkillDefaults(): SkillDefaults {
   const raw = readJson<{ skill_defaults?: unknown }>(appStateFile())?.skill_defaults;
   if (!raw || typeof raw !== 'object') return {};
-  return Object.fromEntries(Object.entries(raw).filter(([id, on]) => isSkillId(id) && typeof on === 'boolean')) as SkillDefaults;
+  const out: SkillDefaults = {};
+  for (const [id, v] of Object.entries(raw)) {
+    if (!isSkillId(id)) continue;
+    if (isSkillMode(v)) out[id] = v; else if (typeof v === 'boolean') out[id] = v ? 'always' : 'demand';
+  }
+  return out;
 }
 
-/** Legt fest, ob neue Modelle den Skill bekommen. Entspricht das dem Kopf des Skills (`factory`), fällt der Eintrag weg. */
-export function setSkillDefault(id: string, on: boolean, factory: boolean): void {
+/** Legt die Stufe für neue Modelle fest. Entspricht sie dem Kopf des Skills (`factory`), fällt der Eintrag weg. */
+export function setSkillDefault(id: string, mode: SkillMode, factory: SkillMode): void {
   const s = readJson<Record<string, unknown>>(appStateFile()) ?? {};
   const next = { ...getSkillDefaults() };
-  if (on === factory) delete next[id]; else next[id] = on;
+  if (mode === factory) delete next[id]; else next[id] = mode;
   const out: Record<string, unknown> = { ...s, skill_defaults: next };
   if (!Object.keys(next).length) delete out.skill_defaults;
   writeJson(appStateFile(), out);

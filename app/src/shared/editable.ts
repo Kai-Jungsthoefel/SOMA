@@ -7,7 +7,7 @@ export function readOnlyReason(rel: string): string | null {
   if (/^(AGENTS|CLAUDE)\.md$/i.test(p)) return 'Wird von der App verwaltet und bei Updates ersetzt. Eigene Wünsche und Regeln gehören in NOTES.md.';
   if (/^\.gitignore$/i.test(p)) return 'Wird von der App verwaltet.';
   if (/^(output|exports)\//i.test(p)) return 'Wird beim Bauen oder Exportieren neu erzeugt.';
-  if (/^\.soma\/skills\//i.test(p)) return 'Kopie eines Skills. Ein- und ausschalten links unter „Skills“.';
+  if (/^\.soma\/skills\//i.test(p)) return 'Kopie eines Skills. Umstellen links unter „Skills“.';
   if (/^\.(soma|git)(\/|$)/i.test(p)) return 'Interne Daten der App und von Git.';
   return null;
 }

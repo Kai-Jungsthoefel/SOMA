@@ -171,7 +171,7 @@ try {
   // Skills mit Einstellungen (E17): Variablen im Kopf, Platzhalter im Text, Prüfung der Werte
   const sk = path.join(tmp, 'skills.mjs');
   await build({ entryPoints: [path.join(APP, 'src', 'main', 'skills.ts')], outfile: sk, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
-  const { parseSkill, renderSkill, checkValue, cleanValues, bundledSkills, defaultSkills } = await import(pathToFileURL(sk).href);
+  const { parseSkill, renderSkill, checkValue, cleanValues, bundledSkills, defaultModes, skillsBlock } = await import(pathToFileURL(sk).href);
   const SRC = '---\ntitle: Test\nvar angle: 45 | ° | Winkel | 10..80\nvar mat: PLA | | Material | PLA, PETG=Petg-Filament\n---\n# Skill\n\nUp to {{angle}}° in {{mat}}, {{unknown}} stays.\n';
   const ps = parseSkill('t', SRC);
   check('Skill-Kopf: Zahl mit Einheit und Bereich, Auswahl mit Anzeigenamen', ps.vars.length === 2 && ps.vars[0].kind === 'number' && ps.vars[0].min === 10 && ps.vars[0].max === 80 && ps.vars[0].unit === '°'
@@ -187,17 +187,33 @@ try {
   const leftover = shipped.map((s) => renderSkill(s.text, {})).filter((x) => /\{\{/.test(x));
   // Einstellungen sind freiwillig (etwa „Normteile“ hat keine), der Kopf aber nicht
   check('Mitgelieferte Skills: Kopf vollständig, jeder Platzhalter hat eine Variable, Standardwerte gültig', shipped.length >= 12
-    && shipped.every((s) => s.title !== s.id && s.name !== s.title && s.summary && s.topics.length && s.order < 100)
+    && shipped.every((s) => s.title !== s.id && s.name !== s.title && s.summary && s.topics.length && s.order < 100 && s.when && !s.when.endsWith('.'))
     && shipped.every((s) => s.vars.every((v) => 'value' in checkValue(v, v.default))) && !leftover.length, shipped.map((s) => `${s.id}:${s.vars.length}`).join(','));
-  // Kategorien und Standard für neue Modelle (E46)
-  const kp = parseSkill('k', '---\ntitle: K\ncategory: Arbeitsweise\ndefault: on\n---\n# K\n');
-  check('Skill-Kopf: Kategorie und „default: on“, ohne Angabe keine Kategorie und aus', kp.category === 'Arbeitsweise' && kp.defaultOn === true
-    && ps.category === '' && ps.defaultOn === false && parseSkill('x', '---\ndefault: off\n---\n').defaultOn === false);
+  // Kategorien und Stufe für neue Modelle (E46, E55)
+  const kp = parseSkill('k', '---\ntitle: K\ncategory: Arbeitsweise\ndefault: always\nwhen: the user asks.\n---\n# K\n');
+  const modeOf = (d) => parseSkill('x', `---\ndefault: ${d}\n---\n`).defaultMode;
+  check('Skill-Kopf: Kategorie, Stufe „always“ (auch „on“), „off“, ohne Angabe Bei Bedarf, Anlass ohne Punkt', kp.category === 'Arbeitsweise' && kp.defaultMode === 'always'
+    && kp.when === 'the user asks' && ps.category === '' && ps.defaultMode === 'demand' && ps.when === '' && modeOf('on') === 'always' && modeOf('off') === 'off' && modeOf('on-demand') === 'demand');
   const cats = [...new Set(shipped.map((s) => s.category))];
   check('Mitgelieferte Skills: jeder mit Kategorie, drei Kategorien', shipped.every((s) => s.category) && cats.length === 3, cats.join(','));
   const SKD = path.join(APP, 'resources', 'skills');
-  check('Neue Modelle: ohne Vorgabe des Nutzers die Arbeitsweise und Normteile (Kopf „default: on“)', defaultSkills(SKD, {}).join(',') === 'konstruktionsablauf,cadquery,normteile', defaultSkills(SKD, {}).join(','));
-  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels', defaultSkills(SKD, { konstruktionsablauf: false, toleranzen: true, '3d-druck': true }).join(',') === 'cadquery,3d-druck,toleranzen,normteile');
+  const dm = defaultModes(SKD, {});
+  check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'konstruktionsablauf,cadquery,normteile'
+    && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen', JSON.stringify(dm));
+  const dm2 = defaultModes(SKD, { konstruktionsablauf: 'demand', toleranzen: 'always', '3d-druck': 'always', laser: 'off' });
+  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,3d-druck,toleranzen,normteile'
+    && dm2.demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen', JSON.stringify(dm2));
+  // Bei Bedarf (E55): Hinweis unter der ersten Überschrift, Werte als Standard der App, vom Nutzer gesetzte mit Namen
+  const rd = renderSkill(SRC, {}, 'demand');
+  check('Bei Bedarf: Hinweis direkt unter der Überschrift, mit Leerzeilen, Werte als Standard der App, NOTES.md', rd.includes('# Skill\n\n> **On demand:**')
+    && rd.includes('NOTES.md') && rd.includes('The values in this file are defaults of the app') && rd.includes('Up to 45° in PLA') && /chosen them[^\n]*\n> In the app[^\n]*\n\nUp to/.test(rd), rd);
+  check('Bei Bedarf mit eingestelltem Wert: nennt ihn, Immer ohne Hinweis', renderSkill(SRC, { angle: 50 }, 'demand').includes('The user set `angle` in the app. The other values')
+    && !renderSkill(SRC, { angle: 50 }, 'always').includes('On demand') && renderSkill(SRC, {}) === renderSkill(SRC, {}, 'always'));
+  check('Bei Bedarf ohne Einstellungen: kein Satz zu Werten', !renderSkill('---\ntitle: N\n---\n# N\n\nText.\n', {}, 'demand').includes('values'));
+  const blk = skillsBlock([{ id: 'a', name: 'A', when: '', mode: 'always' }, { id: 'b', name: 'B', when: 'parts move', mode: 'demand' }]);
+  check('AGENTS.md: zwei Listen, Bei Bedarf mit Anlass, ohne Skills ein Satz', blk.indexOf('### Always follow') < blk.indexOf('- `.soma/skills/a.md`: A')
+    && blk.indexOf('- `.soma/skills/a.md`: A') < blk.indexOf('### Read when relevant') && blk.includes('- `.soma/skills/b.md`: B. Read when parts move.')
+    && !skillsBlock([{ id: 'b', name: 'B', when: '', mode: 'demand' }]).includes('Always follow') && skillsBlock([]).includes('No skills are switched on'), blk);
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

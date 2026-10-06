@@ -4,13 +4,14 @@ name: Strength and stiffness
 summary: Gestaltungsregeln ohne Simulation: Kerben vermeiden, Rippen statt Masse, kurzer Kraftfluss, Überschlagsrechnung mit Sicherheit {{safety}}, Werkstoffwerte, Gewicht.
 order: 23
 category: Konstruktionswissen
-default: off
+default: on-demand
+when: a part carries load or must be stiff, strong or light
 topics: Gestaltungsregeln; Überschlagsrechnung; Werkstoffwerte; Gewicht
 var safety: 2 | | Sicherheitsfaktor | 1..10
 ---
 # Skill: Strength and stiffness
 
-No simulation: design for strength with rules and a rough calculation. Safety factor set by the user in the app:
+No simulation: design for strength with rules and a rough calculation. Safety factor from the app:
 `SAFETY = {{safety}}`. For parts that carry people, hang overhead or lift loads, say clearly that a real calculation and
 a test are needed.
 

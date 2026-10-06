@@ -4,7 +4,8 @@ name: Clean CadQuery modeling
 summary: Parameter oben, ein Teil je Funktion, feste Reihenfolge der Schritte, robuste Selektoren, typische Fehler vermeiden, jedes Teil prüfen.
 order: 2
 category: Arbeitsweise
-default: on
+default: always
+when: you write or restructure CadQuery code
 topics: Parameter und Aufbau; Reihenfolge der Schritte; Selektoren; Typische Fehler; Jedes Teil prüfen
 ---
 # Skill: Clean CadQuery modeling

@@ -4,14 +4,15 @@ name: Joints and fasteners
 summary: Schrauben (bevorzugt {{screw}}) mit Einschraubtiefe und Randabstand, Schnapphaken, Scharniere, Stifte und Formschluss, Magnete, Kleben.
 order: 21
 category: Konstruktionswissen
-default: off
+default: on-demand
+when: parts are joined: screws, snap fits, hinges, pins, magnets or glue
 topics: Schrauben; Schnapphaken; Scharniere; Stifte und Formschluss; Magnete und Kleben
 var screw: M3 | | Bevorzugte Schraube | M2, M2.5, M3, M4, M5, M6, M8
 ---
 # Skill: Joints and fasteners
 
-The user set the preferred screw size in the app. It applies unless the user says otherwise in the chat or in
-`NOTES.md`. Clearances for sliding fits come from the active process or tolerances skill.
+Preferred screw size from the app. It applies unless the user says otherwise in the chat or in `NOTES.md`.
+Clearances for sliding fits come from the process or tolerances skill.
 
 ## Screws
 

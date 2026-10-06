@@ -4,7 +4,8 @@ name: 3D printing (FDM)
 summary: Druckbare Wandstärken, Überhänge bis {{overhang}}°, Spiel für Passungen, Ausrichtung auf dem Druckbett, Gewinde über Einschmelzmuttern.
 order: 10
 category: Fertigungsverfahren
-default: off
+default: on-demand
+when: the parts will be 3D printed on a filament printer (FDM)
 topics: Drucker und Material; Wände und kleine Details; Überhänge und Brücken; Ausrichtung und Bauraum; Spiel und Passungen; Schrauben und Gewinde; Prüfen und Export
 var material: PLA | | Material | PLA, PETG, ABS, ASA, TPU
 var nozzle: 0.4 | mm | Düse | 0.1..1.2
@@ -19,8 +20,8 @@ var clearance: 0.3 | mm | Spiel je Seite (Gleitpassung) | 0..3
 ---
 # Skill: 3D printing (FDM)
 
-The parts are printed on a filament printer (FDM). The user set these values in the app. They apply unless the user
-says otherwise in the chat or in `NOTES.md`:
+The parts are printed on a filament printer (FDM). Settings from the app, they apply unless the user says otherwise
+in the chat or in `NOTES.md`:
 
 | Setting | Value |
 |---|---|

@@ -4,7 +4,8 @@ name: Laser cutting
 summary: Teile aus {{material}}, {{thickness}} mm: Steckverbindungen mit Schnittbreite {{kerf}} mm, Mindeststege, Zusammenbau in 3D, DXF je Platte.
 order: 13
 category: Fertigungsverfahren
-default: off
+default: on-demand
+when: parts will be laser cut from flat sheets (plywood, MDF, acrylic)
 topics: Material und Plattenstärke; Schnittbreite und Steckverbindungen; Stege, Löcher, Ecken; Aufbau im Modell; Prüfen und Export als DXF
 var material: plywood | | Material | plywood=Sperrholz, MDF=MDF, acrylic=Acryl (PMMA), cardboard=Karton
 var thickness: 3 | mm | Plattenstärke | 0.5..25

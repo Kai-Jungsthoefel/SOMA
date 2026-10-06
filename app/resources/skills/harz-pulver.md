@@ -4,7 +4,8 @@ name: Resin and powder 3D printing (SLA, SLS, MJF)
 summary: {{process}}: Wände ab {{min_wall}} mm, Spiel {{clearance}} mm je Seite, Hohlkörper mit Ablauflöchern, Ausrichtung und Stützen.
 order: 11
 category: Fertigungsverfahren
-default: off
+default: on-demand
+when: the parts will be printed in resin (SLA, DLP) or powder (SLS, MJF)
 topics: Verfahren: {{process}}; Wände und Details; Hohlkörper; Ausrichtung und Stützen; Spiel und Gewinde; Prüfen und Export
 var process: SLA | | Verfahren | SLA=Harz (SLA, DLP), SLS=Pulver (SLS, MJF)
 var min_wall: 1 | mm | Mindestwand | 0.3..10
@@ -12,7 +13,7 @@ var clearance: 0.2 | mm | Spiel je Seite (Gleitpassung) | 0..2
 ---
 # Skill: Resin and powder 3D printing
 
-Process set by the user in the app: **{{process}}**. "SLA" means resin printers (SLA, DLP, MSLA), "SLS" powder bed
+Process from the app: **{{process}}**. "SLA" means resin printers (SLA, DLP, MSLA), "SLS" powder bed
 printers (SLS, MJF). The values apply unless the user says otherwise in the chat or in `NOTES.md`. Constants at the
 top: `MIN_WALL = {{min_wall}}`, `CLEARANCE = {{clearance}}`.
 

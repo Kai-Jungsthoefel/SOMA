@@ -4,14 +4,15 @@ name: Assemblies and motion
 summary: Teile in Einbaulage aus gemeinsamen Bezügen, Schnittstellen nur einmal definiert, Montierbarkeit, bewegliche Teile über den ganzen Weg prüfen ({{motion_gap}} mm Abstand), Stückliste.
 order: 24
 category: Konstruktionswissen
-default: off
+default: on-demand
+when: several parts are assembled or move against each other
 topics: Bezüge und Einbaulage; Schnittstellen; Montierbarkeit; Bewegliche Teile; Stückliste
 var motion_gap: 1 | mm | Mindestabstand bewegter Teile | 0..20
 ---
 # Skill: Assemblies and motion
 
-The user set the minimum gap between moving parts in the app: `MOTION_GAP = {{motion_gap}}`. It applies unless the
-user says otherwise in the chat or in `NOTES.md`.
+Minimum gap between moving parts, from the app: `MOTION_GAP = {{motion_gap}}`. It applies unless the user says
+otherwise in the chat or in `NOTES.md`.
 
 ## Positions
 

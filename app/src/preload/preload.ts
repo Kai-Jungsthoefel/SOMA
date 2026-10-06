@@ -63,9 +63,9 @@ const api: SomaApi = {
   measure: { query: (source, req) => ipcRenderer.invoke('measure:query', source, req) },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
-    set: (id, on) => ipcRenderer.invoke('skills:set', id, on),
+    set: (id, mode) => ipcRenderer.invoke('skills:set', id, mode),
     configure: (id, values) => ipcRenderer.invoke('skills:configure', id, values),
-    setDefault: (id, on) => ipcRenderer.invoke('skills:setDefault', id, on),
+    setDefault: (id, mode) => ipcRenderer.invoke('skills:setDefault', id, mode),
   },
   dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
   openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
