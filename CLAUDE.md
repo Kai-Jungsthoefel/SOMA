@@ -34,7 +34,8 @@ uv pip install --python "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/python.ex
 npm install
 npm start               # baut und startet
 npm run typecheck
-npm test                # baut, dann test:unit, test:smoke, test:versions, test:editor, test:measure, test:groups, test:section, test:explode, test:skills, test:fasteners und test:animation (echte App, unsichtbares Fenster)
+npm test                # baut, dann alle Suiten (unit, smoke, versions, editor, measure, groups, section, explode, skills, fasteners, animation) parallel über test/run-all.mjs (echte App, unsichtbares Fenster)
+node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run build
 
 # soma direkt
 "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/soma.exe" build --project <ordner>
@@ -65,7 +66,7 @@ npm test                # baut, dann test:unit, test:smoke, test:versions, test:
 
 - **Netzlaufwerke:** Liegt das Repo auf einem Netzlaufwerk, starten die sandboxed Prozesse von Electron nicht (schwarzes Fenster, `launch-failed` Code 18). Electron läuft deshalb aus einer lokalen Kopie (`app/scripts/electron-local.mjs`). Nie `node_modules/electron/dist/electron.exe` direkt starten. Die Python-Umgebung liegt lokal unter `%LOCALAPPDATA%\cadide-phase0\venv-full`.
 - **Proxy:** Node-Downloads (Electron-Binary, dugite) brauchen `NODE_USE_ENV_PROXY=1`.
-- **Ports:** Feste Ports können von anderen Programmen belegt sein. Eigene Ports: 8791 (Phase 0), 9333 (Tests).
+- **Ports:** Feste Ports können von anderen Programmen belegt sein. Eigene Ports: 8791 (Phase 0), 9333 (Tests einzeln ohne `SOMA_TEST_PORT`; `run-all.mjs` holt freie Ports). Laufen mehrere Sessions gleichzeitig, braucht jede eigene Ports, und Testprozesse nur die eigenen beenden.
 - Prozesse nur gezielt beenden (Pfad des Repos oder `soma-dev` in der Kommandozeile), nie pauschal alle `electron.exe` oder `node.exe`.
 
 ## Stolpersteine beim Bearbeiten

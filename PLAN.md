@@ -462,6 +462,8 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - Vorschau eines alten Stands beendet Animation und Analyse (beide gehören zum aktuellen Code)
 - Abhängigkeit mediabunny (MPL-2.0, Dateien unverändert, E30) für MP4
 - Explosionsansicht (E56, E57, E59): Start bei 50 % des Schiebers mit einer Lücke von 5 % der Modelldiagonale, bei 100 % dreifach, mindestens eine halbe Lücke je Teil. Das größte Teil bleibt stehen. Strahltest mit Punkten 1 ‰ der Diagonale (mindestens 0,1 mm) unter der Oberfläche, Berührung unter 0,4 % (mindestens 0,5 mm), etwa 600 Punkte je Teil. Gruppen aus `group=` zählen nicht mehr. Referenzen bleiben stehen und zählen nicht mit, ausgeblendete Teile zählen mit (sonst spränge die Explosion beim Ausblenden). Wege sind anfangs an und zeigen den eigenen Weg ab dem Elternteil. Messen und Explosion schließen sich aus, ebenso Animation und Explosion.
+- Terminal: Strg+V fügt den Text der Zwischenablage selbst ein (bracketed paste), sonst kam bei OpenCode nichts an. Ohne Text (Bild) geht `^V` an das Programm weiter
+- `npm test` läuft über `test/run-all.mjs` mit vier Suiten gleichzeitig und freien Ports (5,5 bis 7 statt 8,5 Minuten, die Animation bestimmt die Dauer und wird unter Last 2 bis 3 Mal langsamer), Watchdog dann 15 Minuten. `soma` lädt cadquery erst in Befehlen, die es brauchen (`soma --version` 0,7 statt 4,4 s)
 
 - Rolle `reference` und ihre Standardwerte (E34)
 - Hinweis beim ersten Start, dass der Agent mit den Rechten des Nutzers läuft (E29)
