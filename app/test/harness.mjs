@@ -13,7 +13,7 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Startet die App. Standard: Fenster unsichtbar (SMOKE_VISIBLE=1 zeigt es), eigener App-Daten-Ordner,
  * Watchdog (hängt etwas, wird alles hart beendet). `userData` erlaubt einen Neustart mit denselben Daten.
  */
-export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 9333, userData, watchdogMs = 6 * 60 * 1000, name = 'test' } = {}) {
+export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 9333, userData, watchdogMs = (Number(process.env.SOMA_TEST_WATCHDOG_S) || 6 * 60) * 1000, name = 'test' } = {}) {
   // SMOKE_VISIBLE=1 sichtbar, =offscreen angezeigt außerhalb des Bildschirms (frische Screenshots, kein Fokusklau), sonst unsichtbar
   const mode = process.env.SMOKE_VISIBLE;
   const visible = mode === '1';
@@ -61,7 +61,10 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
 /** Sammelt Prüfungen und gibt sie einheitlich aus. */
 export function checker() {
   let fails = 0;
-  const check = (label, ok, detail = '') => { console.log((ok ? 'OK     ' : 'FEHLER ') + label.padEnd(68) + detail); if (!ok) fails++; };
+  // SOMA_TEST_TIMES=1: Sekunden seit Start vor jeder Prüfung, um langsame Stellen zu finden
+  const t0 = Date.now();
+  const stamp = () => process.env.SOMA_TEST_TIMES ? `[${((Date.now() - t0) / 1000).toFixed(1).padStart(6)} s] ` : '';
+  const check = (label, ok, detail = '') => { console.log((ok ? 'OK     ' : 'FEHLER ') + stamp() + label.padEnd(68) + detail); if (!ok) fails++; };
   return { check, fail: () => { fails++; }, get fails() { return fails; } };
 }
 

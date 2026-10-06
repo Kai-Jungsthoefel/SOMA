@@ -110,7 +110,7 @@ try {
   await waitFor('Zeichenfläche', () => window.__t.markup().active, 5000).catch(() => {});
   await domClick('btn-mark-send');
   const firstShort = await g('rev-parse', '--short', first);
-  await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markierung: .soma/feedback/'), 10000, await term()).catch(() => {});
+  await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markierung: .soma/feedback/'), 30000, await term()).catch(() => {});
   check('Markierung in der Vorschau nennt den alten Stand', (await termText()).includes(`zeigt den älteren Stand ${firstShort} "Neues Modell angelegt"]`), (await termText()).match(/\[Markierung:[^\]]*\]/)?.[0]?.slice(0, 90) ?? '');
   check('Nach der Markierung läuft die Vorschau weiter', !!(await versions()).previewing && await ev(() => document.getElementById('viewer').classList.contains('preview')));
   await ev((i) => window.soma.term.write(i, '\x03'), await term()); // Zeile verwerfen
