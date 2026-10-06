@@ -11,6 +11,8 @@ export interface OverlayContent {
   labels?: { text: string; x: number; y: number }[];
   stamp?: string | null;
   legend?: ResultMeta | null;
+  /** Zusatzzeile unter der Legende, etwa die Überhöhung der Verformung (FEM). */
+  legendNote?: string | null;
   /** Untertitel so weit über dem unteren Rand (Pixel), im Viewer über der Karte der Animation. */
   captionLift?: number;
 }
@@ -102,7 +104,7 @@ export function paintOverlay(g: CanvasRenderingContext2D, w: number, h: number, 
     g.fillText(c.stamp, unit * 0.6 + pad, unit * 1.5);
   }
 
-  if (c.legend) paintLegend(g, w, h, unit, c.legend);
+  if (c.legend) paintLegend(g, w, h, unit, c.legend, c.legendNote ?? null);
   g.restore();
 }
 
@@ -125,18 +127,18 @@ export function resultColor(v: number, m: Pick<ResultMeta, 'bad' | 'threshold' |
   return mix(OK, FAR, (f - 0.15) / 0.85);
 }
 
-const fmt = (v: number, unit: string) => `${(+v.toFixed(unit === '°' ? 1 : 2)).toLocaleString('de-DE')}${unit === '°' ? '°' : ` ${unit}`}`;
+const fmt = (v: number, unit: string) => `${(+v.toFixed(unit === '°' ? 1 : 2)).toLocaleString('de-DE')}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
 
 /** Legende unten rechts: Farbverlauf über die Spanne, Grenzwert markiert. */
-function paintLegend(g: CanvasRenderingContext2D, w: number, h: number, unit: number, m: ResultMeta): void {
+function paintLegend(g: CanvasRenderingContext2D, w: number, h: number, unit: number, m: ResultMeta, note: string | null): void {
   const bw = Math.min(w * 0.36, unit * 22), bh = unit * 0.9, pad = unit * 0.8;
-  const boxW = bw + pad * 2, boxH = unit * 6.3;
+  const boxW = bw + pad * 2, boxH = unit * (note ? 7.5 : 6.3);
   const x0 = w - boxW - unit, y0 = h - boxH - unit;
   g.fillStyle = 'rgba(18,20,23,.88)';
   roundRect(g, x0, y0, boxW, boxH, unit * 0.4); g.fill();
   g.fillStyle = '#e6e8eb';
   g.font = `600 ${Math.round(unit * 1.0)}px ${FONT}`;
-  g.fillText(`${m.title} (${m.unit})`, x0 + pad, y0 + unit * 1.3);
+  g.fillText(m.unit ? `${m.title} (${m.unit})` : `${m.title}: ${m.quantity}`, x0 + pad, y0 + unit * 1.3);
   const bx = x0 + pad, by = y0 + unit * 2.3;
   const [lo, hi] = m.range;
   for (let i = 0; i < bw; i++) {
@@ -156,4 +158,8 @@ function paintLegend(g: CanvasRenderingContext2D, w: number, h: number, unit: nu
   g.fillStyle = '#e6e8eb';
   g.fillText(`Grenze ${fmt(m.threshold, m.unit)}`, Math.min(Math.max(tx, bx + unit * 3), bx + bw - unit * 3), by + bh + unit * 2.1);
   g.textAlign = 'left';
+  if (note) {
+    g.fillStyle = '#a3acb6';
+    g.fillText(note, bx, by + bh + unit * 3.3);
+  }
 }

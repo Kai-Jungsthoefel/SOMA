@@ -103,7 +103,9 @@ export class AnimBuilder {
   dispose(): void { this.disposed = true; this.pending = null; }
 }
 
-const KINDS = new Set(['overhang', 'thickness', 'clearance']);
+const KINDS = new Set(['overhang', 'thickness', 'clearance', 'fem']);
+/** Lastfall einer FEM-Studie: eine Python-Datei im Projekt (kommt aus der Ergebnisdatei, also prüfen). */
+const STUDY = /^[\p{L}\p{N}_./ -]{1,200}\.py$/u;
 
 /** Ergebnisse in .soma/results/. Veraltet: Der Code ist neuer als die Auswertung. */
 export function listResults(dir: string): ResultEntry[] {
@@ -114,7 +116,11 @@ export function listResults(dir: string): ResultEntry[] {
   for (const f of files) {
     const meta = (readGlbJson(path.join(dir, '.soma', 'results', f))?.extras as { soma_result?: ResultMeta } | undefined)?.soma_result;
     if (!meta || typeof meta.id !== 'string' || !Array.isArray(meta.range)) continue;
-    out.push({ ...meta, file: `.soma/results/${f}`, stale: model > (Number(meta.created) || 0) * 1000 });
+    // FEM: auch die Datei mit dem Lastfall zählt (analyses/ gehört nicht zu den Quellen des Modells)
+    let newest = model;
+    const study = meta.fem?.study;
+    if (typeof study === 'string' && STUDY.test(study)) try { newest = Math.max(newest, mtime(resolveInside(dir, study))); } catch { /* außerhalb: zählt nicht */ }
+    out.push({ ...meta, file: `.soma/results/${f}`, stale: newest > (Number(meta.created) || 0) * 1000 });
   }
   return out;
 }
@@ -129,7 +135,16 @@ export async function rerunResult(dir: string, id: string): Promise<{ ok: boolea
   const cmd = Array.isArray(r.command) ? r.command.map(String) : [];
   if (cmd[0] !== 'analyze' || !KINDS.has(cmd[1])) return { ok: false, error: 'Unbekannte Auswertung in der Datei.' };
   const args = ['analyze', cmd[1]];
-  for (const a of cmd.slice(2)) {
+  let rest = cmd.slice(2);
+  if (cmd[1] === 'fem') {
+    // Die Datei mit dem Lastfall: relativ, im Projekt, eine .py-Datei
+    const study = rest[0] ?? '';
+    if (!STUDY.test(study) || study.startsWith('-') || study.includes('..')) return { ok: false, error: `Unerwartete Studie in der Datei: ${study.slice(0, 60)}` };
+    try { resolveInside(dir, study); } catch { return { ok: false, error: 'Die Studie liegt außerhalb des Projekts.' }; }
+    args.push(study);
+    rest = rest.slice(1);
+  }
+  for (const a of rest) {
     // Immer als --schalter=wert: Werte wie -z oder -0.5 sind dann keine Schalter für argparse
     const m = /^(--parts|--threshold|--up|--name)=(.{1,400})$/s.exec(a);
     if (!m) return { ok: false, error: `Unerwartete Angabe in der Datei: ${a.slice(0, 60)}` };

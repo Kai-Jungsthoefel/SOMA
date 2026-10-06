@@ -33,7 +33,8 @@ async function prepare(job: RenderJob): Promise<Scene> {
 
 /** Stand zur Zeit t (ohne Animation: die gewählte Ansicht) und ein Bild davon. */
 function frame(s: Scene, t: number, stamp: string | null, forceView: boolean): HTMLCanvasElement {
-  let content: Parameters<typeof paintOverlay>[3] = { legend: s.legend, stamp };
+  // FEM: Das Bild zeigt die Verformung überhöht (wie der Viewer beim Öffnen), die Legende sagt, wie stark
+  let content: Parameters<typeof paintOverlay>[3] = { legend: s.legend, legendNote: s.legend ? results.deformNote() : null, stamp };
   let labels: { text: string; at: THREE.Vector3 }[] = [];
   if (s.anim) {
     const f = s.anim.frame(t);

@@ -1,6 +1,6 @@
 import type { ResultEntry } from '../shared/types';
 import { resultColor } from './overlay';
-import type { ResultLayer, ResultProbe } from './resultview';
+import { fmtScale, type ResultLayer, type ResultProbe } from './resultview';
 import { el } from './ui';
 
 // Ergebnisse von `soma analyze` im Viewer (E58): auswählen, farbig zeigen, Wert unter dem Zeiger, an den Agenten geben.
@@ -10,6 +10,8 @@ interface Ui {
   card: HTMLElement; close: HTMLButtonElement; select: HTMLSelectElement;
   legend: HTMLElement; summary: HTMLElement; probe: HTMLElement; hint: HTMLElement;
   rerun: HTMLButtonElement; agent: HTMLButtonElement;
+  /** Nur FEM: Überhöhung der Verformung und Lastfall ein/aus. */
+  femRow: HTMLElement; deform: HTMLSelectElement; bcs: HTMLButtonElement;
   viewerEl: HTMLElement;
 }
 interface Deps {
@@ -25,8 +27,14 @@ interface Deps {
 }
 
 const num = (v: number, unit: string) => (+v.toFixed(unit === '°' ? 1 : 2) + 0).toLocaleString('de-DE'); // + 0: kein „-0“
-const withUnit = (v: number, unit: string) => `${num(v, unit)}${unit === '°' ? '°' : ` ${unit}`}`;
-const dot = (v: number, unit: string) => `${v.toFixed(unit === '°' ? 1 : 2)}${unit === '°' ? '°' : ` ${unit}`}`;
+// Ohne Einheit (Sicherheitsfaktor der FEM) steht die Zahl allein
+const withUnit = (v: number, unit: string) => `${num(v, unit)}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
+const dot = (v: number, unit: string) => `${v.toFixed(unit === '°' ? 1 : 2)}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
+const de = (v: number, digits: number) => (+v.toFixed(digits) + 0).toLocaleString('de-DE');
+/** Spannung und Verschiebung an einer Stelle (FEM). */
+const femAt = (p: ResultProbe) => (p.stress != null ? ` · ${de(p.stress, 1)} MPa` : '') + (p.disp != null ? ` · ${de(p.disp, 3)} mm` : '');
+/** Höchster Sicherheitsfaktor in der Datei (soma.fem VALUE_CAP): Dort ist kaum Spannung, der Wert selbst sagt nichts. */
+const SAFETY_CAP = 99;
 /** Abstand des Schilds vom Zeiger (px): neben den Armen des Fadenkreuzes, nicht darauf. */
 const TIP_GAP = 14;
 
@@ -52,6 +60,8 @@ export class ResultTool {
     ui.select.addEventListener('change', () => { const e = this.list.find((r) => r.id === ui.select.value); if (e) void this.load(e); });
     ui.rerun.addEventListener('click', () => void this.rerun());
     ui.agent.addEventListener('click', () => { const t = this.agentNote(); if (t) d.insert(t); });
+    ui.deform.addEventListener('change', () => { d.layer.setScale(Number(ui.deform.value) || 0); this.hideTip(); });
+    ui.bcs.addEventListener('click', () => { d.layer.setBcsVisible(!d.layer.bcsVisible); ui.bcs.setAttribute('aria-pressed', String(d.layer.bcsVisible)); });
     ui.viewerEl.append(this.tip);
     let queued = false, pos: [number, number] | null = null, away = true;
     // Zeiger nicht mehr über dem Bild: Schild weg, die Karte zeigt wieder die gemerkte Stelle (wichtig vor „An Agent geben“)
@@ -160,7 +170,7 @@ export class ResultTool {
     this.hideTip();
     this.ui.hint.classList.toggle('warn', !!r?.stale);
     if (!r) {
-      this.ui.hint.textContent = 'Noch kein Ergebnis. Der Agent erzeugt es mit soma analyze (Überhang, Wandstärke, Abstand).';
+      this.ui.hint.textContent = 'Noch kein Ergebnis. Der Agent erzeugt es mit soma analyze (Überhang, Wandstärke, Abstand, Festigkeit mit FEM).';
       return;
     }
     this.ui.hint.textContent = this.busy ? 'Wird neu berechnet …' : r.stale ? 'Älter als der Code. „Neu berechnen“ wertet das aktuelle Modell aus.' : `soma ${r.command.join(' ')}`;
@@ -176,7 +186,7 @@ export class ResultTool {
     mark.style.left = `${Math.max(0, Math.min(100, ((r.threshold - lo) / (hi - lo || 1)) * 100))}%`;
     bar.append(mark);
     this.ui.legend.append(
-      el('div', { className: 'rs-q', textContent: `${r.quantity} (${r.unit})` }), bar,
+      el('div', { className: 'rs-q', textContent: r.unit ? `${r.quantity} (${r.unit})` : r.quantity }), bar,
       el('div', { className: 'rs-scale' }, el('span', { textContent: withUnit(lo, r.unit) }),
         el('span', { className: 'rs-thr', textContent: `Grenze ${withUnit(r.threshold, r.unit)}, kritisch ${r.bad === 'high' ? 'darüber' : 'darunter'}` }),
         el('span', { textContent: withUnit(hi, r.unit) })),
@@ -184,10 +194,38 @@ export class ResultTool {
     for (const p of r.parts) {
       const range = p.min != null && p.max != null ? `${withUnit(p.min, r.unit)} bis ${withUnit(p.max, r.unit)}` : 'keine Werte';
       const crit = p.critical > 0 ? `${(p.critical / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })} cm² kritisch` : 'nichts kritisch';
+      // FEM: kleinste Sicherheit, höchste Spannung und größte Verschiebung sagen mehr als die Spanne
+      // („kritisch“ nur, wenn es so ist: die Zeile ist schmal, und sie ist dann ohnehin rot)
+      const text = r.fem && p.stress && p.displacement && p.min != null
+        ? `Sicherheit ${de(p.min, 2)} · ${de(p.stress.value, 1)} MPa · ${de(p.displacement.value, 3)} mm${p.critical > 0 ? ` · ${crit}` : ''}`
+        : `${range} · ${crit}`;
       this.ui.summary.append(el('div', { className: 'rs-row' + (p.critical > 0 ? ' bad' : '') },
-        el('b', { textContent: p.name }), el('span', { textContent: `${range} · ${crit}` })));
+        el('b', { textContent: p.name }), el('span', { textContent: text })));
     }
+    this.renderFem(r);
     this.showProbe(this.pinned, true);
+  }
+
+  /** FEM: Lastfall und Hinweise in der Karte, Wahl der Überhöhung. */
+  private renderFem(r: ResultEntry): void {
+    const fem = r.fem;
+    this.ui.femRow.hidden = !fem;
+    if (!fem) return;
+    const n = (v: number[]) => `${de(Math.hypot(v[0], v[1], v[2]), 1)} N`;
+    for (const b of fem.bcs) {
+      const what = b.kind === 'fix' ? `fest${b.axes && b.axes !== 'xyz' ? ` (nur ${b.axes.toUpperCase().split('').join(', ')})` : ''}`
+        : b.kind === 'force' ? 'Kraft' : 'Druck';
+      const val = b.kind === 'fix' ? (b.reaction ? `Lagerkraft ${n(b.reaction)}` : '')
+        : b.kind === 'pressure' ? `${de(b.value ?? 0, 3)} MPa, zusammen ${n(b.total ?? [0, 0, 0])}` : n(b.total ?? [0, 0, 0]);
+      this.ui.summary.append(el('div', { className: 'rs-row bc' }, el('b', { textContent: what }), el('span', { textContent: `${b.label} · ${val}` })));
+    }
+    for (const t of r.notes ?? []) this.ui.summary.append(el('div', { className: 'rs-note', textContent: t }));
+    const l = this.d.layer;
+    const opts: [number, string][] = [[0, 'Unverformt'], [1, 'Echte Größe']];
+    if (l.autoScale > 1) opts.push([l.autoScale, `${fmtScale(l.autoScale)}-fach überhöht`]);
+    this.ui.deform.replaceChildren(...opts.map(([v, t]) => el('option', { value: String(v), textContent: t })));
+    this.ui.deform.value = String(l.scale);
+    this.ui.bcs.setAttribute('aria-pressed', String(l.bcsVisible));
   }
 
   private showProbe(p: ResultProbe | null, pinned: boolean): void {
@@ -210,7 +248,7 @@ export class ResultTool {
   private showTip(p: ResultProbe | null, at: [number, number]): void {
     const r = this.current;
     if (!p || !r) { this.hideTip(); return; }
-    this.tipVal.textContent = withUnit(p.value, r.unit);
+    this.tipVal.textContent = (r.fem && p.value >= SAFETY_CAP ? `über ${SAFETY_CAP}` : withUnit(p.value, r.unit)) + femAt(p);
     this.tipName.textContent = p.name;
     this.tipDot.style.background = `rgb(${resultColor(p.value, r).map(Math.round).join(',')})`;
     this.tip.hidden = false;
@@ -230,7 +268,8 @@ export class ResultTool {
 
   private probeText(p: ResultProbe, pinned: boolean): string {
     const r = this.current!;
-    return `${pinned ? 'Gewählt' : 'Zeiger'}: ${p.name}, ${withUnit(p.value, r.unit)} bei (${p.point.map((v) => (v + 0).toLocaleString('de-DE')).join('; ')})`;
+    const what = r.fem ? `Sicherheit ${p.value >= SAFETY_CAP ? `über ${SAFETY_CAP}` : withUnit(p.value, r.unit)}${femAt(p)}` : withUnit(p.value, r.unit);
+    return `${pinned ? 'Gewählt' : 'Zeiger'}: ${p.name}, ${what} bei (${p.point.map((v) => (v + 0).toLocaleString('de-DE')).join('; ')})`;
   }
 
   private async rerun(): Promise<void> {
@@ -252,7 +291,9 @@ export class ResultTool {
     if (!r) return null;
     const head = `[Ergebnis: "${r.title}" (${r.file}, Grenzwert ${dot(r.threshold, r.unit)})`;
     const p = this.pinned;
-    return p ? `${head}, Bauteil "${p.name}": ${dot(p.value, r.unit)} bei (${p.point.map((v) => v.toFixed(1)).join(', ')}) mm] ` : `${head}] `;
+    // FEM: Sicherheit mit Spannung und Verschiebung, damit der Agent die Stelle ohne neue Rechnung einordnen kann
+    const extra = p && p.stress != null ? ` (${p.stress.toFixed(1)} MPa${p.disp != null ? `, Verschiebung ${p.disp.toFixed(3)} mm` : ''})` : '';
+    return p ? `${head}, Bauteil "${p.name}": ${r.fem ? 'Sicherheit ' : ''}${r.fem && p.value >= SAFETY_CAP ? `über ${SAFETY_CAP}` : dot(p.value, r.unit)}${extra} bei (${p.point.map((v) => v.toFixed(1)).join(', ')}) mm] ` : `${head}] `;
   }
 
   /** Für die Markierung: Welches Ergebnis zu sehen ist (null: keines). */
@@ -267,6 +308,11 @@ export class ResultTool {
       rows: [...this.ui.summary.querySelectorAll('.rs-row')].map((x) => x.textContent), probe: this.ui.probe.textContent, hint: this.ui.hint.textContent,
       note: this.agentNote(), meta: this.d.layer.meta ? { threshold: this.d.layer.meta.threshold, unit: this.d.layer.meta.unit } : null,
       tip: this.tip.hidden ? null : `${this.tipVal.textContent} · ${this.tipName.textContent}`,
+      fem: this.ui.femRow.hidden ? null : {
+        deform: this.ui.deform.value, options: [...this.ui.deform.options].map((o) => o.textContent), bcs: this.ui.bcs.getAttribute('aria-pressed') === 'true',
+        scale: this.d.layer.scale, notes: [...this.ui.summary.querySelectorAll('.rs-note')].map((x) => x.textContent),
+        bcRows: [...this.ui.summary.querySelectorAll('.rs-row.bc')].map((x) => x.textContent),
+      },
     };
   }
 

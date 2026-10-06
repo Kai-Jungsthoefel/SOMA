@@ -199,10 +199,10 @@ try {
   const SKD = path.join(APP, 'resources', 'skills');
   const dm = defaultModes(SKD, {});
   check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'konstruktionsablauf,cadquery,normteile'
-    && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation', JSON.stringify(dm));
+    && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem', JSON.stringify(dm));
   const dm2 = defaultModes(SKD, { konstruktionsablauf: 'demand', toleranzen: 'always', '3d-druck': 'always', laser: 'off' });
   check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,3d-druck,toleranzen,normteile'
-    && dm2.demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen,analyse,animation', JSON.stringify(dm2));
+    && dm2.demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen,analyse,animation,fem', JSON.stringify(dm2));
   // Bei Bedarf (E55): Hinweis unter der ersten Überschrift, Werte als Standard der App, vom Nutzer gesetzte mit Namen
   const rd = renderSkill(SRC, {}, 'demand');
   check('Bei Bedarf: Hinweis direkt unter der Überschrift, mit Leerzeilen, Werte als Standard der App, NOTES.md', rd.includes('# Skill\n\n> **On demand:**')

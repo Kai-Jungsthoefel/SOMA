@@ -174,6 +174,18 @@ export interface ResultPart {
   name: string; group: string | null; area: number; critical: number; min?: number; max?: number;
   worst?: { value: number; at: number[] }; overlap?: number; contact?: number;
 }
+  /** Nur FEM: höchste Vergleichsspannung (MPa), größte Verschiebung (mm), Werkstoff. */
+  stress?: { value: number; at: number[] }; displacement?: { value: number; at: number[] };
+  material?: { name: string; E: number; strength: number; note?: string | null };
+}
+/** Randbedingung einer FEM-Studie (soma analyze fem): fest, Kraft oder Druck auf Flächen eines Teils. */
+export interface FemBc {
+  kind: 'fix' | 'force' | 'pressure'; part: string; label: string; area: number; at: number[];
+  axes?: string; reaction?: number[]; total?: number[]; value?: number;
+}
+export interface FemInfo {
+  study: string; bcs: FemBc[]; applied: number[]; reaction: number[]; maxDisp: number; diag: number;
+  mesh: { size: number; elements: number; dofs: number; solver: string };
 export interface ResultMeta {
   id: string; kind: string; title: string; quantity: string; unit: string;
   /** Welche Seite des Grenzwerts kritisch ist. */
@@ -183,6 +195,9 @@ export interface ResultMeta {
   neutral?: [number, number] | null;
   parts: ResultPart[]; summary: string; created: number; command: string[];
 }
+  /** Hinweise der Auswertung (FEM: Netzabhängigkeit, große Verformung, Werkstoff). */
+  notes?: string[];
+  fem?: FemInfo | null;
 export interface ResultEntry extends ResultMeta { file: string; stale: boolean }
 
 /** Auftrag an das unsichtbare Render-Fenster (E58). Die Dateien kommen als Inhalt mit, das Fenster liest selbst nichts. */

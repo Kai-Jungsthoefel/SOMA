@@ -43,7 +43,7 @@ accuracy of the threshold count as exactly at the threshold, not critical (a 45Â
 - Clearance is measured along the surface normal: a gap at an angle (a cone in a hole) reads larger than it is.
 - Overhang looks at the direction of the surface only. Bridges and small chamfers show as overhang, judge them with
   the skill for the process.
-- No strength analysis: loads and stresses need the skill for strength.
+- No loads here: stresses and deflection under load are `soma analyze fem` (skill for FEM).
 
 ## Feedback from the user
 

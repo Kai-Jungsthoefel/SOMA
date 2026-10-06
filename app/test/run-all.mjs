@@ -9,7 +9,7 @@ import path from 'node:path';
 
 const DIR = import.meta.dirname;
 // Längste zuerst, damit sie nicht am Ende allein laufen
-const ALL = ['animation', 'versions', 'smoke', 'editor', 'skills', 'explode', 'fasteners', 'section', 'measure', 'groups', 'unit'];
+const ALL = ['animation', 'fem', 'versions', 'smoke', 'editor', 'skills', 'explode', 'fasteners', 'section', 'measure', 'groups', 'unit'];
 const wanted = process.argv.slice(2);
 const unknown = wanted.filter((s) => !ALL.includes(s));
 if (unknown.length) { console.log(`Unbekannte Suite: ${unknown.join(', ')}. Vorhanden: ${ALL.join(', ')}`); process.exit(2); }

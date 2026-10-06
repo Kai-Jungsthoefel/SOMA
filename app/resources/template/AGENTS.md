@@ -14,6 +14,7 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 | `output/model.step` | Main result with all parts, written by `soma build`. Never write it yourself |
 | `exports/` | Single-part exports written by `soma export` |
 | `animations/` | Optional. Motion, camera flights and captions in Python (`soma.anim`), one file per topic. The skill for animation explains them |
+| `analyses/` | Optional. Load cases for `soma analyze fem` in Python (`soma.fem`), one file per load case. The skill for FEM explains them |
 | `renders/` | Pictures and videos written by `soma render`. Not in the version history |
 | `.soma/` | App data (viewer cache, build status, feedback images, skills, built animations, analysis results). Do not edit. Read the skills in `.soma/skills/` as the list at the end of this file says, and files in `.soma/feedback/` when the user points you to them |
 
@@ -39,6 +40,7 @@ Run them in this terminal. They work without the app.
 | `soma export --all --format step` | Exports all parts except references |
 | `soma render` | Saves a picture of the current model to `renders/ansicht-iso.png` (`--view top`, `--size 1280x800`, `--out`). **Open the picture and look at it** to check your work. Works only in the terminals of the app, it renders with the app's viewer |
 | `soma analyze overhang` (or `thickness`, `clearance`) | Value at every spot of the surface with a summary per part. Details in the skill for analysis |
+| `soma analyze fem analyses/x.py` | Stresses, safety and deflection under a load case described in `analyses/x.py`. Details in the skill for FEM |
 | `soma anim build`, `soma anim info "Name"` | Animations from `animations/`. Details in the skill for animation |
 
 If `soma build` fails, fix the error before doing anything else. Keep the model buildable at all times.

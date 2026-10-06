@@ -11,7 +11,8 @@ var safety: 2 | | Sicherheitsfaktor | 1..10
 ---
 # Skill: Strength and stiffness
 
-No simulation: design for strength with rules and a rough calculation. Safety factor from the app:
+Design for strength with rules and a rough calculation. To check a design under a real load, the skill for FEM
+computes stresses and deflection (`soma analyze fem`). Safety factor from the app:
 `SAFETY = {{safety}}`. For parts that carry people, hang overhead or lift loads, say clearly that a real calculation and
 a test are needed.
 

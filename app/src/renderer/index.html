@@ -236,6 +236,12 @@
         </div>
 
         </div>
+          <!-- Nur bei FEM (E65): Verformung überhöht zeigen, Lastfall ein- und ausblenden -->
+          <div id="result-fem" class="an-opts rs-fem" hidden>
+            <select id="result-deform" class="an-speed" aria-label="Verformung" title="Verformung: unverformt, in echter Größe oder überhöht, damit man sie sieht"></select>
+            <span class="grow"></span>
+            <button id="btn-result-bcs" class="btn sm" aria-pressed="true" title="Lastfall zeigen: eingespannte Flächen und Lasten in Blau, Kräfte als Pfeile"><i data-icon="arrow" data-size="14" data-stroke="1.9"></i>Lastfall</button>
+          </div>
 
         <div id="errcard" class="float errcard" hidden>
           <div class="ec-hd"><span class="err-ico"><i data-icon="alert" data-size="18"></i></span>

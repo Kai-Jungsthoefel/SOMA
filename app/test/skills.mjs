@@ -60,13 +60,13 @@ try {
   /** Die beiden Listen des Abschnitts: Immer vor „Read when relevant“, Bei Bedarf danach. */
   const always = () => (block() ?? '').split('### Read when relevant')[0];
   const demand = () => (block() ?? '').split('### Read when relevant')[1] ?? '';
-  const DEMAND_NEW = '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation';
+  const DEMAND_NEW = '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem';
 
   // 1) Panel: die mitgelieferten Skills nach Kategorien und `order`
   await ev(() => document.querySelector('#rail [data-panel="skills"]').click());
   await waitFor('Skills geladen', () => window.__t.skills().skills.length >= 3, 10000);
   let s = await st();
-  const ORDER = 'konstruktionsablauf,cadquery,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,normteile,festigkeit,baugruppen,analyse,animation';
+  const ORDER = 'konstruktionsablauf,cadquery,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,normteile,festigkeit,baugruppen,analyse,animation,fem';
   const heads = await ev(() => [...document.querySelectorAll('#skills-list .sk-cat')].map((h) => h.textContent).join(','));
   check('Panel „Skills": Überschriften Arbeitsweise, Fertigungsverfahren, Konstruktionswissen, Prüfen und Zeigen, darunter die Skills nach `order`',
     s.skills.map((x) => x.id).join(',') === ORDER && heads === 'Arbeitsweise,Fertigungsverfahren,Konstruktionswissen,Prüfen und Zeigen'
@@ -91,7 +91,7 @@ try {
     && always().includes('- `.soma/skills/normteile.md`: Standard parts') && !always().includes('3d-druck')
     && demand().includes('- `.soma/skills/3d-druck.md`: 3D printing (FDM). Read when the parts will be 3D printed on a filament printer (FDM).')
     && DEMAND_NEW.split(',').every((id) => demand().includes(`.soma/skills/${id}.md`))
-    && (await g('ls-files', '.soma/skills')).split('\n').length === 14
+    && (await g('ls-files', '.soma/skills')).split('\n').length === 15
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, `${String((await ev(() => window.__t.saveState())).dirtyFiles)} | ${String(block()).slice(0, 200)}`);
   check('Zeile mit Stufen-Schalter, Klick auf die Zeile öffnet die Karte mit drei Stufen, die eingestellte gewählt', await ev(() => {
     document.querySelector('#skills-list .sk-row[data-id="3d-druck"] .sk-open').click();
@@ -308,12 +308,12 @@ try {
   const fdm2 = fs.readFileSync(path.join(p2.dir, '.soma', 'skills', '3d-druck.md'), 'utf8');
   const ka2 = fs.readFileSync(path.join(p2.dir, '.soma', 'skills', 'konstruktionsablauf.md'), 'utf8');
   check('Neues Modell nach der Vorgabe: immer Sauber modellieren, 3D-Druck, Normteile, Laser aus, Konstruktionsablauf bei Bedarf, Standardwerte statt 55° und PETG',
-    JSON.stringify(pj2.skills) === '["cadquery","3d-druck","normteile"]' && pj2.skills_on_demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation'
+    JSON.stringify(pj2.skills) === '["cadquery","3d-druck","normteile"]' && pj2.skills_on_demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem'
     && !pj2.skill_settings && fdm2.includes('Overhangs up to 45°') && fdm2.includes('| Material | PLA |') && !fdm2.includes('On demand') && ka2.includes('> **On demand:**')
     && !fs.existsSync(path.join(p2.dir, '.soma', 'skills', 'laser.md'))
     && norm(fs.readFileSync(path.join(p2.dir, 'AGENTS.md'), 'utf8')).includes('- `.soma/skills/3d-druck.md`: 3D printing (FDM)\n'), JSON.stringify(pj2));
   await waitFor('Speicherstand neu', () => window.__t.saveState() && !window.__t.saveState().unsaved, 10000).catch(() => {});
-  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 13
+  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 14
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, String((await ev(() => window.__t.saveState())).dirtyFiles));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
