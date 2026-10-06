@@ -158,6 +158,41 @@ export interface GitLog { commits: CommitInfo[]; problems: string[]; head: strin
 export interface PreviewResult { commit: CommitInfo | null; glb: ArrayBuffer; map: ModelMap; error?: string }
 export interface RestoreResult { cancelled: boolean; commit?: string | null; safety?: string | null; error?: string }
 
+/** Animation aus animations/*.py (E58), gebaut nach `glb`. `stale`: Code oder Animationsdatei sind neuer. */
+export interface AnimEntry { id: string; name: string; file: string; line: number | null; duration: number; glb: string; parts: number; stale: boolean }
+/** Fehler einer Animationsdatei (sie hat dann keine Einträge). */
+export interface AnimFileError { file: string; line: number | null; message: string }
+export interface AnimList { animations: AnimEntry[]; errors: AnimFileError[]; building: boolean }
+export interface AnimBuildResult extends AnimList { ok: boolean; error?: string }
+
+/** Ergebnis einer Auswertung (`soma analyze`, E58), Metadaten aus extras.soma_result der GLB. */
+export interface ResultPart {
+  name: string; group: string | null; area: number; critical: number; min?: number; max?: number;
+  worst?: { value: number; at: number[] }; overlap?: number; contact?: number;
+}
+export interface ResultMeta {
+  id: string; kind: string; title: string; quantity: string; unit: string;
+  /** Welche Seite des Grenzwerts kritisch ist. */
+  bad: 'high' | 'low';
+  threshold: number; range: [number, number];
+  /** Werte in diesem Band gelten als Berührung, nicht als kritisch (Abstand). */
+  neutral?: [number, number] | null;
+  parts: ResultPart[]; summary: string; created: number; command: string[];
+}
+export interface ResultEntry extends ResultMeta { file: string; stale: boolean }
+
+/** Auftrag an das unsichtbare Render-Fenster (E58). Die Dateien kommen als Inhalt mit, das Fenster liest selbst nichts. */
+export interface RenderJob {
+  id: number; kind: 'still' | 'sheet' | 'video'; width: number; height: number;
+  view: string | null; at: number; grid: [number, number]; fps: number;
+  model: ArrayBuffer; anim: ArrayBuffer | null; result: ArrayBuffer | null;
+}
+/** Antwort des Render-Fensters. Video: MP4, Untertitel (WebVTT) und eine Übersicht als PNG. */
+export interface RenderOutput { ok: boolean; error?: string; warnings?: string[]; png?: ArrayBuffer; mp4?: ArrayBuffer; vtt?: string | null; sheet?: ArrayBuffer }
+export interface RenderResult { ok: boolean; files: string[]; warnings: string[]; error?: string }
+/** Meldung an das Hauptfenster: Bild oder Video fertig (auch auf Auftrag des Agenten). */
+export interface RenderNotice extends RenderResult { kind: 'still' | 'sheet' | 'video'; byAgent: boolean }
+
 export interface SomaApi {
   testMode: boolean;
   project: {
@@ -183,7 +218,7 @@ export interface SomaApi {
     onChanged(cb: () => void): void;
   };
   /** Nur im Testmodus (SOMA_TEST=1) vorhanden. */
-  test?: { answers(a: unknown[]): Promise<void>; screenshot(file: string): Promise<{ width: number; height: number }> };
+  test?: { answers(a: unknown[]): Promise<void>; screenshot(file: string): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>> };
   build: {
     run(): Promise<void>;
     cancel(): Promise<void>;
@@ -242,10 +277,37 @@ export interface SomaApi {
     /** Stufe für neue Modelle festlegen (für die ganze App, das offene Modell bleibt, wie es ist). */
     setDefault(id: string, mode: SkillMode): Promise<SkillResult>;
   };
+  /** Animationen (E58): Liste aus .soma/anim/index.json, bauen über `soma anim build`. */
+  anim: {
+    list(): Promise<AnimList>;
+    /** `file` (animations/x.py) baut nur diese Datei, ohne alle. */
+    build(file?: string): Promise<AnimBuildResult>;
+    onChanged(cb: () => void): void;
+  };
+  /** Ergebnisse von `soma analyze` (E58). */
+  results: {
+    list(): Promise<ResultEntry[]>;
+    /** Dieselbe Auswertung noch einmal (mit den gespeicherten Angaben). */
+    rerun(id: string): Promise<{ ok: boolean; error?: string }>;
+  };
+  /** Bilder und Videos über das Render-Fenster (E58). */
+  render: {
+    video(animId: string): Promise<RenderResult>;
+    onProgress(cb: (fraction: number) => void): void;
+    onNotice(cb: (n: RenderNotice) => void): void;
+  };
   /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
   dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };
   /** Öffnet eine Web-Adresse (http, https, mailto) im Browser des Systems. Andere Adressen lehnt der Hauptprozess ab. */
   openUrl(url: string): Promise<FileOpResult>;
 }
 
-declare global { interface Window { soma: SomaApi } }
+/** Schnittstelle des unsichtbaren Render-Fensters (E58, render-preload.ts). */
+export interface RenderApi {
+  onJob(cb: (job: RenderJob) => void): void;
+  done(id: number, out: RenderOutput): void;
+  progress(id: number, fraction: number): void;
+  ready(): void;
+}
+
+declare global { interface Window { soma: SomaApi; somaRender: RenderApi } }

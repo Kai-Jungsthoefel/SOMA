@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:">
 <title>SOMA</title>
 <link rel="stylesheet" href="xterm.css">
 <link rel="stylesheet" href="style.css">
@@ -90,6 +90,8 @@
           <button id="btn-measure" aria-pressed="false" title="Messen: Fläche oder Kante anklicken, ein zweiter Klick misst Abstand und Winkel (exakte Werte)"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
           <button id="btn-section" aria-pressed="false" title="Schnitt: das Modell an einer Ebene aufschneiden (senkrecht zu X, Y, Z oder parallel zu einer Fläche)"><i data-icon="section"></i><span class="lbl">Schnitt</span></button>
           <button id="btn-explode" aria-pressed="false" title="Explosion: die Bauteile zur Darstellung auseinanderziehen, Normteile entlang ihrer Achse"><i data-icon="explode"></i><span class="lbl">Explosion</span></button>
+          <button id="btn-anim" aria-pressed="false" title="Animation: Bewegungen, Kamerafahrten und Texte aus animations/ abspielen, Video erzeugen"><i data-icon="anim"></i><span class="lbl">Animation</span></button>
+          <button id="btn-result" aria-pressed="false" title="Analyse: Ergebnisse von soma analyze farbig zeigen (Überhang, Wandstärke, Abstand)"><i data-icon="gauge"></i><span class="lbl">Analyse</span></button>
           <span class="vsep"></span>
           <button id="btn-mark" title="Viewer-Bild markieren und an den Agenten geben"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
         </div>
@@ -162,6 +164,44 @@
           </div>
         </div>
 
+        <!-- Animation (E58, animtool.ts): Ablauf aus animations/*.py abspielen. Ändert nichts am Modell. -->
+        <div id="anim-card" class="float ancard" hidden>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="anim" data-size="16"></i></span><b>Animation</b>
+            <select id="anim-select" class="an-select" aria-label="Animation wählen"></select>
+            <button id="btn-anim-close" class="ibtn s" aria-label="Animation beenden" title="Animation beenden (das Modell steht wieder in Einbaulage)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div class="an-transport">
+            <button id="btn-anim-play" class="ibtn an-play" aria-label="Abspielen" title="Abspielen (Leertaste)"><i data-icon="play" data-size="16" data-stroke="2"></i></button>
+            <input id="anim-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Zeitpunkt in der Animation">
+            <span id="anim-time" class="an-time"></span>
+          </div>
+          <div class="an-opts">
+            <button id="btn-anim-follow" class="btn sm" aria-pressed="true" title="Kamera der Animation folgen. Aus: frei drehen, die Teile bewegen sich trotzdem"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Kamera folgen</button>
+            <button id="btn-anim-loop" class="btn sm" aria-pressed="false" title="Am Ende von vorn"><i data-icon="loop" data-size="14" data-stroke="1.9"></i>Schleife</button>
+            <span class="grow"></span>
+            <select id="anim-speed" class="an-speed" aria-label="Tempo" title="Tempo"><option value="0.25">0,25×</option><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+          </div>
+          <div id="anim-hint" class="mc-hint"></div>
+          <div class="sc-actions">
+            <button id="btn-anim-video" class="btn sm" title="Video (MP4) dieser Animation nach renders/ schreiben und abspielen"><i data-icon="f-video" data-size="14" data-stroke="1.9"></i>Video erzeugen</button>
+            <button id="btn-anim-agent" class="btn sm acc" title="Name der Animation und Zeitpunkt in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+          </div>
+        </div>
+
+        <!-- Analyse (E58, resulttool.ts): Ergebnisse von soma analyze farbig zeigen -->
+        <div id="result-card" class="float rscard" hidden>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="gauge" data-size="16"></i></span><b>Analyse</b>
+            <select id="result-select" class="an-select" aria-label="Ergebnis wählen"></select>
+            <button id="btn-result-close" class="ibtn s" aria-label="Analyse beenden" title="Analyse beenden (zeigt wieder das Modell)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div id="result-legend" class="rs-legend"></div>
+          <div id="result-summary" class="rs-summary"></div>
+          <div id="result-probe" class="rs-probe"></div>
+          <div id="result-hint" class="mc-hint"></div>
+          <div class="sc-actions">
+            <button id="btn-result-rerun" class="btn sm" title="Dieselbe Auswertung am aktuellen Modell noch einmal rechnen"><i data-icon="refresh" data-size="14" data-stroke="1.9"></i>Neu berechnen</button>
+            <button id="btn-result-agent" class="btn sm acc" title="Ergebnis und die angeklickte Stelle in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+          </div>
+        </div>
+
         <div id="errcard" class="float errcard" hidden>
           <div class="ec-hd"><span class="err-ico"><i data-icon="alert" data-size="18"></i></span>
             <div class="ec-title"><b>Build fehlgeschlagen</b><span id="err-where" class="c2"></span></div><span class="grow"></span>
@@ -188,6 +228,22 @@
           <span class="grow"></span>
           <button id="btn-live" class="btn">Zurück zu Jetzt</button>
           <button id="btn-restore" class="btn vio" title="Diesen Stand als neuen Stand übernehmen">Wiederherstellen</button>
+        </div>
+
+        <!-- Video (E58, videoview.ts): MP4 aus dem Projekt abspielen, Standbild markieren -->
+        <div id="videoview" class="videoview" hidden>
+          <video id="video-el" preload="auto" playsinline></video>
+          <div class="float vv-bar" role="toolbar" aria-label="Video">
+            <span class="vv-title"><i data-icon="f-video" data-size="15"></i><b id="video-title"></b></span><span class="vsep"></span>
+            <button id="btn-video-back" class="ibtn" aria-label="Ein Bild zurück" title="Ein Bild zurück (Pfeil links)"><i data-icon="stepback" data-size="15" data-stroke="1.9"></i></button>
+            <button id="btn-video-play" class="ibtn" aria-label="Abspielen" title="Abspielen oder anhalten (Leertaste)"><i data-icon="play" data-size="16" data-stroke="2"></i></button>
+            <button id="btn-video-fwd" class="ibtn" aria-label="Ein Bild vor" title="Ein Bild vor (Pfeil rechts)"><i data-icon="stepfwd" data-size="15" data-stroke="1.9"></i></button>
+            <input id="video-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Zeitpunkt im Video">
+            <span id="video-time" class="an-time"></span><span class="vsep"></span>
+            <button id="btn-video-mark" class="btn sm" title="Dieses Standbild auf der Zeichenfläche markieren und mit Zeitstempel an den Agenten geben"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Markieren</button>
+            <button id="btn-video-agent" class="btn sm acc" title="Datei und Zeitstempel in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Zeit an Agent</button>
+            <button id="btn-video-close" class="ibtn" aria-label="Video schließen" title="Video schließen (Escape)"><i data-icon="x" data-size="15" data-stroke="2"></i></button>
+          </div>
         </div>
 
         <!-- Markierung (E16): eingefrorenes Bild des Viewers oder leere Fläche zum Zeichnen -->

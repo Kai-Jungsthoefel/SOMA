@@ -195,14 +195,14 @@ try {
   check('Skill-Kopf: Kategorie, Stufe „always“ (auch „on“), „off“, ohne Angabe Bei Bedarf, Anlass ohne Punkt', kp.category === 'Arbeitsweise' && kp.defaultMode === 'always'
     && kp.when === 'the user asks' && ps.category === '' && ps.defaultMode === 'demand' && ps.when === '' && modeOf('on') === 'always' && modeOf('off') === 'off' && modeOf('on-demand') === 'demand');
   const cats = [...new Set(shipped.map((s) => s.category))];
-  check('Mitgelieferte Skills: jeder mit Kategorie, drei Kategorien', shipped.every((s) => s.category) && cats.length === 3, cats.join(','));
+  check('Mitgelieferte Skills: jeder mit Kategorie, vier Kategorien', shipped.every((s) => s.category) && cats.length === 4, cats.join(','));
   const SKD = path.join(APP, 'resources', 'skills');
   const dm = defaultModes(SKD, {});
   check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'konstruktionsablauf,cadquery,normteile'
-    && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen', JSON.stringify(dm));
+    && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation', JSON.stringify(dm));
   const dm2 = defaultModes(SKD, { konstruktionsablauf: 'demand', toleranzen: 'always', '3d-druck': 'always', laser: 'off' });
   check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,3d-druck,toleranzen,normteile'
-    && dm2.demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen', JSON.stringify(dm2));
+    && dm2.demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen,analyse,animation', JSON.stringify(dm2));
   // Bei Bedarf (E55): Hinweis unter der ersten Überschrift, Werte als Standard der App, vom Nutzer gesetzte mit Namen
   const rd = renderSkill(SRC, {}, 'demand');
   check('Bei Bedarf: Hinweis direkt unter der Überschrift, mit Leerzeilen, Werte als Standard der App, NOTES.md', rd.includes('# Skill\n\n> **On demand:**')
@@ -214,6 +214,14 @@ try {
   check('AGENTS.md: zwei Listen, Bei Bedarf mit Anlass, ohne Skills ein Satz', blk.indexOf('### Always follow') < blk.indexOf('- `.soma/skills/a.md`: A')
     && blk.indexOf('- `.soma/skills/a.md`: A') < blk.indexOf('### Read when relevant') && blk.includes('- `.soma/skills/b.md`: B. Read when parts move.')
     && !skillsBlock([{ id: 'b', name: 'B', when: '', mode: 'demand' }]).includes('Always follow') && skillsBlock([]).includes('No skills are switched on'), blk);
+
+  // Animationsdateien (E58): bauen die Animation neu, nicht das Modell
+  const ed = path.join(tmp, 'editable.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'shared', 'editable.ts')], outfile: ed, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const { affectsBuild, affectsAnimation } = await import(pathToFileURL(ed).href);
+  check('animations/*.py: Animation, kein Model-Build. model.py, parts/, inputs/ bauen das Modell', affectsAnimation('animations/deckel.py') && affectsAnimation('animations\\x.py')
+    && !affectsBuild('animations/deckel.py') && affectsBuild('model.py') && affectsBuild('parts/lid.py') && affectsBuild('inputs/a.step')
+    && !affectsAnimation('animations/sub/x.py') && !affectsAnimation('model.py') && !affectsAnimation('animations/notes.md'));
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

@@ -17,8 +17,9 @@
     "test:explode": "npm run build && node test/explode.mjs",
     "test:skills": "npm run build && node test/skills.mjs",
     "test:fasteners": "npm run build && node test/fasteners.mjs",
+    "test:animation": "npm run build && node test/animation.mjs",
     "test:unit": "node test/unit.mjs",
-    "test": "npm run build && node test/unit.mjs && node test/smoke.mjs && node test/versions.mjs && node test/editor.mjs && node test/measure.mjs && node test/groups.mjs && node test/section.mjs && node test/explode.mjs && node test/skills.mjs && node test/fasteners.mjs"
+    "test": "npm run build && node test/unit.mjs && node test/smoke.mjs && node test/versions.mjs && node test/editor.mjs && node test/measure.mjs && node test/groups.mjs && node test/section.mjs && node test/explode.mjs && node test/skills.mjs && node test/fasteners.mjs && node test/animation.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -36,6 +37,7 @@
     "@xterm/xterm": "^6.0.0",
     "dugite": "^3.2.3",
     "marked": "^18.1.0",
+    "mediabunny": "^1.61.3",
     "node-pty": "^1.1.0",
     "pdfjs-dist": "^6.4.299",
     "three": "^0.180.0",

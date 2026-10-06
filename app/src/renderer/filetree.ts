@@ -11,6 +11,8 @@ const FEEDBACK = '.soma/feedback';
 export const TEXT_EXT = /\.(py|md|txt|json|toml|cfg|ini|yml|yaml|gitignore|csv)$|^[^.]*$/i;
 /** Bilder, die die Zeichenfläche als Hintergrund laden kann (alles, was Chromium als <img> anzeigt). */
 export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+/** Videos, die die App abspielt (E58). MOV meist nur, wenn H.264 darin steckt. */
+export const VIDEO_EXT = /\.(mp4|webm|m4v|mov)$/i;
 
 /** Was der Baum vom Rest der App braucht. Die Aktionen liefern true, wenn das Namensfeld zugehen darf. */
 export interface FileTreeDeps {
@@ -42,6 +44,7 @@ const FILE_ICONS: [RegExp, string][] = [
   [/\.(stl|3mf|obj|glb|gltf|ply|amf)$/i, 'f-mesh'],
   [/\.(dxf|dwg|svg)$/i, 'f-draw'],
   [/\.(png|jpe?g|gif|webp|bmp|tiff?)$/i, 'f-image'],
+  [/\.(mp4|webm|m4v|mov)$/i, 'f-video'],
   [/\.pdf$/i, 'f-pdf'],
   [/\.(zip|7z|rar|tar|gz)$/i, 'f-zip'],
   [/^\.gitignore$/i, 'f-lock'],
@@ -209,6 +212,7 @@ export class FileTree {
     if (n && !n.dir) {
       if (TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name)) items.push(menuItem('Öffnen', { icon: 'code', onClick: () => d.open(n) }));
       if (IMAGE_EXT.test(n.name)) items.push(menuItem('Markieren', { icon: 'camera', onClick: () => d.mark(n.path) }));
+      if (VIDEO_EXT.test(n.name)) items.push(menuItem('Abspielen', { icon: 'play', onClick: () => d.open(n) }));
       items.push(menuItem('Mit Standardprogramm öffnen', { icon: 'openext', onClick: () => d.openExternal(n.path) }));
     }
     items.push(menuItem('Im Explorer zeigen', { icon: 'folder', onClick: () => d.reveal(n?.path ?? '') }));
@@ -254,7 +258,8 @@ export class FileTree {
       return b;
     }
     const b = this.button(depth, null, fileIcon(n.name), n.name, TAGS[n.path] ?? '', '');
-    b.title = TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name) ? `${n.path} im Code-Panel öffnen` : IMAGE_EXT.test(n.name) ? `${n.path} zum Markieren öffnen` : n.path;
+    b.title = TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name) ? `${n.path} im Code-Panel öffnen` : IMAGE_EXT.test(n.name) ? `${n.path} zum Markieren öffnen`
+      : VIDEO_EXT.test(n.name) ? `${n.path} abspielen` : n.path;
     b.dataset.path = n.path;
     b.addEventListener('click', () => this.deps.open(n));
     return b;

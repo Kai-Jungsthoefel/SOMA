@@ -12,3 +12,8 @@ __pycache__/
 .soma/zip-info.json
 .soma/feedback/
 .soma/geometry/
+
+# Pictures and videos from soma render, built animations and analysis results (regenerated from the code)
+renders/
+.soma/anim/
+.soma/results/

@@ -13,7 +13,9 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 | `inputs/` | Files the user brought (STEP, images). Never modify them, load them from `model.py` |
 | `output/model.step` | Main result with all parts, written by `soma build`. Never write it yourself |
 | `exports/` | Single-part exports written by `soma export` |
-| `.soma/` | App data (viewer cache, build status, feedback images, skills). Do not edit. Read the skills in `.soma/skills/` as the list at the end of this file says, and files in `.soma/feedback/` when the user points you to them |
+| `animations/` | Optional. Motion, camera flights and captions in Python (`soma.anim`), one file per topic. The skill for animation explains them |
+| `renders/` | Pictures and videos written by `soma render`. Not in the version history |
+| `.soma/` | App data (viewer cache, build status, feedback images, skills, built animations, analysis results). Do not edit. Read the skills in `.soma/skills/` as the list at the end of this file says, and files in `.soma/feedback/` when the user points you to them |
 
 ## Rules for model.py
 
@@ -35,6 +37,9 @@ Run them in this terminal. They work without the app.
 | `soma build` | Runs `model.py`, writes `output/model.step` and the viewer cache. **Run it after every change and read the result.** On errors it prints the file, line and message |
 | `soma export <Part> --format stl` | Exports one part (formats: step, stl, 3mf, amf, brep, iges, obj, vrml, glb, gltf, dxf, svg) |
 | `soma export --all --format step` | Exports all parts except references |
+| `soma render` | Saves a picture of the current model to `renders/ansicht-iso.png` (`--view top`, `--size 1280x800`, `--out`). **Open the picture and look at it** to check your work. Works only in the terminals of the app, it renders with the app's viewer |
+| `soma analyze overhang` (or `thickness`, `clearance`) | Value at every spot of the surface with a summary per part. Details in the skill for analysis |
+| `soma anim build`, `soma anim info "Name"` | Animations from `animations/`. Details in the skill for animation |
 
 If `soma build` fails, fix the error before doing anything else. Keep the model buildable at all times.
 
@@ -59,6 +64,8 @@ The app pastes short notes into your input. The user adds their own words and se
 - `[Markierung: .soma/feedback/markierung-20260930-1405.png]`: a picture of the 3D view (or a blank sketch) with the user's drawings: arrows, circles, handwritten text, often with dimensions. **Open the image file and look at it**, compare it with the model, then change the code. If the note says `zeigt den älteren Stand <hash>`, the picture shows that older commit, not the current code (`git show <hash>:model.py`). Leave the images where they are.
 - `[Auswahl: Bauteil "…", model.py Zeile …]`: the part the user clicked, with the lines of its `add_part` call and the clicked face.
 - `[Build-Fehler: …]`: the message of the last failed build.
+- `[Animation: "Name" (animations/x.py) bei 1.50 s]`, `[Video: renders/x.mp4 bei 00:03.20]`: a moment in an animation or a video. A marking can name it too (`gezeichnet auf renders/x.mp4 bei 00:03.20`).
+- `[Ergebnis: "Wandstärke" (.soma/results/…), Bauteil "…": 0.80 mm bei (x, y, z) mm]`: a spot in the colours of an analysis.
 - `[Skill: .soma/skills/<name>.md]`: the user points you to this rule set, switched it on or changed its settings (the note may list them, they are already written into the file). Read the file again now and follow it from here on. When the user switches a skill off, it disappears from the list below: stop applying it.
 
 The user can also edit files directly in the app's editor. Read a file again right before you change it, do not rely on an older copy.

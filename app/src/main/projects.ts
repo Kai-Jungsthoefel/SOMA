@@ -1,8 +1,14 @@
 import { shell, type BrowserWindow, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ExportResult, GitLog, MeasureEntity, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult, ProjectInfo, RestoreResult, SaveResult, SaveState, SkillInfo, SkillResult } from '../shared/types';
+import type {
+  AnimBuildResult, AnimList, ExportResult, GitLog, MeasureEntity, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
+  ProjectInfo, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
+} from '../shared/types';
+import { affectsAnimation } from '../shared/editable';
+import { AnimBuilder, listResults, readAnimList, rerunResult, samePath } from './animations';
 import { BuildManager, buildIsStale, newestSourceMtime, runSoma } from './build';
+import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, choosePath } from './dialogs';
 import { GitRepo } from './git';
 import { MeasureService } from './measure';
@@ -26,6 +32,9 @@ interface Session {
   terminals: TerminalManager;
   git: GitRepo;
   measure: MeasureService;
+  /** Animationen bauen (E58), ausgelöst vom Watcher, der Oberfläche oder vor einem Video. */
+  anims: AnimBuilder;
+  animTimer?: NodeJS.Timeout;
   stopWatch: () => void;
   poll: NodeJS.Timeout;
   signature: string;
@@ -42,6 +51,8 @@ const safeFileName = (n: string) => n.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').tri
  */
 export class ProjectController {
   session: Session | null = null;
+  /** Unsichtbares Fenster für Bilder und Videos (E58), eins für die App. */
+  readonly renders = new RenderService();
 
   constructor(private readonly getWin: () => BrowserWindow | null, private readonly wc: WebContents) {}
 
@@ -60,7 +71,9 @@ export class ProjectController {
     const s = this.session;
     if (!s) return;
     clearInterval(s.poll);
+    clearTimeout(s.animTimer);
     s.stopWatch();
+    s.anims.dispose();
     s.builds.dispose();
     s.terminals.killAll();
     s.measure.stop();
@@ -74,8 +87,10 @@ export class ProjectController {
     const terminals = new TerminalManager(this.wc, dir);
     const git = new GitRepo(dir);
     builds.on('status', (st) => this.send('build:status', st));
-    const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'));
-    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), stopWatch, signature: '', poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
+    const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'),
+      (rel) => this.animFileChanged(rel));
+    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, stopWatch, signature: '', poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     setLastProject(id);
     // Erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
@@ -330,6 +345,82 @@ export class ProjectController {
     } catch (e) {
       return { cancelled: false, error: `Wiederherstellen fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}` };
     }
+  }
+
+  // ---- Animationen, Ergebnisse, Bilder und Videos (E58) ------------------------------------------------------------
+
+  animList(): AnimList {
+    const s = this.need();
+    return readAnimList(s.dir, s.anims.busy);
+  }
+
+  /** Animationen bauen: eine Datei (animations/x.py) oder alle. */
+  animBuild(file: unknown): Promise<AnimBuildResult> {
+    const s = this.need();
+    const f = file == null ? null : String(file).replace(/\\/g, '/');
+    if (f !== null && !affectsAnimation(f)) return Promise.resolve({ ...readAnimList(s.dir), ok: false, error: 'Keine Animationsdatei (animations/*.py).' });
+    return s.anims.request(f);
+  }
+
+  /** Watcher: Eine Animationsdatei hat sich geändert. Mit Auto-Build gleich neu bauen (entprellt), sonst nur melden. */
+  private animFileChanged(rel: string): void {
+    const s = this.session;
+    if (!s) return;
+    clearTimeout(s.animTimer);
+    s.animTimer = setTimeout(() => {
+      if (this.session !== s) return;
+      if (s.builds.autoBuild && fs.existsSync(path.join(s.dir, rel))) void s.anims.request(rel);
+      else this.send('anim:changed');
+    }, 700);
+  }
+
+  results(): ResultEntry[] { return listResults(this.need().dir); }
+
+  rerunResult(id: unknown): Promise<{ ok: boolean; error?: string }> {
+    const s = this.need();
+    return rerunResult(s.dir, String(id ?? ''));
+  }
+
+  /** Bild oder Video rendern. Vorher den laufenden Build abwarten, damit das aktuelle Modell zu sehen ist. */
+  private async render(req: RenderRequest, byAgent: boolean): Promise<RenderResult> {
+    const s = this.need();
+    await s.builds.whenIdle();
+    const warnings: string[] = [];
+    if (s.builds.status.state === 'error') warnings.push('Der letzte Build ist fehlgeschlagen. Zu sehen ist der letzte erfolgreiche Stand.');
+    else if (s.builds.status.stale) warnings.push('Der Code ist neuer als der letzte Build (Auto-Build ist aus). Zu sehen ist der letzte Build.');
+    const r = await this.renders.run(s.dir, req, (f) => this.send('render:progress', f));
+    const res = { ...r, warnings: [...warnings, ...r.warnings] };
+    this.send('render:notice', { ...res, kind: req.kind, byAgent });
+    if (r.ok) this.send('fs:changed');
+    return res;
+  }
+
+  /** Auftrag von `soma render` aus einem Terminal der App (über bridge.ts). */
+  async renderForAgent(body: unknown): Promise<{ status: number; body: unknown }> {
+    const s = this.session;
+    if (!s) return { status: 409, body: { ok: false, error: 'In der App ist kein Modell offen.' } };
+    const project = String((body as { project?: unknown } | null)?.project ?? '');
+    if (!project || !samePath(project, s.dir)) {
+      return { status: 409, body: { ok: false, error: 'Dieser Ordner ist nicht das Modell, das in der App offen ist. soma render läuft nur im offenen Modell.' } };
+    }
+    const req = checkRequest(s.dir, body);
+    if (typeof req === 'string') return { status: 400, body: { ok: false, error: req } };
+    const r = await this.render(req, true);
+    return { status: r.ok ? 200 : 500, body: r };
+  }
+
+  /** Knopf „Video erzeugen“: Animation (falls veraltet) neu bauen, dann rendern nach renders/<id>.mp4. */
+  async renderVideo(animId: unknown): Promise<RenderResult> {
+    const s = this.need();
+    let entry = readAnimList(s.dir).animations.find((a) => a.id === animId);
+    if (!entry) return { ok: false, files: [], warnings: [], error: 'Diese Animation gibt es nicht (mehr).' };
+    if (entry.stale) {
+      const file = entry.file;
+      const b = await s.anims.request(file);
+      entry = b.animations.find((a) => a.id === animId);
+      if (!entry) return { ok: false, files: [], warnings: [], error: b.errors.find((e) => e.file === file)?.message ?? b.error ?? 'Die Animation ließ sich nicht neu bauen.' };
+    }
+    return this.render({ kind: 'video', size: [1280, 720], view: null, at: 0, grid: [3, 3], fps: 30, anim: entry.glb, result: null, out: `renders/${entry.id}.mp4` }, false);
   }
 
   // ---- Beenden ----------------------------------------------------------------------------------------------------

@@ -1,11 +1,15 @@
 import path from 'node:path';
 import type { WebContents } from 'electron';
 import * as pty from 'node-pty';
+import { bridgeEnv } from './bridge';
 import { gitCmdDir, pythonBinDir } from './paths';
 
-/** Umgebung fuer Terminals: Python-Basisumgebung vorn im PATH, damit `python`, `pip` und `soma` gefunden werden. */
+/**
+ * Umgebung fuer Terminals: Python-Basisumgebung vorn im PATH, damit `python`, `pip` und `soma` gefunden werden. Dazu Adresse
+ * und Schluessel der App fuer `soma render` (E58).
+ */
 export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUTF8: '1', SOMA_PROJECT: projectDir };
+  const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUTF8: '1', SOMA_PROJECT: projectDir, ...bridgeEnv() };
   const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
   const front: string[] = [];
   const bin = pythonBinDir();

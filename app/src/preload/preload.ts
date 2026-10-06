@@ -67,11 +67,25 @@ const api: SomaApi = {
     configure: (id, values) => ipcRenderer.invoke('skills:configure', id, values),
     setDefault: (id, mode) => ipcRenderer.invoke('skills:setDefault', id, mode),
   },
+  anim: {
+    list: () => ipcRenderer.invoke('anim:list'),
+    build: (file) => ipcRenderer.invoke('anim:build', file ?? null),
+    onChanged: (cb) => { ipcRenderer.on('anim:changed', () => cb()); },
+  },
+  results: {
+    list: () => ipcRenderer.invoke('results:list'),
+    rerun: (id) => ipcRenderer.invoke('results:rerun', id),
+  },
+  render: {
+    video: (animId) => ipcRenderer.invoke('render:video', animId),
+    onProgress: (cb) => { ipcRenderer.on('render:progress', (_e, f) => cb(f)); },
+    onNotice: (cb) => { ipcRenderer.on('render:notice', (_e, n) => cb(n)); },
+  },
   dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
   openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'
-    ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f) }
+    ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f), bridge: () => ipcRenderer.invoke('test:bridge') }
     : undefined,
 };
 

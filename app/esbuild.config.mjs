@@ -9,12 +9,17 @@ await Promise.all([
           external: ['electron', 'node-pty', 'dugite'] }),
   build({ ...common, entryPoints: ['src/preload/preload.ts'], outfile: 'dist/preload/preload.js', platform: 'node', format: 'cjs',
           external: ['electron'] }),
+  // Unsichtbares Render-Fenster für soma render (E58): eigener Preload und eigene Seite, derselbe Viewer
+  build({ ...common, entryPoints: ['src/preload/render-preload.ts'], outfile: 'dist/preload/render-preload.js', platform: 'node', format: 'cjs',
+          external: ['electron'] }),
+  build({ ...common, entryPoints: ['src/renderer/render.ts'], outfile: 'dist/renderer/render.js', platform: 'browser', format: 'iife' }),
   build({ ...common, entryPoints: ['src/renderer/main.ts'], outfile: 'dist/renderer/main.js', platform: 'browser', format: 'iife' }),
   // Worker von pdf.js als klassisches Skript: Module aus file:// lädt Chromium nicht (E54)
   build({ ...common, sourcemap: false, entryPoints: ['node_modules/pdfjs-dist/build/pdf.worker.mjs'], outfile: 'dist/renderer/pdf.worker.js', platform: 'browser', format: 'iife' }),
 ]);
 fs.mkdirSync('dist/renderer', { recursive: true });
 fs.copyFileSync('src/renderer/index.html', 'dist/renderer/index.html');
+fs.copyFileSync('src/renderer/render.html', 'dist/renderer/render.html');
 fs.copyFileSync('src/renderer/style.css', 'dist/renderer/style.css');
 fs.copyFileSync(path.join('node_modules', '@xterm', 'xterm', 'css', 'xterm.css'), 'dist/renderer/xterm.css');
 

@@ -47,7 +47,9 @@ for a in (0, 45, 90):  # range of LID_ANGLE
 ```
 
 The volume must be 0, the distance at least `MOTION_GAP`, except where parts are meant to touch (pin, guide). Remove
-the output afterwards.
+the output afterwards. For motions with several steps or parts, write an animation (skill for animation) and run
+`soma anim check "Name" --gap {{motion_gap}}`: it checks every moment. `soma analyze clearance` shows tight gaps in
+the model position.
 
 ## Parts list
 

@@ -428,6 +428,45 @@ code { font-family:var(--mono); font-size:.95em; }
 .bn-text .tag { font-size:11px; padding:1px 7px; border-radius:9px; background:var(--vio-tint); color:#cdd2ff; }
 #bn-sub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
+/* ---- Animation, Analyse und Video (E58) ----------------------------------------------------------------------- */
+.v-paint { pointer-events:none; }
+/* Karten unten links statt der Auswahlkarte (wie beim Messen). Klicks wählen weiter Bauteile. */
+#viewer.animating #selcard, #viewer.analyzing #selcard { display:none; }
+.ancard { left:12px; bottom:12px; width:400px; overflow:hidden; }
+.rscard { left:12px; bottom:12px; width:356px; overflow:hidden; }
+.an-select { flex:1; min-width:0; height:26px; margin-left:4px; padding:0 6px; border-radius:6px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:inherit; font-size:12.5px; }
+.an-select:disabled { opacity:1; border-color:transparent; background:transparent; appearance:none; padding-left:2px; color:var(--tx2); }
+.an-transport { display:flex; align-items:center; gap:8px; padding:2px 12px 4px 8px; }
+.an-transport input[type=range], .vv-bar input[type=range] { flex:1; min-width:0; accent-color:var(--acc); height:18px; }
+.an-play { width:32px; height:32px; border-radius:8px; background:var(--acc-tint); color:var(--acc-tx); display:flex; align-items:center; justify-content:center; }
+.an-play:disabled { background:transparent; color:#5d6671; }
+.an-time { font:12px var(--mono); color:var(--tx2); white-space:nowrap; min-width:92px; text-align:right; }
+.an-opts { display:flex; align-items:center; gap:6px; padding:2px 12px 4px; }
+.an-opts .btn[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); border-color:var(--acc-line); }
+.an-speed { height:26px; padding:0 4px; border-radius:6px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--mono); }
+.rs-legend { padding:2px 14px 6px; }
+.rs-q { font-size:12px; color:var(--tx2); margin-bottom:5px; }
+.rs-bar { position:relative; height:12px; border-radius:3px; }
+.rs-mark { position:absolute; top:-3px; bottom:-3px; width:2px; margin-left:-1px; background:var(--tx); border-radius:1px; }
+.rs-scale { display:flex; justify-content:space-between; gap:8px; margin-top:4px; font:11px var(--mono); color:var(--tx3); }
+.rs-scale .rs-thr { color:var(--tx2); font-family:var(--sans); }
+.rs-summary { padding:2px 0 2px; max-height:120px; overflow:auto; }
+.rs-row { display:flex; gap:8px; padding:2px 14px; font-size:12px; color:var(--tx2); min-width:0; }
+.rs-row b { color:var(--tx); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40%; }
+.rs-row span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rs-row.bad span { color:var(--err); }
+.rs-probe { margin:4px 12px 2px; padding:6px 8px; border-radius:6px; background:var(--term); font-size:12px; color:var(--tx2); min-height:28px; }
+.videoview { position:absolute; inset:0; z-index:7; background:#0d0f12; display:flex; align-items:center; justify-content:center; padding:12px 12px 64px; }
+.videoview video { max-width:100%; max-height:100%; background:#000; border-radius:6px; box-shadow:var(--shadow); }
+.vv-bar { left:50%; bottom:12px; transform:translateX(-50%); width:min(940px, calc(100% - 24px)); display:flex; align-items:center; gap:4px; padding:4px 6px; }
+.vv-bar input[type=range] { flex:1 1 140px; min-width:90px; }
+.vv-bar .an-time { flex-shrink:0; }
+.vv-title { display:flex; align-items:center; gap:7px; padding:0 6px; min-width:0; max-width:220px; flex-shrink:2; color:var(--tx2); }
+.vv-title b { color:var(--tx); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vv-bar .ibtn { width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px; }
+.vv-bar .ibtn:hover { background:var(--s3); }
+@container viewer (max-width: 760px) { .vv-title { display:none; } .ancard, .rscard { width:auto; right:12px; } }
+
 /* ---- Markierung (E16) ----------------------------------------------------------------------------------------- */
 #viewer.marking > .float, #viewer.marking > .cube, #viewer.marking > #viewer-msg { display:none; }
 .markup { position:absolute; inset:0; z-index:8; background:var(--s2); }

@@ -37,5 +37,11 @@ export function fileOpBlockReason(rel: string, op: 'create' | 'rename' | 'delete
  */
 export function affectsBuild(rel: string): boolean {
   const p = rel.replace(/\\/g, '/');
+  if (affectsAnimation(p)) return false;
   return /\.py$/i.test(p) || /^inputs\//i.test(p);
+}
+
+/** Eine Animationsdatei (E58): Ihre Änderung baut die Animation neu, nicht das Modell. */
+export function affectsAnimation(rel: string): boolean {
+  return /^animations\/[^/]+\.py$/i.test(rel.replace(/\\/g, '/'));
 }

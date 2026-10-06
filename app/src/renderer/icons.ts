@@ -52,6 +52,13 @@ const PATHS: Record<string, string> = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>', spin: '<path d="M12 3a9 9 0 1 1-9 9"/>',
   play: '<path d="M7 5v14l11-7z"/>',
+  // Animation, Analyse und Video (E58)
+  pause: '<path d="M8 5v14M16 5v14"/>',
+  anim: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>',
+  gauge: '<path d="M4.2 17a8.5 8.5 0 1 1 15.6 0"/><path d="m12 14 4.5-5"/><circle cx="12" cy="14" r="1.2"/>',
+  stepback: '<path d="M18 6v12l-8-6zM6 6v12"/>', stepfwd: '<path d="M6 6v12l8-6zM18 6v12"/>',
+  loop: '<path d="M17 3l3 3-3 3"/><path d="M4 11V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3"/><path d="M20 13v2a3 3 0 0 1-3 3H4"/>',
+  'f-video': '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/>',
   // Werkzeuge der Markierung
   pointer: '<path d="M6 3v16l4.2-4.1 2.9 6.2 2.6-1.2-2.9-6.1H18.5z"/>',
   ghost: '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" fill-opacity=".45"/>',

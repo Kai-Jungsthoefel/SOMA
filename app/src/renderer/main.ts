@@ -1,7 +1,8 @@
 import { affectsBuild } from '../shared/editable';
 import type { AgentInfo, BuildStatus, ModelMap, PartMap, PreviewResult, ProjectInfo, SaveState } from '../shared/types';
 import { CodePanel, codeRows, isPdf, type Mark } from './code';
-import { FileTree, IMAGE_EXT, TEXT_EXT } from './filetree';
+import { AnimTool } from './animtool';
+import { FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
 import { MAX_QUOTE } from './pdfview';
@@ -10,9 +11,12 @@ import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
 import { SkillsPanel } from './skills';
 import { PartsCard } from './parts';
+import { ResultTool } from './resulttool';
+import { ResultLayer } from './resultview';
 import { TerminalTabs } from './terminals';
 import { $, el, fmtWhen, menuItem, menus, toast } from './ui';
 import { VersionsBar } from './versions';
+import { VideoView } from './videoview';
 import { PickResult, Viewer, ViewName } from './viewer';
 
 hydrateIcons();
@@ -127,6 +131,7 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
     if (TEXT_EXT.test(n.name) || isPdf(n.name)) void openCode(n.path);
     // Bilder (etwa Markierungen und Skizzen) öffnen auf der Zeichenfläche (E52), das Bildprogramm gibt es per Rechtsklick
     else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
+    else if (VIDEO_EXT.test(n.name)) void videoView.open(n.path);
     else if (/\.(step|stp)$/i.test(n.name)) toast('Fremde STEP-Dateien im Viewer ansehen kommt in einem späteren Schritt. Der Agent kann sie schon jetzt im Skript einbinden.', 'info');
     else toast('Für diesen Dateityp gibt es keine Ansicht in der App. Rechtsklick: „Mit Standardprogramm öffnen“.', 'info');
   },
@@ -429,7 +434,7 @@ async function sendMarkup(): Promise<void> {
     // Zeigt das Bild einen alten Stand, einen Schnitt oder eine Explosion, soll der Agent das wissen (sonst vergleicht er es mit dem
     // aktuellen Code, hält die Schnittfläche für eine echte Fläche oder die auseinandergezogenen Teile für ihre Lage)
     // Auf einem Bild aus dem Projekt gezeichnet: Der Agent soll das Original kennen, Stand und Schnitt spielen dann keine Rolle
-    const cut = [sectionTool.agentText(), explodeTool.agentText()].filter(Boolean).join(', ');
+    const cut = [sectionTool.agentText(), explodeTool.agentText(), animTool.agentText(), resultTool.agentText()].filter(Boolean).join(', ');
     const note = source ? `, gezeichnet auf ${source}`
       : (old ? `, zeigt den älteren Stand ${old.short} "${old.subject.slice(0, 80)}"` : '') + (cut ? `, ${cut}` : '');
     insertToAgent(`[Markierung: ${r.path}${note}] `, `Markierung gespeichert: ${r.path}`);
@@ -437,6 +442,47 @@ async function sendMarkup(): Promise<void> {
     toast(`Die Markierung ließ sich nicht speichern: ${e instanceof Error ? e.message : String(e)}`, 'error');
   } finally { btn.disabled = false; }
 }
+
+// ---- Animation, Analyse und Video (E58) -----------------------------------------------------------------------------
+
+const resultLayer = new ResultLayer(viewer);
+/** Messen, Explosion, Animation und Analyse schließen sich aus: Jedes braucht das Modell in seiner eigenen Lage. */
+const endOthers = (keep: 'measure' | 'explode' | 'anim' | 'result') => {
+  if (keep !== 'measure' && measureTool.isActive) measureTool.setActive(false);
+  if (keep !== 'explode' && explodeTool.isActive) explodeTool.setActive(false, false);
+  if (keep !== 'anim') animTool.setActive(false);
+  if (keep !== 'result') resultTool.setActive(false);
+};
+const animTool = new AnimTool({
+  card: $('anim-card'), button: $<HTMLButtonElement>('btn-anim'), close: $<HTMLButtonElement>('btn-anim-close'),
+  select: $<HTMLSelectElement>('anim-select'), play: $<HTMLButtonElement>('btn-anim-play'), range: $<HTMLInputElement>('anim-range'), time: $('anim-time'),
+  loop: $<HTMLButtonElement>('btn-anim-loop'), follow: $<HTMLButtonElement>('btn-anim-follow'), speed: $<HTMLSelectElement>('anim-speed'), hint: $('anim-hint'),
+  video: $<HTMLButtonElement>('btn-anim-video'), agent: $<HTMLButtonElement>('btn-anim-agent'), viewerEl: $('viewer'),
+}, {
+  viewer, list: () => api.anim.list(), build: (f) => api.anim.build(f), readBinary: (rel) => api.fs.readBinary(rel), renderVideo: (id) => api.render.video(id),
+  beforeOn: () => endOthers('anim'), insert: (t) => insertToAgent(t), toast, showVideo: (rel) => { void refreshFiles(); void videoView.open(rel); },
+});
+const resultTool = new ResultTool({
+  card: $('result-card'), button: $<HTMLButtonElement>('btn-result'), close: $<HTMLButtonElement>('btn-result-close'), select: $<HTMLSelectElement>('result-select'),
+  legend: $('result-legend'), summary: $('result-summary'), probe: $('result-probe'), hint: $('result-hint'),
+  rerun: $<HTMLButtonElement>('btn-result-rerun'), agent: $<HTMLButtonElement>('btn-result-agent'), viewerEl: $('viewer'),
+}, {
+  layer: resultLayer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
+  beforeOn: () => endOthers('result'), insert: (t) => insertToAgent(t), toast,
+});
+// Messen und Explosion schalten die beiden aus, bevor sie selbst anfangen (Lauscher in der Erfassungsphase laufen vor denen
+// der Werkzeuge): Beide rechnen mit der Einbaulage
+for (const [id, isOn] of [['btn-measure', () => measureTool.isActive], ['btn-explode', () => explodeTool.isActive]] as const) {
+  $(id).addEventListener('click', () => { if (!isOn()) { animTool.setActive(false); resultTool.setActive(false); } }, true);
+}
+const videoView = new VideoView({
+  root: $('videoview'), video: $<HTMLVideoElement>('video-el'), title: $('video-title'), play: $<HTMLButtonElement>('btn-video-play'),
+  back: $<HTMLButtonElement>('btn-video-back'), fwd: $<HTMLButtonElement>('btn-video-fwd'), range: $<HTMLInputElement>('video-range'), time: $('video-time'),
+  mark: $<HTMLButtonElement>('btn-video-mark'), agent: $<HTMLButtonElement>('btn-video-agent'), close: $<HTMLButtonElement>('btn-video-close'),
+}, {
+  readBinary: (rel) => api.fs.readBinary(rel), insert: (t) => insertToAgent(t), toast,
+  markFrame: (label, c) => markSource(label, c, c.width, c.height),
+});
 
 $('btn-mark').addEventListener('click', startMarkup);
 $('btn-ins-mark').addEventListener('click', startMarkup);
@@ -560,6 +606,8 @@ async function loadModel(): Promise<void> {
     await viewer.load(glb);
     measureTool.reset(); // neuer Build: die Nummern der Flächen und Kanten gelten nicht mehr
     explodeTool.refresh(); // vor dem Schnitt: Dessen Bereich hängt von der Lage der Bauteile ab
+    animTool.modelChanged(); // neue Bauteile: Lagen erneut anwenden, eine veraltete Animation neu bauen lassen
+    if (resultTool.isActive) void resultTool.refresh();
     sectionTool.refresh();
     msg.className = ''; msg.textContent = '';
     refreshPartsCard();
@@ -590,6 +638,8 @@ const versions = new VersionsBar({
 }, {
   async show(res: PreviewResult | null) {
     if (!res) { await loadModel(); return; }
+    animTool.setActive(false);
+    resultTool.setActive(false);
     try {
       map = res.map;
       textCache.clear();
@@ -618,6 +668,9 @@ async function onProject(p: ProjectInfo): Promise<void> {
   if (measureTool.isActive) measureTool.setActive(false);
   sectionTool.setActive(false);
   explodeTool.setActive(false, false);
+  animTool.setActive(false);
+  resultTool.setActive(false);
+  videoView.close();
   viewer.clear();
   versions.reset();
   terminals.closeAll();
@@ -977,6 +1030,14 @@ api.fs.onEditorRequest(async (action) => {
   return { ok: await code.discardAll() };
 });
 api.versions.onChanged(() => void versions.refresh());
+api.anim.onChanged(() => void animTool.refresh());
+api.render.onProgress((f) => animTool.progress(f));
+// Bilder und Videos, die der Agent erzeugt hat: kurz Bescheid geben, ein Klick im Dateibaum öffnet sie
+api.render.onNotice((n) => {
+  if (!n.byAgent) return;
+  if (n.ok) toast(`Der Agent hat ${n.files.join(', ')} erzeugt.`, 'info');
+  void refreshFiles();
+});
 api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (der Hauptprozess öffnet es beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
@@ -1007,6 +1068,15 @@ if (api.testMode) {
     measure: () => measureTool.state(),
     section: () => sectionTool.state(),
     explode: () => explodeTool.state(),
+    anim: () => animTool.state(),
+    animSeek: (t: number) => animTool.testSeek(t),
+    animRefresh: () => animTool.refresh(),
+    result: () => resultTool.state(),
+    resultRefresh: () => resultTool.refresh(),
+    resultPin: (x: number, y: number) => resultTool.testPin(x, y),
+    video: () => videoView.state(),
+    videoOpen: (rel: string) => videoView.open(rel),
+    videoSeek: (t: number) => videoView.testSeek(t),
     skills: () => skills.state(),
     pick: () => selection?.pick ?? null,
     markPixel: (x: number, y: number) => markup.pixel(x, y),

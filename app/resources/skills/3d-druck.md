@@ -94,5 +94,6 @@ def overhang_faces(part):
     return [f for f in s.Faces() if f.geomType() == "PLANE" and f.normalAt().z < lim and f.Center().z > zmin + 0.01]
 ```
 
-Curved faces (holes, fillets underneath) are not covered: check them in the viewer. Export each printable part as STL or
-3MF: `soma export "Lid" --format 3mf`. References are not printed.
+Curved faces (holes, fillets underneath) are not covered here. `soma analyze overhang --threshold {{overhang}}` and
+`soma analyze thickness --threshold {{min_wall}}` check every spot, curved faces too (skill for analysis). Export each
+printable part as STL or 3MF: `soma export "Lid" --format 3mf`. References are not printed.

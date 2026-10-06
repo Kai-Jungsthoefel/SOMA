@@ -25,7 +25,12 @@ interface PartEntry {
   cap?: { stencils: THREE.Mesh[]; plate: THREE.Mesh };
   /** Dreiecke in Weltkoordinaten, für die Schnittkontur und den Bereich des Schiebers (erst bei Bedarf berechnet). */
   world?: { pos: Float32Array; idx: ArrayLike<number>; faces: boolean }[];
+  /** Lage aus einer Animation (E58), bezogen auf die Einbaulage. Fehlt: in Einbaulage. */
+  pose?: THREE.Matrix4;
 }
+
+/** Zeichnet Texte über das Bild (E58). `project`: Weltpunkt → Bildpunkt in dieser Fläche, null hinter der Kamera. */
+export type OverlayPainter = (g: CanvasRenderingContext2D, w: number, h: number, project: (p: THREE.Vector3) => { x: number; y: number } | null) => void;
 
 /** Treffer eines Strahls. `cut`: Er trifft die Schnittfläche (dort steckt er in der Schnittebene im Material). */
 type Hit = THREE.Intersection & { cut?: boolean };
@@ -131,20 +136,35 @@ export class Viewer {
   private showTrails = true;
   /** Wartet auf einen Klick auf eine Fläche (Schnitt an Fläche ausrichten). */
   private planePick: ((h: PlaneHit | null) => void) | null = null;
+  /** Animation (E58): ausgeblendete, durchsichtige und hervorgehobene Bauteile zu diesem Zeitpunkt (getrennt von den Einstellungen des Nutzers). */
+  private animHidden = new Set<string>();
+  private animGhost = new Set<string>();
+  private animHighlight = new Set<string>();
+  /** Ergebnisansicht (E58): Das Modell tritt zurück, eine eigene Ebene zeigt die gefärbten Netze. */
+  private modelHidden = false;
+  /** 2D-Fläche über dem Bild für Untertitel, Beschriftungen und Legende (E58). */
+  private paint: HTMLCanvasElement;
+  private painter: OverlayPainter | null = null;
   onPick: (r: PickResult | null) => void = () => {};
   /** Klick im Messmodus. null: daneben geklickt. */
   onMeasurePick: (h: ProbeHit | null) => void = () => {};
   /** Klick im Messmodus auf die Schnittfläche selbst (die hat keine exakte Geometrie). */
   onMeasureCut: () => void = () => {};
 
-  constructor(private container: HTMLElement) {
+  /** `pixelRatio`: fest statt der des Bildschirms (Render-Fenster: ein Bildpunkt je Pixel des Videos). */
+  constructor(private container: HTMLElement, private readonly opts: { pixelRatio?: number } = {}) {
     // Durchsichtiger Hintergrund: den Verlauf dahinter zeichnet CSS, so passt er zur übrigen Oberfläche
     // Schablonenpuffer (stencil) für die gefüllten Schnittflächen, seit three.js r163 nicht mehr von selbst da
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true, stencil: true });
     this.renderer.localClippingEnabled = true;
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(opts.pixelRatio ?? window.devicePixelRatio);
     this.renderer.setClearColor(0x000000, 0);
     container.appendChild(this.renderer.domElement);
+    this.paint = document.createElement('canvas');
+    this.paint.className = 'v-paint';
+    // Liegt über dem Bild (#viewer > canvas zieht sie auf volle Größe), Klicks gehen durch auf die 3D-Ansicht
+    this.paint.style.pointerEvents = 'none';
+    container.appendChild(this.paint);
     this.camera.up.set(0, 0, 1);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -292,7 +312,7 @@ export class Viewer {
   get hiddenCount(): number { return this.hidden.size; }
 
   private applyVisibility(): void {
-    for (const [id, p] of this.parts) p.group.visible = !this.hidden.has(id);
+    for (const [id, p] of this.parts) p.group.visible = !this.hidden.has(id) && !this.animHidden.has(id) && !this.modelHidden;
     this.syncTrails();
     this.syncSection();
   }
@@ -303,7 +323,7 @@ export class Viewer {
 
   private applyDisplay(): void {
     for (const [id, p] of this.parts) {
-      const own = this.ghosted.has(id);
+      const own = this.ghosted.has(id) || this.animGhost.has(id);
       for (const l of p.lines) {
         l.visible = this.edges;
         const lm = l.material as THREE.LineBasicMaterial;
@@ -535,7 +555,7 @@ export class Viewer {
       partId: part.meta.partId, name: part.meta.name, role: part.meta.role,
       faceId: face?.id ?? null, surface: face?.surface ?? null, area: face?.area ?? null,
       // In Einbaulage: Die Explosionsansicht verschiebt nur die Darstellung, der Agent kennt nur das Modell
-      point: hit.point.clone().sub(part.offset).toArray().map((v) => +v.toFixed(3)),
+      point: this.restPoint(part, hit.point).toArray().map((v) => +v.toFixed(3)),
       ...(hit.cut ? { cut: true } : {}),
     };
   }
@@ -916,7 +936,16 @@ export class Viewer {
   /** Das ausgewählte Bauteil leuchtet leicht orange (Farbe der Auswahl in der ganzen Oberfläche). */
   private applySelection(): void {
     for (const [id, p] of this.parts) {
-      for (const m of p.meshes) (m.material as THREE.MeshStandardMaterial).emissive?.setHex(id === this.selectedId ? 0x5a2e00 : 0x000000);
+      for (const m of p.meshes) {
+        const mat = m.material as THREE.MeshStandardMaterial;
+        mat.emissive?.setHex(id === this.selectedId ? 0x5a2e00 : 0x000000);
+        // Hervorhebung einer Animation (E58): Flächenfarbe deutlich nach Orange ziehen. Nur Leuchten färbte ein blaues Teil violett
+        // (Violett heißt in der Oberfläche Vorschau)
+        // (Material.clone() macht aus einer Farbe in userData ein einfaches Objekt: dann neu merken)
+        const stored = mat.userData.baseColor as unknown;
+        const base = stored instanceof THREE.Color ? stored : (mat.userData.baseColor = mat.color.clone());
+        if (this.animHighlight.has(id)) mat.color.copy(base).lerp(Viewer.highlightColor, 0.65); else mat.color.copy(base);
+      }
     }
   }
   get selection(): string | null { return this.selectedId; }
@@ -927,6 +956,9 @@ export class Viewer {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
+    const dpr = this.renderer.getPixelRatio();
+    this.paint.width = Math.round(w * dpr);
+    this.paint.height = Math.round(h * dpr);
     for (const m of this.lineMats) m.resolution.set(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -942,6 +974,7 @@ export class Viewer {
       this.prepareSection();
       this.renderer.render(this.scene, this.camera);
       this.placeOverlay();
+      this.paintLive();
       this.cube?.render();
     });
   }
@@ -993,6 +1026,7 @@ export class Viewer {
     g.fillRect(-cx, -cy * rx / ry, w, h * rx / ry);
     g.restore();
     g.drawImage(src, 0, 0);
+    if (this.painter) this.painter(g, w, h, (p) => this.project(p, w, h));
   }
 
   /**
@@ -1327,6 +1361,129 @@ export class Viewer {
     l.computeLineDistances();
     l.raycast = () => {};
     this.trails.add(l);
+  }
+
+  // ---- Animation und Ergebnisse (E58) ---------------------------------------------------------------------------
+
+  private static highlightColor = new THREE.Color(ORANGE);
+
+  /**
+   * Lage je Bauteil aus einer Animation (Matrix bezogen auf die Einbaulage, Schlüssel: partId). null oder fehlend: Einbaulage.
+   * Wie bei der Explosion arbeiten Klicks, Schnitt und Hervorhebungen danach mit der neuen Lage.
+   */
+  setPoses(poses: Map<string, THREE.Matrix4> | null): void {
+    const t = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+    let changed = false;
+    for (const p of this.parts.values()) {
+      const m = poses?.get(p.meta.partId) ?? null;
+      if (!m && !p.pose) continue;
+      if (m && p.pose && m.equals(p.pose)) continue;
+      p.pose = m ? m.clone() : undefined;
+      if (m) m.decompose(t, q, sc); else { t.set(0, 0, 0); q.identity(); }
+      p.group.position.copy(p.base).add(t).add(p.offset);
+      p.group.quaternion.copy(q);
+      p.group.updateMatrixWorld(true);
+      p.world = undefined;
+      changed = true;
+    }
+    if (!changed) return;
+    this.follow();
+    this.syncTrails();
+    this.syncSection();
+    this.fitClip();
+    this.requestRender();
+  }
+
+  /** Zustände einer Animation (Schlüssel: partId). null: keine. */
+  setAnimState(s: { hidden: Set<string>; ghost: Set<string>; highlight: Set<string> } | null): void {
+    const same = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+    const next = s ?? { hidden: new Set<string>(), ghost: new Set<string>(), highlight: new Set<string>() };
+    if (same(next.hidden, this.animHidden) && same(next.ghost, this.animGhost) && same(next.highlight, this.animHighlight)) return;
+    this.animHidden = new Set(next.hidden);
+    this.animGhost = new Set(next.ghost);
+    this.animHighlight = new Set(next.highlight);
+    this.applyVisibility();
+    this.applyDisplay();
+    this.applySelection();
+    this.requestRender();
+  }
+
+  /** Kamera an diese Stelle, Blick auf `target` (Drehpunkt), Z bleibt oben. */
+  setCamera(position: THREE.Vector3, target: THREE.Vector3): void {
+    this.anim?.stop();
+    this.controls.target.copy(target);
+    this.camera.position.copy(position);
+    this.controls.update();
+    this.fitClip();
+    this.requestRender();
+  }
+
+  /** Malt Texte über das Bild (null: nichts). Wird bei jedem Zeichnen und im Schnappschuss aufgerufen. */
+  setPainter(p: OverlayPainter | null): void {
+    this.painter = p;
+    this.requestRender();
+  }
+
+  private project(p: THREE.Vector3, w: number, h: number): { x: number; y: number } | null {
+    const v = p.clone().project(this.camera);
+    if (v.z > 1) return null;
+    return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h };
+  }
+
+  private paintLive(): void {
+    const g = this.paint.getContext('2d');
+    if (!g) return;
+    g.clearRect(0, 0, this.paint.width, this.paint.height);
+    if (this.painter) this.painter(g, this.paint.width, this.paint.height, (p) => this.project(p, this.paint.width, this.paint.height));
+  }
+
+  /** Punkt in Einbaulage: ohne Explosion und Bewegung der Animation (der Agent kennt nur das Modell). */
+  private restPoint(part: PartEntry, p: THREE.Vector3): THREE.Vector3 {
+    const q = p.clone().sub(part.offset);
+    return part.pose ? q.applyMatrix4(part.pose.clone().invert()) : q;
+  }
+
+  /** Das Modell ausblenden, solange eine eigene Ebene (Ergebnis) es zeigt. */
+  setModelHidden(on: boolean): void {
+    if (this.modelHidden === on) return;
+    this.modelHidden = on;
+    this.applyVisibility();
+    this.requestRender();
+  }
+
+  /** Eigene Objekte in der Szene (Ergebnisse). Sie werden geschnitten, wenn ihre Materialien `clipPlanes` nutzen. */
+  addLayer(o: THREE.Object3D): void { this.scene.add(o); this.requestRender(); }
+  removeLayer(o: THREE.Object3D): void { this.scene.remove(o); this.requestRender(); }
+  /** Die Liste der Schnittebenen (leer ohne Schnitt). Dieselbe Liste für alle Materialien, sie ändert sich an Ort und Stelle. */
+  get clipPlanes(): THREE.Plane[] { return this.clip; }
+
+  /** Erster sichtbarer Treffer unter dem Zeiger auf diesen Objekten (was der Schnitt wegnimmt, zählt nicht). */
+  pickObjects(clientX: number, clientY: number, objects: THREE.Object3D[]): THREE.Intersection | null {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    this.camera.updateMatrixWorld();
+    this.raycaster.setFromCamera(new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1), this.camera);
+    return this.raycaster.intersectObjects(objects, true).find((h) => !this.clipped(h.point)) ?? null;
+  }
+
+  /** Feste Größe in CSS-Pixeln (Render-Fenster). */
+  resizeTo(w: number, h: number): void {
+    this.container.style.width = `${w}px`;
+    this.container.style.height = `${h}px`;
+    this.resize();
+  }
+
+  /** Lage eines Bauteils, für Tests: Mittelpunkt des Hüllquaders und Drehung (Quaternion). */
+  partPose(id: string): { center: number[]; quaternion: number[] } | null {
+    const p = this.parts.get(id);
+    if (!p) return null;
+    const c = new THREE.Box3().setFromObject(p.group).getCenter(new THREE.Vector3());
+    return { center: c.toArray().map((v) => +v.toFixed(3)), quaternion: p.group.quaternion.toArray().map((v) => +v.toFixed(4)) };
+  }
+
+  /** Zustand der Animation im Viewer, für Tests. */
+  animViewState() {
+    return { hidden: [...this.animHidden], ghost: [...this.animGhost], highlight: [...this.animHighlight], modelHidden: this.modelHidden, painter: !!this.painter };
   }
 
   // ---- Prüfhilfen (nur für Tests) -------------------------------------------------------------------------------

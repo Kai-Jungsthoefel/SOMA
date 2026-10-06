@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell, type WebContents } from 'el
 import fs from 'node:fs';
 import path from 'node:path';
 import { detectAgents } from './agents';
+import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { choose, setTestAnswers } from './dialogs';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
@@ -17,6 +18,8 @@ if (process.env.SOMA_USER_DATA) app.setPath('userData', process.env.SOMA_USER_DA
 else if (process.platform === 'win32' && process.env.LOCALAPPDATA) app.setPath('userData', path.join(process.env.LOCALAPPDATA, 'soma'));
 
 let win: BrowserWindow | null = null;
+/** Für Anfragen aus den Terminals (bridge.ts): das Projekt des Fensters. */
+let controller: ProjectController | null = null;
 
 function registerIpc(ctl: ProjectController): void {
   const dir = () => ctl.need().dir;
@@ -123,6 +126,11 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('skills:set', (_e, id: unknown, mode: unknown) => ctl.setSkill(id, mode));
   ipcMain.handle('skills:configure', (_e, id: unknown, values: unknown) => ctl.configureSkill(id, values));
   ipcMain.handle('skills:setDefault', (_e, id: unknown, mode: unknown) => ctl.setSkillDefault(id, mode));
+  ipcMain.handle('anim:list', () => ctl.animList());
+  ipcMain.handle('anim:build', (_e, file: unknown) => ctl.animBuild(file));
+  ipcMain.handle('results:list', () => ctl.results());
+  ipcMain.handle('results:rerun', (_e, id: unknown) => ctl.rerunResult(id));
+  ipcMain.handle('render:video', (_e, id: unknown) => ctl.renderVideo(id));
   // Rückfragen aus dem Renderer (etwa ungespeicherte Eingaben im Editor) laufen über dieselben Dialoge wie im Hauptprozess
   ipcMain.handle('dialog:choose', (_e, o: { title?: unknown; message?: unknown; detail?: unknown; buttons?: unknown }) => {
     const buttons = Array.isArray(o?.buttons) ? o.buttons.slice(0, 4).map(String) : [];
@@ -133,6 +141,8 @@ function registerIpc(ctl: ProjectController): void {
   // Nur im Testmodus: vorbereitete Antworten für Dialoge (siehe dialogs.ts)
   if (process.env.SOMA_TEST === '1') {
     ipcMain.handle('test:answers', (_e, a: unknown[]) => setTestAnswers(a));
+    // Adresse und Schlüssel für soma render, damit Tests es auch außerhalb eines Terminals aufrufen können
+    ipcMain.handle('test:bridge', () => bridgeEnv());
     // Screenshot auch aus unsichtbaren Fenstern (CDP liefert dort kein Bild)
     ipcMain.handle('test:screenshot', async (e, file: string) => {
       const img = await e.sender.capturePage();
@@ -203,6 +213,7 @@ function createWindow(): void {
   if (testWindowMode === 'offscreen') { win.setBounds({ x: -20000, y: -20000, width: 1600, height: 950 }); win.showInactive(); }
   const wc = win.webContents;
   const ctl = new ProjectController(() => win, wc);
+  controller = ctl;
   registerIpc(ctl);
   // Stürzt der Anzeigeprozess ab, steht der Grund im Protokoll (sonst bliebe nur ein schwarzes Fenster).
   wc.on('render-process-gone', (_e, d) => onRendererGone(wc, d.reason, d.exitCode));
@@ -232,8 +243,16 @@ function createWindow(): void {
       if (ok) { allowClose = true; win?.close(); }
     })();
   });
-  win.on('closed', () => { ctl.close(); win = null; });
+  win.on('closed', () => { ctl.close(); ctl.renders.close(); controller = null; win = null; });
 }
 
-app.whenReady().then(createWindow);
-app.on('window-all-closed', () => app.quit());
+// Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
+app.whenReady().then(async () => {
+  await startBridge(async (route, body) => {
+    if (!controller) return { status: 503, body: { ok: false, error: 'Die App hat gerade kein Fenster.' } };
+    if (route === 'render') return controller.renderForAgent(body);
+    return { status: 404, body: { ok: false, error: `Unbekannte Anfrage: ${route}` } };
+  });
+  createWindow();
+});
+app.on('window-all-closed', () => { stopBridge(); app.quit(); });
