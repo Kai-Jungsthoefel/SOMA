@@ -1,0 +1,1074 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOMA Entwurf 2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Entwurf 2 „Aufgeräumt“: Weiterentwicklung von design/ui-entwurf.html (E38) nach der Kritik vom 2026-10-06.
+   Gleiche Farben mit fester Bedeutung: Orange Aktion und Auswahl, Violett Vorschau, Grün/Gelb/Rot Status.
+   Die pinken Kreise sind Anmerkungen zum Entwurf, kein Teil der Oberfläche. */
+:root{
+  --bg:#121417; --s1:#16181c; --s2:#1b1e23; --s3:#232830; --line:#262a31; --line2:#2d323a;
+  --tx:#e6e8eb; --tx2:#a3acb6; --tx3:#7f8994; --term:#0f1114;
+  --acc:#f29a38; --acc-tx:#f6b46a; --acc-tint:rgba(242,154,56,.14); --acc-line:rgba(242,154,56,.45);
+  --vio:#9aa6ff; --vio-tint:rgba(154,166,255,.14);
+  --ok:#5cc98b; --warn:#e8c547; --err:#f07470;
+  --note:#e25bd6;
+  --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif; --mono:'IBM Plex Mono',Consolas,monospace;
+  --k:1;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#0b0c0e;color:var(--tx);font:13px/1.4 var(--sans)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+svg{display:block;flex-shrink:0}
+b{font-weight:600}
+code,.mono{font-family:var(--mono);font-size:.95em}
+
+/* ---- Präsentation ---- */
+.deck-top{position:sticky;top:0;z-index:5;background:#0b0c0e;border-bottom:1px solid #1d2025}
+.deck-head{display:flex;align-items:center;gap:18px;padding:10px 24px}
+.deck-title{font-weight:600;font-size:14px;white-space:nowrap}
+.deck-tabs{display:flex;gap:2px;flex-wrap:wrap}
+.deck-tab{height:30px;padding:0 11px;border-radius:6px;color:var(--tx2);white-space:nowrap}
+.deck-tab .n{color:var(--tx3);margin-right:6px}
+.deck-tab[aria-selected=true]{background:var(--s3);color:var(--tx)}
+.deck-tab[aria-selected=true] .n{color:var(--acc-tx)}
+.deck-tools{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--tx3);font-size:12px;white-space:nowrap}
+.deck-tools label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--tx2)}
+.deck-tools input{accent-color:var(--note)}
+.deck-cap{display:flex;gap:28px;align-items:baseline;padding:4px 24px 12px}
+.deck-cap h2{margin:0;font-size:17px;font-weight:600;white-space:nowrap}
+.deck-cap ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px 24px;color:var(--tx2)}
+.deck-cap li{display:flex;gap:8px;align-items:flex-start;max-width:520px}
+.deck-cap li .bul{width:5px;height:5px;margin:7px 6px 0 6px;border-radius:50%;background:var(--tx3);flex-shrink:0}
+.stage{padding:16px 24px 40px;display:flex;justify-content:center}
+.frame{width:calc(1600px * var(--k));height:calc(900px * var(--k));flex-shrink:0}
+.screen{width:1600px;height:900px;transform:scale(var(--k));transform-origin:0 0;border-radius:10px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px #262a31}
+body.solo .deck-top{display:none}
+body.solo .stage{padding:0}
+body.solo .screen{border-radius:0;box-shadow:none}
+
+/* Anmerkungen */
+.pin{position:absolute;z-index:50;width:22px;height:22px;border-radius:50%;background:var(--note);color:#fff;font:600 12px/22px var(--sans);text-align:center;box-shadow:0 0 0 3px rgba(226,91,214,.28),0 4px 10px rgba(0,0,0,.5);pointer-events:none}
+.pin.s{position:static;display:inline-block;flex-shrink:0;width:20px;height:20px;font-size:11px;line-height:20px;box-shadow:none}
+body.nonotes .app .pin{display:none}
+
+/* ---- App: Grundbausteine ---- */
+.app{width:1600px;height:900px;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;position:relative}
+.top{height:44px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding-right:12px;background:var(--s1);border-bottom:1px solid var(--line)}
+.logo{width:56px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--acc);flex-shrink:0}
+.docname{display:flex;align-items:center;gap:6px;height:30px;padding:0 8px;margin-left:-6px;border-radius:6px;color:var(--tx2)}
+.docname b{font-size:14px;color:var(--tx)}
+.savestate{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--tx2);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.grow{flex-grow:1}
+.c2{color:var(--tx2)} .c3{color:var(--tx3)} .small{font-size:12px}
+.pill{display:flex;align-items:center;height:30px;border:1px solid var(--line2);border-radius:15px;background:var(--s2);white-space:nowrap}
+.pill .main{display:flex;align-items:center;gap:8px;height:28px;padding:0 12px}
+.pill .sep{width:1px;height:16px;background:var(--line2)}
+.pill .auto{display:flex;align-items:center;gap:6px;height:28px;padding:0 12px 0 10px;color:var(--tx2)}
+.spin{color:var(--acc);display:flex}
+.btn{display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;border:1px solid var(--line2);border-radius:6px;white-space:nowrap;flex-shrink:0}
+.btn.sm{height:28px;padding:0 9px;font-size:12px;gap:6px}
+.btn.xs{height:24px;padding:0 8px;font-size:12px;gap:5px}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#1b1206;font-weight:600;gap:10px;padding:0 12px}
+.btn.primary .kbd{font-size:11px;font-weight:500;color:#5a3a12}
+.btn.acc{background:var(--acc-tint);border-color:var(--acc-line);color:var(--acc-tx);font-weight:500}
+.btn.ghost{border-color:transparent;color:var(--tx2)}
+.ibtn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:var(--tx2);flex-shrink:0}
+.ibtn.s{width:26px;height:26px}
+.ibtn.on{color:var(--acc-tx)}
+.layout{display:flex;align-items:center;gap:2px;padding:2px;border:1px solid var(--line2);border-radius:8px}
+.layout button{width:30px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--tx3)}
+.layout button.on{background:var(--s3);color:var(--tx)}
+.body{flex-grow:1;display:flex;min-height:0}
+.rail{width:56px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:var(--s1);border-right:1px solid var(--line)}
+.rail button{width:48px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:8px;color:var(--tx2);text-align:center}
+.rail button span{font-size:10px}
+.rail button.on{background:var(--s3);color:var(--acc-tx)}
+.side{flex-shrink:0;display:flex;flex-direction:column;background:var(--s1);border-right:1px solid var(--line);min-height:0;position:relative}
+.side-hd{height:40px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 6px 0 14px;border-bottom:1px solid var(--line)}
+.side-hd b{font-size:13px}
+.side-bd{flex-grow:1;min-height:0;overflow:hidden;padding:6px 0}
+.cap{font-size:11px;letter-spacing:.06em;color:var(--tx3)}
+.grp{display:flex;align-items:center;gap:6px;padding:12px 14px 4px;font-size:11px;letter-spacing:.06em;color:var(--tx3)}
+.sw{width:10px;height:10px;border-radius:3px;flex-shrink:0;display:inline-block}
+.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--s3);color:var(--tx2);white-space:nowrap}
+.tag.acc{background:var(--acc-tint);color:var(--acc-tx)}
+.tag.dash{background:none;border:1px dashed var(--line2);color:var(--tx3)}
+
+/* Baum (Bauteile, Dateien) */
+.trow{display:flex;align-items:center;gap:7px;height:26px;padding:0 6px 0 calc(10px + var(--d,0) * 16px);margin:0 6px;border-radius:6px;white-space:nowrap;color:var(--tx)}
+.trow .chev{width:14px;display:flex;justify-content:center;color:var(--tx3);flex-shrink:0}
+.trow .nm{flex-grow:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.trow .ra{display:flex;gap:0;color:var(--tx3);visibility:hidden}
+.trow .ra .ibtn{width:22px;height:22px}
+.trow.hov{background:var(--s3)}
+.trow.hov .ra,.trow .ra.keep{visibility:visible}
+.trow.sel{background:var(--acc-tint);color:var(--acc-tx);font-weight:500}
+.trow.off .nm{color:var(--tx3)}
+.trow.g .nm{font-weight:500}
+.trow .cnt{color:var(--tx3);font-size:12px}
+.trow .fico{color:var(--tx3);display:flex}
+.trow.dim{color:var(--tx2)}
+.drop{margin:10px 12px 12px;padding:9px 12px;border:1px dashed var(--line2);border-radius:8px;display:flex;align-items:center;gap:10px;color:var(--tx3);font-size:12px}
+
+/* Editor */
+.ed{flex-shrink:0;display:flex;flex-direction:column;background:var(--term);border-right:1px solid var(--line);min-width:0}
+.ed-hd{height:40px;flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:0 6px 0 6px;background:var(--s1);border-bottom:1px solid var(--line)}
+.ctab{height:33px;display:flex;align-items:center;gap:8px;padding:0 10px 0 12px;border-radius:7px 7px 0 0;color:var(--tx2);font-family:var(--mono);font-size:12px;border:1px solid transparent}
+.ctab.on{background:var(--term);border-color:var(--line);border-bottom-color:var(--term);margin-bottom:-1px;color:var(--tx)}
+.ctab .x{color:var(--tx3);display:flex}
+.ed-hd .acts{display:flex;align-items:center;gap:2px;align-self:center;margin-left:auto}
+.code{font-family:var(--mono);font-size:12.5px;line-height:1.72;padding:8px 0;overflow:hidden;flex-grow:1}
+.cl{display:flex;gap:14px;padding:0 12px 0 0;white-space:pre}
+.cl .ln{color:#5d6671;min-width:34px;text-align:right;flex-shrink:0}
+.cl.cur{background:rgba(255,255,255,.035)}
+.cl.hl{background:rgba(242,154,56,.11)}
+.k-fn{color:#7fb4ff}.k-str{color:#9fd28a}.k-num{color:#e0b36a}.k-cm{color:#7f8994}.k-kw{color:#c69cf5}
+
+/* Viewer */
+.center{flex-grow:1;min-width:0;display:flex;flex-direction:column}
+.vp{flex-grow:1;position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 46%,#272c34 0%,#1b1e23 62%,#16181c 100%)}
+.vp > svg.model{position:absolute;inset:0;width:100%;height:100%}
+.float{background:rgba(24,27,31,.96);border:1px solid var(--line2);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.vtop{position:absolute;left:12px;right:12px;top:12px;display:flex;align-items:flex-start;gap:12px;z-index:3}
+.vtop .cubespace{width:100px;flex-shrink:0}
+.switcher{display:flex;align-items:center;height:38px;padding:0 4px 0 0;white-space:nowrap}
+.switcher .sb{display:flex;align-items:center;gap:9px;height:36px;padding:0 10px 0 12px;border-radius:9px}
+.switcher .sb .ico{color:var(--tx2);display:flex}
+.switcher .sb .ico.heat{color:var(--warn)}
+.switcher.open .sb{background:var(--s3)}
+.switcher .new{display:flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:10px;background:var(--acc-tint);color:var(--acc-tx);font-size:11px;font-weight:500}
+.switcher .vs{width:1px;height:18px;background:var(--line2);margin:0 2px}
+.switcher.vio{border-color:rgba(154,166,255,.5);background:rgba(28,30,44,.96)}
+.switcher.vio .sb .ico{color:var(--vio)}
+.tools{display:flex;align-items:center;gap:2px;padding:3px;height:42px}
+.tools button{display:flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:7px;white-space:nowrap;color:var(--tx)}
+.tools button .c3{font-size:11px}
+.tools button.on{background:var(--acc-tint);color:var(--acc-tx);font-weight:500;box-shadow:inset 0 0 0 1px var(--acc-line)}
+.tools.icons button{padding:0 9px}
+.vsep{width:1px;height:20px;background:var(--line2);margin:0 4px;flex-shrink:0}
+.cubebox{position:absolute;top:8px;right:12px;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:3}
+.vbar{display:flex;flex-direction:column;gap:2px;padding:3px}
+.vbar button{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:#c9ced4}
+.vbar button.on{background:var(--s3);color:var(--acc-tx)}
+.vcard{position:absolute;left:12px;bottom:12px;width:340px;overflow:hidden;z-index:3}
+.mc-hd{height:40px;display:flex;align-items:center;gap:9px;padding:0 6px 0 12px}
+.mc-ico{width:24px;height:24px;border-radius:6px;background:var(--acc-tint);color:var(--acc-tx);display:flex;align-items:center;justify-content:center}
+.mc-body{padding:0 12px 10px;display:flex;flex-direction:column;gap:10px}
+.sc-actions{display:flex;gap:8px;padding:10px 12px 12px;border-top:1px solid var(--line)}
+.sc-actions .btn{flex:1;justify-content:center}
+.peek{margin:0 12px;border:1px solid var(--line);border-radius:7px;background:var(--term);overflow:hidden}
+.peek .ph{display:flex;justify-content:space-between;padding:5px 10px;font-family:var(--mono);font-size:11px;color:var(--tx3);border-bottom:1px solid var(--line)}
+.peek .code{font-size:11.5px;padding:4px 0}
+.seg{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+.seg button{flex:1;height:28px;font-size:12px;color:var(--tx2);display:flex;align-items:center;justify-content:center;gap:5px;text-align:center}
+.seg button + button{border-left:1px solid var(--line2)}
+.seg button.on{background:var(--acc-tint);color:var(--acc-tx);font-weight:500}
+.slider{display:flex;align-items:center;gap:10px}
+.trk{position:relative;flex-grow:1;height:4px;border-radius:2px;background:var(--line2)}
+.trk i{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--acc)}
+.trk b{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#f4f5f6;box-shadow:0 0 0 3px rgba(242,154,56,.35)}
+.valbox{display:flex;align-items:center;gap:4px;height:26px;padding:0 8px;border:1px solid var(--line2);border-radius:5px;background:var(--bg);font-family:var(--mono);font-size:12px;white-space:nowrap}
+.tl{height:44px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--s1);border-top:1px solid var(--line)}
+.tl .lbl{display:flex;align-items:center;gap:7px;color:var(--tx2);font-size:12px;font-weight:500;flex-shrink:0}
+.track{position:relative;height:44px;flex-grow:1}
+.track .line{position:absolute;left:8px;right:64px;top:21px;height:2px;background:var(--line2);border-radius:1px}
+.vd{position:absolute;top:15px;width:14px;height:14px;margin-left:-7px;display:flex;align-items:center;justify-content:center}
+.vd i{width:8px;height:8px;border-radius:50%;background:var(--tx2)}
+.vd.app i{background:var(--s1);box-shadow:inset 0 0 0 2px var(--tx2)}
+.vd.saved i{background:var(--ok);width:9px;height:9px}
+.now{position:absolute;top:13px;right:0;height:18px;display:flex;align-items:center;gap:8px}
+.now i{width:14px;height:14px;border-radius:50%;background:var(--bg);box-shadow:inset 0 0 0 2px var(--acc);display:flex;align-items:center;justify-content:center}
+.now i::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--acc)}
+.now span{font-size:12px;font-weight:500;color:var(--acc-tx)}
+
+/* Agent */
+.agent{flex-shrink:0;display:flex;flex-direction:column;background:var(--term);border-left:1px solid var(--line);position:relative;min-width:0}
+.tabs{height:40px;flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:0 6px 0 8px;background:var(--s1);border-bottom:1px solid var(--line)}
+.tab{height:33px;display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;border-radius:7px 7px 0 0;color:var(--tx2);border:1px solid transparent;white-space:nowrap}
+.tab.on{background:var(--term);border-color:var(--line);border-bottom-color:var(--term);margin-bottom:-1px;color:var(--tx);font-weight:500}
+.tab .x{color:var(--tx3);display:flex}
+.term{flex-grow:1;min-height:0;display:flex;flex-direction:column;padding:12px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.6;color:#c9ced4;overflow:hidden}
+.term .l{white-space:pre-wrap}
+.term .gap{height:12px;flex-shrink:0}
+.term .u{color:var(--tx)} .term .p{color:var(--acc-tx)} .term .cmd{color:#7fb4ff} .term .ok{color:var(--ok)} .term .mut{color:var(--tx3)} .term .del{color:#f0908c} .term .add{color:#8fd6a3}
+.term .bul{color:var(--ok)}
+.term .inbox{margin-top:auto;border-top:1px solid #2b3038;border-bottom:1px solid #2b3038;padding:6px 0;color:var(--tx)}
+.term .ref{background:rgba(242,154,56,.16);color:var(--acc-tx);border-radius:3px;padding:0 3px}
+.cursor{display:inline-block;width:7px;height:15px;margin-left:2px;background:var(--tx);vertical-align:-3px}
+.toast{position:absolute;left:12px;right:12px;top:50px;display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:var(--s2);border:1px solid var(--line2);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.45);font-size:12.5px;z-index:4}
+.toast .ok{color:var(--ok);margin-top:1px}
+
+/* Menüs */
+.menu{background:var(--s2);border:1px solid var(--line2);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.45);padding:6px;width:300px}
+.menu.pos{position:absolute;z-index:6}
+.mi{display:flex;align-items:center;gap:10px;min-height:32px;padding:0 10px;border-radius:6px;width:100%;white-space:nowrap}
+.mi .k{margin-left:auto;color:var(--tx3);font-size:12px;display:flex;align-items:center;gap:6px}
+.mi.on{background:var(--s3)}
+.mi .ico{color:var(--tx2);display:flex}
+.mi.two{align-items:flex-start;padding-top:7px;padding-bottom:7px}
+.mi.two .t{display:flex;flex-direction:column;gap:1px;white-space:normal}
+.msep{height:1px;background:var(--line);margin:6px 4px}
+.mh{padding:8px 10px 4px;font-size:11px;letter-spacing:.06em;color:var(--tx3);display:flex;gap:6px}
+.mh .src{font-family:var(--mono);letter-spacing:0;text-transform:none}
+.mnote{padding:4px 10px 6px;font-size:12px;color:var(--tx3);white-space:normal}
+.chip{height:28px;padding:0 10px;border:1px solid var(--line2);border-radius:6px;font-size:12px;display:flex;align-items:center;gap:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 10px 8px}
+.chk{width:15px;color:var(--acc-tx);display:flex}
+
+/* Skills */
+.sk{display:flex;align-items:center;gap:10px;padding:6px 8px 6px 12px;margin:0 6px;border-radius:7px}
+.sk .t{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.sk .t b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sk .t span{font-size:12px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sk .t span.cust{color:var(--tx2)}
+.sk.sel{background:var(--s3)}
+.sk.off .t b{color:var(--tx3)}
+.lvl{display:flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 8px;border:1px solid var(--line2);border-radius:12px;font-size:11.5px;color:var(--tx2);white-space:nowrap;flex-shrink:0}
+.lvl .ld{width:7px;height:7px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--tx2)}
+.lvl.always{border-color:var(--acc-line);color:var(--acc-tx);background:var(--acc-tint)}
+.lvl.always .ld{background:var(--acc);box-shadow:none}
+.lvl.off{color:var(--tx3);border-color:var(--line)}
+.lvl.off .ld{box-shadow:inset 0 0 0 1.5px var(--tx3);opacity:.6}
+.flyout{position:absolute;left:8px;top:60px;width:356px;z-index:7;overflow:hidden;display:flex;flex-direction:column}
+.fl-sec{padding:12px 14px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.frm{display:flex;align-items:center;gap:8px;height:28px}
+.frm .lb{flex-grow:1;color:var(--tx2)}
+.frm .valbox{width:84px;justify-content:space-between}
+.frm .valbox.chg{border-color:var(--acc-line);color:var(--acc-tx)}
+.sel-box{display:flex;align-items:center;justify-content:space-between;gap:6px;height:26px;width:84px;padding:0 6px 0 8px;border:1px solid var(--line2);border-radius:5px;background:var(--bg);font-size:12px}
+.sel-box.chg{border-color:var(--acc-line);color:var(--acc-tx)}
+
+/* Parameter */
+.psrc{display:flex;align-items:center;gap:8px;padding:8px 14px 6px;font-size:12px;color:var(--tx3)}
+.pvar{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line)}
+.pg{display:flex;align-items:center;gap:6px;padding:12px 14px 4px 10px;font-size:11px;letter-spacing:.06em;color:var(--tx3)}
+.pg .src{letter-spacing:0;font-size:11px;color:var(--tx3)}
+.prm{position:relative;margin:0 6px;border-radius:7px}
+.prm .r{display:flex;align-items:center;gap:8px;height:30px;padding:0 6px 0 14px}
+.prm .lb{flex-grow:1;min-width:0;display:flex;align-items:baseline;gap:7px;white-space:nowrap;overflow:hidden}
+.prm .lb .cn{font-family:var(--mono);font-size:10.5px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis}
+.prm .valbox{width:96px;justify-content:flex-end;height:24px;gap:5px}
+.prm .valbox .u{color:var(--tx3);font-size:11px}
+.prm .rst{width:20px;color:var(--tx3);display:flex;justify-content:center;visibility:hidden}
+.prm.chg::before{content:"";position:absolute;left:4px;top:12px;width:6px;height:6px;border-radius:50%;background:var(--acc)}
+.prm.chg .valbox{border-color:var(--acc-line);color:var(--acc-tx)}
+.prm.chg.err .valbox{border-color:rgba(240,116,112,.6);color:#ffb8b3}
+.prm.chg.err::before{background:var(--err)}
+.prm.chg .rst{visibility:visible}
+.prm.der .lb{color:var(--tx2)}
+.prm.der .valbox{border-style:dashed;background:none;color:var(--tx2)}
+.prm.err .valbox{border-color:rgba(240,116,112,.6);color:#ffb8b3}
+.prm.open{background:var(--s2);box-shadow:inset 0 0 0 1px var(--line2)}
+.prm .x{padding:2px 14px 12px 14px;display:flex;flex-direction:column;gap:9px}
+.prm .x .slider .c3{font-family:var(--mono);font-size:11px}
+.prm.hov{background:var(--s3)}
+.lnk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2)}
+.stepper{display:flex;align-items:center;height:24px;width:96px;border:1px solid var(--line2);border-radius:5px;background:var(--bg);font-family:var(--mono);font-size:12px}
+.stepper span{flex:1;text-align:center}
+.stepper button{width:24px;height:22px;display:flex;align-items:center;justify-content:center;color:var(--tx3)}
+.switch{width:32px;height:18px;border-radius:9px;background:var(--acc);position:relative;flex-shrink:0}
+.switch::after{content:"";position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#1b1206}
+.switch.offsw{background:var(--line2)}
+.switch.offsw::after{right:auto;left:2px;background:var(--tx3)}
+.pfoot{display:flex;align-items:center;gap:8px;padding:10px 12px 10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--tx2);background:var(--s1)}
+
+/* Konzept und Bausteine */
+.sheet{width:1600px;height:900px;background:#101215;position:relative;overflow:hidden}
+.wire{position:absolute;border:1px solid #39404a;border-radius:6px;background:#15181c}
+.zone{position:absolute;border-radius:6px;display:flex;flex-direction:column;gap:4px;padding:10px 12px;font-size:12px;color:var(--tx2)}
+.zone b{color:var(--tx);font-size:13px}
+.zone.z1{background:rgba(242,154,56,.08);border:1px solid rgba(242,154,56,.35)}
+.zone.z2{background:rgba(154,166,255,.07);border:1px solid rgba(154,166,255,.32)}
+.zone.z3{background:rgba(92,201,139,.07);border:1px solid rgba(92,201,139,.3)}
+.zone.z0{background:#1a1e23;border:1px solid #2d333c}
+.qn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--s3);color:var(--tx);font-size:11px;font-weight:600;margin-right:6px}
+.crit{width:100%;border-collapse:collapse;font-size:12.5px}
+.crit td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:top;color:var(--tx2)}
+.crit td:first-child{width:34px;padding-left:0}
+.crit td b{color:var(--tx);font-weight:500}
+.crit .go{color:var(--acc-tx);white-space:nowrap}
+.rules{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;color:var(--tx2)}
+.rules li{display:flex;gap:10px}
+.rules li::before{content:"";width:6px;height:6px;margin-top:6px;border-radius:50%;background:var(--acc);flex-shrink:0}
+.bcol{display:flex;flex-direction:column;gap:22px}
+.bcol .cap{margin-bottom:8px}
+.stack{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.ghostdrag{display:flex;align-items:center;gap:7px;height:26px;padding:0 10px;border-radius:6px;background:var(--s3);border:1px solid var(--acc-line);box-shadow:0 8px 20px rgba(0,0,0,.5);color:var(--acc-tx);font-weight:500;transform:rotate(-2deg)}
+</style>
+</head>
+<body>
+<div class="deck-top">
+  <div class="deck-head">
+    <span class="deck-title">SOMA · Entwurf 2 „Aufgeräumt“</span>
+    <nav class="deck-tabs" id="tabs" aria-label="Ansichten"></nav>
+    <span class="deck-tools"><span>Pfeiltasten blättern</span><label><input type="checkbox" id="notes" checked>Anmerkungen</label><button class="btn sm" id="zoom">Originalgröße</button></span>
+  </div>
+  <div class="deck-cap"><h2 id="cap-title"></h2><ul id="cap-list"></ul></div>
+</div>
+<div class="stage"><div class="frame"><div class="screen" id="screen"></div></div></div>
+
+<script>
+// ================================================================================================================
+// Symbole
+// ================================================================================================================
+function cogPath() {
+  const pts = [];
+  for (let k = 0; k < 8; k++) for (const [da, r] of [[-11, 9.6], [11, 9.6], [17, 7.2], [28, 7.2]]) {
+    const t = (k * 45 + da) * Math.PI / 180; pts.push(`${(12 + r * Math.cos(t)).toFixed(2)} ${(12 + r * Math.sin(t)).toFixed(2)}`);
+  }
+  return `<path d="M${pts.join('L')}Z"/><circle cx="12" cy="12" r="3"/>`;
+}
+const I = {
+  cube:'<path d="M12 2.5 20.5 7.2v9.6L12 21.5l-8.5-4.7V7.2z"/><path d="M3.5 7.2 12 12l8.5-4.8M12 12v9.5"/>',
+  logo:'<path d="M12 2.6 19.9 7.1 12 11.6 4.1 7.1z" fill="currentColor"/><path d="M12 2.6 19.9 7.1v9L12 20.6l-4.3-2.45-5.3 3.2 1.7-7.5V7.1z"/><path d="M4.1 7.1 12 11.6l7.9-4.5M12 11.6v9"/>',
+  down:'<path d="m6 9 6 6 6-6"/>', up:'<path d="m6 15 6-6 6 6"/>', right:'<path d="m9 6 6 6-6 6"/>', left:'<path d="m15 6-6 6 6 6"/>',
+  refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/>',
+  reset:'<path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5"/><path d="M4 3.5v5h5"/>',
+  export:'<path d="M12 15V4M7 9l5-5 5 5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  fileplus:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M12 11v6M9 14h6"/>',
+  folderplus:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/>',
+  code:'<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+  book:'<path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"/><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
+  sliders:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  cog: cogPath(),
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  eye:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff:'<path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/>',
+  half:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  ruler:'<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>',
+  section:'<path d="M5 9 12 5l7 4v8l-7 4-7-4z"/><path d="M2 13h20"/>',
+  explode:'<rect x="9" y="9" width="6" height="6" rx="1"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><path d="m10 4.5 2-2 2 2M10 19.5l2 2 2-2M4.5 10l-2 2 2 2M19.5 10l2 2-2 2"/>',
+  camera:'<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
+  gauge:'<path d="M3.5 16.5a8.5 8.5 0 1 1 17 0"/><path d="m12 16.5 4.2-5"/><circle cx="12" cy="16.5" r="1.2" fill="currentColor"/>',
+  anim:'<circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/>',
+  film:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7.5 5v14M16.5 5v14M3 9.5h4.5M3 14.5h4.5M16.5 9.5H21M16.5 14.5H21"/>',
+  fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', home:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>', plus:'<path d="M12 5v14M5 12h14"/>', minus:'<path d="M5 12h14"/>', send:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+  history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  term:'<path d="m5 8 4 4-4 4M12 16h7"/>',
+  sideL:'<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M9 4.5v15"/>',
+  sideR:'<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M15 4.5v15"/>',
+  target:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+  image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5L5 20"/>',
+  alert:'<path d="M12 4 2 20h20z"/><path d="M12 10v4M12 17v.01"/>',
+  file:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
+  upload:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>',
+  openext:'<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>', spin:'<path d="M12 3a9 9 0 1 1-9 9"/>',
+  play:'<path d="M7 4.5v15l12-7.5z"/>', flip:'<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+  grip:'<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+  more:'<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
+};
+const ic = (n, s = 16, sw = 1.8) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const pinAt = (n, pos = 'tr') => n ? ` data-pin="${n}" data-pin-pos="${pos}"` : '';
+
+// ================================================================================================================
+// Kleiner 3D-Zeichner für das Beispielmodell (Einzylinder-Motor). Konvexe Körper, Maleralgorithmus, Schnitt per Ebene.
+// ================================================================================================================
+const DEG = Math.PI / 180;
+const CA = Math.cos(34 * DEG), SA = Math.sin(34 * DEG), CE = Math.cos(27 * DEG), SE = Math.sin(27 * DEG);
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const VIEW = [SA * CE, CA * CE, SE];
+const LIGHT = norm([-0.35, 0.55, 1]);
+const proj = ([x, y, z]) => { const y1 = x * SA + y * CA; return [x * CA - y * SA, y1 * SE - z * CE, y1 * CE + z * SE]; };
+function newell(p) {
+  const n = [0, 0, 0];
+  for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length];
+    n[0] += (a[1] - b[1]) * (a[2] + b[2]); n[1] += (a[2] - b[2]) * (a[0] + b[0]); n[2] += (a[0] - b[0]) * (a[1] + b[1]); }
+  return norm(n);
+}
+const centroid = (pts) => mul(pts.reduce((s, p) => add(s, p), [0, 0, 0]), 1 / pts.length);
+function prism(base, off, o = {}) {
+  if (dot(newell(base), off) < 0) base = base.slice().reverse();
+  const top = base.map((p) => add(p, off)), faces = [{ pts: base.slice().reverse(), cap: true }, { pts: top, cap: true }];
+  for (let i = 0; i < base.length; i++) { const j = (i + 1) % base.length; faces.push({ pts: [base[i], base[j], top[j], top[i]], side: true }); }
+  return { faces, smooth: !!o.smooth, convex: o.convex !== false };
+}
+const box = (x0, y0, z0, x1, y1, z1) => prism([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0]], [0, 0, z1 - z0]);
+const circ = (n, a0 = 0, a1 = 360) => Array.from({ length: n }, (_, i) => { const t = (a0 + (a1 - a0) * i / (a1 - a0 === 360 ? n : n - 1)) * DEG; return [Math.cos(t), Math.sin(t)]; });
+const cylZ = (cx, cy, z0, z1, r, n = 30) => prism(circ(n).map(([u, v]) => [cx + r * u, cy + r * v, z0]), [0, 0, z1 - z0], { smooth: true });
+const cylX = (cy, cz, x0, x1, r, n = 26) => prism(circ(n).map(([u, v]) => [x0, cy + r * u, cz + r * v]), [x1 - x0, 0, 0], { smooth: true });
+function gearX(cy, cz, x0, x1, r, teeth) {
+  const pts = [], st = 360 / teeth;
+  for (let k = 0; k < teeth; k++) for (const [f, rr] of [[-0.3, r - 3.5], [-0.14, r + 3], [0.14, r + 3], [0.3, r - 3.5]]) {
+    const t = (k * st + f * st) * DEG; pts.push([x0, cy + rr * Math.cos(t), cz + rr * Math.sin(t)]);
+  }
+  return prism(pts, [x1 - x0, 0, 0], { convex: false });
+}
+
+const PARTS = {
+  platte: ['Grundplatte', '#7b838e'], rueck: ['Rückwand', '#8d96a2'], wandl: ['Wand links', '#8d96a2'], wandr: ['Wand rechts', '#8d96a2'],
+  deck: ['Deckplatte', '#99a2ad'], zyl: ['Zylinder', '#c2c8d0'], kopf: ['Zylinderkopf', '#69717c'], schr: ['Kopfschraube', '#4fb06d'],
+  kolben: ['Kolben', '#d6dae0'], pleuel: ['Pleuel', '#b4bac3'], welle: ['Kurbelwelle', '#a9b0b9'], zapfen: ['Kurbelzapfen', '#a9b0b9'],
+  gegen: ['Gegengewicht', '#cf4a3c'], radl: ['Steuerrad links', '#d8a03a'], radr: ['Steuerrad rechts', '#d8a03a'],
+};
+// Wandstärke je Teil (0 = zu dünn, 1 = dick), für die Analyse-Ansicht
+const HEAT = { platte: 1, rueck: .9, wandl: .84, wandr: .84, deck: .7, kopf: .78, kolben: .62, pleuel: .5, welle: .95, zapfen: .9, gegen: .1, radl: .36, radr: .36 };
+const SOLIDS = [];
+const put = (part, s, o = {}) => SOLIDS.push({ part, ...s, ...o });
+put('platte', box(0, 0, 0, 250, 185, 10), { order: -1e9 });
+put('rueck', box(40, 40, 10, 200, 52, 120));
+put('wandl', box(40, 52, 10, 52, 150, 120), { order: 110 });
+put('wandr', box(188, 52, 10, 200, 150, 120));
+put('deck', box(40, 40, 120, 88, 150, 132)); put('deck', box(152, 40, 120, 200, 150, 132));
+put('deck', box(88, 40, 120, 152, 58, 132)); put('deck', box(88, 140, 124, 152, 150, 132), { heat: .06 });
+for (let i = 0; i < 24; i++) {
+  const a0 = i * 15 * DEG, a1 = (i + 1) * 15 * DEG, P = (r, a) => [120 + r * Math.cos(a), 90 + r * Math.sin(a), 132];
+  const mid = (a0 + a1) / 2;
+  put('zyl', prism([P(26, a0), P(32, a0), P(32, a1), P(26, a1)], [0, 0, 74], { smooth: true }), { seg: true, heat: .62 - .38 * Math.max(0, Math.sin(mid)) ** 2 });
+}
+put('kopf', box(82, 52, 206, 158, 128, 220), { order: 400 });
+for (const [x, y] of [[91, 61], [149, 61], [91, 119], [149, 119]]) put('schr', cylZ(x, y, 220, 232, 4.5, 16), { order: 400 + x * .1 + y });
+put('kolben', cylZ(120, 90, 150, 190, 25, 30));
+put('pleuel', box(114, 85, 66, 126, 95, 162));
+put('welle', cylX(90, 60, 28, 212, 7));
+put('zapfen', cylX(90, 80, 106, 134, 6, 18));
+put('gegen', prism(circ(13, 180, 360).map(([u, v]) => [104, 90 + 28 * u, 60 + 28 * v]), [32, 0, 0]));
+put('radl', gearX(90, 60, 60, 70, 31, 18));
+put('radr', gearX(90, 60, 170, 180, 31, 18));
+
+const hex = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+const rgb = ([r, g, b]) => `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
+const mix = (a, b, t) => { const A = hex(a), B = hex(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); };
+const HEATSTOPS = [[0, '#e5484d'], [.28, '#f0a33a'], [.48, '#e8c547'], [.72, '#5cc98b'], [1, '#4b8fe0']];
+function heatColor(t) {
+  for (let i = 1; i < HEATSTOPS.length; i++) if (t <= HEATSTOPS[i][0]) {
+    const [t0, c0] = HEATSTOPS[i - 1], [t1, c1] = HEATSTOPS[i]; return mix(c0, c1, (t - t0) / (t1 - t0));
+  }
+  return HEATSTOPS[HEATSTOPS.length - 1][1];
+}
+const shade = (c, n) => rgb(hex(c).map((v) => v * (0.46 + 0.6 * Math.max(0, dot(n, LIGHT)))));
+
+function clipSolid(s, n, d) {
+  const faces = [], cap = [];
+  for (const f of s.faces) {
+    const out = [], P = f.pts;
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i], b = P[(i + 1) % P.length], da = dot(n, a) - d, db = dot(n, b) - d;
+      if (da <= 0) out.push(a);
+      if ((da < 0 && db > 0) || (da > 0 && db < 0)) { const p = add(a, mul(sub(b, a), da / (da - db))); out.push(p); cap.push(p); }
+    }
+    if (out.length >= 3) faces.push({ ...f, pts: out });
+  }
+  if (!faces.length) return null;
+  if (cap.length >= 3) {
+    const c = centroid(cap), u = norm(cross(n, Math.abs(n[0]) < .9 ? [1, 0, 0] : [0, 1, 0])), w = cross(n, u);
+    const pts = cap.map((p) => ({ p, a: Math.atan2(dot(sub(p, c), w), dot(sub(p, c), u)) })).sort((x, y) => x.a - y.a).map((x) => x.p)
+      .filter((p, i, arr) => i === 0 || Math.hypot(...sub(p, arr[i - 1])) > 1e-6);
+    let poly = pts; if (dot(newell(poly), n) < 0) poly = poly.slice().reverse();
+    if (poly.length >= 3) faces.push({ pts: poly, cut: true });
+  }
+  return { ...s, faces };
+}
+function hull(pts) {
+  const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of p.reverse()) { while (hi.length >= 2 && cr(hi[hi.length - 2], hi[hi.length - 1], q) <= 0) hi.pop(); hi.push(q); }
+  return lo.slice(0, -1).concat(hi.slice(0, -1));
+}
+const pt2 = (q) => `${q[0].toFixed(1)},${q[1].toFixed(1)}`;
+const BBOX = (() => { const q = SOLIDS.flatMap((s) => s.faces.flatMap((f) => f.pts)).map(proj);
+  return { x0: Math.min(...q.map((v) => v[0])), x1: Math.max(...q.map((v) => v[0])), y0: Math.min(...q.map((v) => v[1])), y1: Math.max(...q.map((v) => v[1])) }; })();
+const EDGE = 'rgba(12,14,17,.92)';
+
+// o: sel, heat, clip {n, d}, hidden [], ghost [], pad [oben, rechts, unten, links] als Anteil, probe [{p, text}]
+function model(o = {}) {
+  const items = [];
+  for (const s0 of SOLIDS) {
+    if (o.hidden && o.hidden.includes(s0.part)) continue;
+    const s = o.clip ? clipSolid(s0, o.clip.n, o.clip.d) : s0;
+    if (!s) continue;
+    items.push({ s, part: s0.part, heat: s0.heat, depth: s0.order ?? proj(centroid(s.faces.flatMap((f) => f.pts)))[2] });
+  }
+  items.sort((a, b) => a.depth - b.depth);
+  let out = '';
+  for (const it of items) {
+    const sel = o.sel === it.part, ghost = o.ghost && o.ghost.includes(it.part);
+    let base = PARTS[it.part][1];
+    if (o.heat) base = it.part === 'schr' ? '#5b626c' : heatColor(it.heat ?? HEAT[it.part] ?? .8);
+    if (sel) base = mix(base, '#f29a38', .5);
+    const faces = it.s.faces.map((f) => ({ ...f, n: newell(f.pts), d: proj(centroid(f.pts))[2] })).filter((f) => dot(f.n, VIEW) > 1e-6).sort((a, b) => a.d - b.d);
+    let g = '';
+    for (const f of faces) {
+      const pts = f.pts.map((p) => pt2(proj(p))).join(' ');
+      if (f.cut) { g += `<polygon points="${pts}" fill="${mix(base, '#ffffff', .18)}" stroke="${EDGE}" stroke-width="1" vector-effect="non-scaling-stroke"/><polygon points="${pts}" fill="url(#hatch)"/>`; continue; }
+      const fill = shade(base, f.n), soft = it.s.smooth && f.side;
+      g += `<polygon points="${pts}" fill="${fill}" stroke="${soft ? fill : sel ? '#f29a38' : EDGE}" stroke-width="${soft ? .7 : 1}" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+    }
+    if (it.s.smooth && it.s.convex && !it.s.seg) {
+      const h = hull(it.s.faces.flatMap((f) => f.pts).map(proj));
+      g += `<polygon points="${h.map(pt2).join(' ')}" fill="none" stroke="${sel ? '#f29a38' : EDGE}" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+    }
+    out += ghost ? `<g opacity=".26">${g}</g>` : g;
+  }
+  if (o.clip) {
+    const X = o.clip.d, c = [[X, -18, -12], [X, 205, -12], [X, 205, 250], [X, -18, 250]].map(proj).map(pt2).join(' ');
+    out += `<polygon points="${c}" fill="rgba(242,154,56,.04)" stroke="rgba(242,154,56,.75)" stroke-width="1.2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke"/>`;
+  }
+  for (const pr of o.probe || []) {
+    const [x, y] = proj(pr.p);
+    out += `<g><circle cx="${x}" cy="${y}" r="4" fill="#fff" stroke="#121417" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      <line x1="${x}" y1="${y}" x2="${x + 18}" y2="${y - 18}" stroke="#f4f5f6" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
+      <rect x="${x + 18}" y="${y - 27}" width="${pr.w || 44}" height="15" rx="3.5" fill="#16181c" stroke="#e5484d" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
+      <text x="${x + 18 + (pr.w || 44) / 2}" y="${y - 16.6}" fill="#f4f5f6" font-family="IBM Plex Mono, monospace" font-size="8" text-anchor="middle">${pr.text}</text></g>`;
+  }
+  const [pt, pr, pb, pl] = o.pad || [.2, .1, .16, .1], W = BBOX.x1 - BBOX.x0, H = BBOX.y1 - BBOX.y0;
+  const vb = [BBOX.x0 - W * pl, BBOX.y0 - H * pt, W * (1 + pl + pr), H * (1 + pt + pb)].map((v) => v.toFixed(1)).join(' ');
+  return `<svg class="model" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(18,20,23,.45)" stroke-width="1.4"/></pattern></defs>${out}</svg>`;
+}
+
+// Ansichtswürfel mit derselben Kamera
+function cube(size = 92) {
+  const P = (x, y, z) => proj([x, y, z]);
+  const faces = [
+    { n: [0, 0, 1], c: [0.5, 0.5, 1], u: [1, 0, 0], v: [0, 1, 0], pts: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], t: 'OBEN', f: '#2e343d' },
+    { n: [0, 1, 0], c: [0.5, 1, 0.5], u: [1, 0, 0], v: [0, 0, -1], pts: [[0, 1, 0], [1, 1, 0], [1, 1, 1], [0, 1, 1]], t: 'VORNE', f: '#3a414b' },
+    { n: [1, 0, 0], c: [1, 0.5, 0.5], u: [0, -1, 0], v: [0, 0, -1], pts: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], t: 'RECHTS', f: '#262b32' },
+  ];
+  let g = '';
+  for (const f of faces) {
+    g += `<polygon points="${f.pts.map((p) => pt2(P(...p))).join(' ')}" fill="${f.f}" stroke="#4a525d" stroke-width=".02" stroke-linejoin="round"/>`;
+    const o = P(...f.c), u = P(...add(f.c, f.u)), v = P(...add(f.c, f.v));
+    g += `<text transform="matrix(${u[0] - o[0]} ${u[1] - o[1]} ${v[0] - o[0]} ${v[1] - o[1]} ${o[0]} ${o[1]})" font-family="IBM Plex Sans, sans-serif" font-weight="600" font-size=".17" fill="#c9ced4" text-anchor="middle" dominant-baseline="central" letter-spacing=".01">${f.t}</text>`;
+  }
+  const O = P(0, 1, 0);
+  for (const [d, c] of [[[0.42, 0, 0], '#f07470'], [[0, 0, 0.42], '#7fb4ff']]) { const q = P(...add([0, 1, 0], d)); g += `<line x1="${O[0]}" y1="${O[1]}" x2="${q[0]}" y2="${q[1]}" stroke="${c}" stroke-width=".035"/>`; }
+  const q = [0, 0, 0, 0]; const all = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]].map((p) => P(...p));
+  q[0] = Math.min(...all.map((a) => a[0])) - .12; q[1] = Math.min(...all.map((a) => a[1])) - .12; q[2] = Math.max(...all.map((a) => a[0])) - q[0] + .12; q[3] = Math.max(...all.map((a) => a[1])) - q[1] + .12;
+  return `<svg width="${size}" height="${size}" viewBox="${q.join(' ')}" aria-hidden="true">${g}</svg>`;
+}
+
+// ================================================================================================================
+// Bausteine der App
+// ================================================================================================================
+function topbar(o = {}) {
+  const L = o.layout || {};
+  const st = o.build === 'busy'
+    ? `<span class="spin">${ic('spin', 14, 2.4)}</span><span style="font-weight:500">Baut …</span><span class="c2">BORE = 38 · 1 s</span>`
+    : `<span class="dot" style="background:var(--ok)"></span><span style="font-weight:500">Gebaut</span><span class="c2">26 Bauteile · 5,1 s</span>`;
+  return `<header class="top">
+    <span class="logo">${ic('logo', 22, 1.6)}</span>
+    <button class="docname"><b>Motor</b>${ic('down', 14, 2)}</button>
+    <span class="savestate"><span class="dot" style="width:7px;height:7px;background:var(--warn)"></span>Nicht gespeichert · zuletzt 09:36</span>
+    <span class="grow"></span>
+    <div class="pill"><span class="main">${st}</span><span class="sep"></span><span class="auto">${ic('refresh', 14, 2)}Auto an</span></div>
+    <span class="grow"></span>
+    <div class="layout"${pinAt(o.pinLayout, 'tl')} role="group" aria-label="Spalten">
+      <button class="${L.side !== false ? 'on' : ''}" title="Seitenleiste ein/aus">${ic('sideL', 17, 1.7)}</button>
+      <button class="${L.code ? 'on' : ''}" title="Code ein/aus">${ic('code', 16, 1.9)}</button>
+      <button class="${L.agent !== false ? 'on' : ''}" title="Agent ein/aus">${ic('sideR', 17, 1.7)}</button>
+    </div>
+    <button class="btn">${ic('export', 15)}Exportieren${ic('down', 13, 2)}</button>
+    <button class="btn primary">Speichern <span class="kbd">Strg S</span></button>
+  </header>`;
+}
+function rail(active, pin) {
+  const items = [['bauteile', 'cube', 'Bauteile'], ['parameter', 'sliders', 'Parameter'], ['dateien', 'folder', 'Dateien'], ['skills', 'book', 'Skills']];
+  return `<nav class="rail">${items.map(([k, i, l]) => `<button class="${k === active ? 'on' : ''}"${pin && pin[0] === k ? pinAt(pin[1], pin[2] || 'tr') : ''}>${ic(i, 20, 1.7)}<span>${l}</span></button>`).join('')}
+    <span class="grow"></span><button>${ic('help', 20, 1.7)}<span>Hilfe</span></button><button>${ic('cog', 20, 1.6)}<span>Optionen</span></button></nav>`;
+}
+const timeline = () => `<div class="tl"><span class="lbl">${ic('history', 15)}Verlauf</span>
+  <div class="track"><div class="line"></div>
+    <div class="vd" style="left:8px"><i></i></div><div class="vd saved" style="left:30%"><i></i></div><div class="vd app" style="left:52%"><i></i></div><div class="vd" style="left:71%"><i></i></div><div class="vd" style="left:84%"><i></i></div>
+    <div class="now"><i></i><span>Jetzt</span></div></div><span class="c3" style="font-size:12px">6 Stände</span></div>`;
+
+// ---- Seitenleiste: Bauteile ----
+function sideParts(o = {}) {
+  const row = (name, color, d, cls = '', extra = '') => `<div class="trow ${cls}" style="--d:${d}"><span class="chev"></span><span class="sw" style="background:${color}"></span><span class="nm">${name}</span>${extra}<span class="ra">${`<span class="ibtn">${ic('half', 14)}</span><span class="ibtn">${ic('eye', 14)}</span>`}</span></div>`;
+  const grp = (name, n, open, d = 0, cls = '', pin = '') => `<div class="trow g ${cls}" style="--d:${d}"${pinAt(pin, 'tr')}><span class="chev">${ic(open ? 'down' : 'right', 13, 2)}</span><span class="nm">${name}</span><span class="cnt">${n}</span><span class="ra"><span class="ibtn">${ic('half', 14)}</span><span class="ibtn">${ic('eye', 14)}</span></span></div>`;
+  const sel = o.sel ?? 'Pleuel';
+  return `<aside class="side" style="width:${o.w || 264}px">
+    <div class="side-hd"><b>Bauteile</b><span class="c3" style="margin-left:4px">26</span><span class="grow"></span><span class="ibtn s">${ic('search', 15)}</span><span class="ibtn s">${ic('more', 16)}</span></div>
+    <div class="side-bd">
+      ${grp('Gehäuse', 6, true, 0, '', o.pin)}
+      ${row('Grundplatte', '#7b838e', 1)}${row('Rückwand', '#8d96a2', 1)}${row('Wand links', '#8d96a2', 1)}${row('Wand rechts', '#8d96a2', 1)}${row('Deckplatte', '#99a2ad', 1)}
+      <div class="trow off" style="--d:1"><span class="chev"></span><span class="sw" style="background:#8d96a2;opacity:.5"></span><span class="nm">Lagerdeckel</span><span class="ra keep"><span class="ibtn">${ic('eyeoff', 14)}</span></span></div>
+      ${grp('Zylinder', 3, false)}
+      ${grp('Kurbeltrieb', 6, true)}
+      ${row('Kurbelwelle', '#a9b0b9', 1, 'hov')}${row('Kurbelzapfen', '#a9b0b9', 1)}${row('Gegengewicht', '#cf4a3c', 1)}
+      ${row('Pleuel', '#b4bac3', 1, sel === 'Pleuel' ? 'sel' : '')}${row('Kolben', '#d6dae0', 1)}${row('Kolbenbolzen', '#a9b0b9', 1)}
+      ${grp('Steuerung', 3, false)}
+      ${grp('Normteile', 8, false)}
+      <div class="grp">REFERENZEN</div>
+      <div class="trow" style="--d:0"><span class="chev"></span><span class="sw" style="border:1.5px dashed var(--tx3);background:none"></span><span class="nm c2">Prüfstand</span><span class="ra keep"><span class="ibtn" style="color:var(--acc-tx)">${ic('half', 14)}</span></span></div>
+    </div>
+  </aside>`;
+}
+
+// ---- Seitenleiste: Dateien ----
+function sideFiles(o = {}) {
+  const f = (name, d, cls = '', ico = 'file', extra = '') => `<div class="trow ${cls}" style="--d:${d}"><span class="chev"></span><span class="fico">${ic(ico, 14)}</span><span class="nm">${name}</span>${extra}</div>`;
+  const dir = (name, d, open, n = '') => `<div class="trow" style="--d:${d}"><span class="chev">${ic(open ? 'down' : 'right', 13, 2)}</span><span class="fico" style="color:var(--tx2)">${ic('folder', 14)}</span><span class="nm">${name}</span><span class="cnt">${n}</span></div>`;
+  return `<aside class="side" style="width:${o.w || 236}px">
+    <div class="side-hd"><b>Dateien</b><span class="grow"></span><span class="ibtn s">${ic('fileplus', 15)}</span><span class="ibtn s">${ic('folderplus', 15)}</span><span class="ibtn s">${ic('openext', 15)}</span></div>
+    <div class="side-bd" style="display:flex;flex-direction:column">
+      ${dir('animations', 0, true)}${f('kurbeltrieb.py', 1)}
+      ${dir('inputs', 0, false, 2)}
+      ${dir('parts', 0, true)}${f('gehaeuse.py', 1)}${f('kurbeltrieb.py', 1)}${f('steuerung.py', 1)}
+      ${dir('renders', 0, false, 3)}
+      ${f('model.py', 0)}${f('motor.py', 0)}${f('params.py', 0, 'sel')}${f('NOTES.md', 0)}
+      <div class="trow dim" style="--d:0;margin-top:6px"><span class="chev">${ic('right', 13, 2)}</span><span class="nm c3">Vom Programm verwaltet</span></div>
+      <span class="grow"></span>
+      <div class="drop">${ic('upload', 16)}<span>Hierher ziehen: landet in <code>inputs/</code></span></div>
+    </div>
+  </aside>`;
+}
+
+// ---- Editor ----
+const PARAMS_PY = [
+  '"""Alle Maße des Motors. Grundmaße oben, abgeleitete Maße darunter.', '', 'Koordinaten: Kurbelwellenachse entlang Y bei x = 0, z = Z_CRANK.',
+  'Die Schnittebene y = 0 geht durch die Zylinderachse.', '"""', 'import math', '',
+  '# --- 3D-Druck (FDM, PLA), aus .soma/skills/3d-druck.md ---', 'NOZZLE = 0.4',
+  'CLEARANCE = 0.3        # Spiel je Seite für Dreh- und Gleitpassungen', 'HOLE_OVERSIZE = 0.2    # gedruckte Schraubenlöcher kommen kleiner',
+  'NUT_CLEARANCE = 0.2    # Spiel je Seite in Muttertaschen', 'HEX_FIT = 0.15         # Spiel je Seite Sechskant Kurbelwelle', 'MAX_OVERHANG = 45',
+  'BED = (220, 220, 250)', 'MOTION_GAP = 1.0       # Mindestabstand bewegter Teile', 'AXIAL_GAP = 0.5        # Axialspiel an Anlaufflächen', '',
+  '# --- Kurbeltrieb ---', 'BORE = 36.0            # Zylinderbohrung', 'STROKE = 36.0          # Hub', 'CONROD_L = 64.0        # Pleuel, Mitte zu Mitte',
+  'Z_CRANK = 40.0         # Höhe der Kurbelwellenachse über dem Boden', 'PISTON_TOP = 14.0      # Kolbenbolzen bis Kolbenboden',
+  'PISTON_SKIRT = 12.0    # Kolbenbolzen bis Kolbenunterkante', 'PISTON_CROWN = 4.0     # Dicke Kolbenboden', 'PISTON_WALL = 2.4      # Wand Kolbenhemd',
+  'DECK_GAP = 1.5         # Kolben im OT bis Zylinderende', '', 'ROD_W = 8.0            # Breite Pleuel (Y)', 'ROD_EYE_WALL = 3.0     # Wand um die Pleuelaugen',
+  'PIN_D = 7.0            # Außen-Ø der Lagerhülsen', 'SLEEVE_FLANGE_D = 11.0 # Bund der Kurbelzapfenhülse', 'SLEEVE_FLANGE_T = 2.0', '',
+  'WEB_T = 6.0            # Kurbelwange', 'WEB_CW_R = 21.0        # Gegengewicht', 'WEB_HUB_R = 8.0', '', '# --- abgeleitet ---',
+  'DISPLACEMENT = math.pi / 4 * BORE ** 2 * STROKE / 1000  # cm³',
+];
+function hl(line, doc) {
+  if (doc) return `<span class="k-str">${esc(line)}</span>`;
+  const ci = line.indexOf('#'), code = ci >= 0 ? line.slice(0, ci) : line, cm = ci >= 0 ? line.slice(ci) : '';
+  const c = esc(code).replace(/\b(import|from|def|return)\b/g, '<span class="k-kw">$1</span>').replace(/(^|[^\w.])(\d+(?:\.\d+)?)/g, '$1<span class="k-num">$2</span>').replace(/\b(math)\.(pi)\b/g, '<span class="k-fn">$1</span>.$2');
+  return c + (cm ? `<span class="k-cm">${esc(cm)}</span>` : '');
+}
+function editor(o = {}) {
+  const lines = PARAMS_PY.map((l, i) => `<div class="cl${i + 1 === (o.cur || 20) ? ' cur' : ''}"><span class="ln">${i + 1}</span><span>${hl(l, i < 5) || ' '}</span></div>`).join('');
+  return `<section class="ed" style="width:${o.w || 480}px"${pinAt(o.pin, 'tr')}>
+    <div class="ed-hd">
+      <span class="ctab">model.py</span><span class="ctab on">params.py<span class="x">${ic('x', 13, 2)}</span></span><span class="ctab">NOTES.md</span>
+      <span class="acts"><span class="ibtn s on" title="Mit Auswahl verknüpft: Klick auf ein Bauteil springt zur Codestelle">${ic('link', 15, 1.9)}</span><span class="ibtn s">${ic('more', 16)}</span><span class="ibtn s" title="Code schließen">${ic('x', 15, 2)}</span></span>
+    </div>
+    <div class="code">${lines}</div>
+  </section>`;
+}
+
+// ---- Viewer-Overlays ----
+function switcher(o = {}) {
+  const k = o.kind || 'model';
+  if (k === 'heat') return `<div class="switcher float ${o.open ? 'open' : ''}"${pinAt(o.pin, 'tr')}><span class="sb"><span class="ico heat">${ic('gauge', 16)}</span><b>Wandstärke</b><span class="c3">Analyse</span>${ic('down', 14, 2)}</span><span class="vs"></span><span class="ibtn s" title="Zurück zum Modell">${ic('x', 14, 2)}</span></div>`;
+  if (k === 'anim') return `<div class="switcher float"><span class="sb"><span class="ico" style="color:var(--acc-tx)">${ic('anim', 16)}</span><b>Kurbeltrieb</b><span class="c3">Animation · 4,0 s</span>${ic('down', 14, 2)}</span><span class="vs"></span><span class="ibtn s">${ic('x', 14, 2)}</span></div>`;
+  if (k === 'old') return `<div class="switcher float vio"><span class="sb"><span class="ico">${ic('history', 16)}</span><b>Stand 14:02</b><span class="c3">nur ansehen</span>${ic('down', 14, 2)}</span><span class="vs"></span><span class="ibtn s">${ic('x', 14, 2)}</span></div>`;
+  return `<div class="switcher float"${pinAt(o.pin, 'tr')}><span class="sb"><span class="ico">${ic('cube', 16)}</span><b>Modell</b>${o.compact ? '' : '<span class="c3">26 Bauteile</span>'}${o.badge ? '<span class="new"><span class="dot" style="width:6px;height:6px;background:var(--acc)"></span>1 neu</span>' : ''}${ic('down', 14, 2)}</span></div>`;
+}
+function tools(o = {}) {
+  const b = (k, icon, label) => `<button class="${o.on === k ? 'on' : ''}" title="${label}">${ic(icon, 16)}${o.icons ? '' : label}</button>`;
+  return `<div class="tools float ${o.icons ? 'icons' : ''}"${pinAt(o.pin, 'tr')}>${b('measure', 'ruler', 'Messen')}${b('section', 'section', 'Schnitt')}${b('explode', 'explode', 'Explosion')}<span class="vsep"></span>${b('mark', 'camera', 'Markieren')}</div>`;
+}
+const cubebox = (o = {}) => `<div class="cubebox"${pinAt(o.pin, 'bl')}>${cube(o.size || 92)}<div class="vbar float">
+  <button title="Alles einpassen">${ic('fit', 16)}</button><button title="Standardansicht">${ic('home', 16)}</button><button class="${o.display ? 'on' : ''}" title="Darstellung">${ic('layers', 16)}</button></div></div>`;
+function viewer(o = {}) {
+  return `<main class="center"><section class="vp">
+    ${model(o.model || { sel: 'pleuel' })}
+    <div class="vtop">${o.switcher || switcher()}<span class="grow"></span>${o.tools || tools()}<span class="grow"></span><span class="cubespace"></span></div>
+    ${o.cubebox || cubebox()}
+    ${o.overlay || ''}
+  </section>${timeline()}</main>`;
+}
+const selcard = (pin) => `<div class="vcard float"${pinAt(pin, 'tr')}>
+  <div class="mc-hd"><span class="sw" style="background:#f29a38"></span><b>Pleuel</b><span class="c3 small">Kurbeltrieb</span><span class="grow"></span><span class="ibtn s">${ic('x', 14, 2)}</span></div>
+  <div class="c2 small" style="padding:0 12px 8px">Volumen 7,4 cm³ · bewegt sich in „Kurbeltrieb“</div>
+  <div class="peek"><div class="ph"><span>parts/kurbeltrieb.py</span><span>Zeile 88</span></div><div class="code">
+    <div class="cl hl"><span class="ln">88</span><span>rod = conrod(CONROD_L, ROD_W, PIN_D)</span></div>
+    <div class="cl"><span class="ln">89</span><span><span class="k-fn">add_part</span>(<span class="k-str">"Pleuel"</span>, rod, group=<span class="k-str">"Kurbeltrieb"</span>)</span></div></div></div>
+  <div class="sc-actions"><button class="btn sm">${ic('code', 14, 1.9)}Code öffnen</button><button class="btn sm acc">${ic('send', 14, 1.9)}An Agent geben</button></div>
+</div>`;
+
+// ---- Agent ----
+function agent(o = {}) {
+  return `<aside class="agent" style="width:${o.w || 440}px"${pinAt(o.pin, 'bl')}>
+    <div class="tabs"><span class="tab on"><span class="dot" style="width:7px;height:7px;background:var(--ok)"></span>Claude Code<span class="x">${ic('x', 13, 2)}</span></span><span class="tab">${ic('term', 14, 2)}Terminal<span class="x">${ic('x', 13, 2)}</span></span>
+      <span class="ibtn" style="align-self:center;width:44px;gap:2px">${ic('plus', 15, 2)}${ic('down', 12, 2)}</span></div>
+    ${o.toast ? `<div class="toast"><span class="ok">${ic('check', 16, 2.2)}</span><span>„Pleuel“ mit Datei und Zeilen in die Eingabe von Claude Code eingefügt</span></div>` : ''}
+    <div class="term">
+      <div class="l"><span class="p">&gt;</span> <span class="u">Mach die Zylinderbohrung einstellbar und prüf danach die Wandstärke.</span></div><div class="gap"></div>
+      <div class="l"><span class="bul">●</span> <span class="u">Read</span>(params.py)</div><div class="l mut">  ⎿  64 Zeilen</div>
+      <div class="l"><span class="bul">●</span> <span class="u">Update</span>(params.py)</div>
+      <div class="l mut">  ⎿  <span class="del">20 - BORE = 36.0  # Zylinderbohrung</span></div>
+      <div class="l mut">     <span class="add">20 + BORE = 36.0  # Zylinderbohrung [30:0.5:42]</span></div>
+      <div class="l"><span class="bul">●</span> <span class="u">Bash</span>(<span class="cmd">soma analyze thickness --threshold 1.2</span>)</div>
+      <div class="l mut">  ⎿  Ergebnis „thickness“: 2 Stellen unter 1,2 mm</div><div class="gap"></div>
+      <div class="l"><span class="bul" style="color:var(--tx)">●</span> BORE ist jetzt ein Parameter (30 bis 42 mm). Die Analyse findet zwei dünne Stellen: die Deckplatte vorne (0,13 mm) und das Gegengewicht am Mutternschlitz (0,04 mm). Die Zahnspitzen sind erwartungsgemäß dünn.</div><div class="gap"></div>
+      <div class="l">  Soll ich die Deckplatte vorne auf 2 mm verstärken?</div>
+      <div class="inbox l"><span class="p">&gt;</span> ${o.input || ''}<span class="cursor"></span></div>
+      <div class="l mut" style="padding-top:4px"><span style="color:var(--acc-tx)">⏵⏵</span> auto mode on <span class="mut">(shift+tab to cycle)</span></div>
+    </div>
+  </aside>`;
+}
+
+function app(o) {
+  return `<div class="app">${topbar(o.top || {})}<div class="body">${rail(o.rail, o.railPin)}${o.side || ''}${o.editor || ''}${o.viewer}${o.agent === false ? '' : (o.agent || agent())}</div>${o.extra || ''}</div>`;
+}
+
+// ================================================================================================================
+// Bildschirme
+// ================================================================================================================
+const S = {};
+
+// 0 Konzept
+S[0] = () => `<div class="sheet">
+  <div style="position:absolute;left:48px;top:40px;width:900px">
+    <div class="cap" style="margin-bottom:12px">AUFBAU · VIER ORTE IM VIEWER, JEDER BEANTWORTET EINE FRAGE</div>
+    <div class="wire" style="position:relative;width:900px;height:560px">
+      <div class="zone z0" style="left:8px;right:8px;top:8px;height:42px;flex-direction:row;align-items:center;gap:16px"><b>Kopfzeile</b><span>Modell ▾ · Speicherstand · Build · <span style="color:var(--tx)">Spalten ein/aus</span> · Exportieren · Speichern</span></div>
+      <div class="zone z0" style="left:8px;top:58px;width:44px;bottom:8px;align-items:center;padding:10px 0;gap:14px">
+        <span style="color:var(--acc-tx)">${ic('cube', 18)}</span><span class="c2">${ic('sliders', 18)}</span><span class="c2">${ic('folder', 18)}</span><span class="c2">${ic('book', 18)}</span></div>
+      <div class="zone z2" style="left:58px;top:58px;width:150px;bottom:8px"><b>Seitenleiste</b><span>Was gehört zum Modell?</span><span style="margin-top:8px;line-height:1.9;color:var(--tx)">Bauteile<br>Parameter <span class="tag acc" style="font-size:10px">neu</span><br>Dateien<br>Skills</span><span class="c3" style="margin-top:auto">eine Ansicht zur Zeit</span></div>
+      <div class="zone z2" style="left:214px;top:58px;width:150px;bottom:8px;border-style:dashed"><b>Code</b><span>eigene Spalte, nur wenn gebraucht</span><span class="c3" style="margin-top:auto">steht neben den Dateien</span></div>
+      <div class="zone z0" style="left:370px;top:58px;width:372px;bottom:58px;padding:0;background:#1d2127">
+        <div class="zone z1" style="left:8px;top:8px;width:120px;height:104px"><b>Was sehe ich?</b><span>Modell oder ein Ergebnis des Agenten</span></div>
+        <div class="zone z1" style="left:136px;top:8px;width:120px;height:104px"><b>Was tue ich?</b><span>Messen, Schnitt, Explosion, Markieren</span></div>
+        <div class="zone z1" style="right:8px;top:8px;width:100px;height:104px"><b>Wie sehe ich es?</b><span>Würfel, Darstellung</span></div>
+        <div style="position:absolute;left:0;right:0;top:46%;text-align:center;color:var(--tx3);font-size:13px">Viewer</div>
+        <div class="zone z1" style="left:8px;bottom:8px;width:178px;height:78px"><b>Karte unten links</b><span>Auswahl, Werkzeug oder Ergebnis, immer nur eine</span></div>
+      </div>
+      <div class="zone z0" style="left:370px;width:372px;bottom:8px;height:44px;flex-direction:row;align-items:center"><b>Verlauf</b></div>
+      <div class="zone z3" style="left:748px;right:8px;top:58px;bottom:8px"><b>Agent</b><span>nur Terminals</span><span class="c3" style="margin-top:auto">keine Knopfleiste mehr</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:26px">
+      <div><div class="cap" style="margin-bottom:10px">GRUNDREGELN</div><ul class="rules">
+        <li>Jeder Ort hat eine Aufgabe. Was dieselbe Frage beantwortet, steht zusammen.</li>
+        <li>Im Viewer höchstens eine Karte, immer unten links.</li>
+        <li>„An Agent geben“ steht dort, wo es um etwas geht, nicht in einer Sammelleiste.</li></ul></div>
+      <div><div class="cap" style="margin-bottom:10px">&nbsp;</div><ul class="rules">
+        <li>Orange nur für Aktion und Auswahl. Bei den Skills heißt das: nur „Immer“ ist orange.</li>
+        <li>Was es noch nicht gibt, steht nicht da (der graue Knopf „Pakete“ entfällt).</li>
+        <li>Spalten frei kombinieren: Seitenleiste, Code und Agent unabhängig ein und aus.</li></ul></div>
+    </div>
+  </div>
+  <div style="position:absolute;left:1000px;top:40px;width:552px">
+    <div class="cap" style="margin-bottom:6px">DEINE KRITIK UND DER VORSCHLAG</div>
+    <table class="crit">
+      <tr><td><span class="pin s">1</span></td><td><b>Dateien und Code gehen nicht gleichzeitig</b><br>Code wird eine eigene Spalte neben der Seitenleiste. Ein Klick auf eine Datei öffnet sie daneben, der Baum bleibt stehen.</td><td class="go" data-go="2">Bild 2 ›</td></tr>
+      <tr><td><span class="pin s">2</span></td><td><b>Zu viele, zu verschiedene Knöpfe oben</b><br>Drei Orte statt einer Leiste: Werkzeuge (nur noch vier), Kamera und Darstellung beim Würfel, Analyse und Animation als Ergebnisse im Umschalter „Modell“.</td><td class="go" data-go="3">Bild 3, 4 ›</td></tr>
+      <tr><td><span class="pin s">3</span></td><td><b>Skill-Menü</b><br>Eine Zeile je Skill mit kleinem Stufen-Schalter. Beschreibung und Einstellungen in einer Karte daneben. Orange nur noch für „Immer“.</td><td class="go" data-go="5">Bild 5 ›</td></tr>
+      <tr><td><span class="pin s">4</span></td><td><b>Bauteilfenster nimmt viel Platz</b><br>Bauteile wandern in die Seitenleiste, der Viewer bleibt frei. Kompakte Zeilen, Symbole erst beim Überfahren.</td><td class="go" data-go="1">Bild 1 ›</td></tr>
+      <tr><td><span class="pin s">5</span></td><td><b>Knöpfe unter der Konsole</b><br>Die Leiste entfällt. „An Agent geben“ bleibt in den Karten (Auswahl, Messung, Fehler, Ergebnis). Neu: Bauteile und Dateien ins Terminal ziehen.</td><td class="go" data-go="1">Bild 1 ›</td></tr>
+      <tr><td><span class="pin s">P</span></td><td><b>Parameter-Menü (später)</b><br>Eigener Eintrag in der Seitenleiste. Werte als Formular, gruppiert wie im Code, Ändern baut neu.</td><td class="go" data-go="6">Bild 6 ›</td></tr>
+    </table>
+    <div class="cap" style="margin:26px 0 8px">WAS BLEIBT</div>
+    <div class="c2" style="line-height:1.6">Aufteilung von links nach rechts, Kopfzeile mit Zuständen statt Knopfreihen, Verlauf unter dem Viewer, Farben mit fester Bedeutung, Startseite, alle Karten und Menüs von heute (Messen, Schnitt, Explosion, Markieren, Export).</div>
+  </div>
+</div>`;
+
+// 1 Arbeitsbereich
+S[1] = () => app({
+  rail: 'bauteile', top: { pinLayout: '1' },
+  side: sideParts({ pin: '4' }),
+  viewer: viewer({ switcher: switcher({ pin: '2', badge: true }), tools: tools({ pin: '2' }), cubebox: cubebox({ pin: '2' }), overlay: selcard('5') }),
+  agent: agent({ toast: true, pin: '5', input: '<span class="ref">[Pleuel · parts/kurbeltrieb.py:88-89]</span> ' }),
+});
+
+// 2 Dateien und Code
+S[2] = () => app({
+  rail: 'dateien', top: { layout: { code: true }, pinLayout: '1' },
+  side: sideFiles({ w: 232 }),
+  editor: editor({ w: 500, pin: '1' }),
+  viewer: viewer({ model: { pad: [.32, .06, .2, .06] }, switcher: switcher({ compact: true }), tools: tools({ icons: true }), cubebox: cubebox({ size: 74 }) }),
+  agent: agent({ w: 400 }),
+});
+
+// 3 Werkzeuge
+const displayMenu = `<div class="menu pos" style="right:88px;top:150px;width:250px" data-pin="2" data-pin-pos="tl">
+  <div class="mh">DARSTELLUNG</div>
+  <button class="mi"><span class="chk">${ic('check', 15, 2.2)}</span><span>Kanten</span></button>
+  <button class="mi"><span class="chk"></span><span>Drahtgitter</span></button>
+  <button class="mi"><span class="chk"></span><span>Transparent</span></button>
+  <div class="msep"></div><div class="mh">ANSICHT</div>
+  <div class="chips"><button class="chip">Vorne</button><button class="chip">Hinten</button><button class="chip">Links</button><button class="chip">Rechts</button><button class="chip">Oben</button><button class="chip">Unten</button></div>
+  <div class="mnote">Doppelklick setzt den Drehpunkt, Mausrad zoomt zur Maus, rechte Taste verschiebt.</div></div>`;
+const sectionCard = `<div class="vcard float" data-pin="2" data-pin-pos="tr">
+  <div class="mc-hd"><span class="mc-ico">${ic('section', 16)}</span><b>Schnitt</b><span class="grow"></span><span class="ibtn s">${ic('x', 14, 2)}</span></div>
+  <div class="mc-body">
+    <div class="seg"><button class="on">X</button><button>Y</button><button>Z</button><button>${ic('target', 13, 2)}Fläche</button></div>
+    <div class="slider"><span class="c2" style="width:30px">X =</span><div class="trk"><i style="width:48%"></i><b style="left:48%"></b></div><span class="valbox">0,0 <span class="c3">mm</span></span></div>
+  </div>
+  <div class="sc-actions"><button class="btn sm">${ic('flip', 14, 1.9)}Seite wechseln</button><button class="btn sm">${ic('eye', 14, 1.9)}Blick auf den Schnitt</button></div>
+</div>`;
+S[3] = () => app({
+  rail: null, top: { layout: { side: false } },
+  viewer: viewer({ model: { clip: { n: [1, 0, 0], d: 120 }, pad: [.16, .12, .12, .12] }, tools: tools({ on: 'section', pin: '2' }), cubebox: cubebox({ display: true }), overlay: sectionCard + displayMenu }),
+});
+
+// 4 Ergebnisse
+const switchMenu = `<div class="menu pos" style="left:12px;top:56px;width:340px" data-pin="2" data-pin-pos="tr">
+  <button class="mi"><span class="ico">${ic('cube', 15)}</span><span>Modell</span><span class="k">26 Bauteile</span></button>
+  <div class="msep"></div><div class="mh">ANALYSEN <span class="src">soma analyze</span></div>
+  <button class="mi on"><span class="ico" style="color:var(--warn)">${ic('gauge', 15)}</span><span>Wandstärke ≥ 1,2 mm</span><span class="k"><span class="dot" style="width:7px;height:7px;background:var(--err)"></span>2 Stellen<span class="chk">${ic('check', 14, 2.2)}</span></span></button>
+  <button class="mi"><span class="ico">${ic('gauge', 15)}</span><span>Überhang 45°</span><span class="k"><span class="dot" style="width:7px;height:7px;background:var(--warn)"></span>4 Stellen<span class="chk"></span></span></button>
+  <button class="mi"><span class="ico">${ic('gauge', 15)}</span><span>Spalt 0,5 mm</span><span class="k"><span class="dot" style="width:7px;height:7px;background:var(--ok)"></span>in Ordnung<span class="chk"></span></span></button>
+  <div class="msep"></div><div class="mh">ANIMATIONEN <span class="src">animations/</span></div>
+  <button class="mi"><span class="ico">${ic('anim', 15)}</span><span>Kurbeltrieb</span><span class="tag acc" style="font-size:10.5px">neu</span><span class="k">4,0 s<span class="chk"></span></span></button>
+  <button class="mi"><span class="ico">${ic('anim', 15)}</span><span>Kamerafahrt</span><span class="k">12,0 s<span class="chk"></span></span></button>
+  <div class="msep"></div><div class="mh">VIDEOS <span class="src">renders/</span></div>
+  <button class="mi"><span class="ico">${ic('film', 15)}</span><span>kurbeltrieb.mp4</span><span class="k">4,0 s<span class="chk"></span></span></button>
+  <div class="msep"></div><div class="mnote">Ergebnisse legt der Agent an. Neue bekommen einen Punkt am Umschalter.</div></div>`;
+const heatCard = `<div class="vcard float" style="width:330px">
+  <div class="mc-hd"><span class="mc-ico" style="background:rgba(232,197,71,.14);color:var(--warn)">${ic('gauge', 16)}</span><b>Wandstärke</b><span class="c3 small">Grenze 1,2 mm</span><span class="grow"></span><span class="ibtn s">${ic('x', 14, 2)}</span></div>
+  <div class="mc-body">
+    <div><div style="height:10px;border-radius:3px;background:linear-gradient(90deg,#e5484d 0%,#f0a33a 28%,#e8c547 48%,#5cc98b 72%,#4b8fe0 100%)"></div>
+      <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--tx3);margin-top:4px"><span>0</span><span>0,6</span><span>1,2</span><span>3</span><span>≥ 6 mm</span></div></div>
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <div class="trow" style="margin:0;padding:0 6px"><span class="dot" style="background:var(--err)"></span><span class="nm">Deckplatte vorne</span><span class="mono c2">0,13 mm</span></div>
+      <div class="trow" style="margin:0;padding:0 6px"><span class="dot" style="background:var(--err)"></span><span class="nm">Gegengewicht, Mutternschlitz</span><span class="mono c2">0,04 mm</span></div>
+      <div class="c3 small" style="padding:4px 6px 0">Klick auf eine Stelle dreht die Kamera hin. Normteile sind nicht bewertet.</div></div>
+  </div>
+  <div class="sc-actions"><button class="btn sm">${ic('refresh', 14, 1.9)}Neu berechnen</button><button class="btn sm acc">${ic('send', 14, 1.9)}An Agent geben</button></div>
+</div>`;
+S[4] = () => app({
+  rail: 'bauteile',
+  side: sideParts({ sel: '' }),
+  viewer: viewer({ model: { heat: true, probe: [{ p: [120, 150, 126], text: '0,13 mm' }], pad: [.24, .1, .18, .1] }, switcher: switcher({ kind: 'heat', open: true }), overlay: heatCard + switchMenu }),
+});
+
+// 5 Skills
+const SK = [
+  ['ARBEITSWEISE', [['Konstruktionsablauf', 'Anforderungen klären, vom Groben ins Feine', 'always'], ['Sauber modellieren (CadQuery)', 'Parameter oben, ein Teil je Funktion', 'always']]],
+  ['FERTIGUNGSVERFAHREN', [['3D-Druck (FDM)', 'PETG · Düse 0,6 mm · angepasst', 'always', 'sel', true], ['3D-Druck Harz und Pulver', 'SLA, SLS, MJF', 'need'], ['CNC-Fräsen und Drehen', 'Werkzeugradien, Aufspannungen', 'need'], ['Laserschneiden', 'Plattenstärke 4 mm · angepasst', 'off', '', true], ['Blech', 'Biegeradien, Laschen, Freischnitte', 'need']]],
+  ['KONSTRUKTIONSWISSEN', [['Toleranzen und Passungen', 'Spiel, Presssitz, ISO-Passungen', 'need'], ['Verbindungen', 'Schrauben, Clips, Einschmelzmuttern', 'need'], ['Normteile', 'Schrauben, Muttern, Scheiben aus soma', 'always'], ['Festigkeit und Steifigkeit', 'Rippen, Radien, Lastpfade', 'need'], ['Baugruppen und Bewegung', 'Gelenke, Spiel, Kollisionen', 'need']]],
+  ['PRÜFEN UND ZEIGEN', [['Analyse', 'Überhang, Wandstärke, Spalt', 'need'], ['Animation und Video', 'Abläufe in animations/, MP4', 'need']]],
+];
+const LV = { always: ['always', 'Immer'], need: ['', 'Bei Bedarf'], off: ['off', 'Aus'] };
+const lvl = (k, pin) => `<span class="lvl ${LV[k][0]}"${pinAt(pin, 'tr')}><span class="ld"></span>${LV[k][1]}${ic('down', 12, 2)}</span>`;
+function sideSkills() {
+  let first = true;
+  const body = SK.map(([g, list]) => `<div class="grp">${g}</div>` + list.map(([n, d, l, cls = '', cust]) => {
+    const pin = first && l === 'always' ? '3' : ''; if (pin) first = false;
+    return `<div class="sk ${cls} ${l === 'off' ? 'off' : ''}"${cls === 'sel' ? pinAt('3', 'tr') : ''}><span class="t"><b>${n}</b><span class="${cust ? 'cust' : ''}">${d}</span></span>${lvl(l, pin)}</div>`;
+  }).join('')).join('');
+  return `<aside class="side" style="width:300px">
+    <div class="side-hd"><b>Skills</b><span class="grow"></span><span class="ibtn s">${ic('search', 15)}</span><span class="ibtn s" title="Was sind Skills?">${ic('info', 15)}</span></div>
+    <div class="psrc" style="padding:8px 14px 2px">Regeln für den Agenten, je Modell · 4 immer, 10 bei Bedarf, 1 aus</div>
+    <div class="side-bd" style="padding-top:0">${body}</div>
+  </aside>`;
+}
+const skillFlyout = `<div class="flyout float" data-pin="3" data-pin-pos="tr">
+  <div class="mc-hd" style="height:46px"><span class="mc-ico" style="background:var(--s3);color:var(--tx2)">${ic('book', 15)}</span><div style="display:flex;flex-direction:column"><b>3D-Druck (FDM)</b><span class="c3 small">Fertigungsverfahren</span></div><span class="grow"></span><span class="ibtn s">${ic('x', 14, 2)}</span></div>
+  <div class="c2" style="padding:0 14px 12px;line-height:1.5">Druckbare Wandstärken, Überhänge bis 50°, Spiel für Passungen, Ausrichtung auf dem Druckbett, Gewinde über Einschmelzmuttern.</div>
+  <div class="fl-sec"><div class="cap">FÜR DIESES MODELL</div>
+    <div class="seg"><button>Aus</button><button>Bei Bedarf</button><button class="on">Immer</button></div>
+    <div class="c3 small">Der Agent befolgt den Skill bei jeder Änderung.</div></div>
+  <div class="fl-sec"><div style="display:flex;align-items:center"><span class="cap">EINSTELLUNGEN</span><span class="grow"></span><span class="c3 small">2 angepasst ·&nbsp;</span><button class="small" style="color:var(--acc-tx)">Zurücksetzen</button></div>
+    <div class="frm"><span class="lb">Material</span><span class="sel-box chg">PETG${ic('down', 12, 2)}</span><span class="ibtn s" style="width:20px;color:var(--tx3)">${ic('reset', 13)}</span></div>
+    <div class="frm"><span class="lb">Düse</span><span class="valbox chg">0,6<span class="c3">mm</span></span><span class="ibtn s" style="width:20px;color:var(--tx3)">${ic('reset', 13)}</span></div>
+    <div class="frm"><span class="lb">Schichthöhe</span><span class="valbox">0,2<span class="c3">mm</span></span><span style="width:20px"></span></div>
+    <div class="frm"><span class="lb">Max. Überhang</span><span class="valbox">50<span class="c3">°</span></span><span style="width:20px"></span></div>
+    <div class="frm"><span class="lb">Bauraum</span><span class="valbox" style="width:140px">220 × 220 × 250<span class="c3">mm</span></span><span style="width:20px"></span></div>
+  </div>
+  <div class="fl-sec" style="flex-direction:row;align-items:center"><span class="c2 small">Bei neuen Modellen</span><span class="grow"></span>${lvl('need')}</div>
+  <div class="sc-actions"><button class="btn sm">${ic('file', 14, 1.9)}Datei ansehen</button><button class="btn sm acc">${ic('send', 14, 1.9)}Agent Bescheid geben</button></div>
+</div>`;
+S[5] = () => app({
+  rail: 'skills',
+  side: sideSkills(),
+  viewer: viewer({ model: { pad: [.2, .06, .16, .32] }, overlay: skillFlyout }),
+});
+
+// 6 Parameter
+const prm = (label, cn, val, unit, o = {}) => {
+  const cls = [o.chg && 'chg', o.der && 'der', o.err && 'err', o.open && 'open', o.hov && 'hov'].filter(Boolean).join(' ');
+  let ctl = `<span class="valbox">${val}${unit ? `<span class="u">${unit}</span>` : ''}</span>`;
+  if (o.int) ctl = `<span class="stepper"><button>${ic('minus', 12, 2)}</button><span>${val}</span><button>${ic('plus', 12, 2)}</button></span>`;
+  if (o.bool) ctl = `<span style="width:96px;display:flex;justify-content:flex-end"><span class="switch ${val ? '' : 'offsw'}"></span></span>`;
+  if (o.choice) ctl = `<span class="sel-box" style="width:96px">${val}${ic('down', 12, 2)}</span>`;
+  const rst = o.hov ? `<span class="rst" style="visibility:visible" title="Zur Codestelle">${ic('code', 13, 2)}</span>` : `<span class="rst" title="Zurücksetzen">${ic('reset', 13)}</span>`;
+  return `<div class="prm ${cls}"${pinAt(o.pin, o.pinPos || 'tr')}><div class="r"><span class="lb">${o.der ? '<span class="mono c3" style="font-style:italic">ƒx</span>' : ''}${label}<span class="cn">${cn}</span></span>${ctl}${rst}</div>${o.x || ''}</div>`;
+};
+function sideParams() {
+  const boreX = `<div class="x">
+    <div class="slider"><span class="c3">30</span><div class="trk"><i style="width:66.7%"></i><b style="left:66.7%"></b></div><span class="c3">42</span></div>
+    <div class="c3 small">Zylinderbohrung. Vorher 36,0 mm, Schritt 0,5 mm.</div>
+    <div style="display:flex;align-items:center;gap:12px"><button class="lnk">${ic('code', 13, 2)}params.py, Zeile 20</button><span class="grow"></span><button class="lnk">${ic('reset', 13)}36,0</button></div></div>`;
+  return `<aside class="side" style="width:340px">
+    <div class="side-hd"><b>Parameter</b><span class="c3" style="margin-left:4px">38</span><span class="grow"></span><span class="ibtn s">${ic('search', 15)}</span><span class="ibtn s">${ic('more', 16)}</span></div>
+    <div class="pvar"><span class="c2 small">Variante</span><span class="sel-box" style="width:140px">Standard${ic('down', 12, 2)}</span><span class="grow"></span><span class="tag dash">später</span></div>
+    <div class="side-bd" style="padding-top:0">
+      <div class="pg">${ic('down', 12, 2)}KURBELTRIEB</div>
+      ${prm('Zylinderbohrung', 'BORE', '38,0', 'mm', { chg: true, open: true, x: boreX, pin: 'P' })}
+      ${prm('Hub', 'STROKE', '36,0', 'mm')}
+      ${prm('Pleuellänge', 'CONROD_L', '66,0', 'mm', { chg: true })}
+      ${prm('Höhe Kurbelwelle', 'Z_CRANK', '40,0', 'mm', { hov: true })}
+      ${prm('Kolben oben', 'PISTON_TOP', '14,0', 'mm')}
+      ${prm('Wand Kolbenhemd', 'PISTON_WALL', '0,8', 'mm', { chg: true, err: true, pin: 'P', pinPos: 'tl' })}
+      ${prm('Hubraum', 'DISPLACEMENT', '40,8', 'cm³', { der: true, pin: 'P' })}
+      <div class="pg">${ic('down', 12, 2)}STEUERUNG</div>
+      ${prm('Zähne', 'TEETH', '18', '', { int: true })}
+      ${prm('Modul', 'MODULE', '1,5', 'mm')}
+      ${prm('Gegengewicht', 'COUNTERWEIGHT', true, '', { bool: true })}
+      ${prm('Lagerart', 'BEARING', 'Hülse', '', { choice: true })}
+      <div class="pg">${ic('right', 12, 2)}PLEUEL <span class="src">· 6</span></div>
+      <div class="pg">${ic('right', 12, 2)}3D-DRUCK <span class="src">· 9 · aus Skill 3D-Druck (FDM)</span></div>
+    </div>
+    <div class="pfoot"><span class="dot" style="width:7px;height:7px;background:var(--acc)"></span>3 geändert seit dem Speichern<span class="grow"></span><button class="btn xs">Zurücksetzen</button></div>
+  </aside>`;
+}
+const errHint = `<div class="vcard float" style="width:300px;border-color:rgba(240,116,112,.45)"><div class="mc-hd"><span style="color:var(--err)">${ic('alert', 16)}</span><b>Wand Kolbenhemd</b><span class="grow"></span><span class="ibtn s">${ic('x', 14, 2)}</span></div>
+  <div class="c2 small" style="padding:0 12px 12px;line-height:1.5">0,8 mm liegt unter dem Bereich 1,2 bis 4 mm aus dem Code. Der Wert ist eingetragen, gebaut wird trotzdem. Die App ändert nichts selbst.</div>
+  <div class="sc-actions"><button class="btn sm">${ic('reset', 14)}Auf 2,4 zurück</button><button class="btn sm acc">${ic('send', 14, 1.9)}An Agent geben</button></div></div>`;
+S[6] = () => app({
+  rail: 'parameter', railPin: ['parameter', 'P', 'tl'], top: { build: 'busy' },
+  side: sideParams(),
+  viewer: viewer({ model: { pad: [.22, .08, .2, .08] }, overlay: errHint }),
+  agent: agent({ w: 420 }),
+});
+
+// 7 Bausteine
+const mi = (icon, label, k, cls = '') => `<button class="mi ${cls}">${icon ? `<span class="ico">${ic(icon, 15)}</span>` : '<span style="width:15px"></span>'}<span>${label}</span>${k ? `<span class="k">${k}</span>` : ''}</button>`;
+S[7] = () => `<div class="sheet" style="padding:36px 40px;display:grid;grid-template-columns:330px 430px 330px 340px;gap:30px;align-content:start">
+  <div class="bcol">
+    <div><div class="cap">UMSCHALTER OBEN LINKS · WAS ZEIGT DER VIEWER</div><div class="stack">
+      ${switcher()}${switcher({ badge: true })}${switcher({ kind: 'heat' })}${switcher({ kind: 'anim' })}${switcher({ kind: 'old' })}</div>
+      <div class="c3 small" style="margin-top:8px;line-height:1.5">Ein alter Stand aus dem Verlauf erscheint hier violett, das Banner über dem Verlauf bleibt.</div></div>
+    <div><div class="cap">SPALTEN · OBEN RECHTS</div><div class="stack">
+      <div style="display:flex;align-items:center;gap:10px"><div class="layout"><button class="on">${ic('sideL', 17, 1.7)}</button><button>${ic('code', 16, 1.9)}</button><button class="on">${ic('sideR', 17, 1.7)}</button></div><span class="c3 small">Standard</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><div class="layout"><button class="on">${ic('sideL', 17, 1.7)}</button><button class="on">${ic('code', 16, 1.9)}</button><button>${ic('sideR', 17, 1.7)}</button></div><span class="c3 small">Code lesen, Agent eingeklappt</span></div></div>
+      <div class="c3 small" style="margin-top:8px;line-height:1.5">Kurzbefehle Strg 1, 2, 3. Ein eingeklappter Agent läuft weiter, wie heute.</div></div>
+  </div>
+  <div class="bcol">
+    <div><div class="cap">WERKZEUGLEISTE</div><div class="stack">
+      ${tools()}${tools({ on: 'measure' })}${tools({ icons: true })}</div>
+      <div class="c3 small" style="margin-top:8px;line-height:1.5">Schmaler Viewer: nur Symbole. Escape beendet das aktive Werkzeug.</div></div>
+    <div><div class="cap">INS TERMINAL ZIEHEN</div>
+      <div style="position:relative;height:150px;border:1px solid var(--line);border-radius:10px;background:var(--term);overflow:hidden">
+        <div class="term" style="padding:12px 14px;height:100%"><div class="l mut">Soll ich die Deckplatte vorne verstärken?</div>
+          <div class="inbox l" style="border-color:var(--acc-line);background:rgba(242,154,56,.05)"><span class="p">&gt;</span> nein, aber <span class="cursor" style="background:var(--acc)"></span></div></div>
+        <div class="ghostdrag" style="position:absolute;left:150px;top:66px"><span class="sw" style="background:#b4bac3"></span>Pleuel</div></div>
+      <div class="c3 small" style="margin-top:8px;line-height:1.5">Bauteile aus der Seitenleiste oder dem Viewer, Dateien aus dem Baum. Loslassen fügt den Verweis ein wie „An Agent geben“.</div></div>
+  </div>
+  <div class="bcol">
+    <div><div class="cap">SKILL-STUFE · KLICK AUF DEN SCHALTER</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">${lvl('always')}${lvl('need')}${lvl('off')}</div>
+      <div class="menu" style="width:300px">
+        <button class="mi two"><span class="chk"></span><span class="t"><span>Aus</span><span class="c3 small">Der Agent sieht den Skill nicht.</span></span></button>
+        <button class="mi two"><span class="chk"></span><span class="t"><span>Bei Bedarf</span><span class="c3 small">Der Agent liest ihn, wenn das Gespräch darauf kommt.</span></span></button>
+        <button class="mi two on"><span class="chk">${ic('check', 15, 2.2)}</span><span class="t"><span>Immer</span><span class="c3 small">Der Agent befolgt ihn bei jeder Änderung.</span></span></button></div></div>
+    <div><div class="cap">DARSTELLUNG BEIM WÜRFEL</div><div style="display:flex;gap:14px;align-items:flex-start">
+      <div class="vbar float" style="position:static"><button>${ic('fit', 16)}</button><button>${ic('home', 16)}</button><button class="on">${ic('layers', 16)}</button></div>
+      <div class="c3 small" style="line-height:1.5">Einpassen, Standardansicht und das Menü „Darstellung“ von heute (Kanten, Drahtgitter, Transparent, Ansichten).</div></div></div>
+  </div>
+  <div class="bcol">
+    <div><div class="cap">PARAMETER · ZEILENARTEN</div>
+      <div style="border:1px solid var(--line);border-radius:10px;background:var(--s1);padding:6px 0;width:340px">
+        ${prm('Zylinderbohrung', 'BORE', '36,0', 'mm')}${prm('Pleuellänge', 'CONROD_L', '66,0', 'mm', { chg: true })}${prm('Wand Kolbenhemd', 'PISTON_WALL', '0,8', 'mm', { err: true })}
+        ${prm('Zähne', 'TEETH', '18', '', { int: true })}${prm('Gegengewicht', 'COUNTERWEIGHT', true, '', { bool: true })}${prm('Lagerart', 'BEARING', 'Hülse', '', { choice: true })}${prm('Hubraum', 'DISPLACEMENT', '36,6', 'cm³', { der: true })}</div>
+      <div class="c3 small" style="margin-top:8px;line-height:1.5">Zahl mit Einheit, geändert, außerhalb des Bereichs, ganze Zahl, Schalter, Auswahl, abgeleitet.</div></div>
+    <div><div class="cap">PARAMETER · NOCH KEINE IM MODELL</div>
+      <div style="border:1px solid var(--line);border-radius:10px;background:var(--s1);padding:16px;width:340px;display:flex;flex-direction:column;gap:10px">
+        <span class="c3">${ic('sliders', 22, 1.6)}</span><b>Dieses Modell hat noch keine Parameter</b>
+        <span class="c2 small" style="line-height:1.5">Parameter sind Maße, die du hier ändern kannst. Der Agent legt sie an, etwa mit „Mach Bohrung und Hub einstellbar“.</span>
+        <button class="btn sm acc" style="align-self:flex-start">${ic('send', 14, 1.9)}Agent bitten</button></div></div>
+  </div>
+</div>`;
+
+// ================================================================================================================
+// Blättern
+// ================================================================================================================
+const META = {
+  0: ['Konzept', []],
+  1: ['Arbeitsbereich', [
+    ['4', 'Bauteile fest in der Seitenleiste statt als Karte im Viewer. Zeilen 26 px, Symbole erst beim Überfahren'],
+    ['2', 'Werkzeugleiste nur noch mit dem, was am Modell arbeitet. Darstellung beim Würfel, Analyse und Animation im Umschalter „Modell“'],
+    ['5', 'Übergabeleiste entfällt. „An Agent geben“ steht in der Karte, um die es geht, die Meldung oben bestätigt'],
+    ['1', 'Spalten oben rechts ein- und ausblenden: Seitenleiste, Code, Agent'],
+  ]],
+  2: ['Dateien und Code', [
+    ['1', 'Code ist eine eigene Spalte. Dateibaum und Editor sind gleichzeitig offen, Klick auf eine Datei öffnet sie daneben'],
+    ['', 'Schmaler Viewer: Werkzeuge nur als Symbole, Umschalter ohne Zusatz'],
+    ['', 'Wird es zu eng, klappt man oben rechts den Agenten ein. Er läuft weiter'],
+  ]],
+  3: ['Werkzeuge', [
+    ['2', 'Aktives Werkzeug orange, seine Karte steht unten links (wo sonst die Auswahl steht)'],
+    ['2', 'Alles zur Kamera beim Würfel: Einpassen, Standardansicht, Darstellung mit Kanten, Drahtgitter, Transparent und Ansichten'],
+    ['', 'Seitenleiste ausgeblendet: Der Viewer hat fast die ganze Breite'],
+  ]],
+  4: ['Ergebnisse', [
+    ['2', 'Analysen, Animationen und Videos sind Ergebnisse des Agenten, keine Werkzeuge. Sie stehen im Umschalter oben links'],
+    ['', 'Der Umschalter sagt immer, was der Viewer gerade zeigt. Kreuz führt zurück zum Modell'],
+    ['', 'Legende und Fundstellen unten links. Animation und Video bekommen unten die Abspielleiste wie heute'],
+  ]],
+  5: ['Skills', [
+    ['3', 'Eine Zeile je Skill, die Stufe als kleiner Schalter rechts. Orange nur für „Immer“'],
+    ['3', 'Beschreibung, Stufe und Einstellungen in einer Karte neben der Liste. Die Liste bleibt sichtbar'],
+    ['', 'Angepasste Einstellungen stehen in der Zeile („PETG · Düse 0,6 mm“). Die lange Erklärung steckt hinter dem i'],
+  ]],
+  6: ['Parameter (später)', [
+    ['P', 'Eigene Seitenleiste: Maße als Formular, gruppiert wie im Code. Die aktive Zeile klappt auf: Schieber, Bereich, Sprung in den Code'],
+    ['P', 'Ändern schreibt den Wert in den Code und baut (wie Strg S im Editor, E39). Geänderte Werte orange, einzeln rücksetzbar'],
+    ['P', 'Außerhalb des Bereichs: melden, nicht reparieren (E28). Abgeleitete Werte (ƒx) nur zum Ansehen'],
+    ['', 'Offen: wie der Agent Parameter auszeichnet, z. B. Kommentare wie im OpenSCAD-Customizer, die Agenten kennen'],
+  ]],
+  7: ['Bausteine', [
+    ['', 'Zustände von Umschalter, Spalten, Werkzeugleiste, Skill-Stufe und Parameter-Zeilen'],
+    ['', 'Neu: Ziehen ins Terminal. Leerer Zustand der Parameter mit Bitte an den Agenten'],
+  ]],
+};
+const N = Object.keys(META).length;
+const params = new URLSearchParams(location.search);
+if (params.has('nur')) document.body.classList.add('solo');
+if (params.has('ohne')) { document.body.classList.add('nonotes'); document.getElementById('notes').checked = false; }
+let cur = Math.min(N - 1, Math.max(0, parseInt(location.hash.slice(1), 10) || 0)), actual = false;
+const tabs = document.getElementById('tabs'), screenEl = document.getElementById('screen');
+tabs.innerHTML = Object.keys(META).map((n) => `<button class="deck-tab" data-go="${n}" role="tab"><span class="n">${n}</span>${META[n][0]}</button>`).join('');
+function fit() {
+  const head = document.body.classList.contains('solo') ? 0 : document.querySelector('.deck-top').offsetHeight;
+  const k = (actual || document.body.classList.contains('solo')) ? 1 : Math.min(1, (innerWidth - 48) / 1600, (innerHeight - head - 40) / 900);
+  document.documentElement.style.setProperty('--k', Math.max(0.3, k));
+}
+// Anmerkungen an die Ecke des markierten Elements setzen (in unskalierten Koordinaten der App)
+function placePins() {
+  const root = screenEl.firstElementChild; if (!root) return;
+  const k = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k')) || 1, r0 = root.getBoundingClientRect();
+  root.querySelectorAll('.pin:not(.s)').forEach((p) => p.remove());
+  root.querySelectorAll('[data-pin]').forEach((el) => {
+    const r = el.getBoundingClientRect(), pos = el.dataset.pinPos || 'tr';
+    const x = ((pos.includes('r') ? r.right : r.left) - r0.left) / k, y = ((pos.includes('b') ? r.bottom : r.top) - r0.top) / k;
+    const p = document.createElement('span'); p.className = 'pin'; p.textContent = el.dataset.pin;
+    p.style.left = `${Math.round(Math.min(1600 - 26, Math.max(4, x - 11)))}px`; p.style.top = `${Math.round(Math.min(900 - 26, Math.max(4, y - 11)))}px`;
+    root.appendChild(p);
+  });
+}
+function show(n) {
+  cur = n;
+  screenEl.innerHTML = S[n]();
+  document.getElementById('cap-title').textContent = `${n} · ${META[n][0]}`;
+  document.getElementById('cap-list').innerHTML = META[n][1].map(([p, t]) => `<li>${p ? `<span class="pin s">${p}</span>` : '<span class="bul"></span>'}<span>${esc(t)}</span></li>`).join('');
+  tabs.querySelectorAll('.deck-tab').forEach((t) => t.setAttribute('aria-selected', String(+t.dataset.go === n)));
+  if (location.hash !== '#' + n) history.replaceState(null, '', location.pathname + location.search + '#' + n);
+  fit(); placePins();
+}
+document.addEventListener('click', (e) => { const el = e.target.closest('[data-go]'); if (el) show(+el.dataset.go); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') show((cur + 1) % N);
+  if (e.key === 'ArrowLeft') show((cur + N - 1) % N);
+});
+document.getElementById('notes').addEventListener('change', (e) => document.body.classList.toggle('nonotes', !e.target.checked));
+document.getElementById('zoom').addEventListener('click', (e) => { actual = !actual; e.target.textContent = actual ? 'Einpassen' : 'Originalgröße'; fit(); });
+addEventListener('resize', fit);
+show(cur);
+if (document.fonts) document.fonts.ready.then(placePins);
+</script>
+</body>
+</html>
