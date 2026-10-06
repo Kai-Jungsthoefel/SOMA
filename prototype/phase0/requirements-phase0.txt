@@ -11,6 +11,7 @@ cycler==0.12.1
 ezdxf==1.4.4
 fonttools==4.66.0
 frozenlist==1.8.0
+gmsh==4.15.2
 idna==3.20
 kiwisolver==1.5.1
 llvmlite==0.49.0
@@ -25,6 +26,7 @@ numpy==2.5.3
 packaging==26.3
 pillow==12.3.0
 propcache==0.5.4
+pyamg==5.3.0
 pyparsing==3.3.3
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3

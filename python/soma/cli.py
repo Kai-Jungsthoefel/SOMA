@@ -209,10 +209,18 @@ def cmd_analyze(args):
         for m in res:
             print(f"{m['id']}: {m['title']} ({m['file']})")
         if not res:
-            print("Noch keine Ergebnisse (soma analyze overhang | thickness | clearance).")
+            print("Noch keine Ergebnisse (soma analyze overhang | thickness | clearance | fem <studie.py>).")
         return 0
     try:
-        meta = analysis.run(root, args.kind, args.parts, args.threshold, args.up, args.name)
+        if args.kind == "fem":
+            from . import fem
+            if not args.study:
+                return _fail("soma analyze fem braucht die Datei mit dem Lastfall, z. B. soma analyze fem analyses/halter.py (Skill FEM)")
+            meta = fem.run(root, args.study, args.name, args.threshold)
+        else:
+            if args.study:
+                return _fail(f"Unerwartete Angabe {args.study!r}: nur soma analyze fem nimmt eine Datei")
+            meta = analysis.run(root, args.kind, args.parts, args.threshold, args.up, args.name)
     except analysis.AnalysisError as e:
         return _fail(str(e))
     if args.json:
@@ -281,10 +289,11 @@ def main(argv=None):
     a.add_argument("--json", action="store_true")
     a.set_defaults(func=cmd_anim)
 
-    z = sub.add_parser("analyze", help="Auswertung: overhang (3D-Druck), thickness (Wandstaerke), clearance (Spalt zu anderen Teilen)")
-    z.add_argument("kind", choices=["overhang", "thickness", "clearance", "list"])
+    z = sub.add_parser("analyze", help="Auswertung: overhang (3D-Druck), thickness (Wandstaerke), clearance (Spalt zu anderen Teilen), fem (Festigkeit)")
+    z.add_argument("kind", choices=["overhang", "thickness", "clearance", "fem", "list"])
+    z.add_argument("study", nargs="?", help="fem: Datei mit dem Lastfall, z. B. analyses/halter.py")
     z.add_argument("--parts", help="Bauteile oder Gruppen, mit Komma getrennt, \"Gruppe/\" immer die Gruppe (Standard: alle eigenen Teile)")
-    z.add_argument("--threshold", type=float, help="Grenzwert (Standard: overhang 45 Grad, thickness 1.2 mm, clearance 0.5 mm)")
+    z.add_argument("--threshold", type=float, help="Grenzwert (Standard: overhang 45 Grad, thickness 1.2 mm, clearance 0.5 mm, fem der Sicherheitsfaktor der Studie)")
     z.add_argument("--up", default="z", help="overhang: Druckrichtung (z, -z, x, -x, y, -y)")
     z.add_argument("--name", help="Name des Ergebnisses (Standard: wie die Auswertung)")
     z.add_argument("--project", default=".")

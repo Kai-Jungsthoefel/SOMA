@@ -200,6 +200,8 @@ def _pick(parts, spec, default_roles):
 
 def _fmt(v, unit):
     v = v + 0.0  # kein "-0.0"
+    if not unit:  # Verhaeltnis ohne Einheit (Sicherheitsfaktor)
+        return f"{v:.2f}"
     return f"{v:.1f}{unit}" if unit == "°" else f"{v:.2f} {unit}"
 
 
