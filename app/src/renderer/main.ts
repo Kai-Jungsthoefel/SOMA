@@ -7,6 +7,7 @@ import { Markup } from './markup';
 import { MAX_QUOTE } from './pdfview';
 import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
+import { ExplodeTool } from './explodetool';
 import { SkillsPanel } from './skills';
 import { PartsCard } from './parts';
 import { TerminalTabs } from './terminals';
@@ -330,6 +331,21 @@ const sectionTool = new SectionTool({
   hint: $('section-hint'), flip: $<HTMLButtonElement>('btn-section-flip'), look: $<HTMLButtonElement>('btn-section-look'),
 }, { viewer });
 
+// ---- Explosionsansicht (E56) ----------------------------------------------------------------------------------------
+
+const explodeTool = new ExplodeTool({
+  card: $('explode-card'), button: $<HTMLButtonElement>('btn-explode'), close: $<HTMLButtonElement>('btn-explode-close'),
+  range: $<HTMLInputElement>('explode-range'), value: $('explode-value'), hint: $('explode-hint'),
+  trails: $<HTMLButtonElement>('btn-explode-trails'), fit: $<HTMLButtonElement>('btn-explode-fit'), viewerEl: $('viewer'),
+}, {
+  viewer,
+  beforeOn: () => { if (measureTool.isActive) measureTool.setActive(false); },
+  settled: () => sectionTool.refresh(), // der Bereich des Schiebers folgt den verschobenen Bauteilen
+});
+// Gemessen wird in Einbaulage (die exakte Geometrie kennt keine Explosion): Messen setzt das Modell sofort zusammen.
+// Nach dem Knopf-Handler von MeasureTool registriert, isActive ist hier schon umgeschaltet.
+$('btn-measure').addEventListener('click', () => { if (measureTool.isActive) explodeTool.setActive(false, false); });
+
 // ---- Markierung (E16) -------------------------------------------------------------------------------------------
 
 const markup = new Markup({
@@ -410,10 +426,10 @@ async function sendMarkup(): Promise<void> {
     const old = versions.previewed, source = markup.source;
     markup.close();
     void refreshFiles(); // die neue Markierung steht gleich im Dateibaum
-    // Zeigt das Bild einen alten Stand oder einen Schnitt, soll der Agent das wissen (sonst vergleicht er es mit dem aktuellen Code
-    // oder hält die Schnittfläche für eine echte Fläche)
+    // Zeigt das Bild einen alten Stand, einen Schnitt oder eine Explosion, soll der Agent das wissen (sonst vergleicht er es mit dem
+    // aktuellen Code, hält die Schnittfläche für eine echte Fläche oder die auseinandergezogenen Teile für ihre Lage)
     // Auf einem Bild aus dem Projekt gezeichnet: Der Agent soll das Original kennen, Stand und Schnitt spielen dann keine Rolle
-    const cut = sectionTool.agentText();
+    const cut = [sectionTool.agentText(), explodeTool.agentText()].filter(Boolean).join(', ');
     const note = source ? `, gezeichnet auf ${source}`
       : (old ? `, zeigt den älteren Stand ${old.short} "${old.subject.slice(0, 80)}"` : '') + (cut ? `, ${cut}` : '');
     insertToAgent(`[Markierung: ${r.path}${note}] `, `Markierung gespeichert: ${r.path}`);
@@ -543,6 +559,7 @@ async function loadModel(): Promise<void> {
     textCache.clear();
     await viewer.load(glb);
     measureTool.reset(); // neuer Build: die Nummern der Flächen und Kanten gelten nicht mehr
+    explodeTool.refresh(); // vor dem Schnitt: Dessen Bereich hängt von der Lage der Bauteile ab
     sectionTool.refresh();
     msg.className = ''; msg.textContent = '';
     refreshPartsCard();
@@ -578,6 +595,7 @@ const versions = new VersionsBar({
       textCache.clear();
       await viewer.load(res.glb);
       measureTool.reset();
+      explodeTool.refresh();
       sectionTool.refresh();
       refreshPartsCard();
       selectPart(null, null);
@@ -599,6 +617,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   markup.close();
   if (measureTool.isActive) measureTool.setActive(false);
   sectionTool.setActive(false);
+  explodeTool.setActive(false, false);
   viewer.clear();
   versions.reset();
   terminals.closeAll();
@@ -987,6 +1006,7 @@ if (api.testMode) {
     markup: () => markup.state(),
     measure: () => measureTool.state(),
     section: () => sectionTool.state(),
+    explode: () => explodeTool.state(),
     skills: () => skills.state(),
     pick: () => selection?.pick ?? null,
     markPixel: (x: number, y: number) => markup.pixel(x, y),

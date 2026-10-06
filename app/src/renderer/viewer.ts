@@ -12,10 +12,15 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 interface FaceEntry { id: number; surface: string; area?: number; center?: number[]; triStart: number; triCount: number }
 interface EdgeEntry { id: number; curve: string; length?: number; segStart: number; segCount: number }
 interface VertexEntry { id: number; p: number[] }
-/** `solid`: geschlossener Körper (fehlt bei älteren Builds, gilt dann als geschlossen). Nur dann füllt der Schnitt die Schnittfläche. */
-interface PartMeta { partId: string; name: string; role: string; group?: string | null; solid?: boolean; faces: FaceEntry[]; edges?: EdgeEntry[]; vertices?: VertexEntry[] }
+/**
+ * `solid`: geschlossener Körper (fehlt bei älteren Builds, gilt dann als geschlossen). Nur dann füllt der Schnitt die Schnittfläche.
+ * `axis`: nur bei Normteilen, Richtung aus dem Material heraus. Daran zieht die Explosionsansicht sie heraus.
+ */
+interface PartMeta { partId: string; name: string; role: string; group?: string | null; solid?: boolean; axis?: number[]; faces: FaceEntry[]; edges?: EdgeEntry[]; vertices?: VertexEntry[] }
 interface PartEntry {
   group: THREE.Object3D; meta: PartMeta; meshes: THREE.Mesh[]; lines: THREE.LineSegments[];
+  /** Lage des Knotens laut GLB (Einbaulage) und die Verschiebung der Explosionsansicht davon weg. */
+  base: THREE.Vector3; offset: THREE.Vector3;
   /** Deckel der Schnittfläche: Zählnetze für den Schablonenpuffer und die Platte in der Ebene (erst beim ersten Schnitt angelegt). */
   cap?: { stencils: THREE.Mesh[]; plate: THREE.Mesh };
   /** Dreiecke in Weltkoordinaten, für die Schnittkontur und den Bereich des Schiebers (erst bei Bedarf berechnet). */
@@ -38,6 +43,12 @@ export interface SectionPlane { normal: number[]; constant: number }
 
 /** Angeklickte Fläche, an der sich der Schnitt ausrichten soll. `normal` zeigt aus dem Material heraus. */
 export interface PlaneHit { partId: string; name: string; faceId: number; surface: string; normal: number[]; point: number[] }
+
+/**
+ * Bauteil in Einbaulage, Grundlage der Explosionsansicht. `min`/`max`: Hüllquader. `axis`: nur Normteile, Einheitsvektor aus
+ * dem Material heraus, `span` ihre Ausdehnung entlang dieser Achse.
+ */
+export interface ExplodePart { id: string; group: string | null; role: string; min: number[]; max: number[]; axis: number[] | null; span: [number, number] | null }
 
 export type ViewName = 'iso' | 'front' | 'back' | 'top' | 'bottom' | 'right' | 'left' | 'fit';
 
@@ -115,6 +126,9 @@ export class Viewer {
   /** Zu jedem Segment der Schnittkontur Bauteil und Fläche: Beim Messen lässt sich so die Kontur anklicken. */
   private contourOf: { part: PartEntry; face: number }[] = [];
   private contourDirty = false;
+  /** Explosionsansicht: Wege der verschobenen Bauteile, gestrichelt von der Einbaulage zur aktuellen Lage. */
+  private trails = new THREE.Group();
+  private showTrails = true;
   /** Wartet auf einen Klick auf eine Fläche (Schnitt an Fläche ausrichten). */
   private planePick: ((h: PlaneHit | null) => void) | null = null;
   onPick: (r: PickResult | null) => void = () => {};
@@ -135,7 +149,7 @@ export class Viewer {
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(80, -120, 200);
-    this.scene.add(sun, this.highlight, this.hover, this.marks, this.caps);
+    this.scene.add(sun, this.highlight, this.hover, this.marks, this.caps, this.trails);
     this.overlay = document.createElement('div');
     this.overlay.className = 'v-overlay';
     container.appendChild(this.overlay);
@@ -189,7 +203,7 @@ export class Viewer {
         mat.userData.baseTransparent = mat.transparent;
         if (meta.role === 'reference') { mat.depthWrite = false; m.renderOrder = 1; }
       }
-      fresh.set(meta.partId, { group: o, meta, meshes, lines });
+      fresh.set(meta.partId, { group: o, meta, meshes, lines, base: o.position.clone(), offset: new THREE.Vector3() });
     });
     this.clearCaps();
     this.disposeModel();
@@ -205,8 +219,7 @@ export class Viewer {
     this.hoverKey = '';
     if (this.selectedId && !this.parts.has(this.selectedId)) this.selectedId = null;
     this.applySelection();
-    const box = this.bounds([...this.parts.keys()]);
-    if (!box.isEmpty()) { box.getCenter(this.center); this.radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1); }
+    this.updateExtent();
     if (!this.hasFitted && this.parts.size) { this.setView('iso'); this.hasFitted = true; }
     this.fitClip();
     this.syncSection();
@@ -222,6 +235,7 @@ export class Viewer {
     this.hasFitted = false;
     this.highlight.clear();
     this.clearGroup(this.hover);
+    this.clearGroup(this.trails);
     this.setMeasureMarks(null);
     this.syncSection();
     this.requestRender();
@@ -279,6 +293,7 @@ export class Viewer {
 
   private applyVisibility(): void {
     for (const [id, p] of this.parts) p.group.visible = !this.hidden.has(id);
+    this.syncTrails();
     this.syncSection();
   }
 
@@ -361,6 +376,12 @@ export class Viewer {
       box.expandByObject(p.group);
     }
     return box;
+  }
+
+  /** Mitte und Radius aller Bauteile in ihrer aktuellen Lage (die Explosionsansicht vergrößert das Modell). */
+  private updateExtent(): void {
+    const box = this.bounds([...this.parts.keys()]);
+    if (!box.isEmpty()) { box.getCenter(this.center); this.radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1); }
   }
 
   setView(name: ViewName, ids?: string[]): void {
@@ -513,7 +534,8 @@ export class Viewer {
     return {
       partId: part.meta.partId, name: part.meta.name, role: part.meta.role,
       faceId: face?.id ?? null, surface: face?.surface ?? null, area: face?.area ?? null,
-      point: hit.point.toArray().map((v) => +v.toFixed(3)),
+      // In Einbaulage: Die Explosionsansicht verschiebt nur die Darstellung, der Agent kennt nur das Modell
+      point: hit.point.clone().sub(part.offset).toArray().map((v) => +v.toFixed(3)),
       ...(hit.cut ? { cut: true } : {}),
     };
   }
@@ -528,7 +550,26 @@ export class Viewer {
       color: 0xf29a38, transparent: true, opacity: 0.85, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide,
       clippingPlanes: this.clip }));
     o.renderOrder = 2;
+    this.attach(o, src);
     this.highlight.add(o);
+  }
+
+  /** Hervorhebung in den Koordinaten von `src` (Netz oder Knoten eines Bauteils): Sie wandert mit, wenn die Explosionsansicht es verschiebt. */
+  private attach(o: THREE.Object3D, src: THREE.Object3D): void {
+    o.matrixAutoUpdate = false;
+    o.userData.follow = src;
+    src.updateMatrixWorld();
+    o.matrix.copy(src.matrixWorld);
+  }
+
+  /** Angehängte Hervorhebungen an die aktuelle Lage ihrer Bauteile setzen. */
+  private follow(): void {
+    for (const g of [this.highlight, this.hover, this.marks]) {
+      for (const o of g.children) {
+        const src = o.userData.follow as THREE.Object3D | undefined;
+        if (src) { o.matrix.copy(src.matrixWorld); o.matrixWorldNeedsUpdate = true; }
+      }
+    }
   }
 
   private installPicking(): void {
@@ -771,10 +812,11 @@ export class Viewer {
       if (!vx) return;
       // Ein runder Punkt fester Bildgröße, immer sichtbar (Hervorhebung: größer, Auswahl in Orange)
       const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(new THREE.Vector3(...(vx.p as [number, number, number])).applyMatrix4(p.group.matrixWorld).toArray(), 3));
+      g.setAttribute('position', new THREE.Float32BufferAttribute(vx.p.slice(0, 3), 3));
       const m = new THREE.PointsMaterial({ color, size: 6 + width * 3, sizeAttenuation: false, map: Viewer.dot(), transparent: true, alphaTest: 0.2, depthTest: false });
       const o = new THREE.Points(g, m);
       o.renderOrder = 11;
+      this.attach(o, p.group);
       group.add(o);
       return;
     }
@@ -794,6 +836,7 @@ export class Viewer {
       const o = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide,
         clippingPlanes: this.clip }));
       o.renderOrder = 3;
+      this.attach(o, src);
       group.add(o);
       return;
     }
@@ -801,12 +844,13 @@ export class Viewer {
     const l = p.lines[0];
     if (!edge || !l) return;
     const pos = l.geometry.getAttribute('position');
-    const v = new THREE.Vector3();
     const flat: number[] = [];
     for (let s = edge.segStart; s < edge.segStart + edge.segCount; s++) {
-      for (const k of [s * 2, s * 2 + 1]) { v.fromBufferAttribute(pos, k).applyMatrix4(l.matrixWorld); flat.push(v.x, v.y, v.z); }
+      for (const k of [s * 2, s * 2 + 1]) flat.push(pos.getX(k), pos.getY(k), pos.getZ(k));
     }
-    group.add(this.fatLines(flat, color, width, false, true));
+    const o = this.fatLines(flat, color, width, false, true);
+    this.attach(o, l);
+    group.add(o);
   }
 
   private static dotTexture: THREE.Texture | null = null;
@@ -1041,7 +1085,7 @@ export class Viewer {
     return { partId: part.meta.partId, name: part.meta.name, faceId: face.id, surface: face.surface, normal: n.toArray(), point: point.toArray() };
   }
 
-  /** Dreiecke eines Bauteils in Weltkoordinaten (einmal berechnet, das Modell bewegt sich nicht). */
+  /** Dreiecke eines Bauteils in Weltkoordinaten (einmal berechnet, bis die Explosionsansicht das Bauteil verschiebt). */
   private worldOf(p: PartEntry): NonNullable<PartEntry['world']> {
     if (p.world) return p.world;
     p.group.updateMatrixWorld(true);
@@ -1206,7 +1250,94 @@ export class Viewer {
     this.scene.add(this.contour);
   }
 
+  // ---- Explosionsansicht ----------------------------------------------------------------------------------------
+
+  /** Alle Bauteile in Einbaulage, auch ausgeblendete: Die Explosion soll nicht springen, wenn man etwas aus- oder einblendet. */
+  explodeParts(): ExplodePart[] {
+    return [...this.parts.values()].map((p) => {
+      const box = new THREE.Box3().setFromObject(p.group).translate(p.offset.clone().negate());
+      const a = p.meta.axis;
+      const axis = Array.isArray(a) && a.length === 3 && a.every(Number.isFinite) && Math.hypot(a[0], a[1], a[2]) > 1e-9
+        ? new THREE.Vector3(a[0], a[1], a[2]).normalize() : null;
+      let span: [number, number] | null = null;
+      if (axis) {
+        // Genau aus den Dreiecken, der Hüllquader wäre bei schräger Achse zu lang
+        let lo = Infinity, hi = -Infinity;
+        const shift = axis.dot(p.offset);
+        for (const w of this.worldOf(p)) {
+          for (let i = 0; i < w.pos.length; i += 3) {
+            const v = axis.x * w.pos[i] + axis.y * w.pos[i + 1] + axis.z * w.pos[i + 2] - shift;
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+          }
+        }
+        if (lo <= hi) span = [lo, hi];
+      }
+      return { id: p.meta.partId, group: p.meta.group ?? null, role: p.meta.role, min: box.min.toArray(), max: box.max.toArray(),
+        axis: axis ? axis.toArray() : null, span };
+    });
+  }
+
+  /**
+   * Bauteile aus der Einbaulage verschieben (nur verschieben, nicht drehen). Fehlende Bauteile und null: Einbaulage.
+   * Klicks, Schnitt und Hervorhebungen arbeiten danach mit der neuen Lage.
+   */
+  setOffsets(offsets: Map<string, number[]> | null): void {
+    for (const [id, p] of this.parts) {
+      const o = offsets?.get(id);
+      const next = new THREE.Vector3(o?.[0] ?? 0, o?.[1] ?? 0, o?.[2] ?? 0);
+      if (next.equals(p.offset)) continue;
+      p.offset.copy(next);
+      p.group.position.copy(p.base).add(p.offset);
+      p.group.updateMatrixWorld(true);
+      p.world = undefined;
+    }
+    this.follow();
+    this.updateExtent();
+    this.syncTrails();
+    this.syncSection();
+    this.fitClip();
+    this.requestRender();
+  }
+
+  /** Wege der Explosionsansicht zeigen oder nicht. */
+  setTrails(on: boolean): void { this.showTrails = on; this.syncTrails(); this.requestRender(); }
+
+  /** Gestrichelte Linie je verschobenem, sichtbarem Bauteil von seiner Mitte in Einbaulage zur aktuellen Mitte. */
+  private syncTrails(): void {
+    this.clearGroup(this.trails);
+    if (!this.showTrails) return;
+    const flat: number[] = [];
+    const c = new THREE.Vector3();
+    for (const p of this.parts.values()) {
+      if (!p.group.visible || p.offset.length() < this.radius * 1e-3) continue;
+      new THREE.Box3().setFromObject(p.group).getCenter(c);
+      flat.push(c.x - p.offset.x, c.y - p.offset.y, c.z - p.offset.z, c.x, c.y, c.z);
+    }
+    if (!flat.length) return;
+    const g = new LineSegmentsGeometry();
+    g.setPositions(flat);
+    // Mit Tiefe, anders als Messstrecken: Die Wege sollen hinter Bauteilen verschwinden, sonst überdecken sie das Bild
+    const m = new LineMaterial({ color: 0x8d97a3, linewidth: 1.2, transparent: true, opacity: 0.85, dashed: true,
+      dashSize: this.radius / 50, gapSize: this.radius / 70 });
+    m.clippingPlanes = this.clip;
+    m.resolution.set(this.container.clientWidth || 1, this.container.clientHeight || 1);
+    this.lineMats.add(m);
+    const l = new LineSegments2(g, m);
+    l.computeLineDistances();
+    l.raycast = () => {};
+    this.trails.add(l);
+  }
+
   // ---- Prüfhilfen (nur für Tests) -------------------------------------------------------------------------------
+
+  /** Verschiebung je Bauteil (nur verschobene) und Zahl der Wege, für Tests. */
+  explodeState() {
+    const offsets: Record<string, number[]> = {};
+    for (const [id, p] of this.parts) if (p.offset.lengthSq() > 0) offsets[id] = p.offset.toArray().map((v) => +v.toFixed(4));
+    const t = this.trails.children[0] as LineSegments2 | undefined;
+    return { offsets, trails: t ? (t.geometry as LineSegmentsGeometry).getAttribute('instanceStart').count : 0, radius: this.radius };
+  }
 
   facesOf(partId: string): FaceEntry[] { return this.parts.get(partId)?.meta.faces ?? []; }
 
@@ -1218,9 +1349,11 @@ export class Viewer {
     const pos = l.geometry.getAttribute('position');
     const r = this.renderer.domElement.getBoundingClientRect();
     this.camera.updateMatrixWorld();
+    l.updateMatrixWorld();
     return (p.meta.edges ?? []).map((e) => {
       const s = e.segStart + Math.floor(e.segCount / 2);
-      const a = new THREE.Vector3().fromBufferAttribute(pos, s * 2), b = new THREE.Vector3().fromBufferAttribute(pos, s * 2 + 1);
+      const a = new THREE.Vector3().fromBufferAttribute(pos, s * 2).applyMatrix4(l.matrixWorld);
+      const b = new THREE.Vector3().fromBufferAttribute(pos, s * 2 + 1).applyMatrix4(l.matrixWorld);
       const m = a.clone().lerp(b, 0.5);
       const v = m.clone().project(this.camera);
       return { id: e.id, curve: e.curve, length: e.length, mid: m.toArray(), screen: { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height } };
@@ -1303,7 +1436,7 @@ export class Viewer {
   screenOf(partId: string, faceId: number): { x: number; y: number } {
     const f = this.facesOf(partId).find((x) => x.id === faceId)!;
     this.camera.updateMatrixWorld();
-    const v = new THREE.Vector3(...(f.center as [number, number, number])).project(this.camera);
+    const v = new THREE.Vector3(...(f.center as [number, number, number])).applyMatrix4(this.parts.get(partId)!.group.matrixWorld).project(this.camera);
     const r = this.renderer.domElement.getBoundingClientRect();
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
   }

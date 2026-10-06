@@ -89,6 +89,7 @@
           <span class="vsep"></span>
           <button id="btn-measure" aria-pressed="false" title="Messen: Fläche oder Kante anklicken, ein zweiter Klick misst Abstand und Winkel (exakte Werte)"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
           <button id="btn-section" aria-pressed="false" title="Schnitt: das Modell an einer Ebene aufschneiden (senkrecht zu X, Y, Z oder parallel zu einer Fläche)"><i data-icon="section"></i><span class="lbl">Schnitt</span></button>
+          <button id="btn-explode" aria-pressed="false" title="Explosion: die Bauteile zur Darstellung auseinanderziehen, Normteile entlang ihrer Achse"><i data-icon="explode"></i><span class="lbl">Explosion</span></button>
           <span class="vsep"></span>
           <button id="btn-mark" title="Viewer-Bild markieren und an den Agenten geben"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
         </div>
@@ -142,6 +143,22 @@
           <div class="sc-actions">
             <button id="btn-section-flip" class="btn sm" title="Die andere Seite wegschneiden"><i data-icon="flip" data-size="14" data-stroke="1.9"></i>Seite wechseln</button>
             <button id="btn-section-look" class="btn sm" title="Senkrecht auf die Schnittfläche blicken"><i data-icon="eye" data-size="14" data-stroke="1.9"></i>Blick auf den Schnitt</button>
+          </div>
+        </div>
+
+        <!-- Explosionsansicht (explodetool.ts): Bauteile auseinanderziehen. Ändert nichts am Modell. -->
+        <div id="explode-card" class="float excard" hidden>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="explode" data-size="16"></i></span><b>Explosion</b><span class="grow"></span>
+            <button id="btn-explode-close" class="ibtn s" aria-label="Explosion beenden" title="Explosion beenden (setzt das Modell wieder zusammen)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div class="sx-pos">
+            <label for="explode-range">Abstand</label>
+            <input id="explode-range" type="range" min="0" max="100" step="1" aria-label="Abstand der Explosion in Prozent">
+            <span id="explode-value" class="ex-val"></span>
+          </div>
+          <div id="explode-hint" class="mc-hint"></div>
+          <div class="sc-actions">
+            <button id="btn-explode-trails" class="btn sm" aria-pressed="true" title="Gestrichelte Wege von der Einbaulage zur aktuellen Lage zeigen"><i data-icon="line" data-size="14" data-stroke="1.9"></i>Wege</button>
+            <button id="btn-explode-fit" class="btn sm" title="Das auseinandergezogene Modell ganz ins Bild holen"><i data-icon="fit" data-size="14" data-stroke="1.9"></i>Einpassen</button>
           </div>
         </div>
 
