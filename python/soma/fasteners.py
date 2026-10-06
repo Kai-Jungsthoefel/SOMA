@@ -12,11 +12,13 @@ ins Material (Standard "-Z": von oben nach unten). Eine Schraube liegt mit der K
 Scheibe mit einer Stirnseite. Senkschraube, Gewindestift und Gewindeeinsatz schliessen mit ihrer Oberseite an `at` ab.
 `sunk=True` versenkt Kopf, Mutter oder Scheibe buendig (die Aussenseite liegt dann an `at`), `sunk=0.5` 0,5 mm tiefer.
 `on=teil` sucht die Auflage selbst: Die Gerade durch `at` in Richtung `direction` trifft das Teil, der erste Treffer
-gilt (bei "-Z" zaehlen dann nur x und y von `at`).
+gilt (bei "-Z" zaehlen dann nur x und y von `at`). `rotate()`, `translate()` und `moved()` wie bei CadQuery-Formen
+liefern eine bewegte Kopie, etwa damit eine Schraube mit ihrem Teil in eine andere Stellung wandert.
 
 Die Masse stammen aus den Tabellen von bd_warehouse (Apache 2.0, siehe data/fasteners/QUELLE.md), teils Nenn-, teils
 Groesstmasse. Gewinde werden nicht modelliert: Schaft und Bohrung der Mutter haben den Nenndurchmesser.
 """
+import copy
 import csv
 import functools
 import math
@@ -26,7 +28,7 @@ from pathlib import Path
 
 import cadquery as cq
 from OCP.BRepIntCurveSurface import BRepIntCurveSurface_Inter
-from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+from OCP.gp import gp_Ax1, gp_Dir, gp_Lin, gp_Pnt, gp_Trsf
 
 __all__ = ["Screw", "Nut", "Washer", "HeatSetInsert", "lengths", "pick_length", "standards"]
 
@@ -408,6 +410,44 @@ class _Part:
 
     def __soma_shape__(self):
         return self.shape
+
+    # Lage aendern wie bei CadQuery-Formen: liefert eine Kopie, Bezeichnung, Masse und Bohrungen bleiben. So wandert eine
+    # Schraube mit ihrem Teil (etwa in eine andere Stellung), ohne sie dort neu anzulegen.
+
+    def moved(self, loc):
+        """Kopie, um loc (cq.Location) bewegt, wie cq.Shape.moved()."""
+        if not isinstance(loc, cq.Location):
+            raise ValueError(f"moved() erwartet eine cq.Location, nicht {loc!r}")
+        t = loc.wrapped.Transformation()
+
+        def pnt(v):
+            p = gp_Pnt(*v.toTuple()).Transformed(t)
+            return cq.Vector(p.X(), p.Y(), p.Z())
+
+        def dirn(v):
+            d = gp_Dir(*v.toTuple()).Transformed(t)
+            return cq.Vector(d.X(), d.Y(), d.Z())
+
+        new = copy.copy(self)
+        new._plane = cq.Plane(origin=pnt(self._plane.origin), xDir=dirn(self._plane.xDir), normal=dirn(self._plane.zDir))
+        new._loc = cq.Location(new._plane)
+        new._dir, new._surface = dirn(self._dir), pnt(self._surface)
+        return new
+
+    def translate(self, vector):
+        """Kopie, um vector (x, y, z) verschoben, wie cq.Shape.translate()."""
+        return self.moved(cq.Location(_vec(vector, "translate")))
+
+    def rotate(self, startVector, endVector, angleDegrees):
+        """Kopie, um die Achse von startVector nach endVector gedreht (Grad), wie cq.Shape.rotate()."""
+        p1, p2 = _vec(startVector, "rotate: startVector"), _vec(endVector, "rotate: endVector")
+        if (p2 - p1).Length < 1e-9:
+            raise ValueError("rotate: startVector und endVector muessen verschieden sein (sie legen die Achse fest)")
+        if not isinstance(angleDegrees, numbers.Real):
+            raise ValueError(f"rotate: Winkel in Grad, nicht {angleDegrees!r}")
+        t = gp_Trsf()
+        t.SetRotation(gp_Ax1(gp_Pnt(*p1.toTuple()), gp_Dir(*(p2 - p1).toTuple())), math.radians(angleDegrees))
+        return self.moved(cq.Location(t))
 
     def __repr__(self):
         return f"<{self.designation} an {_pt(cq.Vector(*self.seat))}, Richtung {_pt(self._dir)}>"

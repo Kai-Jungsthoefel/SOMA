@@ -10,6 +10,7 @@ import os
 import runpy
 import sys
 import time
+import types
 from pathlib import Path
 
 import numpy as np
@@ -76,6 +77,16 @@ def _run_file(root, path):
     os.chdir(root)
     sys.path.insert(0, str(root))
     registry.IGNORE_ADD = True
+    # Das Modell ist eben gelaufen: sein Namensraum wird das Modul `model`, `from model import ...` fuehrt es nicht noch
+    # einmal aus (das kostete bei grossen Modellen so lange wie ein ganzer Build).
+    mod_name, old_mod = None, None
+    if build.LAST_RUN and Path(build.LAST_RUN[0]).resolve().parent == Path(root).resolve() and build.LAST_RUN[0].stem.isidentifier():
+        script, ns = build.LAST_RUN
+        mod_name, old_mod = script.stem, sys.modules.get(script.stem)
+        mod = types.ModuleType(mod_name)
+        mod.__dict__.update(ns)
+        mod.__name__, mod.__file__ = mod_name, str(script)
+        sys.modules[mod_name] = mod
     try:
         runpy.run_path(str(path), run_name="__main__")
     except SystemExit as e:
@@ -85,6 +96,11 @@ def _run_file(root, path):
         raise build._error_from_exception(e, root)
     finally:
         registry.IGNORE_ADD = False
+        if mod_name:
+            if old_mod is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = old_mod
         os.chdir(old_cwd)
         if sys.path and sys.path[0] == str(root):
             sys.path.pop(0)
@@ -432,13 +448,71 @@ def _t(x):
     return f"{x:.2f}"
 
 
+SHORT_STEP = 0.5  # s: kuerzere Bewegungen desselben Gelenks ohne Luecke fasst der Ablauf zusammen
+
+
+def _g(v):
+    return f"{round(v, 2):g}"
+
+
+def _merge(run):
+    """Eine Folge kurzer Schritte eines Gelenks (oder der Kamera) als ein Eintrag."""
+    first, n = run[0], len(run)
+    s = dict(start=first["start"], end=run[-1]["end"])
+    if first.get("unit"):
+        vals = [x["v0"] for x in run] + [x["v1"] for x in run]
+        v0, v1, lo, hi = first["v0"], run[-1]["v1"], min(vals), max(vals)
+        text = f"{first['label']}: {_g(v0)} -> {_g(v1)} {first['unit']}"
+        if lo < min(v0, v1) - 1e-6 or hi > max(v0, v1) + 1e-6:
+            text += f", dazwischen {_g(lo)} bis {_g(hi)} {first['unit']}"
+    elif first["key"] == "camera" and all("orbit" in x for x in run):
+        orbit, tilt = sum(x["orbit"] for x in run), sum(x["tilt"] for x in run)
+        text = f"Kamera: Umlauf {_g(orbit)} Grad" + (f", Neigung {_g(tilt)} Grad" if abs(tilt) > 1e-9 else "")
+    else:
+        text = first["text"].split(":")[0] + ": Bewegung"
+    s["text"] = f"{text} ({n} Schritte)"
+    return s
+
+
+def _compact_steps(steps):
+    """Viele kurze, lueckenlose Schritte desselben Gelenks (Schleife mit play(), etwa fuer eine gekoppelte Bewegung) als eine
+    Zeile. Andere Eintraege (Untertitel, Pausen, lange Bewegungen) unterbrechen eine Folge, damit der Ablauf lesbar bleibt."""
+    out, runs = [], {}
+
+    def flush(key):
+        run = runs.pop(key)
+        if len(run) >= 3:
+            out.append(_merge(run))
+        else:
+            out.extend(run)
+
+    for s in steps:
+        key = s.get("key")
+        if key is None or s["end"] - s["start"] > SHORT_STEP:
+            for k in list(runs):
+                flush(k)
+            out.append(s)
+            continue
+        run = runs.get(key)
+        if run and abs(run[-1]["end"] - s["start"]) > 1e-6:
+            flush(key)
+            run = None
+        if run is None:
+            runs[key] = [s]
+        else:
+            run.append(s)
+    for k in list(runs):
+        flush(k)
+    return sorted(out, key=lambda s: s["start"])
+
+
 def info_text(root, entry):
     m = read_meta(root, entry)
     lines = [f"Animation \"{m['name']}\" ({m['file']} Zeile {m['line']}), Dauer {_t(m['duration'])} s",
              f"Bewegte Bauteile: {', '.join(m['parts']) or 'keine'}",
              "Kamera: " + ("keine eigene (Standardansicht iso, alles im Bild)" if m["cameraAuto"] else "eigene Einstellungen und Fahrten"),
              "", "Ablauf:"]
-    for s in m["steps"]:
+    for s in _compact_steps(m["steps"]):
         span = f"{_t(s['start'])}-{_t(s['end'])} s" if s["end"] > s["start"] else f"{_t(s['start'])} s"
         lines.append(f"  {span:<16} {s['text']}")
     if m["captions"]:
@@ -465,71 +539,204 @@ def _location(m):
     return cq.Location(t)
 
 
+def _signed(f, pts):
+    """Vorzeichenbehafteter Abstand der Punkte zur Oberflaeche (negativ: innen), in einem Aufruf ueber VTK."""
+    from vtkmodules.util.numpy_support import numpy_to_vtk, vtk_to_numpy
+    from vtkmodules.vtkCommonCore import vtkDoubleArray
+    if not len(pts):
+        return np.empty(0)
+    out = vtkDoubleArray()
+    f.FunctionValue(numpy_to_vtk(np.ascontiguousarray(pts, dtype=np.float64), deep=True), out)
+    return vtk_to_numpy(out).copy()
+
+
+VOL_MIN = 1e-3  # mm3: kleinere Schnittmengen der B-Rep-Koerper sind Rechenrauschen an Beruehrflaechen
+
+
 def check(root, name, step=0.1, gap=0.0):
     """Prueft die Bewegung: Ueberschneiden sich Bauteile (oder kommen sich naeher als gap mm)? Bewegte Bauteile gegen alle
-    anderen, zu jeder Abtastzeit im Abstand step und an den Grenzen jedes Schritts. Schreibt .soma/anim/<id>.check.json."""
-    from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+    anderen, zu jedem Zeitpunkt im Abstand step und am Ende jeder laengeren Bewegung. Schreibt .soma/anim/<id>.check.json.
+
+    Gerechnet wird auf den Dreiecksnetzen (VTK): Wie tief liegen Ecken des einen Teils im anderen, wie nah kommen sie ihm?
+    Der genaue Abstand zweier B-Rep-Koerper (BRepExtrema) brauchte bei Zahnraedern Sekunden je Paar und Zeitpunkt.
+    Genau ist das auf die doppelte Netztoleranz (`tolerance`, wie die Beruehrung in soma analyze). vtkCollisionDetection-
+    Filter (schneiden sich die Oberflaechen?) stuerzte zusammen mit vtkImplicitPolyDataDistance gelegentlich ab, deshalb
+    nur Abstaende an den Ecken der unterteilten Netze. Teile, die sich schon in der Lage im Modell beruehren (Nocken und Stoessel, Bolzen in der Bohrung), sind
+    eine gewollte Beruehrung: Kollision erst, wenn eines tiefer eindringt. Bei allen anderen entscheidet ueber eine
+    Beruehrung ohne tiefe Ecke die Schnittmenge der B-Rep-Koerper. Ebenso ist Spiel aus dem Modell, das enger als gap ist,
+    so konstruiert: "zu nah" nur, wenn es in der Bewegung enger wird."""
+    from vtkmodules.vtkCommonCore import vtkObject, vtkSMPTools
+    vtkObject.GlobalWarningDisplayOff()  # OBB-Baeume melden flache Zellen als Warnung, hier kein Fehler
+    # FunctionValue rechnet mit vtkSMPTools parallel, vtkImplicitPolyDataDistance haelt aber Zwischenwerte im Objekt
+    backend = vtkSMPTools.GetBackend()
+    vtkSMPTools.SetBackend("Sequential")
+    try:
+        return _check(root, name, step, gap)
+    finally:
+        vtkSMPTools.SetBackend(backend)
+
+
+def _check(root, name, step, gap):
+    from scipy.spatial import cKDTree
+    from vtkmodules.vtkFiltersCore import vtkImplicitPolyDataDistance
+    from . import mesher
+    from .analysis import _polydata, _subdivide
+    from .progress import Progress
+    t_start = time.perf_counter()
     root = Path(root).resolve()
     entry = ensure(root, name)
     parts, results = load(root, root / entry["file"])
     a = next((x for _f, res in results if not isinstance(res, build.BuildError) for x in res if x.id == entry["id"]), None)
     if a is None:
         raise AnimError(f"Die Animation {name!r} liess sich nicht neu laden.")
-    shapes = {p["name"]: p["shape"] for p in parts}
-    info = {p["name"]: p for p in anim._PARTS}
+    tol = build.auto_tolerance([p["shape"] for p in parts])
+    pen = round(max(0.01, 2 * tol), 4)
+    raw = {p["name"]: mesher.mesh_shape(p["shape"], tol, 0.3) for p in parts}
+    raw = {n: m for n, m in raw.items() if m["indices"].size}
+    lo_all = np.min([m["positions"].min(axis=0) for m in raw.values()], axis=0)
+    hi_all = np.max([m["positions"].max(axis=0) for m in raw.values()], axis=0)
+    # Gemessen wird an den Ecken der Netze. Lange Kanten werden deshalb unterteilt: Eine Welle durch eine Wand haette sonst
+    # nur Ecken an ihren Enden, keine davon laege in der Wand. Aufloesung `resolution`, wie die Messstellen von soma analyze.
+    res_h = max(float(np.linalg.norm(hi_all - lo_all)) / 100, 0.2)
+    meshes = {}
+    for n, m in raw.items():
+        pos, _nrm, idx = _subdivide(m["positions"].astype(float), m["normals"].astype(float), m["indices"].astype(np.int64), res_h, 60000)
+        f = vtkImplicitPolyDataDistance()
+        f.SetInput(_polydata(m["positions"].astype(float), m["indices"].astype(np.int64)))
+        pos = np.unique(pos, axis=0)
+        meshes[n] = dict(pos=pos, tree=cKDTree(pos), lo=pos.min(0), hi=pos.max(0), dist=f,
+                         shape=next(p["shape"] for p in parts if p["name"] == n))
+
     duration = a.duration
-    times = set(np.round(np.arange(0.0, duration + 1e-9, max(step, 0.01)), 4).tolist())
+    step = max(float(step), 0.01)
+    times = set(np.round(np.arange(0.0, duration + 1e-9, step), 4).tolist())
+    times.add(round(duration, 4))
     for s in a.steps:
-        times.update((round(s["start"], 4), round(s["end"], 4)))
+        # Endlagen laengerer Bewegungen zusaetzlich, nicht jede Grenze vieler kleiner Schritte (Schleifen mit play())
+        if s["end"] - s["start"] >= max(0.5, 3 * step):
+            times.update((round(s["start"], 4), round(s["end"], 4)))
     times = sorted(t for t in times if 0 <= t <= duration + 1e-9)
     joint_of = a.part_joint()
-    moving = a.moving_parts()
+    moving = [n for n in a.moving_parts() if n in meshes]
     pairs = []
     for i, m in enumerate(moving):
-        for o in shapes:
-            if o == m or joint_of.get(o) is joint_of[m] or (o in joint_of and moving.index(o) < i):
+        for o in meshes:
+            if o == m or joint_of.get(o) is joint_of[m] or (o in moving and moving.index(o) < i):
                 continue
             pairs.append((m, o))
-    corners = {n: _corners(info[n]["bbox"]) for n in shapes}
     eye = np.eye(4)
+    margin = max(gap, pen) + tol
+    # Jede Stelle der Oberflaeche liegt hoechstens res_h von einer Ecke entfernt. Ecken, die weiter als reach von allen
+    # Ecken des anderen Teils liegen, sind weiter als margin von ihm weg oder liegen tief in ihm. Tief drin heisst: Es gibt
+    # auch Ecken naeher am Rand mit mehr als pen Tiefe. Nur die uebrigen bekommen den (teuren) Abstand ueber VTK.
+    reach = margin + 2 * res_h
+    cache, volumes = {}, {}
+
+    def near(pts, other):
+        if not len(pts):
+            return pts
+        dd, _ = meshes[other]["tree"].query(pts, distance_upper_bound=reach)
+        return pts[np.isfinite(dd)]
+
+    def measure(m, o, R):
+        """R: Lage von m im System von o. Liefert (tiefste Ecke im anderen Teil, kleinster Abstand einer Ecke zum anderen
+        Teil) oder None, wenn die Teile weiter als margin auseinander liegen."""
+        A, B = meshes[m], meshes[o]
+        c = (R @ _corners((A["lo"], A["hi"])).T).T[:, :3]
+        lo, hi = np.maximum(c.min(0), B["lo"]) - margin, np.minimum(c.max(0), B["hi"]) + margin
+        if np.any(lo > hi):
+            return None
+        key = (m, o, np.round(R[:3], 5).tobytes())  # gleiche Relativlage (Pause, gleichlaeufige Teile): einmal rechnen
+        if key in cache:
+            return cache[key]
+        pa = A["pos"] @ R[:3, :3].T + R[:3, 3]
+        pb = B["pos"]
+        Ri = np.linalg.inv(R)
+        pa = near(pa[np.all((pa >= lo) & (pa <= hi), axis=1)], o)
+        pb = near(pb[np.all((pb >= lo) & (pb <= hi), axis=1)] @ Ri[:3, :3].T + Ri[:3, 3], m)
+        d = np.concatenate([_signed(B["dist"], pa), _signed(A["dist"], pb)])
+        if not len(d):
+            cache[key] = res = (0.0, margin)
+        else:
+            low = float(d.min())
+            cache[key] = res = (max(0.0, -low), max(0.0, low))
+        return res
+
+    def overlap(m, o, ma, mb):
+        """Schnittmenge der B-Rep-Koerper: (Volumen, Dicke). Die Dicke 2 V / Flaeche ist bei einem flachen Span an einer
+        Beruehrflaeche die Eindringtiefe, sie unterscheidet Rechenrauschen von echter Ueberschneidung besser als das Volumen."""
+        key = (m, o, np.round(ma[:3], 5).tobytes(), np.round(mb[:3], 5).tobytes())
+        if key not in volumes:
+            sa = meshes[m]["shape"].moved(_location(ma)) if ma is not eye else meshes[m]["shape"]
+            sb = meshes[o]["shape"].moved(_location(mb)) if mb is not eye else meshes[o]["shape"]
+            try:
+                common = sa.intersect(sb)
+                vol, area = common.Volume(), common.Area()
+                volumes[key] = (vol, 2 * vol / area if area > 1e-9 else 0.0)
+            except Exception:
+                volumes[key] = (float("nan"), float("nan"))
+        return volumes[key]
+
+    def judge(m, o, R, ma, mb, rest):
+        """("Kollision" | "zu nah" | None, Messwerte) fuer ein Paar in einer Lage. rest: kleinster Abstand in der Lage im
+        Modell (0 bei gewollter Beruehrung). Gemeldet wird nur, was in der Bewegung schlechter wird als dort."""
+        wanted = rest <= pen
+        r = measure(m, o, R)
+        if r is None:
+            return None, None
+        depth, dist = r
+        hit = dict(distance=round(dist, 4), depth=round(depth, 4))
+        if depth > pen:
+            return "Kollision", hit
+        if dist <= pen and not wanted:
+            # Beruehrung oder flaches Eindringen, keine Ecke liegt tief im anderen Teil: die B-Rep-Koerper entscheiden
+            vol, thick = overlap(m, o, ma, mb)
+            if math.isnan(vol) or (vol > VOL_MIN and thick > pen):
+                hit["volume"] = None if math.isnan(vol) else round(vol, 4)
+                hit["depth"] = round(max(depth, 0.0 if math.isnan(thick) else thick), 4)
+                return "Kollision", hit
+        # Wie bei soma analyze: Werte innerhalb der Genauigkeit um den Grenzwert gelten als genau auf dem Grenzwert
+        if gap > 0 and dist < gap - pen and dist < rest - pen:
+            return "zu nah", hit
+        return None, hit
+
+    # Lage im Modell: Beruehrung und Spiel dort sind so konstruiert, eine Kollision dort meldet die Pruefung als schon vorhanden
+    rest, at_rest = {}, {}
+    for m, o in pairs:
+        kind, hit = judge(m, o, eye, eye, eye, math.inf)
+        at_rest[(m, o)] = kind if kind == "Kollision" else None
+        rest[(m, o)] = math.inf if hit is None or kind == "Kollision" else hit["distance"]
+    progress = Progress("soma anim check", len(times), "Zeitpunkten")
     found = {}
     for t in times:
         poses = a.poses(t)
-        locs = {}
         for m, o in pairs:
             ma, mb = poses.get(m, eye), poses.get(o, eye)
-            ca, cb = (ma @ corners[m].T).T[:, :3], (mb @ corners[o].T).T[:, :3]
-            lo, hi = np.maximum(ca.min(0), cb.min(0)), np.minimum(ca.max(0), cb.max(0))
-            if np.any(lo - hi > gap + 1e-6):
-                continue
-            for n, mm in ((m, ma), (o, mb)):
-                if n not in locs:
-                    locs[n] = shapes[n].moved(_location(mm)) if mm is not eye else shapes[n]
-            sa, sb = locs[m], locs[o]
-            dist = BRepExtrema_DistShapeShape(sa.wrapped, sb.wrapped)
-            d = dist.Value() if dist.IsDone() else float("nan")
-            vol = 0.0
-            if d <= 1e-6:
-                try:
-                    vol = sa.intersect(sb).Volume()
-                except Exception:
-                    vol = float("nan")
-            if vol > 1e-3 or (gap > 0 and d < gap) or math.isnan(vol):
-                found.setdefault((m, o), []).append(dict(t=t, distance=round(d, 4), volume=round(vol, 4)))
+            kind, hit = judge(m, o, np.linalg.inv(mb) @ ma, ma, mb, rest[(m, o)])
+            if kind:
+                found.setdefault((m, o), []).append(dict(t=t, kind=kind, **hit))
+        progress.step()
+    progress.finish()
+    index = {t: i for i, t in enumerate(times)}
     out = []
     for (m, o), hits in found.items():
         ranges, cur = [], None
         for h in hits:
-            kind = "Kollision" if h["volume"] > 1e-3 or math.isnan(h["volume"]) else "zu nah"
-            if cur and cur["kind"] == kind and abs(times.index(h["t"]) - times.index(cur["end"])) == 1:
+            if cur and cur["kind"] == h["kind"] and index[h["t"]] - index[cur["end"]] == 1:
                 cur["end"] = h["t"]
-                cur["volume"] = max(cur["volume"], h["volume"])
+                cur["depth"] = max(cur["depth"], h["depth"])
                 cur["distance"] = min(cur["distance"], h["distance"])
+                if h.get("volume") is not None:
+                    cur["volume"] = max(cur.get("volume") or 0.0, h["volume"])
             else:
-                cur = dict(kind=kind, start=h["t"], end=h["t"], volume=h["volume"], distance=h["distance"])
+                cur = dict(kind=h["kind"], start=h["t"], end=h["t"], depth=h["depth"], distance=h["distance"], volume=h.get("volume"))
                 ranges.append(cur)
-        out.append(dict(a=m, b=o, atRest=hits[0]["t"] == 0, ranges=ranges))
-    res = dict(version=1, id=entry["id"], name=a.name, step=step, gap=gap, checked=time.time(), samples=len(times), pairs=out)
+        out.append(dict(a=m, b=o, atRest=at_rest[(m, o)] is not None and any(r["kind"] == at_rest[(m, o)] for r in ranges),
+                        ranges=ranges))
+    res = dict(version=2, id=entry["id"], name=a.name, step=step, gap=gap, tolerance=pen, checked=time.time(),
+               samples=len(times), seconds=round(time.perf_counter() - t_start, 1), pairs=out,
+               contacts=[[m, o] for m, o in pairs if rest[(m, o)] <= pen],
+               clearances=[[m, o, round(rest[(m, o)], 3)] for m, o in pairs if pen < rest[(m, o)] < gap - pen])
     (root / OUT_DIR / f"{entry['id']}.check.json").write_text(json.dumps(res, indent=1, ensure_ascii=False), encoding="utf-8")
     return res
 
@@ -545,14 +752,27 @@ def read_check(root, entry):
 
 
 def check_text(res):
-    head = f"Kollisionen (Schritt {res['step']:g} s, {res['samples']} Zeitpunkte" + (f", Mindestabstand {res['gap']:g} mm" if res["gap"] else "") + "):"
-    if not res["pairs"]:
-        return head + " keine"
-    lines = [head]
+    tol = res.get("tolerance")
+    head = (f"Kollisionen (Schritt {res['step']:g} s, {res['samples']} Zeitpunkte" + (f", Mindestabstand {res['gap']:g} mm" if res["gap"] else "")
+            + (f", genau auf {tol:g} mm" if tol else "") + "):")
+    lines = [head + ("" if res["pairs"] else " keine")]
     for p in res["pairs"]:
-        note = " (schon in der Lage im Modell)" if p["atRest"] else ""
+        note = " (auch in der Lage im Modell)" if p["atRest"] else ""
         for r in p["ranges"]:
             span = f"{_t(r['start'])}-{_t(r['end'])} s" if r["end"] > r["start"] else f"{_t(r['start'])} s"
-            val = f"Ueberschneidung bis {r['volume']:.3f} mm3" if r["kind"] == "Kollision" else f"Abstand bis {r['distance']:.3f} mm"
+            if r["kind"] != "Kollision":
+                val = f"Abstand bis {r['distance']:.3f} mm"
+            elif r.get("depth"):
+                val = f"bis {r['depth']:.2f} mm tief" + (f", Ueberschneidung {r['volume']:.3f} mm3" if r.get("volume") else "")
+            else:
+                val = f"Ueberschneidung bis {r['volume']:.3f} mm3" if r.get("volume") else "Oberflaechen schneiden sich"
             lines.append(f"  {span:<16} {p['a']} / {p['b']}: {r['kind']}, {val}{note}")
+    contacts = res.get("contacts") or []
+    if contacts:
+        names = ", ".join(f"{m} / {o}" for m, o in contacts[:6]) + (f" und {len(contacts) - 6} weitere" if len(contacts) > 6 else "")
+        lines.append(f"Beruehren sich schon im Modell (gewollt, gemeldet wird nur tieferes Eindringen): {names}")
+    near = res.get("clearances") or []
+    if near:
+        names = ", ".join(f"{m} / {o} {d:.2f} mm" for m, o, d in near[:6]) + (f" und {len(near) - 6} weitere" if len(near) > 6 else "")
+        lines.append(f"Schon im Modell naeher als {res['gap']:g} mm (gemeldet nur, wenn es enger wird): {names}")
     return "\n".join(lines)

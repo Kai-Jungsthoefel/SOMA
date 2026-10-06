@@ -114,9 +114,10 @@ try {
   fs.writeFileSync(path.join(dir, 'animations', 'falsch.py'), FALSCH);
   await waitFor('zweite Animation', () => window.soma.anim.list().then((x) => x.animations.length === 2 && !x.building), 90000);
   r = soma(['anim', 'check', 'Deckel falsch', '--step', '0.25']);
-  check('soma anim check meldet die Kollision Lid / Body mit Zeit und Volumen (Exit 1)', r.status === 1 && /Lid \/ Body: Kollision, Ueberschneidung bis \d/.test(r.stdout), r.stdout + r.stderr);
+  check('soma anim check meldet die Kollision Lid / Body mit Zeit und Tiefe (Exit 1)', r.status === 1 && /Lid \/ Body: Kollision, bis \d+\.\d\d mm tief/.test(r.stdout), r.stdout + r.stderr);
   r = soma(['anim', 'check', 'Deckel öffnen', '--step', '0.5']);
-  check('Richtige Drehachse: keine Kollision (Exit 0), Berührung in der Lage im Modell nur mit Abstand als Hinweis', r.status === 0 && !r.stdout.includes('Kollision,'), r.stdout);
+  check('Richtige Drehachse: keine Kollision (Exit 0), der aufliegende Deckel gilt als gewollte Berührung', r.status === 0 && !r.stdout.includes('Kollision,')
+    && /Beruehren sich schon im Modell[^\n]*Lid \/ Body/.test(r.stdout), r.stdout);
   r = soma(['anim', 'info', 'Deckel falsch']);
   check('Ergebnis der Prüfung steht danach in soma anim info', r.stdout.includes('Lid / Body: Kollision'), r.stdout.slice(-300));
 
@@ -312,6 +313,53 @@ add_part("Drawer", drawer)
   check('Beispiel aus dem Skill „Animation und Video“ baut ohne Fehler, Ablauf mit Titel, Gelenk und Schublade', !l.errors.length
     && r.status === 0 && r.stdout.includes('Lid: 0 -> -110 Grad') && r.stdout.includes('Drawer: 0 -> 60 mm') && r.stdout.includes('Titel: Storage box'),
     JSON.stringify(l.errors) + r.stdout.slice(0, 200) + r.stderr);
+
+  // 13) Ohne App, eigener Ordner (E64): Grenzwert mit Netzgenauigkeit, Teil vor Gruppe, Problemstellen, bessere Druckrichtung,
+  // Schleife kurzer Schritte im Ablauf, Modell läuft für eine Animation nur einmal
+  const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-anim-plain-'));
+  fs.writeFileSync(path.join(plain, 'model.py'), `import cadquery as cq
+from soma import add_part
+from soma.fasteners import Screw
+
+with open("laeufe.txt", "a") as f:
+    f.write("x")
+PILZ_X = 60.0
+# Teil und Gruppe heissen gleich, die Fase unten hat genau 45 Grad
+box = cq.Workplane("XY").box(20, 20, 20, centered=(True, True, False)).edges("<Z and <X").chamfer(5)
+add_part("Gehäuse", box, group="Gehäuse")
+add_part("Schraube", Screw("ISO 4762", "M3x10", at=(30, 0, 5), direction="-X"), group="Gehäuse/Normteile")
+# Pilz: Der Hut steht nach +Z ueber, kopfueber gedruckt gar nicht
+pilz = cq.Workplane("XY").box(8, 8, 15, centered=(True, True, False)).union(
+    cq.Workplane("XY").box(24, 24, 4, centered=(True, True, False)).translate((0, 0, 15))).translate((PILZ_X, 0, 0))
+add_part("Pilz", pilz)
+`);
+  fs.mkdirSync(path.join(plain, 'animations'));
+  fs.writeFileSync(path.join(plain, 'animations', 'schleife.py'), `from soma.anim import Animation
+from model import PILZ_X
+
+a = Animation("Schleife")
+pilz = a.slider("Pilz", (0, 0, 1))
+for i in range(12):
+    a.play(pilz.to(i + 1), run_time=0.1, ease="linear")
+a.wait(0.5)
+`);
+  const plainSoma = (args) => soma(args, { cwd: plain });
+  r = plainSoma(['analyze', 'overhang']);
+  check('Fase mit genau 45°: nicht kritisch, als „genau am Grenzwert“ genannt', r.status === 0 && /Gehäuse: [^\n]*nichts über 45\.0°, 1\.41 cm² genau am Grenzwert/.test(r.stdout), r.stdout + r.stderr);
+  check('Pilz: Problemstelle mit Fläche und Größe, Hinweis auf --up -z', /Pilz: [^\n]*5\.12 cm² über 45\.0°, mit --up -z nur 0\.00 cm²/.test(r.stdout)
+    && /\n {4}512\.0 mm² in 24\.0 x 24\.0 mm, bis 90\.0° bei/.test(r.stdout), r.stdout);
+  r = plainSoma(['analyze', 'overhang', '--parts', 'Gehäuse', '--name', 'teil']);
+  const r2 = plainSoma(['analyze', 'overhang', '--parts', 'Gehäuse/', '--name', 'gruppe']);
+  check('--parts: Bauteil vor gleichnamiger Gruppe mit Hinweis, „Gehäuse/“ meint die Gruppe', r.status === 0 && !r.stdout.includes('Schraube:')
+    && r.stdout.includes("Hinweis: 'Gehäuse' ist Bauteil und Gruppe") && r2.status === 0 && r2.stdout.includes('Schraube:') && !r2.stdout.includes('Hinweis'), r.stdout + r2.stdout);
+  r = plainSoma(['anim', 'build']);
+  check('Animation importiert aus model.py, das Modell läuft trotzdem nur einmal', r.status === 0 && fs.readFileSync(path.join(plain, 'laeufe.txt'), 'utf8') === 'xxxx',
+    fs.readFileSync(path.join(plain, 'laeufe.txt'), 'utf8') + r.stderr);
+  r = plainSoma(['anim', 'info', 'Schleife']);
+  check('soma anim info: zwölf kurze Schritte als eine Zeile', r.status === 0 && r.stdout.includes('Pilz: 0 -> 12 mm (12 Schritte)') && !r.stdout.includes('Pilz: 1 -> 2'), r.stdout);
+  r = plainSoma(['anim', 'check', 'Schleife']);
+  check('soma anim check: frei, Exit 0', r.status === 0 && r.stdout.includes('Zeitpunkte') && r.stdout.includes('keine'), r.stdout + r.stderr);
+  cleanup(plain);
 } catch (e) {
   t.fail();
   console.log('ABBRUCH:', e);

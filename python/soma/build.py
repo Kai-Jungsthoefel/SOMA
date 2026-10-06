@@ -70,6 +70,11 @@ def _is_inside(path, root):
         return False
 
 
+# Einstiegspunkt und Namensraum des letzten erfolgreichen run_model(). Animationen importieren daraus (`from model import
+# ...`), statt das ganze Modell ein zweites Mal auszufuehren (animrun._run_file).
+LAST_RUN = None
+
+
 def run_model(root, entry=None):
     """Fuehrt den Einstiegspunkt aus und liefert die registrierten Bauteile."""
     root = Path(root).resolve()
@@ -79,12 +84,14 @@ def run_model(root, entry=None):
         raise BuildError(
             f"Einstiegspunkt {entry!r} nicht gefunden. Lege {DEFAULT_ENTRY} an oder setze \"entry\" in .soma/project.json.",
             kind="EntryMissing")
+    global LAST_RUN
     registry.REGISTRY.clear()
+    LAST_RUN = None
     old_cwd = os.getcwd()
     os.chdir(root)
     sys.path.insert(0, str(root))
     try:
-        runpy.run_path(str(script), run_name="__main__")
+        LAST_RUN = (script, runpy.run_path(str(script), run_name="__main__"))
     except BuildError:
         raise
     except SystemExit as e:

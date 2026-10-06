@@ -104,7 +104,8 @@ def cmd_export(args):
         path = out_dir / f"{p['step_name']}.{fmt}"
         try:
             _export_one(p["shape"], fmt, path)
-            print(f"exportiert: {path.relative_to(root).as_posix()}")
+            # Im Projekt relativ (so liest es der Agent), ein Ziel ausserhalb (Speicherdialog der App) absolut
+            print(f"exportiert: {path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()}")
         except Exception as e:
             print(f"Export von {p['name']!r} als {fmt} fehlgeschlagen: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
@@ -258,7 +259,7 @@ def main(argv=None):
     g.add_argument("part", nargs="?", help="Name des Bauteils")
     g.add_argument("--all", action="store_true", help="alle Bauteile (ohne Referenz- und Zukaufteile)")
     e.add_argument("--format", required=True, help=", ".join(EXPORT_FORMATS))
-    e.add_argument("--out", help="Zielordner relativ zum Projekt (Standard: exports)")
+    e.add_argument("--out", help="Zielordner, relativ zum Projekt oder absolut (Standard: exports)")
     e.add_argument("--project", default=".")
     e.set_defaults(func=cmd_export)
 
@@ -279,7 +280,7 @@ def main(argv=None):
 
     z = sub.add_parser("analyze", help="Auswertung: overhang (3D-Druck), thickness (Wandstaerke), clearance (Spalt zu anderen Teilen)")
     z.add_argument("kind", choices=["overhang", "thickness", "clearance", "list"])
-    z.add_argument("--parts", help="Bauteile oder Gruppen, mit Komma getrennt (Standard: alle eigenen Teile)")
+    z.add_argument("--parts", help="Bauteile oder Gruppen, mit Komma getrennt, \"Gruppe/\" immer die Gruppe (Standard: alle eigenen Teile)")
     z.add_argument("--threshold", type=float, help="Grenzwert (Standard: overhang 45 Grad, thickness 1.2 mm, clearance 0.5 mm)")
     z.add_argument("--up", default="z", help="overhang: Druckrichtung (z, -z, x, -x, y, -y)")
     z.add_argument("--name", help="Name des Ergebnisses (Standard: wie die Auswertung)")

@@ -231,6 +231,8 @@ class _Action:
 class Joint:
     """Bauteile, die sich gemeinsam bewegen. Entsteht ueber Animation.hinge(), slider() oder part()."""
 
+    unit = None  # Einheit des Gelenkwerts (Grad, mm), None bei frei bewegten Teilen
+
     def __init__(self, anim, kind, parts, parent, value):
         self.anim, self.kind, self.parts, self.parent = anim, kind, parts, parent
         self.value = value            # Stand am Ende der bisher beschriebenen Zeitleiste
@@ -259,6 +261,8 @@ class Joint:
 
 
 class _Hinge(Joint):
+    unit = "Grad"
+
     def __init__(self, anim, parts, p1, axis, parent, angle):
         super().__init__(anim, "hinge", parts, parent, angle)
         self.p1, self.axis = p1, axis
@@ -278,6 +282,8 @@ class _Hinge(Joint):
 
 
 class _Slider(Joint):
+    unit = "mm"
+
     def __init__(self, anim, parts, direction, parent, position):
         super().__init__(anim, "slider", parts, parent, position)
         self.direction = direction
@@ -449,8 +455,10 @@ class Animation:
 
     # -- Zeitleiste --
 
-    def _step(self, t0, t1, text):
-        self.steps.append(dict(start=round(t0, 4), end=round(t1, 4), text=text))
+    def _step(self, t0, t1, text, **move):
+        """Eintrag im Ablauf. move (bei Bewegungen): key (Gelenk oder Kamera), label, unit, v0, v1 bzw. orbit, tilt.
+        Damit fasst `soma anim info` viele kurze Schritte desselben Gelenks zu einer Zeile zusammen."""
+        self.steps.append(dict(start=round(t0, 4), end=round(t1, 4), text=text, **move))
 
     def play(self, *actions, run_time=1.0, ease="smooth"):
         """Bewegungen gleichzeitig ablaufen lassen, dann geht die Zeit um run_time (Sekunden) weiter.
@@ -470,14 +478,18 @@ class Animation:
             if isinstance(act.target, Camera):
                 kind, spec = act.make
                 act.target.ops.append(dict(t0=t0, t1=t1, kind=kind, spec=spec, ease=f))
-                self._step(t0, t1, act.describe(None))
+                self._step(t0, t1, act.describe(None), key="camera",
+                           **(dict(orbit=spec["orbit"], tilt=spec["tilt"]) if kind == "orbit" else {}))
                 continue
             j = act.target
             if j.anim is not self:
                 raise ValueError("Diese Bewegung gehoert zu einer anderen Animation")
             func, end = act.make(j.value)
             j.segments.append((t0, t1, func, f))
-            self._step(t0, t1, act.describe(j.value))
+            move = dict(key=f"joint{self.joints.index(j)}", label=j.label)
+            if j.unit:
+                move.update(unit=j.unit, v0=round(float(j.value), 4), v1=round(float(end), 4))
+            self._step(t0, t1, act.describe(j.value), **move)
             j.value = end
         self.time = t1
 

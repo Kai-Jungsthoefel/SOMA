@@ -35,6 +35,13 @@ def near(a, b, tol=0.01):
 def overlap(a, b):
     return a.intersect(b).Volume()
 
+def raises(fn):
+    try:
+        fn()
+    except ValueError:
+        return True
+    return False
+
 # 1) Jede Norm baut einen gueltigen Koerper mit den Massen der Tabelle
 rows = []
 ok = True
@@ -160,6 +167,20 @@ out("add_part: Normteile ohne Angabe role \"hardware\" mit eigener Farbe, role= 
     and near(r["Einsatz"]["color"][:3], (0.80, 0.63, 0.32)) and isinstance(r["Schraube"]["shape"], cq.Shape),
     {k: v["role"] for k, v in r.items()})
 registry.REGISTRY.clear()
+
+# 10) Bewegen wie eine CadQuery-Form: Kopie mit neuer Lage, Bohrung wandert mit, das Original bleibt
+s0 = Screw("ISO 4762", "M3x16", at=(10, 0, 20))
+sr = s0.rotate((0, 0, 0), (0, 1, 0), 90)
+sref = Screw("ISO 4762", "M3x16", at=(20, 0, -10), direction="-X")
+h1, h2 = sr.clearance_hole(), sref.clearance_hole()
+out("rotate(): Auflage, Richtung und Durchgangsloch wie neu angelegt, Original unverändert",
+    near(sr.seat, (20, 0, -10)) and near(sr.direction, (-1, 0, 0)) and h1.cut(h2).Volume() + h2.cut(h1).Volume() < 1e-6
+    and near(s0.seat, (10, 0, 20)) and sr.designation == "ISO 4762 M3x16", (sr.seat, sr.direction))
+n0 = Nut("ISO 4032", "M3", at=(0, 0, 0))
+n30 = Nut("ISO 4032", "M3", at=(0, 0, 0), angle=30)
+nr = n0.rotate((0, 0, 0), (0, 0, 1), 30).translate((0, 0, 5))
+out("rotate() dreht den Sechskant mit, translate() verschiebt, moved() verlangt eine Location",
+    nr.shape.translate((0, 0, -5)).cut(n30.shape).Volume() < 1e-6 and near(nr.seat, (0, 0, 5)) and raises(lambda: n0.moved((1, 2, 3))), nr.seat)
 `;
 
 const MODEL = `import cadquery as cq
@@ -200,7 +221,7 @@ try {
   const lib = py(['-c', LIB_CHECKS]);
   const lines = lib.stdout.split(/\r?\n/).filter((l) => l.startsWith('['));
   for (const l of lines) { const [label, ok, detail] = JSON.parse(l); check(label, ok, ok ? '' : detail); }
-  check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 26, lib.status !== 0 ? lib.stderr.slice(-300) : String(lines.length));
+  check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 28, lib.status !== 0 ? lib.stderr.slice(-300) : String(lines.length));
 
   // Der Skill „Normteile“ erklärt dem Agenten die Bibliothek: sein Codeblock und die genannten Aufrufe müssen laufen
   const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'normteile.md'), 'utf8');
