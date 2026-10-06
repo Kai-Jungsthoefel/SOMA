@@ -516,11 +516,11 @@ const resultTool = new ResultTool({
   card: $('result-card'), close: $<HTMLButtonElement>('btn-result-close'), select: $<HTMLSelectElement>('result-select'),
   legend: $('result-legend'), summary: $('result-summary'), probe: $('result-probe'), hint: $('result-hint'),
   rerun: $<HTMLButtonElement>('btn-result-rerun'), agent: $<HTMLButtonElement>('btn-result-agent'), viewerEl: $('viewer'),
+  femRow: $('result-fem'), deform: $<HTMLSelectElement>('result-deform'), bcs: $<HTMLButtonElement>('btn-result-bcs'),
 }, {
   layer: resultLayer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
   beforeOn: () => endOthers('result'), insert: (t) => insertToAgent(t), toast,
   changed: () => renderViewSwitch(),
-  femRow: $('result-fem'), deform: $<HTMLSelectElement>('result-deform'), bcs: $<HTMLButtonElement>('btn-result-bcs'),
 });
 // Messen und Explosion schalten die beiden aus, bevor sie selbst anfangen (Lauscher in der Erfassungsphase laufen vor denen
 // der Werkzeuge): Beide rechnen mit der Einbaulage
