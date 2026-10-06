@@ -222,6 +222,48 @@ try {
   check('animations/*.py: Animation, kein Model-Build. model.py, parts/, inputs/ bauen das Modell', affectsAnimation('animations/deckel.py') && affectsAnimation('animations\\x.py')
     && !affectsBuild('animations/deckel.py') && affectsBuild('model.py') && affectsBuild('parts/lid.py') && affectsBuild('inputs/a.step')
     && !affectsAnimation('animations/sub/x.py') && !affectsAnimation('model.py') && !affectsAnimation('animations/notes.md'));
+
+  // Zwischenergebnisse der App (Ergebnisse von soma analyze bis 70 MB) nicht in Snapshot und ZIP, auch in älteren
+  // Projekten ohne die Einträge in der .gitignore. dugite (und die CommonJS-Pakete für ZIP) bleiben extern, das Bündel
+  // liegt deshalb in app/ (dort findet Node node_modules).
+  const gz = path.join(APP, 'test', `.unit-gitzip-${process.pid}.mjs`);
+  await build({ stdin: { contents: "export { GitRepo } from './src/main/git.ts'; export { saveProjectZip, readZipTexts } from './src/main/zip.ts';", resolveDir: APP, loader: 'ts' },
+    outfile: gz, bundle: true, platform: 'node', format: 'esm', external: ['dugite', 'yazl', 'yauzl'], logLevel: 'silent' });
+  try {
+    const { GitRepo, saveProjectZip, readZipTexts } = await import(pathToFileURL(gz).href);
+    const old = path.join(tmp, 'altprojekt');
+    const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(old, rel)), { recursive: true }); fs.writeFileSync(path.join(old, rel), text); };
+    put('model.py', 'x = 1\n');
+    put('.gitignore', '__pycache__/\n'); // Stand vor E58
+    const repo = new GitRepo(old);
+    await repo.init('Neues Modell angelegt');
+    // So hat es der Agent in älteren Projekten mit `git add -A` committet
+    put('.soma/results/thickness.glb', 'GROSS');
+    put('renders/ansicht-iso.png', 'PNG');
+    await repo.run(['add', '-A'], true);
+    await repo.run(['commit', '-q', '-m', 'Agent'], true);
+    await repo.ensureIgnored();
+    await repo.ensureIgnored();
+    const excl = fs.readFileSync(path.join(old, '.git', 'info', 'exclude'), 'utf8');
+    check('Ältere Projekte: .git/info/exclude nennt .soma/results/, .soma/anim/ und renders/ (einmal), die .gitignore bleibt',
+      excl.split('\n').filter((l) => l === '.soma/results/').length === 1 && excl.includes('.soma/anim/') && excl.includes('renders/')
+      && fs.readFileSync(path.join(old, '.gitignore'), 'utf8') === '__pycache__/\n', excl.slice(-160));
+    put('.soma/results/thickness.glb', 'NEU UND GROSS');
+    put('.soma/anim/deckel.glb', 'ANIM');
+    check('Neues Ergebnis zählt nicht als ungespeicherte Änderung', !(await repo.status()).dirty);
+    put('model.py', 'x = 2\n');
+    await repo.snapshot('Automatischer Snapshot beim Speichern');
+    const tracked = (await repo.run(['ls-files'])).out;
+    check('Snapshot nimmt Ergebnis und Bilder aus dem Verlauf, die Dateien bleiben', tracked.includes('model.py') && !tracked.includes('.soma/results')
+      && !tracked.includes('renders/') && fs.existsSync(path.join(old, '.soma', 'results', 'thickness.glb')), tracked);
+    const zip = path.join(tmp, 'altprojekt.zip');
+    await saveProjectZip(old, zip, { savedAt: '', head: null, id: 'x', name: 'x' });
+    const inZip = await readZipTexts(zip, ['model.py', '.soma/results/thickness.glb', '.soma/anim/deckel.glb', 'renders/ansicht-iso.png']);
+    check('ZIP: ohne .soma/results und .soma/anim, mit Bildern und Modell', inZip['model.py'] === 'x = 2\n' && inZip['.soma/results/thickness.glb'] === null
+      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/ansicht-iso.png'] === 'PNG', JSON.stringify(inZip));
+  } finally {
+    fs.rmSync(gz, { force: true });
+  }
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

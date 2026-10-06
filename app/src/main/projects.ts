@@ -86,6 +86,7 @@ export class ProjectController {
     const builds = new BuildManager(dir);
     const terminals = new TerminalManager(this.wc, dir);
     const git = new GitRepo(dir);
+    void git.ensureIgnored(); // ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten
     builds.on('status', (st) => this.send('build:status', st));
     const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
     const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'),

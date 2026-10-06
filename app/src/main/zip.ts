@@ -11,8 +11,13 @@ export const ZIP_INFO_PATH = '.soma/zip-info.json';
 /** Wird nie gepackt: Umgebungen und Caches (Umgebung wird aus requirements.txt neu gebaut, Cache neu erzeugt). */
 const SKIP_DIRS = new Set(['.venv', 'venv', 'env', '__pycache__', 'node_modules']);
 const SKIP_FILES = new Set(['.soma/model.glb', '.soma/model.map.json', '.soma/build.json']);
-/** Ganze Ordner, die nie gepackt werden (Pfad relativ zum Projekt): die Geometrie für das Messen entsteht beim Bauen neu. */
-const SKIP_PATHS = new Set(['.soma/geometry']);
+/**
+ * Ganze Ordner, die nie gepackt werden (Pfad relativ zum Projekt): die Geometrie für das Messen entsteht beim Bauen neu,
+ * Animationen baut die App beim Öffnen neu, Ergebnisse von soma analyze (bis zu 70 MB je Auswertung) rechnet man neu.
+ */
+const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/results']);
+/** Schon gepackt (Git-Objekte sind zlib, Bilder und Videos komprimiert): nur ablegen, nochmal Deflate kostet nur Zeit. */
+const STORED = /^\.git\/objects\/|\.(png|jpe?g|webp|mp4|webm|zip|gz|7z|pack)$/i;
 const MAX_UNPACKED = 2 * 1024 ** 3;
 
 function collect(root: string): string[] {
@@ -34,7 +39,7 @@ function collect(root: string): string[] {
 export async function saveProjectZip(dir: string, zipPath: string, info: ZipInfo): Promise<{ files: number; bytes: number }> {
   const files = collect(dir);
   const zip = new yazl.ZipFile();
-  for (const rel of files) if (rel !== ZIP_INFO_PATH) zip.addFile(path.join(dir, rel), rel);
+  for (const rel of files) if (rel !== ZIP_INFO_PATH) zip.addFile(path.join(dir, rel), rel, { compress: !STORED.test(rel) });
   zip.addBuffer(Buffer.from(JSON.stringify(info, null, 2)), ZIP_INFO_PATH);
   zip.end();
   const tmp = zipPath + '.part';

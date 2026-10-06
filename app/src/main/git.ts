@@ -17,11 +17,17 @@ const APP_SUBJECT = /^(Neues Modell angelegt|Automatischer Snapshot beim Speiche
 /** Gilt für jeden Aufruf: UTF-8-Pfade lesbar, keine Zeilenenden-Umwandlung (ZIPs wandern zwischen Systemen). */
 const COMMON = ['-c', 'core.quotepath=false', '-c', 'core.autocrlf=false'];
 /**
- * `output/` zählt nicht als Änderung: STEP-Dateien sind nicht byte-stabil (Zeitstempel, teils Reihenfolge).
- * `.soma/geometry/` (Geometrie für das Messen) ist ein Zwischenergebnis. Ältere Projekte haben es noch nicht in der
- * .gitignore, deshalb klammert die App es selbst aus, beim Status und beim Hinzufügen (siehe addAll).
+ * Zwischenergebnisse der App, die nie in den Verlauf gehören: Geometrie für das Messen, gebaute Animationen, Ergebnisse
+ * von soma analyze (bis zu 70 MB je Auswertung) und Bilder und Videos von soma render. Ältere Projekte haben sie noch
+ * nicht in der .gitignore, deshalb klammert die App sie selbst aus, beim Status und beim Hinzufügen (siehe addAll), und
+ * trägt sie beim Öffnen in .git/info/exclude ein, damit auch die Commits des Agenten sie nicht aufnehmen (ensureIgnored).
  */
-const NOT_OUTPUT = ['--', '.', ':(exclude)output', ':(exclude).soma/geometry'];
+const APP_CACHES = ['.soma/geometry', '.soma/anim', '.soma/results', 'renders'];
+/** `output/` zählt nicht als Änderung: STEP-Dateien sind nicht byte-stabil (Zeitstempel, teils Reihenfolge). */
+const NOT_OUTPUT = ['--', '.', ':(exclude)output', ...APP_CACHES.map((p) => `:(exclude)${p}`)];
+/** Was die Vorlage in der .gitignore hat (resources/template/.gitignore), für ältere Projekte in .git/info/exclude. */
+const APP_IGNORES = ['.soma/model.glb', '.soma/model.map.json', '.soma/build.json', '.soma/zip-info.json', '.soma/feedback/',
+  ...APP_CACHES.map((p) => `${p}/`)];
 const HASH = /^[0-9a-f]{7,40}$/;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -52,12 +58,31 @@ export class GitRepo {
   }
 
   /**
-   * Alles vormerken außer `.soma/geometry/`. Ein Ausschluss im Pfad (`:(exclude)…`) ginge nicht: Steht der Ordner in
-   * der .gitignore (neue Projekte), bricht `git add` dann mit Fehler ab. Deshalb danach aus dem Index nehmen, was dort liegt.
+   * Alles vormerken außer den Zwischenergebnissen (APP_CACHES). Ein Ausschluss im Pfad (`:(exclude)…`) ginge nicht: Steht
+   * der Ordner in der .gitignore (neue Projekte), bricht `git add` dann mit Fehler ab. Deshalb danach aus dem Index nehmen,
+   * was dort liegt. Hat ein älteres Projekt sie schon im Verlauf, nimmt der nächste Snapshot sie heraus (die Dateien bleiben).
    */
   private async addAll(): Promise<void> {
     await this.mustRun(['add', '-A'], true);
-    await this.mustRun(['rm', '-r', '--cached', '--ignore-unmatch', '-q', '--', '.soma/geometry'], true);
+    await this.mustRun(['rm', '-r', '--cached', '--ignore-unmatch', '-q', '--', ...APP_CACHES], true);
+  }
+
+  /**
+   * Trägt die Zwischenergebnisse in .git/info/exclude ein, soweit sie dort fehlen. Gilt auch für `git add -A` des Agenten
+   * und ändert keine Datei des Projekts (die .gitignore gehört dem Nutzer). Nur eine Erleichterung: Fehler stören nichts.
+   */
+  async ensureIgnored(): Promise<void> {
+    try {
+      if (!(await this.isRepo())) return;
+      const file = path.join(this.dir, '.git', 'info', 'exclude');
+      const have = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+      const lines = new Set(have.split(/\r?\n/).map((l) => l.trim()));
+      const missing = APP_IGNORES.filter((p) => !lines.has(p));
+      if (!missing.length) return;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const head = have && !have.endsWith('\n') ? '\n' : '';
+      fs.appendFileSync(file, `${head}# SOMA: Zwischenergebnisse der App (neue Projekte haben sie in der .gitignore)\n${missing.join('\n')}\n`);
+    } catch { /* nächster Versuch beim nächsten Öffnen */ }
   }
 
   private async mustRun(args: string[], write = false): Promise<string> {
