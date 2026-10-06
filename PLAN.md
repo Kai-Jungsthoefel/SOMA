@@ -118,8 +118,8 @@ Das Paket `soma` liegt in der mitgelieferten **Basisumgebung**, nicht im Projekt
 | Phase | Funktionen |
 |---|---|
 | **Phase 1 (MVP)** | Navigation, Standardansichten, Darstellungsmodi (schattiert, Kanten, Drahtgitter, Transparenz), Ein-/Ausblenden über den Tree, Klick auf Bauteil → Codezeile, **Screenshot mit Markup** |
-| **Danach** | Messen (Punkt-zu-Punkt, Bounding-Box, exakte Werte, **umgesetzt**), Schnittansicht (wichtig für Gehäuse, **umgesetzt**), Versions-Schieber (umgesetzt in Schritt 2) |
-| **Später** | Volumen/Gewicht, Versionsvergleich, Explosionsansicht |
+| **Danach** | Messen (Punkt-zu-Punkt, Bounding-Box, exakte Werte, **umgesetzt**), Schnittansicht (wichtig für Gehäuse, **umgesetzt**), Versions-Schieber (umgesetzt in Schritt 2), Explosionsansicht (erste Stufe **umgesetzt**, E56) |
+| **Später** | Volumen/Gewicht, Versionsvergleich |
 
 Der Viewer zeigt auch **beliebige weitere STEP-Dateien** im Basismodus, ohne Mapping und Zusatzfunktionen. Standardanzeige ist immer das Hauptmodell.
 
@@ -267,6 +267,15 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 - **Technik:** eine Schnittebene von three.js für alle betroffenen Materialien, die Füllung über den Schablonenpuffer (Rückseiten zählen hoch, Vorderseiten herunter, wo etwas übrig bleibt, zeichnet eine Platte in der Ebene), die Kontur aus den Dreiecken des Netzes.
 - **Nebenbei behoben:** Ein nur lesbarer Reiter im Editor, dessen Datei gelöscht wurde, galt als Konflikt und blockierte das Speichern des Modells. Er schließt sich jetzt. Ein Konflikt erledigt sich auch, wenn die Datei wieder so ist wie zuletzt gelesen.
 
+*Explosion (vorgezogen aus „Später“, Wunsch des Nutzers, E56; 20 Prüfungen in `app/test/explode.mjs`):*
+
+- **Ablauf:** „Explosion“ im Viewer öffnet die Karte unten rechts, die Bauteile gleiten auf 50 % auseinander. Der Schieber stellt den Abstand ein (0 bis 100 %, 100 % ist das Doppelte des Starts). „Wege“ zeigt gestrichelte Linien von der Einbaulage zur aktuellen Lage, „Einpassen“ holt das größere Modell ins Bild. Schließen setzt das Modell gleitend wieder zusammen.
+- **Richtungen (erste Stufe, per Skript ohne KI):** Die Bauteile bilden einen Baum aus ihren Gruppen. Jedes Teil rückt von der Mitte seiner Gruppe weg (Mitte des Hüllquaders), jede Gruppe von der Mitte der Gruppe darüber, Gruppen weiter als Teile, damit sie als Gruppe erkennbar bleiben. Die Schritte addieren sich, ein Teil genau in der Mitte bleibt stehen. Normteile aus `soma.fasteners` bewegen sich nur entlang ihrer Achse aus dem Material heraus und um ihre Länge weiter, so kommen Schrauben aus der Bohrung statt seitlich durch die Wand. Eine Gruppe aus Normteilen mit gleicher Achse bewegt sich gemeinsam entlang der Achse. Referenzen bleiben stehen. Die Achse leitet `add_part` aus `direction` des Normteils ab, der Build legt sie als `axis` in die GLB-Metadaten.
+- **Grenzen:** Teile in anderen Teilen (Platine im Gehäuse) rücken nur von der Mitte weg und können dabei durch Wände fahren, verschränkte Teile haben keine gerade Richtung. Das löst erst die Demontage-Analyse (zweite Stufe: In welche Richtung lässt sich ein Teil kollisionsfrei herausziehen?).
+- **Klicks, Schnitt, Messen:** Auswahl und Hervorhebung arbeiten in der verschobenen Lage, die Hervorhebung wandert mit. Der angeklickte Punkt, den der Agent bekommt, steht in Einbaulage. Der Schnitt schneidet das auseinandergezogene Modell, sein Bereich folgt den Teilen, seine Karte rückt über die der Explosion. Gemessen wird nur in Einbaulage (die exakte Geometrie kennt keine Explosion): „Messen“ setzt das Modell sofort zusammen, „Explosion“ beendet das Messen.
+- **Für den Agenten:** Eine Markierung in der Explosion sagt dazu, dass die Teile nur zur Darstellung auseinandergezogen sind und nicht in Einbaulage stehen.
+- Die Explosion ändert nichts am Modell, bleibt über neue Builds und Vorschauen erhalten (die Richtungen werden neu bestimmt) und wird nicht gespeichert. Getestet unter Windows.
+
 *Skills (E17, E46, E55; 47 Prüfungen in `app/test/skills.mjs`, 14 Einheitentests):*
 
 - **Panel „Skills“** in der Leiste links: die mitgelieferten Skills mit Kurzbeschreibung, Umschalter für die Stufe und aufklappbar den Themen. Mitgeliefert sind 12 Skills in `app/resources/skills/` (siehe „Skill-Inhalte“ unten). Der Inhalt ist für den Agenten auf Englisch, Titel, Beschreibung und Themen für die Oberfläche auf Deutsch (im Kopf der Datei). Die CadQuery-Befehle darin (Kollisionsprüfung, Abstand, Senkungen) sind gegen die Basisumgebung geprüft.
@@ -309,7 +318,7 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 
 *Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
-**Danach:** Zukaufteile wie NEMA-17-Motoren und V-Slot-Profile (E48, Wunsch des Nutzers), Versions-Schieber, `soma check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, Explosionsansicht, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
+**Danach:** Zukaufteile wie NEMA-17-Motoren und V-Slot-Profile (E48, Wunsch des Nutzers), Versions-Schieber, `soma check` und Projekt-Check, MCP-Server, zweite Stufe der Explosionsansicht (Demontage-Analyse, E56). **Später:** Volumen/Gewicht, Versionsvergleich, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
 
 ## 11. Offene Punkte
 
@@ -374,6 +383,7 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - Normteile (E48): Schnittstelle auf Englisch (`Screw`, `Nut`, `Washer`, `HeatSetInsert`) wie der Rest von `soma`, Fehlermeldungen deutsch. Lage über Auflagepunkt und Richtung ins Material. Senkung = Kopf plus Spiel des gewählten Durchgangslochs, Tiefe genau die Kopfhöhe (nicht DIN 974, der Skill „Toleranzen“ nennt für Zylinderköpfe etwas größere Senkungen, mit `recess=` einstellbar). Kernloch aus der Spalte „Soft“ (Regelwerte). Einsätze: Standard ruthex, Bohrung 1 mm tiefer als der Einsatz. Farben Stahlgrau und Messing
 - Normteile: Alte DIN-Namen (DIN 912, DIN 933 …) sind ein Fehler mit Hinweis auf die ISO-Norm, weil manche Maße abweichen. Nur Regelgewinde. Muttern haben eine Bohrung im Nenndurchmesser (sie berühren den Schaft, überschneiden ihn nicht). Ein Einsatz ist dicker als seine Bohrung, Kollisionsprüfungen mit seinem Teil lässt der Agent aus (steht im Skill „Normteile“)
 - Rolle `hardware` (E48): Zukaufteile haben keinen eigenen Abschnitt im Bauteilbaum, sie unterscheiden sich durch Farbe und den Zusatz „(Zukaufteil)“ in der Auswahl. `soma export --all` nennt die Zahl der übersprungenen Teile
+- Explosionsansicht (E56): Start bei 50 % des Schiebers. Bei 100 % rücken Teile um das Doppelte, Gruppen um das 3,2-Fache des Abstands ihrer Mitte zur Mitte darüber. Referenzen bleiben stehen und zählen für die Mitten nicht mit, ausgeblendete Teile zählen mit (sonst spränge die Explosion beim Ausblenden). Wege sind anfangs an. Messen und Explosion schließen sich aus, statt im auseinandergezogenen Modell zu messen
 
 - Rolle `reference` und ihre Standardwerte (E34)
 - Hinweis beim ersten Start, dass der Agent mit den Rechten des Nutzers läuft (E29)

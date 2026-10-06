@@ -14,7 +14,7 @@ Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten
 
 | Pfad | Inhalt |
 |---|---|
-| `app/` | Electron-App. `src/main/` Hauptprozess (`projects.ts` Speichern/Öffnen/Verlauf/Export, `git.ts`, `zip.ts`, `build.ts`, `measure.ts`, `skills.ts`, `workspace.ts`, `terminals.ts`, `files.ts`), `src/preload/`, `src/renderer/` (`main.ts` Verdrahtung, `viewer.ts`, `viewcube.ts`, `sectiontool.ts`, `skills.ts`, `markup.ts`, `measuretool.ts`, `parts.ts`, `code.ts`, `markdown.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `ui.ts`, `icons.ts`), `src/shared/types.ts` (IPC-Vertrag), `src/shared/editable.ts`, `resources/template/` (Vorlage für Nutzerprojekte inkl. `AGENTS.md`), `resources/skills/` (mitgelieferte Skills), `resources/icon.*` (App-Icon, erzeugt mit `scripts/make-icon.py`), `test/` |
+| `app/` | Electron-App. `src/main/` Hauptprozess (`projects.ts` Speichern/Öffnen/Verlauf/Export, `git.ts`, `zip.ts`, `build.ts`, `measure.ts`, `skills.ts`, `workspace.ts`, `terminals.ts`, `files.ts`), `src/preload/`, `src/renderer/` (`main.ts` Verdrahtung, `viewer.ts`, `viewcube.ts`, `sectiontool.ts`, `explodetool.ts`, `skills.ts`, `markup.ts`, `measuretool.ts`, `parts.ts`, `code.ts`, `markdown.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `ui.ts`, `icons.ts`), `src/shared/types.ts` (IPC-Vertrag), `src/shared/editable.ts`, `resources/template/` (Vorlage für Nutzerprojekte inkl. `AGENTS.md`), `resources/skills/` (mitgelieferte Skills), `resources/icon.*` (App-Icon, erzeugt mit `scripts/make-icon.py`), `test/` |
 | `design/ui-entwurf.html` | Freigegebener Oberflächenentwurf (E38), im Browser öffnen. Maßstab für Aufbau, Farben und Texte der Oberfläche |
 | `design/icon-vorschlaege.html` | Die fünf Icon-Entwürfe, aus denen „Dialog“ gewählt wurde (E44). Nur noch Referenz |
 | `python/soma/` | Hilfsbibliothek und CLI: `add_part` (mit `group=` und `role=`), `import_step`, `import_assembly`, `fasteners.py` (Normteile, Maßtabellen aus bd_warehouse in `data/fasteners/`), `soma build`, `soma export`, `soma glb`, `soma serve` (Messdienst, `measure.py`) |
@@ -33,7 +33,7 @@ uv pip install --python "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/python.ex
 npm install
 npm start               # baut und startet
 npm run typecheck
-npm test                # baut, dann test:unit, test:smoke, test:versions, test:editor, test:measure, test:groups, test:section, test:skills und test:fasteners (echte App, unsichtbares Fenster)
+npm test                # baut, dann test:unit, test:smoke, test:versions, test:editor, test:measure, test:groups, test:section, test:explode, test:skills und test:fasteners (echte App, unsichtbares Fenster)
 
 # soma direkt
 "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/soma.exe" build --project <ordner>
