@@ -1,6 +1,7 @@
 // Smoke-Test der echten Electron-App: Projekt, Viewer, Terminal, Auto-Build, Fehlerfall, Projektwechsel.
 // Aufruf: npm run test:smoke (baut vorher). SMOKE_VISIBLE=1 zeigt das Fenster und macht einen Screenshot.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { APP, checker, cleanup, sleep, startApp } from './harness.mjs';
 
@@ -50,17 +51,53 @@ try {
 
   await shot('1-arbeitsbereich');
 
-  // Code-Panel und Dateien-Panel
+  check('Seitenleiste zeigt beim ersten Start die Bauteile, Code ist zu (Entwurf 2)', JSON.stringify(await ev(() => window.__t.layout())) === '{"side":"parts","code":false,"agent":true}',
+    JSON.stringify(await ev(() => window.__t.layout())));
+
+  // Code als eigene Spalte und Dateien gleichzeitig (Entwurf 2)
   await domClick('btn-sel-code');
-  await waitFor('Code-Panel', () => window.__t.codeText().includes('add_part("Lid"'), 10000).catch(() => {});
-  check('„Code öffnen" zeigt model.py im Code-Panel', (await ev(() => window.__t.codeText())).includes('add_part("Lid"'));
+  await waitFor('Code-Spalte', () => window.__t.codeText().includes('add_part("Lid"'), 10000).catch(() => {});
+  check('„Code" in der Auswahlkarte zeigt model.py in der Code-Spalte, die Bauteile bleiben offen', (await ev(() => window.__t.codeText())).includes('add_part("Lid"')
+    && JSON.stringify(await ev(() => window.__t.layout())) === '{"side":"parts","code":true,"agent":true}');
   await shot('2-code');
   await ev(() => window.__t.showPanel('files'));
   await waitFor('Dateiliste', () => window.__t.fileRows().includes('model.py'), 10000).catch(() => {});
   const rows = await ev(() => window.__t.fileRows());
-  check('Dateien-Panel: model.py sichtbar, AGENTS.md eingeklappt unter „Vom Programm verwaltet"', rows.includes('model.py') && rows.includes('Vom Programm verwaltet') && !rows.includes('AGENTS.md'), rows.slice(0, 6).join(','));
+  check('Dateien: model.py sichtbar, AGENTS.md eingeklappt unter „Vom Programm verwaltet"', rows.includes('model.py') && rows.includes('Vom Programm verwaltet') && !rows.includes('AGENTS.md'), rows.slice(0, 6).join(','));
+  check('Dateien und Code gleichzeitig offen, die offene Datei ist im Baum hervorgehoben', await ev(() => !document.getElementById('editor').hidden && !document.getElementById('panel-files').hidden
+    && document.querySelector('#tab-files .frow.sel')?.dataset.path === 'model.py'));
   await shot('3-dateien');
-  await ev(() => window.__t.showPanel(null));
+  await domClick('btn-lay-code');
+  await domClick('btn-lay-side');
+  const lay = await ev(() => window.__t.layout());
+  await ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', ctrlKey: true, bubbles: true })));
+  const lay2 = await ev(() => window.__t.layout());
+  check('Spalten-Schalter oben: Code und Seitenleiste zu, Strg 1 bringt die letzte Ansicht (Dateien) wieder', !lay.code && lay.side === null && lay2.side === 'files', `${JSON.stringify(lay)} ${JSON.stringify(lay2)}`);
+  await ev(() => window.__t.showPanel('parts'));
+
+  // Export mit Dateidialog (statt nach exports/): ein Bauteil aus der Auswahlkarte, alle Bauteile in einen Ordner
+  const expDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-export-test-'));
+  await domClick('btn-sel-export');
+  const expMenu = await ev(() => ({ open: !document.getElementById('menu-export').hidden, sel: document.getElementById('exp-sel').classList.contains('on') ? document.getElementById('exp-sel').textContent : '' }));
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await app.answers([path.join(expDir, 'Deckel.step')]);
+  const one = await ev(() => window.__t.exportAs('step', 'sel'));
+  const deckel = path.join(expDir, 'Deckel.step');
+  check('„Exportieren" in der Auswahlkarte: Menü mit „Nur Lid“, STEP am gewählten Ort, nichts in exports/', expMenu.open && expMenu.sel === 'Nur Lid' && one.ok
+    && fs.existsSync(deckel) && fs.readFileSync(deckel, 'utf8').startsWith('ISO-10303-21') && !fs.existsSync(path.join(proj.dir, 'exports')), JSON.stringify(one).slice(0, 120));
+  fs.writeFileSync(path.join(expDir, 'Body.stl'), 'alt');
+  await app.answers([expDir, 1]);
+  const keptExp = await ev(() => window.__t.exportAs('stl', 'all'));
+  check('Alle Bauteile in einen Ordner: vorhandene Datei nur nach Rückfrage, „Abbrechen“ schreibt nichts', keptExp.cancelled && fs.readFileSync(path.join(expDir, 'Body.stl'), 'utf8') === 'alt'
+    && !fs.existsSync(path.join(expDir, 'Lid.stl')), JSON.stringify(keptExp).slice(0, 100));
+  await app.answers([expDir, 0]);
+  const all = await ev(() => window.__t.exportAs('stl', 'all'));
+  check('„Ersetzen“: beide Bauteile als STL im Ordner, Meldung nennt den Ordner', all.ok && all.files.length === 2 && fs.statSync(path.join(expDir, 'Body.stl')).size > 200
+    && fs.existsSync(path.join(expDir, 'Lid.stl')) && (await ev(() => window.__t.toast())).text.includes(expDir), JSON.stringify(all).slice(0, 120));
+  await app.answers([null]);
+  const none = await ev(() => window.__t.exportAs('step', 'all'));
+  check('Dialog abgebrochen: nichts passiert', none.cancelled && !none.ok);
+  cleanup(expDir);
 
   // 3) Terminal: echte Shell im Projektordner, soma im PATH
   const tid = await ev(() => window.__t.terminals.activeId);
@@ -84,9 +121,9 @@ try {
   const lidPos = await ev((l) => { const v = window.__t.viewer, r = document.getElementById('viewer').getBoundingClientRect(), p = v.screenOf(l.id, l.face); return [p.x - r.left, p.y - r.top]; }, lidFace);
   await domClick('btn-mark');
   await waitFor('Zeichenfläche offen', () => window.__t.markup().active, 5000).catch(() => {});
-  const hiddenUi = await ev(() => ['parts', 'cube', 'selcard'].every((id) => getComputedStyle(document.getElementById(id)).display === 'none'));
+  const hiddenUi = await ev(() => ['vtop', 'cube', 'cards'].every((id) => getComputedStyle(document.getElementById(id)).display === 'none'));
   const mk0 = await ev(() => window.__t.markup());
-  check('„Markieren": Zeichenfläche offen, Bauteilkarte, Würfel und Auswahlkarte treten zurück', mk0.active && !mk0.blank && hiddenUi && mk0.pixels[0] > 0, `${mk0.pixels.join('x')} px`);
+  check('„Markieren": Zeichenfläche offen, Werkzeuge, Würfel und Karten treten zurück', mk0.active && !mk0.blank && hiddenUi && mk0.pixels[0] > 0, `${mk0.pixels.join('x')} px`);
   const [bgPx, lidPx] = await ev((p) => [window.__t.markPixel(3, 3), window.__t.markPixel(p[0], p[1])], lidPos);
   // Die angeklickte Fläche leuchtet im Viewer orange. Im Bild fehlt die Auswahl, sonst verschluckt sie die orange Markierung.
   check('Das eingefrorene Bild zeigt das Modell ohne Auswahlfarbe', bgPx[3] === 255 && lidPx.slice(0, 3).reduce((s, v, i) => s + Math.abs(v - bgPx[i]), 0) > 40
@@ -196,15 +233,30 @@ try {
   await waitFor('Pfad im Terminal', (id) => window.__t.termText(id).includes('[Markierung: .soma/feedback/markierung-'), 10000, tid).catch(() => {});
   check('Pfad steht in der Eingabe des Terminals, nicht abgeschickt', (await ev((id) => window.__t.termText(id), tid)).includes(`[Markierung: .soma/feedback/${fbFiles[0]}]`));
   const tst = await ev(() => window.__t.toast());
-  check('Meldung nennt Datei und Ziel, Bauteilkarte ist zurück', tst.text.includes(`Markierung gespeichert: .soma/feedback/${fbFiles[0]}`) && tst.text.includes('In die Eingabe von Terminal eingefügt')
-    && await ev(() => getComputedStyle(document.getElementById('parts')).display !== 'none'), tst.text.replace(/\s+/g, ' ').slice(0, 70));
+  check('Meldung nennt Datei und Ziel, die Werkzeuge sind zurück', tst.text.includes(`Markierung gespeichert: .soma/feedback/${fbFiles[0]}`) && tst.text.includes('In die Eingabe von Terminal eingefügt')
+    && await ev(() => getComputedStyle(document.getElementById('vtop')).display !== 'none'), tst.text.replace(/\s+/g, ' ').slice(0, 70));
   await ev((id) => window.soma.term.write(id, '\x03'), tid);
   check('Markierung zählt nicht als ungespeicherte Änderung (nicht in Git, E11)', (await ev(() => window.soma.project.saveState())).dirtyFiles === dirtyBefore);
-  await domClick('btn-ins-mark');
-  await waitFor('Zeichenfläche über die Übergabeleiste', () => window.__t.markup().active, 5000).catch(() => {});
-  const viaHandoff = await ev(() => window.__t.markup().active);
+  await domClick('btn-mark');
+  await waitFor('Zeichenfläche erneut', () => window.__t.markup().active, 5000).catch(() => {});
+  const again = await ev(() => window.__t.markup().active);
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
-  check('„Markierung" in der Übergabeleiste öffnet die Zeichenfläche, Escape ohne Zeichnung schließt', viaHandoff && !(await ev(() => window.__t.markup().active)) && fs.readdirSync(fbDir).length === 1);
+  check('Escape ohne Zeichnung schließt die Zeichenfläche, es entsteht keine Datei', again && !(await ev(() => window.__t.markup().active)) && fs.readdirSync(fbDir).length === 1);
+
+  // Ziehen ins Terminal ersetzt die Übergabeleiste (Entwurf 2): Bauteil aus der Seitenleiste fallen lassen
+  const dropOver = await ev(() => {
+    const dt = new DataTransfer();
+    dt.setData('application/x-soma-part', window.__t.parts().find((p) => p.name === 'Body').id);
+    const pane = [...document.querySelectorAll('#term-panes .term-pane')].find((x) => !x.hidden) ?? document.getElementById('term-panes');
+    pane.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    const over = document.getElementById('term-panes').classList.contains('dropping');
+    pane.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    return over;
+  });
+  await waitFor('Verweis im Terminal', (id) => window.__t.termText(id).includes('[Auswahl: Bauteil "Body"'), 10000, tid).catch(() => {});
+  check('Bauteil ins Terminal gezogen: Hinweis beim Darüberziehen, Verweis in der Eingabe, keine Übergabeleiste mehr', dropOver && !(await ev(() => document.getElementById('handoff')))
+    && (await ev((id) => window.__t.termText(id), tid)).includes('[Auswahl: Bauteil "Body"'));
+  await ev((id) => window.soma.term.write(id, '\x03'), tid);
 
   // Dateibaum: Markierungen sichtbar, anlegen, umbenennen, löschen über Menü und Tasten
   await ev(() => window.__t.showPanel('files'));
@@ -331,10 +383,6 @@ try {
   await domClick('chk-auto');
   await waitFor('Auto an baut nach', () => window.__t.partCount() === 2 && window.__t.status().state === 'ok', 60000).catch(() => {});
   check('Auto-Build wieder an: veralteter Stand wird gleich gebaut', await ev(() => window.__t.partCount()) === 2);
-
-  // Export über das Menü (soma export): jedes Bauteil eine Datei in exports/
-  const exp = await ev(() => window.soma.build.export('stl', null));
-  check('Export STL: alle Bauteile nach exports/', exp.ok && ['exports/Body.stl', 'exports/Lid.stl'].every((f) => exp.files.includes(f) && fs.existsSync(path.join(proj.dir, f))), exp.error ?? exp.files.join(','));
 
   // 7b) Ansicht: Würfel (Seite, Ecke, Ziehen), Drehpunkt per Doppelklick, Zoom zur Maus, Ansichten im Menü
   const vs = () => ev(() => window.__t.viewer.viewState());

@@ -134,15 +134,20 @@ try {
   await waitFor('Fehler weg', () => window.soma.anim.list().then((x) => x.errors.length === 0), 20000).catch(() => {});
   check('Gelöschte Datei: Ihr Fehler verschwindet aus der Liste', (await list()).errors.length === 0);
 
-  // 4) Abspielen im Viewer
-  await domClick('btn-anim');
+  // 4) Abspielen im Viewer. Animationen und Analysen wählt man im Umschalter oben links (Entwurf 2), `pickView` klickt den
+  // Eintrag, dessen Text `label` enthält (eine Zahl: der n-te Eintrag, 0 ist „Modell“)
+  const pickView = async (label) => {
+    await ev(() => window.__t.openViewMenu());
+    await ev((l) => { const items = [...document.querySelectorAll('#menu-view .mi')]; (typeof l === 'number' ? items[l] : items.find((b) => b.textContent.includes(l))).click(); }, label);
+  };
+  await pickView('Deckel öffnen');
   await waitFor('Animation geladen', () => window.__t.anim().name !== null, 20000);
   await ev(() => { const s = document.getElementById('anim-select'); s.value = 'deckel-oeffnen'; s.dispatchEvent(new Event('change')); });
   await waitFor('Deckel öffnen gewählt', () => window.__t.anim().name === 'Deckel öffnen', 10000);
   let s = await ev(() => window.__t.anim());
   check('Karte „Animation“: zwei zur Auswahl, Dauer 8 s, Kamera folgt (eigene Kamera), Hinweis mit Datei', s.active && s.options.length === 2 && near(s.duration, 8)
     && s.follow && s.hint.startsWith('animations/deckel.py, Zeile 4') && s.time === '0,00 / 8,00 s'
-    && await ev(() => document.getElementById('btn-anim').getAttribute('aria-pressed') === 'true'), JSON.stringify(s));
+    && JSON.stringify(await ev(() => window.__t.viewSwitch())) === '{"name":"Deckel öffnen","sub":"","unseen":0,"closable":true}', JSON.stringify(s));
   await ev(() => window.__t.animSeek(3));
   let pose = await ev((id) => window.__t.viewer.partPose(id), ids.Lid);
   const q = [-Math.sin(55 * Math.PI / 180), 0, 0, Math.cos(55 * Math.PI / 180)];
@@ -158,6 +163,13 @@ try {
     && near(view.dir[0], 0, 0.02) && near(view.dir[1], -1, 0.02), JSON.stringify([vs, view.dir]));
   s = await ev(() => window.__t.anim());
   check('„An Agent geben“: Name, Datei und Zeit', s.note === '[Animation: "Deckel öffnen" (animations/deckel.py) bei 7.50 s] ', s.note);
+  // Schalter „Texte“: Titel, Untertitel und Beschriftungen aus, Bewegung und Hervorhebung bleiben
+  await domClick('btn-anim-texts');
+  const noText = { s: await ev(() => window.__t.anim()), vs: await ev(() => window.__t.viewer.animViewState()) };
+  await domClick('btn-anim-texts');
+  const withText = { s: await ev(() => window.__t.anim()), vs: await ev(() => window.__t.viewer.animViewState()) };
+  check('„Texte“ aus: nichts gemalt, Hervorhebung bleibt, wieder an: Texte zurück', !noText.s.texts && !noText.vs.painter && noText.vs.highlight.includes(ids.Body)
+    && withText.s.texts && withText.vs.painter, JSON.stringify([noText.s.texts, noText.vs.painter, withText.vs.painter]));
   await ev(() => window.__t.animSeek(2));
   await shot('anim-2-halb');
 
@@ -168,7 +180,7 @@ try {
   pose = await ev((id) => window.__t.viewer.partPose(id), ids.Lid);
   check('Explosion beendet die Animation (Deckel ohne Drehung, Hervorhebung weg)', !s.active && pose.quaternion[3] === 1
     && (await ev(() => window.__t.viewer.animViewState())).highlight.length === 0, JSON.stringify(pose));
-  await domClick('btn-anim');
+  await pickView('Deckel öffnen');
   await waitFor('Animation wieder an', () => window.__t.anim().active && window.__t.anim().name === 'Deckel öffnen', 10000);
   check('Animation beendet die Explosion', !(await ev(() => window.__t.explode())).active);
   await domClick('btn-measure');
@@ -239,7 +251,7 @@ try {
   check('Schließen: Player weg', !(await ev(() => window.__t.video())).open);
 
   // 9) Knopf „Video erzeugen“ in der Animation
-  await domClick('btn-anim');
+  await pickView('Deckel öffnen');
   await waitFor('Animation an', () => window.__t.anim().active && !!window.__t.anim().name, 10000);
   fs.rmSync(mp4);
   await domClick('btn-anim-video');
@@ -259,7 +271,7 @@ try {
   check('Abstand: Stift mit 0,2 mm Spalt kritisch, Störer überschneidet sich, Deckel liegt nur auf', r.status === 0
     && /Stift: [^\n]*unter 0\.50 mm/.test(r.stdout) && /Störer: -[^\n]*Ueberschneidung/.test(r.stdout) && /Lid: [^\n]*nichts unter 0\.50 mm[^\n]*Beruehrung/.test(r.stdout),
     r.stdout + r.stderr);
-  await domClick('btn-result');
+  await pickView(1); // erste Analyse über den Umschalter oben links
   await waitFor('Ergebnis geladen', () => window.__t.result().id !== null, 20000);
   await ev(() => { const s = document.getElementById('result-select'); s.value = 'thickness'; s.dispatchEvent(new Event('change')); });
   await waitFor('Wandstärke gewählt', () => window.__t.result().id === 'thickness', 10000);

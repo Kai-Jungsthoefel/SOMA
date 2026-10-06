@@ -41,13 +41,14 @@ try {
   const pj = () => JSON.parse(read('.soma/project.json'));
   const st = () => ev(() => window.__t.skills());
   const skill = async (id) => (await st()).skills.find((s) => s.id === id);
-  /** Stufe im Umschalter der Karte wählen (E55): off, demand oder always. */
+  /** Stufe über den Schalter der Zeile wählen (E55, Entwurf 2): off, demand oder always. */
   const setMode = async (id, mode) => {
-    await ev(([i, m]) => document.querySelector(`#skills-list .sk-row[data-id="${i}"] .sk-mode button[data-mode="${m}"]`).click(), [id, mode]);
+    await ev(([i, m]) => { document.querySelector(`#skills-list .sk-row[data-id="${i}"] .sk-lvl`).click(); document.querySelector(`#menu-ctx .mi[data-mode="${m}"]`).click(); }, [id, mode]);
     await waitFor(`Skill ${id} ${mode}`, ([i, m]) => { const s = window.__t.skills(); return !s.busy.length && s.skills.find((x) => x.id === i)?.mode === m; }, 10000, [id, mode]);
   };
   /** Wert in ein Feld der Einstellungen schreiben und mit Enter übernehmen (Auswahl: change). */
   const setVar = (id, name, value) => ev(([i, n, v]) => {
+    if (!document.getElementById(`sk-${i}-${n}`)) window.__t.openSkill(i);
     const f = document.getElementById(`sk-${i}-${n}`);
     f.value = v;
     if (f.tagName === 'SELECT') f.dispatchEvent(new Event('change'));
@@ -76,11 +77,11 @@ try {
   await waitFor('Speicherstand', () => !!window.__t.saveState(), 10000);
   const bdir = path.join(ud, 'workspace-backups', `${proj.id}-skills`);
   const modesOf = (sk, m) => sk.skills.filter((x) => x.mode === m).map((x) => x.id).join(',');
-  check('Neues Modell: Konstruktionsablauf, Sauber modellieren und Normteile immer, die übrigen bei Bedarf, Karten nennen „Bei neuen Modellen: Immer“',
+  check('Neues Modell: Konstruktionsablauf, Sauber modellieren und Normteile immer, die übrigen bei Bedarf, Vorgabe für neue Modelle wie im Kopf',
     JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","normteile"]' && (pj().skills_on_demand ?? []).join(',') === DEMAND_NEW
     && modesOf(s, 'always') === 'konstruktionsablauf,cadquery,normteile' && modesOf(s, 'demand') === DEMAND_NEW && !modesOf(s, 'off')
     && s.skills.filter((x) => x.defaultMode === 'always').map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery,normteile'
-    && s.text.split('Bei neuen Modellen: Immer').length === 4 && s.skills.every((x) => !x.problems.length && !x.changed), JSON.stringify(pj()));
+    && s.skills.every((x) => !x.problems.length && !x.changed), JSON.stringify(pj()));
   const fdmNew = read('.soma/skills/3d-druck.md') ?? '';
   check('Neues Modell: Kopien mit Standardwerten, bei Bedarf mit Hinweis (Standardwerte, NOTES.md), Immer ohne',
     !(read('.soma/skills/konstruktionsablauf.md') ?? '{{').includes('{{') && !(read('.soma/skills/konstruktionsablauf.md') ?? '').includes('On demand')
@@ -92,10 +93,14 @@ try {
     && DEMAND_NEW.split(',').every((id) => demand().includes(`.soma/skills/${id}.md`))
     && (await g('ls-files', '.soma/skills')).split('\n').length === 14
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, `${String((await ev(() => window.__t.saveState())).dirtyFiles)} | ${String(block()).slice(0, 200)}`);
-  check('Umschalter: drei Stufen je Karte, die eingestellte gewählt', await ev(() => {
-    const row = document.querySelector('#skills-list .sk-row[data-id="3d-druck"]');
-    return [...row.querySelectorAll('.sk-mode button')].map((b) => `${b.textContent}:${b.getAttribute('aria-checked')}`).join(',') === 'Aus:false,Bei Bedarf:true,Immer:false'
-      && row.classList.contains('demand') && document.querySelector('#skills-list .sk-row[data-id="cadquery"]').classList.contains('always');
+  check('Zeile mit Stufen-Schalter, Klick auf die Zeile öffnet die Karte mit drei Stufen, die eingestellte gewählt', await ev(() => {
+    document.querySelector('#skills-list .sk-row[data-id="3d-druck"] .sk-open').click();
+    const row = document.querySelector('#skills-list .sk-row[data-id="3d-druck"]'); // die Liste wird neu gezeichnet
+    const ok = [...document.querySelectorAll('#skill-detail .sk-mode button')].map((b) => `${b.textContent}:${b.getAttribute('aria-checked')}`).join(',') === 'Aus:false,Bei Bedarf:true,Immer:false'
+      && row.classList.contains('demand') && row.classList.contains('sel') && row.querySelector('.sk-lvl').textContent === 'Bei Bedarf'
+      && document.querySelector('#skills-list .sk-row[data-id="cadquery"] .sk-lvl').classList.contains('always');
+    row.querySelector('.sk-open').click();
+    return ok && document.getElementById('skill-detail').hidden;
   }));
 
   // 2) Aus: Kopie weg (unverändert, also ohne Sicherung), project.json und AGENTS.md ohne ihn
@@ -122,17 +127,17 @@ try {
   check('Zählt als ungespeicherte Änderung (Kopie, project.json, AGENTS.md)', (await ev(() => window.__t.saveState())).dirtyFiles >= 3, String((await ev(() => window.__t.saveState())).dirtyFiles));
 
   // 3) Ansehen (nur lesen) und An Agent geben
-  await ev(() => document.querySelector('#skills-list .sk-row[data-id="3d-druck"] .sk-more').click());
+  await ev(() => window.__t.openSkill('3d-druck'));
   await shot('skills-2-aktiv');
-  await ev(() => [...document.querySelectorAll('#skills-list .sk-row[data-id="3d-druck"] .sk-actions button')].find((b) => b.textContent.includes('Ansehen')).click());
+  await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].find((b) => b.textContent.includes('ansehen')).click());
   await waitFor('Code-Panel', () => window.__t.editor.state().file === '.soma/skills/3d-druck.md', 10000);
   const ed = await ev(() => window.__t.editor.state());
   check('„Ansehen": Kopie im Code-Panel, nur lesen, mit Grund', ed.readOnly && ed.text.includes('# Skill: 3D printing (FDM)') && (ed.locked ?? '').includes('Skill'), JSON.stringify({ ro: ed.readOnly, locked: ed.locked }));
   await ev(() => window.__t.showPanel('skills'));
-  await waitFor('Panel wieder offen', () => !!document.querySelector('#skills-list .sk-row[data-id="3d-druck"] .sk-actions'), 10000);
+  await waitFor('Karte noch offen', () => document.querySelector('#skill-detail')?.dataset.id === '3d-druck' && !document.getElementById('skill-detail').hidden, 10000);
   // Eingefügten Text mitschneiden (im Terminal bricht die lange Eingabezeile um)
   await ev(() => { const tm = window.__t.terminals; const orig = tm.insert.bind(tm); tm.insert = (x) => { window.__inserted = x; return orig(x); }; });
-  await ev(() => [...document.querySelectorAll('#skills-list .sk-row[data-id="3d-druck"] .sk-actions button')].find((b) => b.textContent.includes('An Agent')).click());
+  await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].find((b) => b.textContent.includes('An Agent')).click());
   await sleep(300);
   check('„An Agent geben" fügt [Skill: .soma/skills/3d-druck.md] ein', (await ev(() => window.__t.toast())).text.includes('In die Eingabe von')
     && await ev(() => window.__inserted) === '[Skill: .soma/skills/3d-druck.md] ', await ev(() => window.__inserted));
@@ -147,9 +152,9 @@ try {
     && c3.includes('Overhangs up to 50° from vertical') && c3.includes('| Max. overhang without support | 50° from vertical |') && c3.includes('var overhang: 50 |') && c3.includes('MAX_OVERHANG = 50')
     && !(await skill('3d-druck')).changed, JSON.stringify(settings()));
   s = await st();
-  check('Karte: Kurzbeschreibung „Überhänge bis 50°", Zeile „Eingestellt: …", Rücksetzknopf', s.skills.find((x) => x.id === '3d-druck').summary.includes('Überhänge bis 50°')
-    && s.text.includes('Eingestellt: Max. Überhangwinkel 50°')
-    && await ev(() => !document.querySelector('#skills-list .sk-var[data-var="overhang"] .sk-reset').hidden && document.querySelector('#skills-list .sk-var[data-var="nozzle"] .sk-reset').hidden), s.skills[0].summary);
+  check('Kurzbeschreibung „Überhänge bis 50°", die Zeile nennt „50° · angepasst", Rücksetzknopf in der Karte', s.skills.find((x) => x.id === '3d-druck').summary.includes('Überhänge bis 50°')
+    && s.text.includes('50° · angepasst') && s.detail.includes('1 angepasst')
+    && await ev(() => !document.querySelector('#skill-detail .sk-var[data-var="overhang"] .sk-reset').hidden && document.querySelector('#skill-detail .sk-var[data-var="nozzle"] .sk-reset').hidden), s.skills[0].summary);
   check('Meldung nennt Wert und Datei', (await ev(() => window.__t.toast())).text.includes('Max. Überhangwinkel 50°. Steht in .soma/skills/3d-druck.md'), (await ev(() => window.__t.toast())).text);
   await setVar('3d-druck', 'overhang', '95');
   await waitFor('Fehlermeldung', () => window.__t.toast().error, 5000).catch(() => {});
@@ -163,29 +168,29 @@ try {
   c3 = read('.soma/skills/3d-druck.md') ?? '';
   check('Auswahl (PETG) und Zahl mit Komma (0,6): in der Kopie mit Punkt', c3.includes('| Material | PETG |') && c3.includes('| Nozzle | 0.6 mm |') && c3.includes('NOZZLE = 0.6')
     && await ev(() => document.getElementById('sk-3d-druck-nozzle').value) === '0,6');
-  await ev(() => [...document.querySelectorAll('#skills-list .sk-row[data-id="3d-druck"] .sk-actions button')].find((b) => b.textContent.includes('An Agent')).click());
+  await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].find((b) => b.textContent.includes('An Agent')).click());
   await sleep(300);
   check('„An Agent geben" nennt die geänderten Einstellungen (Zahlen mit Punkt)', await ev(() => window.__inserted)
     === '[Skill: .soma/skills/3d-druck.md, Einstellungen: Material = PETG, Düse = 0.6 mm, Max. Überhangwinkel = 50°] ', await ev(() => window.__inserted));
-  await ev(() => document.querySelector('#skills-list .sk-var[data-var="nozzle"] .sk-reset').click());
+  await ev(() => document.querySelector('#skill-detail .sk-var[data-var="nozzle"] .sk-reset').click());
   await waitFor('Düse zurück', () => window.__t.skills().skills.find((x) => x.id === '3d-druck')?.vars.nozzle === 0.4, 10000);
   check('Zurück auf den Standard: Düse 0,4 mm, aus project.json entfernt, Kopie wieder 0.4', settings()['3d-druck']?.overhang === 50 && settings()['3d-druck']?.material === 'PETG' && !('nozzle' in (settings()['3d-druck'] ?? {}))
     && (read('.soma/skills/3d-druck.md') ?? '').includes('| Nozzle | 0.4 mm |'), JSON.stringify(settings()));
   // Ausgeschalteter Skill: Werte lassen sich vorab einstellen und gelten beim Einschalten
-  await ev(() => document.querySelector('#skills-list .sk-row[data-id="laser"] .sk-more').click());
+  await ev(() => window.__t.openSkill('laser'));
   await setVar('laser', 'thickness', '4');
   await waitFor('Platte 4', () => window.__t.skills().skills.find((x) => x.id === 'laser')?.vars.thickness === 4, 10000);
   check('Laserschneiden (aus): Plattenstärke 4 mm gespeichert, keine Datei angelegt, Hinweis „gilt, sobald nicht mehr aus"', settings().laser?.thickness === 4 && read('.soma/skills/laser.md') === null
     && (await ev(() => window.__t.toast())).text.includes('Gilt, sobald der Skill nicht mehr aus ist'));
   await shot('skills-3-einstellungen');
   // Einstellung bei Bedarf: Der Hinweis nennt den gesetzten Wert, die übrigen bleiben Standard der App
-  await ev(() => document.querySelector('#skills-list .sk-row[data-id="festigkeit"] .sk-more').click());
+  await ev(() => window.__t.openSkill('festigkeit'));
   await setVar('festigkeit', 'safety', '3');
   await waitFor('Sicherheit 3', () => window.__t.skills().skills.find((x) => x.id === 'festigkeit')?.vars.safety === 3, 10000);
   const fest = read('.soma/skills/festigkeit.md') ?? '';
   check('Festigkeit (bei Bedarf), Sicherheit 3: Kopie mit SAFETY = 3, Hinweis nennt `safety` als vom Nutzer gesetzt, „An Agent geben“ da', fest.includes('`SAFETY = 3`')
     && fest.includes('The user set `safety` in the app.') && !(await skill('festigkeit')).changed
-    && await ev(() => [...document.querySelectorAll('#skills-list .sk-row[data-id="festigkeit"] .sk-actions button')].some((b) => b.textContent.includes('An Agent'))), fest.slice(0, 400));
+    && await ev(() => [...document.querySelectorAll('#skill-detail .sk-actions button')].some((b) => b.textContent.includes('An Agent'))), fest.slice(0, 400));
 
   // 4) Zweiter Skill auf Immer: in AGENTS.md in der Reihenfolge des Einschaltens
   await setMode('toleranzen', 'always');
@@ -203,7 +208,8 @@ try {
   await ev(() => window.__t.showPanel('files'));
   await ev(() => window.__t.showPanel('skills'));
   await waitFor('geändert erkannt', () => window.__t.skills().skills.find((x) => x.id === '3d-druck')?.changed === true, 10000);
-  check('Geänderte Kopie: „weicht ab" in der Karte', (await st()).text.includes('weicht von der Fassung dieser App ab'));
+  await ev(() => window.__t.openSkill('3d-druck'));
+  check('Geänderte Kopie: „weicht ab" in der Zeile und in der Karte', (await st()).text.includes('Kopie weicht von der Fassung der App ab') && ((await st()).detail ?? '').includes('weicht von der Fassung dieser App ab'));
   await setVar('3d-druck', 'overhang', '55');
   await waitFor('Überhang 55', () => window.__t.skills().skills.find((x) => x.id === '3d-druck')?.vars.overhang === 55, 10000);
   let backups = fs.existsSync(bdir) ? fs.readdirSync(bdir) : [];
@@ -279,7 +285,7 @@ try {
   // 10) Stufe für neue Modelle (E46, E55): gilt für die App (state.json), das offene Modell bleibt, wie es ist
   const appState = () => { try { return JSON.parse(fs.readFileSync(path.join(ud, 'state.json'), 'utf8')); } catch { return {}; } };
   const setDefault = async (id, mode) => {
-    if (!(await ev((i) => !!document.getElementById(`sk-${i}-default`), id))) await ev((i) => document.querySelector(`#skills-list .sk-row[data-id="${i}"] .sk-more`).click(), id);
+    if (!(await ev((i) => !!document.getElementById(`sk-${i}-default`), id))) await ev((i) => window.__t.openSkill(i), id);
     await ev(([i, m]) => { const f = document.getElementById(`sk-${i}-default`); f.value = m; f.dispatchEvent(new Event('change')); }, [id, mode]);
     await waitFor(`Vorgabe ${id} ${mode}`, ([i, m]) => { const x = window.__t.skills(); return !x.busy.length && x.skills.find((k) => k.id === i)?.defaultMode === m; }, 10000, [id, mode]);
   };
@@ -293,7 +299,7 @@ try {
   await setDefault('cadquery', 'off');
   await setDefault('cadquery', 'always');
   check('Abweichungen vom Kopf stehen in state.json, zurück auf den Kopf fällt der Eintrag weg', JSON.stringify(appState().skill_defaults) === '{"3d-druck":"always","konstruktionsablauf":"demand","laser":"off"}'
-    && appState().lastProject === proj.id && (await st()).text.includes('Bei neuen Modellen: Aus'), JSON.stringify(appState().skill_defaults));
+    && appState().lastProject === proj.id && (await skill('laser')).defaultMode === 'off', JSON.stringify(appState().skill_defaults));
   await shot('skills-4-neue-modelle');
   await domClick('btn-new');
   await waitFor('neues Projekt', (oldId) => window.__t.project().id !== oldId && window.__t.status().state === 'ok', 90000, proj.id);

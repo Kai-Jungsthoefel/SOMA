@@ -70,10 +70,10 @@ try {
   const backups = () => (fs.existsSync(bdir) ? fs.readdirSync(bdir).map((f) => fs.readFileSync(path.join(bdir, f), 'utf8')) : []);
 
   // 1) Öffnen: model.py im Editor, bearbeitbar, mit Hervorhebung
-  await ev(() => document.querySelector('#rail [data-panel="code"]').click());
+  await ev(() => document.getElementById('btn-lay-code').click());
   await waitFor('model.py im Editor', () => window.__t.editor.state().file === 'model.py', 10000).catch(() => {});
   let s = await ed();
-  check('Code-Panel öffnet model.py im Editor, bearbeitbar', s.file === 'model.py' && !s.readOnly && s.text === disk().replace(/\r\n/g, '\n'), s.file ?? '');
+  check('Schalter „Code“ oben öffnet die Code-Spalte mit model.py, bearbeitbar', s.file === 'model.py' && !s.readOnly && s.text === disk().replace(/\r\n/g, '\n'), s.file ?? '');
   check('Python-Hervorhebung: Schlüsselwörter, Konstanten, Aufrufe', await ev(() => ['k-kw', 'k-num', 'k-fn'].every((c) => !!document.querySelector(`#code-view .cm-content .${c}`))));
 
   // 2) Höhe: Der Editor füllt das Panel bis unten, lange Dateien lassen sich bis zum Ende scrollen
@@ -285,7 +285,10 @@ try {
   const p2 = await ev(() => window.__t.project());
   const model2 = path.join(p2.dir, 'model.py');
   check('Rückfrage „Speichern": Eingabe steht im alten Modell, das neue ist unberührt', p2.id !== proj.id && disk().includes('LENGTH = 82.0') && fs.readFileSync(model2, 'utf8').includes('LENGTH = 60.0'));
-  check('Nach dem Wechsel ist der Editor leer', (await ed()).files.length === 0);
+  // Die Code-Spalte bleibt offen und zeigt dann model.py des neuen Modells (nicht leer), Reiter des alten sind weg
+  await waitFor('model.py des neuen Modells', () => window.__t.editor.state().file === 'model.py', 10000).catch(() => {});
+  const ed2 = await ed();
+  check('Nach dem Wechsel: keine Reiter des alten Modells, die Code-Spalte zeigt model.py des neuen', ed2.files.join(',') === 'model.py' && ed2.text.includes('LENGTH = 60.0') && !ed2.dirty, ed2.files.join(','));
 
   // 13) Reiter mit ungespeicherter Eingabe schließen: „Verwerfen" legt sie als Sicherung ab
   await open('model.py');
