@@ -1,5 +1,6 @@
 """Bauteil-Registrierung: add_part merkt sich Objekt, Rolle, Farbe sowie Datei und Zeilenbereich des Aufrufs."""
 import inspect
+import math
 import unicodedata
 
 import cadquery as cq
@@ -106,10 +107,25 @@ def add_part(name, obj, role=None, color=None, group=None):
         return
     if any(p["name"] == name for p in REGISTRY):
         raise ValueError(f"Bauteilname {name!r} ist schon vergeben (Namen muessen eindeutig sein)")
-    _register(name, to_shape(obj), role, color, groups, where)
+    _register(name, to_shape(obj), role, color, groups, where, axis=_axis(obj))
 
 
-def _register(name, shape, role, color, groups, where, unique_step=False):
+def _axis(obj):
+    """Achse eines Normteils als Einheitsvektor aus dem Material heraus (Gegenrichtung von `direction`). Daran zieht
+    die Explosionsansicht das Teil heraus. Andere Objekte haben keine Achse."""
+    if not hasattr(obj, "__soma_shape__"):
+        return None
+    try:
+        d = [float(x) for x in obj.direction]
+    except Exception:  # fremdes Objekt mit __soma_shape__, aber ohne brauchbare Richtung: dann eben ohne Achse
+        return None
+    n = math.sqrt(sum(x * x for x in d)) if len(d) == 3 else 0.0
+    if not n > 1e-9:  # faengt auch nan ab
+        return None
+    return tuple(round(-x / n, 6) + 0.0 for x in d)  # + 0.0: kein "-0.0" in den Metadaten
+
+
+def _register(name, shape, role, color, groups, where, unique_step=False, axis=None):
     step_name = ascii_name(name)
     if any(p["step_name"] == step_name for p in REGISTRY):
         if not unique_step:
@@ -121,7 +137,7 @@ def _register(name, shape, role, color, groups, where, unique_step=False):
     rgb = tuple(color[:3]) if color else DEFAULT_COLORS[role]
     REGISTRY.append(dict(
         name=name, step_name=step_name, role=role, shape=shape, group=tuple(groups),
-        color=(*rgb, REFERENCE_ALPHA if role == "reference" else 1.0), **where,
+        color=(*rgb, REFERENCE_ALPHA if role == "reference" else 1.0), axis=axis, **where,
     ))
 
 

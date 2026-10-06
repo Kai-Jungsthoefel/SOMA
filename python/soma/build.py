@@ -167,8 +167,11 @@ def write_outputs(root, parts, project_name):
                   [round(bb.xmax, 3), round(bb.ymax, 3), round(bb.zmax, 3)]],
             volume=round(p["shape"].Volume(), 3)))
         # solid: geschlossener Koerper. Nur dann fuellt der Viewer die Schnittflaeche (bei offenen Flaechen waere das falsch)
-        glb_parts.append(dict(meta=dict(partId=pid, name=p["name"], role=p["role"], group=group, solid=bool(p["shape"].Solids())),
-                              mesh=mesher.mesh_shape(p["shape"], tol, 0.3), color=p["color"]))
+        meta = dict(partId=pid, name=p["name"], role=p["role"], group=group, solid=bool(p["shape"].Solids()))
+        # axis: Normteile werden in der Explosionsansicht entlang ihrer Achse herausgezogen
+        if p.get("axis"):
+            meta["axis"] = list(p["axis"])
+        glb_parts.append(dict(meta=meta, mesh=mesher.mesh_shape(p["shape"], tol, 0.3), color=p["color"]))
     glb_size = mesher.write_glb(root / ".soma" / "model.glb", glb_parts)
     (root / ".soma" / "model.map.json").write_text(
         json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
