@@ -34,7 +34,7 @@ in the chat or in `NOTES.md`:
 | Minimum wall | {{min_wall}} mm |
 | Clearance per side for sliding fits | {{clearance}} mm |
 
-Constants at the top of `model.py`: `NOZZLE = {{nozzle}}`, `CLEARANCE = {{clearance}}`, `MAX_OVERHANG = {{overhang}}`,
+Constants at the top of `model.py` (or in `parts/params.py`): `NOZZLE = {{nozzle}}`, `CLEARANCE = {{clearance}}`, `MAX_OVERHANG = {{overhang}}`,
 `BED = ({{bed_x}}, {{bed_y}}, {{bed_z}})`.
 
 ## Walls and small features

@@ -20,8 +20,8 @@ Every real part deviates from its nominal size. Design so that parts still fit w
 - Manufacturing process from the app: **{{process}}**. If it is "unknown" and `NOTES.md` does not say how the parts
   are made, ask: the clearances depend on it. The skill for the process (if you follow one) has more specific values,
   they take precedence over this one.
-- Every clearance, fit and allowance is a named constant at the top of `model.py` (`SCREW_CLEARANCE`, `LID_GAP`), never
-  hidden in expressions.
+- Every clearance, fit and allowance is a named constant at the top of `model.py` or in `parts/params.py`
+  (`SCREW_CLEARANCE`, `LID_GAP`), never hidden in expressions.
 - Mating faces never share the exact same coordinate: a defined gap, or a defined overlap for a press fit.
 - Parts that must not touch keep at least {{min_gap}} mm distance (`MIN_GAP = {{min_gap}}`).
 - Dimension from the functional faces: a hole follows the part it has to meet, not an arbitrary outer edge.

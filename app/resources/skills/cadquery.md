@@ -12,10 +12,11 @@ topics: Parameter und Aufbau; Reihenfolge der Schritte; Selektoren; Typische Feh
 
 ## Parameters and structure
 
-- Base dimensions are named constants at the top, everything else is derived (`INNER_W = WIDTH - 2 * WALL`). Never
-  type the same number twice.
+- Base dimensions are named constants at the top of `model.py`, everything else is derived (`INNER_W = WIDTH - 2 *
+  WALL`). Never type the same number twice.
 - One function per part (`def make_lid(): ... return lid`), the `add_part` calls at the end of `model.py`. Move parts
-  into `parts/` when `model.py` grows beyond about 200 lines.
+  into `parts/` when `model.py` grows beyond about 200 lines. The constants then move to `parts/params.py`, imported
+  by `model.py` and the part modules.
 - Build each part around a sensible origin (mounting face on XY, symmetric parts centered), then place it with
   `.translate()` and `.rotate()`.
 

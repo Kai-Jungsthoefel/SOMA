@@ -24,7 +24,7 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 3. Names are unique. Umlauts are fine, they are shown as written.
 4. Group related parts with `group`: `add_part("Screw front", screw, group="Housing/Screws")` (nested with `/`). Groups show up in the part tree of the app and as sub-assemblies in `output/model.step`.
 5. Mark a part the user brought (for example a circuit board) with `role="reference"`: it is shown semi-transparent and skipped by `soma export --all`. Cut clearances around it, but do not export it.
-6. Units are millimetres, Z is up. Put dimensions in named constants at the top so the user can ask for changes ("make the wall 3 mm").
+6. Units are millimetres, Z is up. Put dimensions in named constants at the top of `model.py` so the user can ask for changes ("make the wall 3 mm"). Once parts live in `parts/`, the constants go to `parts/params.py`, and `model.py` and the part modules import them from there.
 7. Load user files with `import_step("inputs/board.step")`: this merges the whole file into one shape. If the file has several parts or sub-assemblies, keep them with `asm = import_assembly("inputs/board.step")` and `add_part("Board", asm, role="reference")`: every body becomes its own part with its name and color, the sub-assemblies become groups under "Board". Move an assembly with `asm.loc = cq.Location((x, y, z))`. STEP files often have their origin in a corner: check the bounding box and move the part deliberately.
 8. Prefer simple, readable CadQuery. Check that operations produced solids. Do not use `show_object` or `cq_editor`.
 

@@ -31,6 +31,8 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
 - Position: `at` is the point on the axis where the part rests, `direction` (default `"-Z"`) points from there into
   the material. With `at=(x, y), on=lid` the surface is found along `direction`. `sunk=True` sinks a head, nut or
   washer flush with `at` (the hole gets the counterbore). Countersunk screws, set screws and inserts always sit flush.
+- Moving: `s.rotate(p1, p2, angle)`, `s.translate((x, y, z))` and `s.moved(loc)` return a moved copy, like CadQuery
+  shapes. Build a moving part with its screws in one place, then move both the same way.
 - Other end: `s.point(d)` is the point `d` mm from the seat along the axis, `.outer` the opposite face. Under a plate
   of thickness `T`: `w = Washer("ISO 7089", "M3", at=s.point(T), direction="+Z")`, then
   `Nut("ISO 4032", "M3", at=w.outer, direction="+Z")`.

@@ -57,7 +57,9 @@ Captions: one short sentence in the language the user speaks, about what moves a
 1. `soma anim build` (the app also builds when the file changes). Errors name file and line.
 2. `soma anim info "Open the lid"`: the timeline as text. Read it.
 3. `soma anim check "Open the lid" --gap 0.5`: parts that collide or come closer than the gap during the motion. Fix
-   collisions in the model or in the motion. Contacts that already exist in the model position are marked.
+   collisions in the model or in the motion. Contacts and gaps as built in the model count as intended, only what
+   gets worse during the motion is reported. A motion built from many short `play()` steps (a coupled mechanism)
+   is fine: approximate a curve with steps of a few degrees, too coarse steps show up as small collisions.
 4. `soma render --anim "Open the lid" --sheet`: one picture with 9 stills and their times, `--at 1.5` for one moment.
    Open the picture and look at it.
 5. Only when the user wants a video: `soma render --anim "Open the lid" --video` writes `renders/<id>.mp4`

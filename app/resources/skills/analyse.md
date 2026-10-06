@@ -20,13 +20,17 @@ topics: Auswertungen; Ablauf; Grenzen; Rückmeldung
 | `soma analyze clearance` | gap in front of the surface to the next other part, negative inside another part | below 0.5 mm |
 
 Options: `--threshold` (take it from the active skills: overhang, minimum wall, clearance, and say so), `--parts
-"Lid,Housing"` (names or groups, default all own parts without references and purchased parts), `--up z` for the
-print direction of overhangs, `--name` to keep a second result of the same kind. Parts that touch (gap 0) are not
-critical, overlaps are.
+"Lid,Housing"` (names or groups, default all own parts without references and purchased parts; a part name wins over a
+group of the same name, `"Housing/"` is always the group), `--up z` for the print direction of overhangs, `--name` to
+keep a second result of the same kind. Parts that touch (gap 0) are not critical, overlaps are. Values within the mesh
+accuracy of the threshold count as exactly at the threshold, not critical (a 45° roof, a gap of exactly 0.2 mm).
 
 ## Workflow
 
-1. `soma build`, then the analysis. Read the summary: range per part, critical area, worst value and where.
+1. `soma build`, then the analysis. Read the summary: range per part, critical area, worst value and where, then the
+   largest critical spots with area, size and position (similar spots such as gear teeth as one line). For overhang
+   it names a print direction with clearly less overhang if there is one; parts printed in different orientations
+   need one run each (`--parts`, `--up`, `--name`).
 2. `soma render --result thickness` (add `--view bottom` for another side) and open the picture: colours green (fine),
    yellow (close to the threshold), red (critical), legend at the bottom right.
 3. Change the model, build, analyse again. Report numbers: "thinnest wall 1.4 mm (was 0.8 mm)".
@@ -35,6 +39,7 @@ critical, overlaps are.
 
 - One value per small triangle. Curved faces carry the mesh tolerance, a few hundredths of a millimetre.
 - Thickness at sharp inner corners and on tiny features can be off. Check a suspicious spot before you change it.
+  Narrow strips along sharp edges (tooth tips, the rim of a countersink) are thin by nature: judge them by their size.
 - Clearance is measured along the surface normal: a gap at an angle (a cone in a hole) reads larger than it is.
 - Overhang looks at the direction of the surface only. Bridges and small chamfers show as overhang, judge them with
   the skill for the process.
