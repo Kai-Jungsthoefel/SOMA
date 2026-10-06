@@ -6,7 +6,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import _STARTED, __version__, build, registry
+# build (und damit cadquery, rund 4 s) laden nur die Befehle, die es brauchen
+from . import _STARTED, __version__
 
 EXPORT_FORMATS = ["step", "stl", "3mf", "amf", "brep", "iges", "obj", "vrml", "glb", "gltf", "dxf", "svg"]
 
@@ -29,6 +30,7 @@ def _print_build(res, as_json, seconds):
 
 
 def cmd_build(args):
+    from . import build  # vor dem Warten: der vorgewaermte Prozess soll cadquery schon geladen haben
     t0 = _STARTED
     if args.wait:
         # Vorgewaermter Prozess der App: cadquery ist geladen, gebaut wird erst auf eine Zeile hin.
@@ -65,7 +67,7 @@ def _export_one(shape, fmt, path):
         if not w.Write(str(path)):
             raise RuntimeError("IGES-Schreiben fehlgeschlagen")
     elif fmt == "obj":
-        from . import mesher
+        from . import build, mesher
         m = mesher.mesh_shape(shape, build.auto_tolerance([shape]), 0.3)
         lines = [f"v {v[0]:.5f} {v[1]:.5f} {v[2]:.5f}" for v in m["positions"]]
         lines += [f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}" for n in m["normals"]]
@@ -81,6 +83,7 @@ def cmd_export(args):
     if fmt not in EXPORT_FORMATS:
         print(f"Format {fmt!r} nicht unterstuetzt. Moeglich: {', '.join(EXPORT_FORMATS)}", file=sys.stderr)
         return 2
+    from . import build
     try:
         parts = build.run_model(root)
     except build.BuildError as e:

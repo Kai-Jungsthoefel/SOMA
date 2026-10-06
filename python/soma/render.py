@@ -10,8 +10,6 @@ import os
 import re
 from pathlib import Path
 
-from . import analysis, animrun
-
 VIEWS = ("iso", "front", "back", "left", "right", "top", "bottom")
 MAX_SIDE = 3840
 
@@ -73,6 +71,9 @@ def prepare(root, args):
         raise RenderError("Nur eins von --at, --sheet und --video")
     if args.anim and args.result:
         raise RenderError("--anim und --result gehen nicht zusammen")
+    # analysis und animrun laden cadquery (rund 4 s), deshalb erst hier: eine Ansicht des Modells braucht es nicht
+    if args.result or args.anim:
+        from . import analysis, animrun
     if args.result:
         meta = analysis.find(root, args.result)
         if not meta:
