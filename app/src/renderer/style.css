@@ -1,4 +1,5 @@
-/* Oberfläche nach dem Entwurf „Modell zuerst“ (design/ui-entwurf.html). Farben mit fester Bedeutung:
+/* Oberfläche nach dem Entwurf „Modell zuerst“ (design/ui-entwurf.html), aufgeräumt nach Entwurf 2 (design/ui-entwurf-2.html).
+   Farben mit fester Bedeutung:
    Orange = Aktion und Auswahl, Violett = Vorschau eines alten Stands, Grün/Gelb/Rot = Status. */
 
 @font-face { font-family: 'IBM Plex Sans'; font-weight: 400; src: url(fonts/ibm-plex-sans-latin-400-normal.woff2) format('woff2'); }
@@ -62,6 +63,11 @@ code { font-family:var(--mono); font-size:.95em; }
 .pill .inner:hover { background:var(--s3); }
 .pill .inner.acc { color:var(--acc-tx); border-color:var(--acc-line); }
 .spin { animation:spin 1s linear infinite; color:var(--acc); display:flex; }
+/* Spalten-Schalter (Entwurf 2): Seitenleiste, Code, Agent unabhängig ein und aus */
+.layout { display:flex; align-items:center; gap:2px; padding:2px; border:1px solid var(--line2); border-radius:8px; flex-shrink:0; }
+.layout button { width:30px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:5px; color:var(--tx3); }
+.layout button:hover { background:var(--s3); color:var(--tx); }
+.layout button[aria-pressed=true] { background:var(--s3); color:var(--tx); }
 @keyframes spin { to { transform:rotate(360deg); } }
 
 .btn { display:flex; align-items:center; gap:7px; height:30px; padding:0 10px; border:1px solid var(--line2); border-radius:6px; white-space:nowrap; flex-shrink:0; }
@@ -70,6 +76,7 @@ code { font-family:var(--mono); font-size:.95em; }
 .btn.primary { background:var(--acc); border-color:var(--acc); color:#1b1206; font-weight:600; gap:10px; padding:0 12px; }
 .btn.primary:hover:not(:disabled) { background:#f5a84f; }
 .btn.primary .kbd { font-size:11px; font-weight:500; color:#5a3a12; }
+.btn.primary.busy, .btn.primary.busy:disabled { background:var(--acc-tint); border-color:var(--acc-line); color:var(--acc-tx); gap:8px; }
 .btn.acc { background:var(--acc-tint); border-color:var(--acc-line); color:var(--acc-tx); font-weight:500; }
 .btn.acc:hover:not(:disabled) { background:rgba(242,154,56,.22); }
 .btn.vio { background:var(--vio); border-color:var(--vio); color:#141733; font-weight:600; }
@@ -91,8 +98,10 @@ code { font-family:var(--mono); font-size:.95em; }
 .splitter { width:4px; margin:0 -2px; flex-shrink:0; cursor:col-resize; position:relative; z-index:5; }
 .splitter:hover, .splitter.drag { background:var(--acc-line); }
 
-#side { width:var(--side, 290px); flex-shrink:0; display:flex; flex-direction:column; min-width:0; background:var(--s1); border-right:1px solid var(--line); }
-#side.code { width:var(--side-code, 520px); background:var(--term); }
+#side { width:var(--side, 272px); flex-shrink:0; display:flex; flex-direction:column; min-width:0; background:var(--s1); border-right:1px solid var(--line); position:relative; }
+#editor { width:var(--editor, 520px); flex-shrink:0; display:flex; flex-direction:column; min-width:0; background:var(--term); border-right:1px solid var(--line); }
+.side-hd .hd-count { margin-left:6px; font-size:12px; }
+.panel .filter { margin:8px 8px 2px; height:28px; padding:0 8px; border-radius:6px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:inherit; flex-shrink:0; }
 .panel { flex:1; display:flex; flex-direction:column; min-height:0; }
 .side-hd { height:40px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 6px 0 14px; border-bottom:1px solid var(--line); background:var(--s1); }
 
@@ -106,59 +115,78 @@ code { font-family:var(--mono); font-size:.95em; }
 .frow .fi { color:var(--tx3); display:flex; }
 .frow.dir .fi { color:var(--tx2); }
 .frow.dim { color:var(--tx2); }
+.frow.sel { background:var(--acc-tint); color:var(--acc-tx); }
 .ftree .gap { height:8px; }
 .ftree .hint { color:var(--tx3); padding:6px 14px; }
 .frow.editing { cursor:default; }
 .frow.editing:hover { background:none; }
 .fedit { flex:1; min-width:0; height:22px; padding:0 6px; border:1px solid var(--acc-line); border-radius:4px; background:var(--s1); color:var(--tx); font:inherit; outline:none; }
 .fedit:focus { border-color:var(--acc); }
-/* Skills (E17): eine Karte je Skill mit Schalter. Eingeschaltet in Orange (Auswahl), Auffälligkeiten in Gelb. */
-.sk-intro { padding:10px 14px 4px; font-size:12px; color:var(--tx2); }
-.sk-intro code, .sk-row code { font:11.5px var(--mono); color:var(--tx); }
-.sk-list { flex:1; overflow:auto; padding:6px 10px 12px; display:flex; flex-direction:column; gap:8px; }
-.sk-list .hint { color:var(--tx3); padding:6px 4px; }
-.sk-row { border:1px solid var(--line2); border-radius:9px; background:var(--s2); }
-/* Stufen (E55): Immer hebt die Karte orange hervor, Aus nimmt sie zurück, Bei Bedarf bleibt neutral */
-.sk-row.always { border-color:var(--acc-line); background:linear-gradient(var(--acc-tint), var(--acc-tint)), var(--s2); }
-.sk-row.off .sk-text b { color:var(--tx2); }
-.sk-row.off .sk-text span { color:var(--tx3); }
-.sk-head { display:flex; align-items:flex-start; gap:10px; padding:10px 8px 8px 12px; }
-.sk-mode { display:flex; gap:2px; margin:0 12px 10px; padding:2px; border:1px solid var(--line2); border-radius:7px; background:var(--term); }
-.sk-mode button { flex:1; height:24px; border-radius:5px; color:var(--tx2); font:500 12px var(--sans); white-space:nowrap; }
+/* Skills (E17, Entwurf 2): eine Zeile je Skill, rechts die Stufe als kleiner Schalter. Orange nur für „Immer“ (E55).
+   Ein Klick auf die Zeile öffnet daneben eine Karte mit Beschreibung, Stufe und Einstellungen. */
+.sk-sum { padding:8px 14px 2px; font-size:12px; color:var(--tx3); flex-shrink:0; }
+.sk-list { flex:1; overflow:auto; padding:0 0 10px; }
+.sk-list .hint { color:var(--tx3); padding:8px 14px; }
+.sk-cat { display:flex; align-items:center; gap:7px; padding:14px 14px 4px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); }
+.sk-cat svg { color:var(--tx2); }
+.sk-row { display:flex; align-items:center; gap:8px; margin:0 6px; padding:0 8px 0 0; border-radius:7px; }
+.sk-row:hover, .sk-row.sel { background:var(--s3); }
+.sk-open { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; padding:6px 0 6px 10px; text-align:left; }
+.sk-open b { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sk-open span { font-size:12px; color:var(--tx3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sk-open span.cust { color:var(--tx2); }
+.sk-open span.warn { color:var(--warn); }
+.sk-row.off .sk-open b { color:var(--tx3); }
+.sk-lvl { display:flex; align-items:center; gap:6px; height:24px; padding:0 6px 0 8px; border:1px solid var(--line2); border-radius:12px; font-size:11.5px; color:var(--tx2); white-space:nowrap; flex-shrink:0; }
+.sk-lvl:hover:not(:disabled), .sk-lvl[aria-expanded=true] { background:var(--s2); color:var(--tx); }
+.sk-lvl .ld { width:7px; height:7px; border-radius:50%; box-shadow:inset 0 0 0 1.5px currentColor; }
+.sk-lvl.always { border-color:var(--acc-line); background:var(--acc-tint); color:var(--acc-tx); }
+.sk-lvl.always .ld { background:var(--acc); box-shadow:none; }
+.sk-lvl.off { color:var(--tx3); border-color:var(--line); }
+.sk-lvl.off .ld { opacity:.6; }
+.sk-lvl:disabled { opacity:.5; }
+.mi.two { align-items:flex-start; padding-top:7px; padding-bottom:7px; }
+.mi.two .t { display:flex; flex-direction:column; gap:1px; white-space:normal; }
+.mi.two .t .sub { white-space:normal; }
+.mi[role=menuitemradio] .chk { visibility:hidden; }
+.mi[role=menuitemradio][aria-checked=true] .chk { visibility:visible; }
+.skdetail { left:100%; top:48px; margin-left:8px; width:360px; max-height:calc(100% - 60px); overflow:auto; z-index:25; background:var(--s2); }
+.skdetail .mc-hd { padding:10px 8px 8px 12px; }
+.sk-ico { background:var(--s3); color:var(--tx2); width:28px; height:28px; border-radius:7px; justify-content:center; align-items:center; }
+.sk-title { display:flex; flex-direction:column; min-width:0; }
+.sk-title b { font-size:14px; }
+.sk-title span { font-size:12px; }
+.sk-desc { padding:0 14px 12px; font-size:12.5px; color:var(--tx2); line-height:1.5; }
+.sk-sec { padding:12px 14px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:8px; }
+.sk-h { display:flex; align-items:center; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); }
+.sk-h .sk-hn { letter-spacing:0; text-transform:none; font-size:12px; }
+.sk-resetall { font-size:12px; letter-spacing:0; text-transform:none; color:var(--acc-tx); }
+.sk-resetall:hover { text-decoration:underline; }
+.sk-mode { display:flex; gap:2px; padding:2px; border:1px solid var(--line2); border-radius:7px; background:var(--term); }
+.sk-mode button { flex:1; height:26px; border-radius:5px; color:var(--tx2); font:500 12px var(--sans); white-space:nowrap; }
 .sk-mode button:hover:not(:disabled) { background:var(--s3); color:var(--tx); }
 .sk-mode button[aria-checked=true] { background:var(--acc-tint); color:var(--acc-tx); box-shadow:inset 0 0 0 1px var(--acc-line); }
 .sk-mode button:disabled { opacity:.5; }
-.sk-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
-.sk-text b { font-size:13px; font-weight:600; }
-.sk-text span { font-size:12px; color:var(--tx2); }
-.sk-more { color:var(--tx3); display:flex; width:24px; height:24px; align-items:center; justify-content:center; border-radius:5px; flex-shrink:0; }
-.sk-more:hover { background:var(--s3); color:var(--tx); }
-.sk-more.open { transform:rotate(180deg); }
-.sk-body { padding:0 12px 10px; font-size:12px; color:var(--tx2); }
-.sk-body ul { margin:2px 0 8px; padding-left:18px; }
-.sk-body li { margin:1px 0; }
-.sk-actions { display:flex; gap:6px; flex-wrap:wrap; }
-.sk-note { padding:0 12px 8px; font-size:12px; color:var(--tx3); }
-.sk-setline { padding:0 12px 8px; font-size:12px; color:var(--acc-tx); }
-.sk-h { margin:2px 0 4px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); }
-.sk-vars { display:flex; flex-direction:column; gap:3px; margin-bottom:10px; }
+.sk-topics { margin:0; padding-left:18px; font-size:12px; color:var(--tx2); }
+.sk-topics li { margin:1px 0; }
+.sk-def { flex-direction:row; align-items:center; justify-content:space-between; font-size:12px; color:var(--tx2); }
+.sk-actions { border-top:1px solid var(--line); }
+.sk-note { padding:0 14px 10px; font-size:12px; color:var(--tx3); }
+.sk-warn { padding:0 14px 10px; font-size:12px; color:var(--warn); }
+.sk-vars { display:flex; flex-direction:column; gap:3px; }
 .sk-var { display:flex; align-items:center; gap:6px; min-height:28px; }
 .sk-var label { flex:1; min-width:0; color:var(--tx2); }
 .sk-var.set label { color:var(--tx); }
 .sk-in { display:flex; align-items:center; gap:4px; flex-shrink:0; }
 .sk-in .c3 { width:16px; font-size:11.5px; }
-.sk-num { width:62px; height:26px; padding:0 6px; border-radius:5px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--mono); text-align:right; }
-.sk-var.set .sk-num, .sk-var.set .sk-select { border-color:var(--acc-line); }
+.sk-num { width:72px; height:26px; padding:0 6px; border-radius:5px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--mono); text-align:right; }
+.sk-var.set .sk-num, .sk-var.set .sk-select { border-color:var(--acc-line); color:var(--acc-tx); }
 .sk-select { max-width:150px; height:26px; padding:0 4px; border-radius:5px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--sans); }
 .sk-reset { width:22px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:5px; color:var(--tx3); flex-shrink:0; }
 .sk-reset:hover { background:var(--s3); color:var(--tx); }
 .sk-reset[hidden] { display:flex; visibility:hidden; }
-.sk-warn { padding:0 12px 8px; font-size:12px; color:var(--warn); }
-.sk-cat { margin:8px 2px -2px; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); }
-.sk-cat:first-child { margin-top:2px; }
-.sk-text .sk-defnote { margin-top:2px; font-size:11.5px; color:var(--tx3); }
-.dropzone { margin:12px; padding:16px 14px; border:1.5px dashed var(--line2); border-radius:10px; display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; color:var(--tx2); font-size:12px; flex-shrink:0; }
-.dropzone b { color:var(--tx); font-size:13px; font-weight:600; }
+.dropzone { margin:10px 12px 12px; padding:9px 12px; border:1px dashed var(--line2); border-radius:8px; display:flex; align-items:center; gap:10px; color:var(--tx3); font-size:12px; flex-shrink:0; }
+.dropzone b { color:var(--tx2); font-weight:500; }
 .dropzone.over, body.dragging .dropzone { border-color:var(--acc); background:var(--acc-tint); }
 
 /* Code */
@@ -301,24 +329,19 @@ code { font-family:var(--mono); font-size:.95em; }
 #viewer-msg.error { color:var(--err); }
 .float { position:absolute; z-index:2; background:rgba(24,27,31,.95); border:1px solid var(--line2); border-radius:10px; box-shadow:var(--shadow); }
 
-.parts { left:12px; top:12px; width:228px; overflow:hidden; max-height:calc(100% - 24px); display:flex; flex-direction:column; }
-.parts .hd { height:36px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 6px 0 4px; }
-.parts .hd-title { display:flex; align-items:center; gap:6px; height:28px; padding:0 8px; border-radius:6px; }
-.parts .hd-title:hover { background:var(--s3); }
-.parts .hd-title .chev { color:var(--tx2); display:flex; transition:transform .15s; }
-.parts .hd-title[aria-expanded=false] .chev { transform:rotate(180deg); }
-.parts.collapsed { width:auto; }
-.parts.collapsed #parts-body, .parts.collapsed #btn-parts-search { display:none; }
-#parts-body { border-top:1px solid var(--line); overflow:auto; min-height:0; }
-.parts .list { padding:4px 0 6px; }
-.parts .filter { width:calc(100% - 16px); margin:8px 8px 2px; height:28px; padding:0 8px; border-radius:6px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:inherit; }
-.row { display:flex; align-items:center; height:28px; padding:0 6px 0 4px; }
-.row .nm { flex:1; min-width:0; display:flex; align-items:center; gap:9px; height:28px; padding:0 8px; border-radius:6px; text-align:left; }
-.row .nm:hover { background:var(--s3); }
+/* Bauteile (Entwurf 2): Baum in der Seitenleiste. Kompakte Zeilen, die Knöpfe erscheinen beim Überfahren
+   oder wenn sie etwas anzeigen (ausgeblendet, transparent). */
+.ptree { flex:1; overflow:auto; padding:6px 0 10px; }
+.row { display:flex; align-items:center; height:26px; padding:0 6px 0 4px; margin:0 6px; border-radius:6px; }
+.row:hover { background:var(--s3); }
+.row .nm { flex:1; min-width:0; display:flex; align-items:center; gap:9px; height:26px; padding:0 6px; border-radius:6px; text-align:left; }
+.row .eye { visibility:hidden; }
+.row:hover .eye, .row .eye:focus-visible, .row .eye.gh.on, .row .eye.gh.partly, .row.off .eye:not(.gh) { visibility:visible; }
 .row .pname { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.row.sel .nm { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
+.row.sel { background:var(--acc-tint); }
+.row.sel .nm { color:var(--acc-tx); font-weight:500; }
 .row.off .nm { color:var(--tx3); }
-.row .eye { width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:var(--tx3); }
+.row .eye { width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:var(--tx3); }
 .row .eye:hover { background:var(--s3); color:var(--tx); }
 .row .eye.gh.on { color:var(--acc-tx); }
 .row .eye.gh.partly { color:var(--acc-tx); opacity:.45; } /* nur ein Teil der Gruppe ist transparent */
@@ -329,15 +352,33 @@ code { font-family:var(--mono); font-size:.95em; }
 .row.gr .gcount { font-size:11px; color:var(--tx3); margin-left:2px; }
 .sw { width:10px; height:10px; border-radius:3px; flex-shrink:0; display:inline-block; box-shadow:inset 0 0 0 1px rgba(255,255,255,.18); }
 .sw.ref { background:transparent !important; border:1px dashed var(--tx3); box-shadow:none; }
-.grp { padding:10px 12px 4px; font-size:11px; letter-spacing:.06em; color:var(--tx3); }
-.parts .hint { color:var(--tx3); padding:8px 12px; }
+.grp { padding:12px 16px 4px; font-size:11px; letter-spacing:.06em; color:var(--tx3); }
+.ptree .hint { color:var(--tx3); padding:8px 14px; }
 
-.dock { top:12px; left:256px; display:flex; align-items:center; gap:2px; padding:4px; }
+/* Obere Reihe (Entwurf 2): links der Umschalter (was der Viewer zeigt), in der Mitte die Werkzeuge, rechts Platz für den Würfel */
+.vtop { position:absolute; left:12px; right:12px; top:12px; z-index:3; display:flex; align-items:flex-start; gap:12px; pointer-events:none; }
+.vtop > * { pointer-events:auto; }
+.vtop > .float { position:relative; }
+.vtop .cubespace { width:120px; flex-shrink:0; pointer-events:none; }
+.switcher { display:flex; align-items:center; height:40px; padding:0 4px 0 0; white-space:nowrap; min-width:0; }
+.switcher .sb { display:flex; align-items:center; gap:8px; height:38px; padding:0 10px 0 12px; border-radius:9px; min-width:0; }
+.switcher .sb:hover, .switcher .sb[aria-expanded=true] { background:var(--s3); }
+.switcher .sb b { overflow:hidden; text-overflow:ellipsis; max-width:220px; }
+.switcher.result .sb b { min-width:64px; }
+.switcher .vico { color:var(--tx2); display:flex; }
+.switcher.result .vico { color:var(--acc-tx); }
+.switcher.vio { border-color:rgba(154,166,255,.55); background:rgba(26,28,42,.97); }
+.switcher.vio .vico { color:var(--vio); }
+.switcher .vs { width:1px; height:18px; background:var(--line2); margin:0 2px; }
+.newbadge { display:flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:10px; background:var(--acc-tint); color:var(--acc-tx); font-size:11px; font-weight:500; }
+.newbadge::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--acc); }
+@container viewer (max-width: 620px) { .switcher #view-sub { display:none; } }
+.dock { display:flex; align-items:center; gap:2px; padding:4px; }
 .dock button { display:flex; align-items:center; gap:7px; height:32px; padding:0 10px; border-radius:7px; white-space:nowrap; }
 .dock button:hover:not(:disabled), .dock button[aria-expanded=true] { background:var(--s3); }
 .dock button:disabled { color:#5d6671; }
 .vsep { width:1px; height:20px; background:var(--line2); margin:0 3px; flex-shrink:0; }
-@container viewer (max-width: 900px) { .dock .lbl { display:none; } .dock button { padding:0 8px; gap:3px; } }
+@container viewer (max-width: 720px) { .dock .lbl { display:none; } .dock button { padding:0 8px; gap:3px; } }
 
 .cube { position:absolute; top:12px; right:14px; z-index:2; display:flex; flex-direction:column; align-items:center; gap:8px; }
 .cube-view { width:116px; height:116px; }
@@ -347,12 +388,16 @@ code { font-family:var(--mono); font-size:.95em; }
 .vbtns button { width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:#c9ced4; }
 .vbtns button:hover { background:var(--s3); }
 
-.selcard { left:12px; bottom:12px; width:356px; overflow:hidden; }
+/* Karten unten links (Entwurf 2): Auswahl, Messen, Schnitt, Explosion, Animation und Analyse stapeln sich nach oben */
+.cards { position:absolute; left:12px; bottom:12px; z-index:2; width:360px; display:flex; flex-direction:column-reverse; gap:8px; pointer-events:none; }
+.cards > .float { position:relative; left:auto; right:auto; top:auto; bottom:auto; width:auto; flex-shrink:0; pointer-events:auto; box-shadow:0 6px 18px rgba(0,0,0,.3); }
+@container viewer (max-width: 560px) { .cards { right:12px; width:auto; } }
+.selcard { overflow:hidden; }
 .dock button[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
 
 /* Messen (E9): Karte unten links statt der Auswahlkarte, Punkte und Beschriftung als HTML über dem Bild */
 #viewer.measuring #selcard { display:none; }
-.mcard { left:12px; bottom:12px; width:356px; overflow:hidden; }
+.mcard { overflow:hidden; }
 .mc-hd { display:flex; align-items:center; gap:8px; padding:10px 8px 6px 14px; }
 .mc-hd b { font-size:14px; }
 .mc-ico { color:var(--acc-tx); display:flex; }
@@ -373,9 +418,8 @@ code { font-family:var(--mono); font-size:.95em; }
 .mc-ent span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .v-overlay { position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
 
-/* Schnitt: Karte unten rechts, neben Auswahl- und Messkarte. Im schmalen Viewer rückt sie unter den Würfel. */
-.sectcard { right:14px; bottom:12px; width:300px; overflow:hidden; }
-@container viewer (max-width: 760px) { .sectcard { bottom:auto; top:212px; width:272px; } }
+/* Schnitt: Karte im Stapel unten links */
+.sectcard { overflow:hidden; }
 .seg { display:flex; gap:2px; margin:2px 12px 8px; padding:3px; border:1px solid var(--line2); border-radius:8px; background:var(--term); }
 .seg button { flex:1; display:flex; align-items:center; justify-content:center; gap:5px; height:26px; border-radius:5px; color:var(--tx2); font-weight:500; }
 .seg button:hover { background:var(--s3); color:var(--tx); }
@@ -398,10 +442,17 @@ code { font-family:var(--mono); font-size:.95em; }
 .peek { margin:0 10px; border:1px solid var(--line); border-radius:6px; background:var(--term); padding:6px 0 7px; font-size:11px; overflow:hidden; }
 .peek:empty { display:none; }
 .peek .ph { display:flex; justify-content:space-between; gap:10px; padding:0 10px 3px; font-size:11px; color:var(--tx3); }
-.sc-actions { display:flex; gap:8px; padding:10px; }
-.sc-actions .btn { flex:1; justify-content:center; }
+.sc-actions { display:flex; flex-wrap:wrap; gap:8px; padding:10px; }
+.sc-actions .btn { flex:1 1 auto; justify-content:center; }
+/* Sehr schmaler Viewer (Dateien, Code und Agent offen): Umschalter und Werkzeuge links untereinander, der Würfel behält seinen Platz */
+@container viewer (max-width: 560px) {
+  .vtop { flex-direction:column; align-items:flex-start; gap:8px; right:auto; }
+  .vtop > .grow, .vtop .cubespace { display:none; }
+  .vtop .dock { flex-direction:column; padding:3px; }
+  .vtop .dock .vsep { width:20px; height:1px; margin:3px 0; }
+}
 
-.errcard { left:256px; top:66px; width:min(560px, calc(100% - 380px)); min-width:360px; overflow:hidden; border-color:rgba(240,116,112,.45); }
+.errcard { left:12px; top:64px; width:min(560px, calc(100% - 170px)); min-width:320px; overflow:hidden; border-color:rgba(240,116,112,.45); z-index:4; }
 .ec-hd { display:flex; align-items:center; gap:10px; padding:12px 10px 10px 14px; }
 .err-ico { color:var(--err); display:flex; }
 .ec-title { display:flex; flex-direction:column; min-width:0; }
@@ -432,8 +483,8 @@ code { font-family:var(--mono); font-size:.95em; }
 .v-paint { pointer-events:none; }
 /* Karten unten links statt der Auswahlkarte (wie beim Messen). Klicks wählen weiter Bauteile. */
 #viewer.animating #selcard, #viewer.analyzing #selcard { display:none; }
-.ancard { left:12px; bottom:12px; width:400px; overflow:hidden; }
-.rscard { left:12px; bottom:12px; width:356px; overflow:hidden; }
+.ancard { overflow:hidden; }
+.rscard { overflow:hidden; }
 .an-select { flex:1; min-width:0; height:26px; margin-left:4px; padding:0 6px; border-radius:6px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:inherit; font-size:12.5px; }
 .an-select:disabled { opacity:1; border-color:transparent; background:transparent; appearance:none; padding-left:2px; color:var(--tx2); }
 .an-transport { display:flex; align-items:center; gap:8px; padding:2px 12px 4px 8px; }
@@ -456,6 +507,14 @@ code { font-family:var(--mono); font-size:.95em; }
 .rs-row span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .rs-row.bad span { color:var(--err); }
 .rs-probe { margin:4px 12px 2px; padding:6px 8px; border-radius:6px; background:var(--term); font-size:12px; color:var(--tx2); min-height:28px; }
+/* Fadenkreuz über dem Bild wie beim Messen (dort setzt der Viewer es selbst auf die 3D-Fläche). Karten und Knöpfe behalten ihren Zeiger. */
+#viewer.analyzing > canvas { cursor:crosshair; }
+/* Schild am Zeiger: wie die Messbeschriftung (.v-label), aber neutral, denn Orange hieße Auswahl. Unter den Karten, Klicks gehen durch. */
+.rs-tip { position:absolute; left:0; top:0; z-index:1; pointer-events:none; padding:3px 9px 4px 8px; border-radius:6px; background:rgba(24,27,31,.95);
+  border:1px solid var(--line2); box-shadow:0 4px 14px rgba(0,0,0,.35); white-space:nowrap; }
+.rs-tip-v { display:flex; align-items:center; gap:6px; font:600 12.5px var(--mono); color:var(--tx); }
+.rs-tip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; box-shadow:0 0 0 1px rgba(255,255,255,.22); }
+.rs-tip-n { padding-left:14px; max-width:220px; overflow:hidden; text-overflow:ellipsis; font-size:11px; color:var(--tx3); }
 .videoview { position:absolute; inset:0; z-index:7; background:#0d0f12; display:flex; align-items:center; justify-content:center; padding:12px 12px 64px; }
 .videoview video { max-width:100%; max-height:100%; background:#000; border-radius:6px; box-shadow:var(--shadow); }
 .vv-bar { left:50%; bottom:12px; transform:translateX(-50%); width:min(940px, calc(100% - 24px)); display:flex; align-items:center; gap:4px; padding:4px 6px; }
@@ -465,10 +524,10 @@ code { font-family:var(--mono); font-size:.95em; }
 .vv-title b { color:var(--tx); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .vv-bar .ibtn { width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px; }
 .vv-bar .ibtn:hover { background:var(--s3); }
-@container viewer (max-width: 760px) { .vv-title { display:none; } .ancard, .rscard { width:auto; right:12px; } }
+@container viewer (max-width: 760px) { .vv-title { display:none; } }
 
 /* ---- Markierung (E16) ----------------------------------------------------------------------------------------- */
-#viewer.marking > .float, #viewer.marking > .cube, #viewer.marking > #viewer-msg { display:none; }
+#viewer.marking > .float, #viewer.marking > .cube, #viewer.marking > .vtop, #viewer.marking > .cards, #viewer.marking > #viewer-msg { display:none; }
 .markup { position:absolute; inset:0; z-index:8; background:var(--s2); }
 .markup canvas { position:absolute; left:0; top:0; display:block; touch-action:none; }
 .mk-frame { position:absolute; inset:6px; border:2px dashed var(--acc-line); border-radius:8px; pointer-events:none; }
@@ -528,7 +587,9 @@ code { font-family:var(--mono); font-size:.95em; }
 .addtab { width:auto !important; height:28px !important; padding:0 6px; gap:3px; margin-left:2px; }
 #term-panes { flex:1; min-height:0; position:relative; }
 .term-pane { position:absolute; inset:0; padding:10px 0 0 12px; }
-.handoff { height:44px; flex-shrink:0; display:flex; align-items:center; gap:6px; padding:0 10px; background:var(--s1); border-top:1px solid var(--line); font-size:12px; overflow:hidden; }
+/* Bauteil oder Datei über dem Terminal: Loslassen fügt den Verweis ein (ersetzt die Übergabeleiste, Entwurf 2) */
+#term-panes.dropping::after { content:'Loslassen fügt den Verweis in die Eingabe ein'; position:absolute; inset:8px; border:2px dashed var(--acc-line); border-radius:8px;
+  background:rgba(242,154,56,.06); display:flex; align-items:flex-end; justify-content:center; padding-bottom:16px; color:var(--acc-tx); font-size:12.5px; pointer-events:none; }
 .strip { display:flex; flex-direction:column; align-items:center; gap:6px; padding-top:6px; height:100%; }
 .strip-tabs { display:flex; flex-direction:column; align-items:center; gap:6px; margin-top:8px; }
 .strip-tabs button { display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px 0; width:36px; border-radius:8px; color:var(--tx2); }
@@ -547,6 +608,13 @@ code { font-family:var(--mono); font-size:.95em; }
 .mi .k { margin-left:auto; padding-left:16px; color:var(--tx3); font-size:12px; }
 .mi .sub { color:var(--tx3); font-size:12px; overflow:hidden; text-overflow:ellipsis; }
 .mi.cur span:nth-child(2) { color:var(--acc-tx); }
+#menu-view { width:360px; max-width:360px; }
+#menu-view .vl { overflow:hidden; text-overflow:ellipsis; }
+#menu-view .k { display:flex; align-items:center; gap:6px; }
+#menu-view .k .dot { width:7px; height:7px; }
+.mh .src { margin-left:6px; font-family:var(--mono); letter-spacing:0; }
+.mi .tag { font-size:10.5px; padding:1px 6px; border-radius:4px; }
+.tag.acc { background:var(--acc-tint); color:var(--acc-tx); }
 .mi .chk { width:15px; display:flex; color:var(--acc-tx); visibility:hidden; }
 .mi[aria-checked=true] .chk { visibility:visible; }
 .msep { height:1px; background:var(--line); margin:6px 4px; }
@@ -616,13 +684,20 @@ code { font-family:var(--mono); font-size:.95em; }
 .note-ico { color:var(--vio); display:flex; }
 .note-text { display:flex; flex-direction:column; gap:8px; font-size:12.5px; }
 .note-text .btn { align-self:flex-start; }
-/* Explosionsansicht (explodetool.ts): Karte unten rechts. Ein offener Schnitt rückt darüber (schmal steht er ohnehin oben). */
-.excard { right:14px; bottom:12px; width:300px; overflow:hidden; }
+/* Explosionsansicht (explodetool.ts): Karte im Stapel unten links */
+.excard { overflow:hidden; }
 .excard .sx-pos label { width:52px; }
 .ex-val { width:42px; flex-shrink:0; text-align:right; font:12px var(--mono); color:var(--tx2); }
 .ex-steps { display:flex; align-items:center; gap:2px; padding:2px 8px 2px 10px; }
-.ex-step { flex:1; min-width:0; padding:0 4px; font-size:12px; color:var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* „Schritt X von N“: feste Ziffernbreite, damit beim Abspielen nichts springt */
+.ex-step { flex:1; min-width:0; padding:0 6px; font-size:12px; font-weight:600; color:var(--tx); font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ex-steps .ibtn:disabled { opacity:.4; }
+/* Der laufende Abspielknopf (zeigt „Anhalten“) */
+.ex-steps .ibtn.on { background:var(--acc-tint); color:var(--acc-tx); }
+/* Zusammenbauen abspielen: dasselbe Symbol wie Abspielen, gespiegelt (zeigt zur Einbaulage) */
+.ex-rev svg.ic { transform:scaleX(-1); }
+.ex-speed { flex-shrink:0; height:24px; margin-right:2px; padding:0 2px; border-radius:6px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--mono); }
+.ex-speed:disabled { opacity:.4; }
+.ex-names { padding:0 14px 2px; font-size:12px; color:var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .excard .btn[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); border-color:var(--acc-line); }
-@container viewer (min-width: 761px) { #viewer.exploding .sectcard { bottom:calc(var(--excard-h, 176px) + 24px); } }
-@container viewer (max-width: 760px) { .excard { width:272px; } }
+

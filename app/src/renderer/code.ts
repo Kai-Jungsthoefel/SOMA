@@ -94,6 +94,8 @@ interface Deps extends PdfDeps {
   ask(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number>;
   /** Die Menge der ungespeicherten Dateien hat sich geändert (für den Speicherstand oben). */
   changed(): void;
+  /** Der aktive Reiter (null: keiner), etwa um die Datei im Dateibaum hervorzuheben. */
+  active?(file: string | null): void;
   /** Link in einer Markdown-Ansicht: Web-Adresse oder Pfad im Projekt. */
   link(href: string): void;
   /** Bild aus dem Projekt für die Markdown-Ansicht als blob:-Adresse, null wenn es nicht geht. */
@@ -158,7 +160,7 @@ const PHRASES = {
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
- * Code-Panel mit Editor (CodeMirror 6). Offene Dateien als Reiter, die Auswahl im Viewer springt zur Codestelle, solange
+ * Code-Spalte mit Editor (CodeMirror 6, Entwurf 2: eigene Spalte neben der Seitenleiste). Offene Dateien als Reiter, die Auswahl im Viewer springt zur Codestelle, solange
  * „Mit Auswahl verknüpft“ an ist. Gespeichert wird nur auf Wunsch des Nutzers (Strg+S im Editor, „Speichern und bauen“,
  * „Speichern“ oben), danach wird gebaut. Beim Tippen passiert nichts auf der Platte.
  *
@@ -187,7 +189,7 @@ export class CodePanel {
       ui.link.setAttribute('aria-pressed', String(this.linked));
     });
     this.view = new EditorView({ parent: ui.view, state: EditorState.create({ doc: '' }) });
-    this.empty = el('div', { className: 'hint', textContent: 'Keine Datei geöffnet. Klick auf ein Bauteil oder im Dateien-Panel auf eine Datei.' });
+    this.empty = el('div', { className: 'hint', textContent: 'Keine Datei geöffnet. Klick auf ein Bauteil oder links unter „Dateien“ auf eine Datei.' });
     this.md = el('div', { className: 'mdview', tabIndex: -1 });
     this.md.hidden = true;
     ui.view.append(this.empty, this.md);
@@ -531,6 +533,7 @@ export class CodePanel {
 
   private renderChrome(): void {
     const { tabs, info, banner } = this.ui;
+    this.deps.active?.(this.active);
     tabs.replaceChildren(...[...this.docs.values()].map((d) => {
       const x = el('button', { className: 'x', title: `${d.file} schließen` }, icon('x', 11, 2.2));
       x.setAttribute('aria-label', `${d.file} schließen`);

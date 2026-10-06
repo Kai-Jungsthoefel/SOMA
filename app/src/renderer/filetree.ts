@@ -13,6 +13,8 @@ export const TEXT_EXT = /\.(py|md|txt|json|toml|cfg|ini|yml|yaml|gitignore|csv)$
 export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 /** Videos, die die App abspielt (E58). MOV meist nur, wenn H.264 darin steckt. */
 export const VIDEO_EXT = /\.(mp4|webm|m4v|mov)$/i;
+/** Datentyp beim Ziehen einer Datei ins Terminal (Wert: Pfad relativ zum Projekt). */
+export const DRAG_FILE = 'application/x-soma-file';
 
 /** Was der Baum vom Rest der App braucht. Die Aktionen liefern true, wenn das Namensfeld zugehen darf. */
 export interface FileTreeDeps {
@@ -65,6 +67,8 @@ export class FileTree {
   private input: HTMLInputElement | null = null;
   /** Ein Name wird gerade angelegt oder umbenannt: kein zweites Absenden, auch nicht aus einem neu gezeichneten Feld. */
   private submitting = false;
+  /** Im Code offene Datei, hervorgehoben. */
+  private active: string | null = null;
 
   constructor(private root: HTMLElement, private menu: HTMLElement, private deps: FileTreeDeps) {
     root.addEventListener('contextmenu', (e) => {
@@ -255,14 +259,29 @@ export class FileTree {
       b.title = n.path;
       b.dataset.path = n.path;
       b.addEventListener('click', () => this.toggle(n.path));
+      FileTree.draggable(b, n.path);
       return b;
     }
     const b = this.button(depth, null, fileIcon(n.name), n.name, TAGS[n.path] ?? '', '');
-    b.title = TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name) ? `${n.path} im Code-Panel öffnen` : IMAGE_EXT.test(n.name) ? `${n.path} zum Markieren öffnen`
+    b.title = TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name) ? `${n.path} im Code öffnen` : IMAGE_EXT.test(n.name) ? `${n.path} zum Markieren öffnen`
       : VIDEO_EXT.test(n.name) ? `${n.path} abspielen` : n.path;
     b.dataset.path = n.path;
     b.addEventListener('click', () => this.deps.open(n));
+    if (n.path === this.active) b.classList.add('sel');
+    FileTree.draggable(b, n.path);
     return b;
+  }
+
+  /** Datei, die gerade im Code offen ist: im Baum hervorheben, damit man sieht, wo man ist. */
+  setActive(rel: string | null): void {
+    this.active = rel;
+    this.root.querySelectorAll<HTMLElement>('.frow[data-path]').forEach((r) => r.classList.toggle('sel', r.dataset.path === rel));
+  }
+
+  /** Ziehen ins Terminal fügt den Pfad ein wie „An Agent geben“ im Kontextmenü. */
+  private static draggable(b: HTMLElement, rel: string): void {
+    b.draggable = true;
+    b.addEventListener('dragstart', (e) => { e.dataTransfer?.setData(DRAG_FILE, rel); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy'; });
   }
 
   private button(depth: number, chev: string | null, ico: string, name: string, tag: string, cls: string): HTMLButtonElement {

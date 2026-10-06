@@ -25,22 +25,34 @@
       <button id="btn-auto" class="auto" title="Automatisch bauen, wenn sich der Code ändert"><i data-icon="refresh" data-size="14" data-stroke="2"></i><span id="auto-label">Auto an</span></button>
     </div>
     <span class="grow"></span>
+    <div id="layout" class="layout" role="group" aria-label="Spalten">
+      <button id="btn-lay-side" aria-pressed="true" title="Seitenleiste ein- und ausblenden (Strg 1)" aria-label="Seitenleiste"><i data-icon="sidel" data-size="17" data-stroke="1.7"></i></button>
+      <button id="btn-lay-code" aria-pressed="false" title="Code ein- und ausblenden (Strg 2)" aria-label="Code"><i data-icon="code" data-size="16" data-stroke="1.9"></i></button>
+      <button id="btn-lay-agent" aria-pressed="true" title="Agent ein- und ausklappen (Strg 3). Eingeklappt läuft er weiter." aria-label="Agent"><i data-icon="panel" data-size="17" data-stroke="1.7"></i></button>
+    </div>
     <button id="btn-export" class="btn" aria-haspopup="menu" aria-expanded="false"><i data-icon="export" data-size="15"></i>Exportieren<i data-icon="down" data-size="13" data-stroke="2"></i></button>
     <button id="btn-save" class="btn primary" title="Snapshot im Verlauf anlegen und die ZIP schreiben">Speichern <span class="kbd">Strg S</span></button>
   </header>
 
   <div id="body">
     <nav id="rail" aria-label="Seitenleisten">
-      <button data-panel="files" aria-pressed="false" title="Dateien des Modells"><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Dateien</span></button>
-      <button data-panel="code" aria-pressed="false" title="Code ansehen und bearbeiten"><i data-icon="code" data-size="20" data-stroke="1.7"></i><span>Code</span></button>
+      <button data-panel="parts" aria-pressed="false" title="Bauteile des Modells: auswählen, aus- und einblenden, transparent schalten"><i data-icon="cube" data-size="20" data-stroke="1.7"></i><span>Bauteile</span></button>
+      <button data-panel="files" aria-pressed="false" title="Dateien des Modells. Ein Klick auf eine Datei öffnet sie im Code daneben."><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Dateien</span></button>
       <button data-panel="skills" aria-pressed="false" title="Skills: Regeln für den Agenten, je Modell einstellbar (3D-Druck, Toleranzen …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
-      <button disabled title="Die Paketliste kommt in einem späteren Schritt"><i data-icon="pkg" data-size="20" data-stroke="1.7"></i><span>Pakete</span></button>
       <span class="grow"></span>
       <button disabled title="Hilfe kommt in einem späteren Schritt"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Hilfe</span></button>
       <button disabled title="Optionen kommen in einem späteren Schritt"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Optionen</span></button>
     </nav>
 
     <aside id="side" hidden>
+      <!-- Bauteile (Entwurf 2): fest in der Seitenleiste statt als Karte im Viewer -->
+      <section id="panel-parts" class="panel" aria-label="Bauteile" hidden>
+        <div class="side-hd"><b>Bauteile</b><span id="parts-count" class="c3 hd-count"></span><span class="grow"></span>
+          <button id="btn-parts-search" class="ibtn s" aria-label="Bauteile suchen" title="Bauteile suchen"><i data-icon="search" data-size="15" data-stroke="1.9"></i></button>
+          <button class="ibtn s side-close" aria-label="Seitenleiste schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+        <input id="parts-filter" class="filter" type="search" placeholder="Bauteil suchen" aria-label="Bauteil suchen" hidden>
+        <div id="tab-model" class="list ptree"></div>
+      </section>
       <section id="panel-files" class="panel" aria-label="Dateien" hidden>
         <div class="side-hd"><b>Dateien</b><span class="grow"></span>
           <button id="btn-file-new" class="ibtn s" title="Neue Datei (Rechtsklick im Baum: auch in einem Ordner)" aria-label="Neue Datei"><i data-icon="fileplus" data-size="15"></i></button>
@@ -48,52 +60,57 @@
           <button id="btn-reveal" class="ibtn s" title="Im Explorer zeigen" aria-label="Im Explorer zeigen"><i data-icon="openext" data-size="15"></i></button>
           <button class="ibtn s side-close" aria-label="Dateien schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="tab-files" class="ftree"></div>
-        <div id="dropzone" class="dropzone"><i data-icon="upload" data-size="20"></i><b>Dateien oder Ordner hierher ziehen</b><span>STEP-Dateien, Bilder und Skizzen landen in <code>inputs/</code>. Vorhandenes wird nicht überschrieben.</span></div>
+        <div id="dropzone" class="dropzone" title="STEP-Dateien, Bilder und Skizzen landen in inputs/. Vorhandenes wird nicht überschrieben."><i data-icon="upload" data-size="16"></i><span><b>Hierher ziehen:</b> landet in <code>inputs/</code></span></div>
       </section>
       <section id="panel-skills" class="panel" aria-label="Skills" hidden>
         <div class="side-hd"><b>Skills</b><span class="grow"></span>
-          <button class="ibtn s side-close" aria-label="Skills schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
-        <div class="sk-intro">Regeln für den Agenten. <b>Bei Bedarf</b> liest er einen Skill, wenn das Gespräch auf das Thema kommt, <b>Immer</b> befolgt er ihn bei jeder Änderung. Beide liegen in <code>.soma/skills/</code>, stehen in <code>AGENTS.md</code> und wandern mit der ZIP.</div>
+          <button id="btn-skills-info" class="ibtn s" aria-label="Was sind Skills?" title="Skills sind Regeln für den Agenten. Aus: Er sieht den Skill nicht. Bei Bedarf: Er liest ihn, wenn das Gespräch auf das Thema kommt. Immer: Er befolgt ihn bei jeder Änderung. Sie liegen in .soma/skills/, stehen in AGENTS.md und wandern mit der ZIP."><i data-icon="info" data-size="15" data-stroke="1.9"></i></button>
+          <button class="ibtn s side-close" aria-label="Seitenleiste schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+        <div id="skills-sum" class="sk-sum"></div>
         <div id="skills-list" class="sk-list" role="list"></div>
       </section>
-      <section id="panel-code" class="panel" aria-label="Code" hidden>
+      <!-- Karte neben der Liste: Beschreibung, Stufe und Einstellungen eines Skills -->
+      <div id="skill-detail" class="float skdetail" role="dialog" aria-label="Skill" hidden></div>
+    </aside>
+    <div class="splitter" id="split-side" hidden></div>
+
+    <!-- Code (Entwurf 2): eigene Spalte neben der Seitenleiste, damit Dateien und Code gleichzeitig offen sein können -->
+    <aside id="editor" aria-label="Code" hidden>
+      <section id="panel-code" class="panel">
         <div class="side-hd code-hd"><div id="code-tabs" class="ctabs"></div><span class="grow"></span>
           <div id="code-mode" class="cmode" role="radiogroup" aria-label="Markdown zeigen als" hidden><button data-mode="view" role="radio" aria-checked="true" aria-label="Ansicht" title="Ansicht: als Dokument zeigen. Doppelklick auf einen Absatz springt zum Bearbeiten an diese Stelle"><i data-icon="eye" data-size="14" data-stroke="1.9"></i></button><button data-mode="edit" role="radio" aria-checked="false" aria-label="Bearbeiten" title="Bearbeiten: Quelltext im Editor, speichern mit Strg+S"><i data-icon="pen" data-size="14" data-stroke="1.9"></i></button></div>
-          <button id="btn-codelink" class="btn sm ghost" aria-pressed="true" title="Klick auf ein Bauteil springt zur Codestelle"><i data-icon="link" data-size="14" data-stroke="1.9"></i>Mit Auswahl verknüpft</button>
-          <button class="ibtn s side-close" aria-label="Code schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+          <button id="btn-codelink" class="ibtn s" aria-pressed="true" aria-label="Mit Auswahl verknüpft" title="Mit Auswahl verknüpft: Klick auf ein Bauteil springt zur Codestelle"><i data-icon="link" data-size="15" data-stroke="1.9"></i></button>
+          <button id="btn-code-close" class="ibtn s" aria-label="Code schließen" title="Code schließen (Strg 2)"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="code-info" class="code-info"></div>
         <div id="code-banner" class="code-banner" role="alert" hidden></div>
         <div id="code-view" class="codeview"></div>
       </section>
     </aside>
-    <div class="splitter" id="split-side" hidden></div>
+    <div class="splitter" id="split-code" hidden></div>
 
     <main id="center">
       <section id="viewer" aria-label="3D-Ansicht">
         <div id="viewer-msg"></div>
 
-        <div id="parts" class="float parts">
-          <div class="hd">
-            <button id="btn-parts-toggle" class="hd-title" aria-expanded="true" title="Liste ein- oder ausklappen"><b>Bauteile</b><span id="parts-count" class="c3"></span><span class="chev"><i data-icon="up" data-size="15" data-stroke="2"></i></span></button>
-            <span class="grow"></span>
-            <button id="btn-parts-search" class="ibtn s" aria-label="Bauteile suchen" title="Bauteile suchen"><i data-icon="search" data-size="15" data-stroke="1.9"></i></button>
+        <!-- Oben links: was der Viewer zeigt (Modell oder ein Ergebnis des Agenten). In der Mitte die Werkzeuge. -->
+        <div id="vtop" class="vtop">
+          <div id="view-switch" class="float switcher">
+            <button id="btn-view" class="sb" aria-haspopup="menu" aria-expanded="false" title="Was der Viewer zeigt: das Modell, eine Analyse, eine Animation oder ein Video">
+              <span id="view-ico" class="vico"><i data-icon="cube" data-size="16"></i></span><b id="view-name">Modell</b><span id="view-sub" class="c3"></span>
+              <span id="view-new" class="newbadge" hidden></span><i data-icon="down" data-size="14" data-stroke="2"></i></button>
+            <span id="view-sep" class="vs" hidden></span>
+            <button id="btn-view-close" class="ibtn s" aria-label="Zurück zum Modell" title="Zurück zum Modell" hidden><i data-icon="x" data-size="14" data-stroke="2"></i></button>
           </div>
-          <div id="parts-body">
-            <input id="parts-filter" class="filter" type="search" placeholder="Bauteil suchen" aria-label="Bauteil suchen" hidden>
-            <div id="tab-model" class="list"></div>
+          <span class="grow"></span>
+          <div id="dock" class="float dock" role="toolbar" aria-label="Werkzeuge">
+            <button id="btn-measure" aria-pressed="false" title="Messen: Fläche oder Kante anklicken, ein zweiter Klick misst Abstand und Winkel (exakte Werte)"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
+            <button id="btn-section" aria-pressed="false" title="Schnitt: das Modell an einer Ebene aufschneiden (senkrecht zu X, Y, Z oder parallel zu einer Fläche)"><i data-icon="section"></i><span class="lbl">Schnitt</span></button>
+            <button id="btn-explode" aria-pressed="false" title="Explosion: die Bauteile zur Darstellung auseinanderziehen, Normteile entlang ihrer Achse"><i data-icon="explode"></i><span class="lbl">Explosion</span></button>
+            <span class="vsep"></span>
+            <button id="btn-mark" title="Viewer-Bild markieren und an den Agenten geben"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
           </div>
-        </div>
-
-        <div id="dock" class="float dock">
-          <button id="btn-display" aria-haspopup="menu" aria-expanded="false" title="Darstellung"><i data-icon="layers"></i><span class="lbl">Darstellung</span><span class="c2"><i data-icon="down" data-size="13" data-stroke="2"></i></span></button>
-          <span class="vsep"></span>
-          <button id="btn-measure" aria-pressed="false" title="Messen: Fläche oder Kante anklicken, ein zweiter Klick misst Abstand und Winkel (exakte Werte)"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
-          <button id="btn-section" aria-pressed="false" title="Schnitt: das Modell an einer Ebene aufschneiden (senkrecht zu X, Y, Z oder parallel zu einer Fläche)"><i data-icon="section"></i><span class="lbl">Schnitt</span></button>
-          <button id="btn-explode" aria-pressed="false" title="Explosion: die Bauteile zur Darstellung auseinanderziehen, Normteile entlang ihrer Achse"><i data-icon="explode"></i><span class="lbl">Explosion</span></button>
-          <button id="btn-anim" aria-pressed="false" title="Animation: Bewegungen, Kamerafahrten und Texte aus animations/ abspielen, Video erzeugen"><i data-icon="anim"></i><span class="lbl">Animation</span></button>
-          <button id="btn-result" aria-pressed="false" title="Analyse: Ergebnisse von soma analyze farbig zeigen (Überhang, Wandstärke, Abstand)"><i data-icon="gauge"></i><span class="lbl">Analyse</span></button>
-          <span class="vsep"></span>
-          <button id="btn-mark" title="Viewer-Bild markieren und an den Agenten geben"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
+          <span class="grow"></span>
+          <span class="cubespace"></span>
         </div>
 
         <div id="cube" class="cube">
@@ -102,16 +119,20 @@
           <div class="vbtns">
             <button data-view="fit" aria-label="Alles einpassen" title="Alles einpassen"><i data-icon="fit"></i></button>
             <button data-view="iso" aria-label="Standardansicht" title="Standardansicht (isometrisch)"><i data-icon="home"></i></button>
+            <button id="btn-display" aria-haspopup="menu" aria-expanded="false" aria-label="Darstellung" title="Darstellung: Kanten, Drahtgitter, Transparent und Ansichten"><i data-icon="layers"></i></button>
           </div>
         </div>
 
+        <!-- Unten links: die Karte zum aktuellen Geschehen. Mehrere stapeln sich nach oben, die erste steht unten. -->
+        <div id="cards" class="cards">
         <div id="selcard" class="float selcard" hidden>
           <div class="sc-hd"><span id="sel-swatch" class="sw"></span><b id="sel-name"></b><span class="grow"></span>
             <button id="btn-sel-close" class="ibtn s" aria-label="Auswahl aufheben"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
           <div id="info" class="sc-info c2"></div>
           <div id="code" class="peek code"></div>
           <div class="sc-actions">
-            <button id="btn-sel-code" class="btn sm"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code öffnen</button>
+            <button id="btn-sel-code" class="btn sm" title="Die Codestelle des Bauteils im Code zeigen"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code</button>
+            <button id="btn-sel-export" class="btn sm" aria-haspopup="menu" aria-expanded="false" title="Dieses Bauteil als Datei exportieren: Format wählen, dann den Speicherort"><i data-icon="export" data-size="14" data-stroke="1.9"></i>Exportieren</button>
             <button id="btn-sel-agent" class="btn sm acc" title="Bauteil, Datei und Zeilen in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
           </div>
         </div>
@@ -123,6 +144,33 @@
           <div class="sc-actions">
             <button id="btn-measure-again" class="btn sm" disabled>Neu messen</button>
             <button id="btn-measure-agent" class="btn sm acc" disabled title="Die Messung in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+          </div>
+        </div>
+
+        <!-- Explosionsansicht (explodetool.ts): Bauteile auseinanderziehen. Ändert nichts am Modell. -->
+        <div id="explode-card" class="float excard" hidden>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="explode" data-size="16"></i></span><b>Explosion</b><span class="grow"></span>
+            <button id="btn-explode-close" class="ibtn s" aria-label="Explosion beenden" title="Explosion beenden (setzt das Modell wieder zusammen)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div class="sx-pos">
+            <label for="explode-range">Abstand</label>
+            <input id="explode-range" type="range" min="0" max="100" step="1" aria-label="Abstand der Explosion in Prozent">
+            <span id="explode-value" class="ex-val"></span>
+          </div>
+          <!-- Abspielen in beide Richtungen: links zur Einbaulage (zurück, Zusammenbau), rechts zur Explosion (Auseinanderbau, weiter) -->
+          <div class="ex-steps">
+            <button id="btn-explode-back" class="ibtn s" aria-label="Schritt zurück" title="Einen Schritt zurück (zusammenbauen)"><i data-icon="stepback" data-size="15"></i></button>
+            <button id="btn-explode-assemble" class="ibtn s ex-rev" aria-label="Zusammenbauen abspielen" title="Den Zusammenbau Schritt für Schritt abspielen"><i data-icon="play" data-size="15"></i></button>
+            <button id="btn-explode-play" class="ibtn s" aria-label="Auseinanderbauen abspielen" title="Den Auseinanderbau Schritt für Schritt abspielen"><i data-icon="play" data-size="15"></i></button>
+            <button id="btn-explode-next" class="ibtn s" aria-label="Schritt weiter" title="Einen Schritt weiter (auseinanderbauen)"><i data-icon="stepfwd" data-size="15"></i></button>
+            <span id="explode-step" class="ex-step"></span>
+            <select id="explode-speed" class="ex-speed" aria-label="Tempo beim Abspielen" title="Tempo beim Abspielen"><option value="0.25">0,25×</option><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+            <button id="btn-explode-agent" class="ibtn s" aria-label="Reihenfolge an den Agenten geben" title="Die Reihenfolge des Auseinanderbaus in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="15"></i></button>
+          </div>
+          <div id="explode-names" class="ex-names" hidden></div>
+          <div id="explode-hint" class="mc-hint" hidden></div>
+          <div class="sc-actions">
+            <button id="btn-explode-trails" class="btn sm" aria-pressed="true" title="Gestrichelte Wege von der Einbaulage zur aktuellen Lage zeigen"><i data-icon="line" data-size="14" data-stroke="1.9"></i>Wege</button>
+            <button id="btn-explode-fit" class="btn sm" title="Das auseinandergezogene Modell ganz ins Bild holen"><i data-icon="fit" data-size="14" data-stroke="1.9"></i>Einpassen</button>
           </div>
         </div>
 
@@ -148,29 +196,6 @@
           </div>
         </div>
 
-        <!-- Explosionsansicht (explodetool.ts): Bauteile auseinanderziehen. Ändert nichts am Modell. -->
-        <div id="explode-card" class="float excard" hidden>
-          <div class="mc-hd"><span class="mc-ico"><i data-icon="explode" data-size="16"></i></span><b>Explosion</b><span class="grow"></span>
-            <button id="btn-explode-close" class="ibtn s" aria-label="Explosion beenden" title="Explosion beenden (setzt das Modell wieder zusammen)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
-          <div class="sx-pos">
-            <label for="explode-range">Abstand</label>
-            <input id="explode-range" type="range" min="0" max="100" step="1" aria-label="Abstand der Explosion in Prozent">
-            <span id="explode-value" class="ex-val"></span>
-          </div>
-          <div class="ex-steps">
-            <button id="btn-explode-back" class="ibtn s" aria-label="Schritt zurück" title="Einen Schritt zurück (zusammenbauen)"><i data-icon="stepback" data-size="15"></i></button>
-            <button id="btn-explode-play" class="ibtn s" aria-label="Abspielen" title="Den Auseinanderbau Schritt für Schritt abspielen"><i data-icon="play" data-size="15"></i></button>
-            <button id="btn-explode-next" class="ibtn s" aria-label="Schritt weiter" title="Einen Schritt weiter (auseinanderbauen)"><i data-icon="stepfwd" data-size="15"></i></button>
-            <span id="explode-step" class="ex-step"></span>
-            <button id="btn-explode-agent" class="ibtn s" aria-label="Reihenfolge an den Agenten geben" title="Die Reihenfolge des Auseinanderbaus in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="15"></i></button>
-          </div>
-          <div id="explode-hint" class="mc-hint"></div>
-          <div class="sc-actions">
-            <button id="btn-explode-trails" class="btn sm" aria-pressed="true" title="Gestrichelte Wege von der Einbaulage zur aktuellen Lage zeigen"><i data-icon="line" data-size="14" data-stroke="1.9"></i>Wege</button>
-            <button id="btn-explode-fit" class="btn sm" title="Das auseinandergezogene Modell ganz ins Bild holen"><i data-icon="fit" data-size="14" data-stroke="1.9"></i>Einpassen</button>
-          </div>
-        </div>
-
         <!-- Animation (E58, animtool.ts): Ablauf aus animations/*.py abspielen. Ändert nichts am Modell. -->
         <div id="anim-card" class="float ancard" hidden>
           <div class="mc-hd"><span class="mc-ico"><i data-icon="anim" data-size="16"></i></span><b>Animation</b>
@@ -182,8 +207,9 @@
             <span id="anim-time" class="an-time"></span>
           </div>
           <div class="an-opts">
-            <button id="btn-anim-follow" class="btn sm" aria-pressed="true" title="Kamera der Animation folgen. Aus: frei drehen, die Teile bewegen sich trotzdem"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Kamera folgen</button>
+            <button id="btn-anim-follow" class="btn sm" aria-pressed="true" title="Kamera der Animation folgen. Aus: frei drehen, die Teile bewegen sich trotzdem"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Kamera</button>
             <button id="btn-anim-loop" class="btn sm" aria-pressed="false" title="Am Ende von vorn"><i data-icon="loop" data-size="14" data-stroke="1.9"></i>Schleife</button>
+            <button id="btn-anim-texts" class="btn sm" aria-pressed="true" title="Titel, Untertitel und Beschriftungen der Animation zeigen. Aus: nur die Bewegung, das Video enthält sie trotzdem"><i data-icon="text" data-size="14" data-stroke="1.9"></i>Texte</button>
             <span class="grow"></span>
             <select id="anim-speed" class="an-speed" aria-label="Tempo" title="Tempo"><option value="0.25">0,25×</option><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
           </div>
@@ -207,6 +233,8 @@
             <button id="btn-result-rerun" class="btn sm" title="Dieselbe Auswertung am aktuellen Modell noch einmal rechnen"><i data-icon="refresh" data-size="14" data-stroke="1.9"></i>Neu berechnen</button>
             <button id="btn-result-agent" class="btn sm acc" title="Ergebnis und die angeklickte Stelle in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
           </div>
+        </div>
+
         </div>
 
         <div id="errcard" class="float errcard" hidden>
@@ -296,15 +324,8 @@
     <aside id="terminals" class="agent" aria-label="Agent und Terminals">
       <div id="term-tabs" class="tabs">
         <button id="btn-term-add" class="ibtn addtab" aria-haspopup="menu" aria-expanded="false" title="Neuer Tab: Agent oder Terminal" aria-label="Neuer Tab: Agent oder Terminal"><i data-icon="plus" data-size="15" data-stroke="2"></i><i data-icon="down" data-size="12" data-stroke="2"></i></button>
-        <span class="grow"></span>
-        <button id="btn-agent-collapse" class="ibtn" title="Agent-Bereich einklappen" aria-label="Agent-Bereich einklappen"><i data-icon="panel"></i></button>
       </div>
       <div id="term-panes"></div>
-      <div id="handoff" class="handoff"><span class="c3">Einfügen:</span>
-        <button id="btn-ins-sel" class="btn sm" disabled title="Bauteil, Datei und Zeilen der Auswahl in die Eingabe einfügen"><i data-icon="target" data-size="13" data-stroke="2"></i>Auswahl</button>
-        <button id="btn-ins-mark" class="btn sm" title="Viewer-Bild markieren und den Pfad einfügen"><i data-icon="image" data-size="13" data-stroke="2"></i>Markierung</button>
-        <button id="btn-ins-err" class="btn sm" disabled title="Meldung des letzten Builds in die Eingabe einfügen"><i data-icon="alert" data-size="13" data-stroke="2"></i>Build-Fehler</button>
-      </div>
       <div id="agent-strip" class="strip" hidden>
         <button id="btn-agent-expand" class="ibtn" title="Agent-Bereich ausklappen" aria-label="Agent-Bereich ausklappen"><i data-icon="panel"></i></button>
         <div id="strip-tabs" class="strip-tabs"></div>
@@ -334,7 +355,10 @@
     <button id="btn-build" class="mi" role="menuitem"><i data-icon="play" data-size="15"></i><span>Jetzt bauen</span><span class="k">Strg B</span></button>
   </div>
 
+  <div id="menu-view" class="menu wide" role="menu" aria-label="Was der Viewer zeigt" hidden></div>
+
   <div id="menu-display" class="menu" role="menu" hidden>
+    <div class="mh">DARSTELLUNG</div>
     <button class="mi keep" role="menuitemcheckbox" data-display="edges" aria-checked="true"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Kanten</span></button>
     <button class="mi keep" role="menuitemcheckbox" data-display="wire" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Drahtgitter</span></button>
     <button class="mi keep" role="menuitemcheckbox" data-display="ghost" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Transparent</span></button>
@@ -359,7 +383,7 @@
     <div class="mh">2D</div>
     <div class="chips"><button class="chip" data-fmt="dxf" title="Schnitt in Bauteilmitte">DXF · Schnitt</button><button class="chip" data-fmt="svg" title="Projektion">SVG · Ansicht</button></div>
     <div class="msep"></div>
-    <div class="mnote">Jedes Bauteil wird eine eigene Datei. Referenzen sind bei „Alle Bauteile“ nicht dabei. Ziel: <code>exports/</code></div>
+    <div class="mnote">Ein Bauteil: Speicherort wählen. Alle Bauteile: Ordner wählen, jedes wird eine eigene Datei. Referenz- und Zukaufteile sind bei „Alle Bauteile“ nicht dabei.</div>
   </div>
 
   <div id="menu-agents" class="menu" role="menu" hidden>

@@ -26,6 +26,12 @@ const PATHS: Record<string, string> = {
   x: '<path d="M18 6 6 18M6 6l12 12"/>', plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>', send: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
   term: '<path d="m5 8 4 4-4 4M12 16h7"/>', panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  // Seitenleiste links (Spalten-Schalter der Kopfzeile, Gegenstück zu panel für den Agenten)
+  sidel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  // Kategorien der Skills: Arbeitsweise (Weg mit Start und Ziel), Fertigung (Schraubenschlüssel), Konstruktionswissen (Zirkel)
+  route: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5"/>',
+  wrench: '<path d="M15 4.5a4.5 4.5 0 0 0-4.3 5.8L4 17a2.1 2.1 0 0 0 3 3l6.7-6.7A4.5 4.5 0 0 0 19.5 9l-2.8 2.8-3.2-.7-.7-3.2z"/>',
+  compass: '<circle cx="12" cy="4.5" r="2"/><path d="m10.9 6.3-5.4 14.2M13.1 6.3l5.4 14.2M7.8 14.5h8.4"/>',
   target: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5L5 20"/>',
   alert: '<path d="M12 4 2 20h20z"/><path d="M12 10v4M12 17v.01"/>',

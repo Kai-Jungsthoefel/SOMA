@@ -17,8 +17,11 @@ interface Hooks {
 /** Gruppe im Baum. `items` in der Reihenfolge, in der sie im Modell zuerst vorkommen (Gruppen und Teile gemischt). */
 interface GroupNode { key: string; name: string; items: ({ group: GroupNode } | { part: PartRow })[] }
 
+/** Datentyp beim Ziehen eines Bauteils ins Terminal (Wert: die ID). */
+export const DRAG_PART = 'application/x-soma-part';
+
 /**
- * Schwebende Bauteilkarte oben links im Viewer. Nur so hoch wie ihr Inhalt, einklappbar, ab ein paar Teilen mit Suche.
+ * Bauteilbaum in der Seitenleiste (Entwurf 2, vorher eine Karte im Viewer). Mit Suche, Zeilen lassen sich ins Terminal ziehen.
  * Gruppen (aus add_part(group=…) oder aus der Struktur importierter STEP-Dateien) stehen als aufklappbarer Baum.
  * Jedes Teil und jede Gruppe lässt sich aus- und einblenden sowie transparent schalten. Referenzen stehen für sich (E34).
  */
@@ -29,18 +32,12 @@ export class PartsCard {
   private placeholder = '';
   private collapsed = new Set<string>();
 
-  constructor(private ui: { card: HTMLElement; list: HTMLElement; count: HTMLElement; toggle: HTMLButtonElement; search: HTMLButtonElement; filter: HTMLInputElement }, private hooks: Hooks) {
-    ui.toggle.addEventListener('click', () => this.setCollapsed(!ui.card.classList.contains('collapsed')));
+  constructor(private ui: { list: HTMLElement; count: HTMLElement; search: HTMLButtonElement; filter: HTMLInputElement }, private hooks: Hooks) {
     ui.search.addEventListener('click', () => {
       ui.filter.hidden = !ui.filter.hidden;
       if (ui.filter.hidden) { ui.filter.value = ''; this.filter = ''; this.render(); } else ui.filter.focus();
     });
     ui.filter.addEventListener('input', () => { this.filter = ui.filter.value.trim().toLowerCase(); this.render(); });
-  }
-
-  setCollapsed(on: boolean): void {
-    this.ui.card.classList.toggle('collapsed', on);
-    this.ui.toggle.setAttribute('aria-expanded', String(!on));
   }
 
   /** Hinweis statt Liste, z. B. während des ersten Builds. */
@@ -123,6 +120,8 @@ export class PartsCard {
       this.eyeButton(p.name, visible, () => this.hooks.setVisible([p.id], !visible)));
     row.style.paddingLeft = `${4 + depth * 14}px`;
     row.dataset.id = p.id;
+    row.draggable = true;
+    row.addEventListener('dragstart', (e) => { e.dataTransfer?.setData(DRAG_PART, p.id); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy'; });
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); this.hooks.context(p.id, e.clientX, e.clientY); });
     return row;
   }

@@ -9,8 +9,16 @@ interface Ui {
   button: HTMLButtonElement; close: HTMLButtonElement;
   range: HTMLInputElement; value: HTMLElement; hint: HTMLElement;
   trails: HTMLButtonElement; fit: HTMLButtonElement;
-  /** Abspielen Schritt für Schritt: zurück, abspielen oder anhalten, weiter, Anzeige des Schritts, Reihenfolge an den Agenten. */
+  /**
+   * Abspielen Schritt für Schritt: zurück, den Auseinanderbau abspielen oder anhalten, weiter, Anzeige „Schritt X von N“,
+   * Reihenfolge an den Agenten.
+   */
   back: HTMLButtonElement; play: HTMLButtonElement; next: HTMLButtonElement; step: HTMLElement; send: HTMLButtonElement;
+  /**
+   * Den Zusammenbau abspielen oder anhalten, Tempo, die Teile des gezeigten Schritts. Fehlen sie hier, sucht die Karte sie in sich
+   * selbst (IDs aus index.html).
+   */
+  assemble?: HTMLButtonElement; speed?: HTMLSelectElement; names?: HTMLElement;
   /** Bekommt die Klasse `exploding`, solange die Karte offen ist (ein offener Schnitt rückt dann darüber). */
   viewerEl: HTMLElement;
 }
@@ -33,8 +41,10 @@ const GAP = 0.05;
 const OPEN_AMOUNT = 0.5;
 const FAR = 3;
 const MOVE_MS = 450;
-/** Dauer eines Schritts beim Abspielen. */
+/** Dauer eines Schritts beim Abspielen im Tempo 1×. */
 const STEP_MS = 700;
+/** Wählbares Tempo (`#explode-speed`), wie in der Animationskarte. */
+const SPEEDS = [0.25, 0.5, 1, 2];
 /**
  * Strahltest, relativ zur Diagonale mit Untergrenze in mm: Die Punkte liegen EPS unter der Oberfläche (so weit dürfen sich Teile
  * überschneiden, etwa durch die Vernetzung), Treffer bis TOUCH gelten als Berührung, je Bauteil etwa SAMPLES Punkte.
@@ -440,19 +450,37 @@ export class ExplodeTool {
   /** Lage bei OPEN_AMOUNT und bei 100 %. */
   private near: Layout = { offsets: new Map(), legs: new Map(), rel: new Map() };
   private far: Layout = { offsets: new Map(), legs: new Map(), rel: new Map() };
-  /** Abspielen: Reihenfolge der Schritte, ihre Nummer, die Ketten je Teil und der Stand (null: alle Schritte zugleich). */
+  /**
+   * Abspielen: Reihenfolge der Schritte, ihre Nummer, die Ketten je Teil und der Stand (null: alle Schritte zugleich, wie mit dem
+   * Schieber eingestellt).
+   */
   private order: string[][] = [];
   private index = new Map<string, number>();
   private chain = new Map<string, string[]>();
   private stepPos: number | null = null;
   private playing = false;
+  /** Richtung beim Abspielen: 1 auseinander, -1 zusammen. Gilt, solange `playing`. */
+  private playDir: 1 | -1 = 1;
+  /** Tempo beim Abspielen (Faktor, SPEEDS). Bleibt für das nächste Einschalten. */
+  private speed = 1;
   private moving = 0;
   private forced = 0;
   private refs = 0;
   private trails = true;
-  private anim: { stop(): void } | null = null;
+  /** Laufende Bewegung. Beim Abspielen mit Ziel, damit ein neues Tempo von der aktuellen Lage aus weiterläuft. */
+  private anim: { stop(): void; goal?: { target: number; play: boolean } } | null = null;
+  private ui: Required<Ui>;
 
-  constructor(private ui: Ui, private deps: Deps) {
+  constructor(ui: Ui, private deps: Deps) {
+    const own = <T extends HTMLElement>(id: string): T => {
+      const e = ui.card.querySelector<T>(`#${id}`);
+      if (!e) throw new Error(`Explosionskarte: #${id} fehlt in index.html`);
+      return e;
+    };
+    this.ui = {
+      ...ui, assemble: ui.assemble ?? own<HTMLButtonElement>('btn-explode-assemble'), speed: ui.speed ?? own<HTMLSelectElement>('explode-speed'),
+      names: ui.names ?? own<HTMLElement>('explode-names'),
+    };
     ui.button.addEventListener('click', () => this.setActive(!this.active));
     ui.close.addEventListener('click', () => this.setActive(false));
     ui.range.addEventListener('input', () => {
@@ -467,7 +495,9 @@ export class ExplodeTool {
     ui.fit.addEventListener('click', () => this.deps.viewer.setView('fit'));
     ui.next.addEventListener('click', () => this.stepBy(1));
     ui.back.addEventListener('click', () => this.stepBy(-1));
-    ui.play.addEventListener('click', () => this.togglePlay());
+    ui.play.addEventListener('click', () => this.togglePlay(1));
+    this.ui.assemble.addEventListener('click', () => this.togglePlay(-1));
+    this.ui.speed.addEventListener('change', () => this.setSpeed(Number(this.ui.speed.value)));
     ui.send.addEventListener('click', () => { const t = this.orderText(); if (t) this.deps.insert(t); });
     this.deps.viewer.setTrails(this.trails);
     this.render();
@@ -503,12 +533,14 @@ export class ExplodeTool {
   /** Beschreibung für den Agenten, etwa beim Markieren. Ohne Explosion null. */
   agentText(): string | null {
     if (!this.active || this.shown <= 0 || !this.moving) return null;
-    const step = this.stepPos === null ? '' : `, Schritt ${Math.floor(this.stepPos + 1e-6)} von ${this.order.length} des Auseinanderbaus`;
+    const step = this.stepPos === null ? '' : `, Schritt ${this.shownStep()} von ${this.order.length} des Auseinanderbaus`;
     return `Explosionsansicht (${Math.round(this.shown * 100)} %${step}): Die Bauteile sind nur zur Darstellung auseinandergezogen, ihre Lage im Bild ist nicht die Einbaulage`;
   }
 
   private compute(): void {
     const { viewer } = this.deps;
+    // Ein laufender Schritt gehört zum alten Plan (seine Nummern stimmen nicht mehr)
+    if (this.anim?.goal) this.stopAnim();
     // Strahltest und Hüllquader in Einbaulage. Wer danach etwas zeigen will, ruft show() wieder auf.
     if (this.shown > 0) viewer.setOffsets(null);
     const parts = viewer.explodeParts();
@@ -570,47 +602,95 @@ export class ExplodeTool {
 
   // ---- Abspielen Schritt für Schritt ------------------------------------------------------------------------------
 
-  /** Einen Schritt weiter (auseinander) oder zurück (zusammen). Aus „alle zugleich“ heraus beginnt es zusammengebaut bzw. ganz offen. */
-  private stepBy(dir: number): void {
+  /**
+   * Gezeigter Schritt (0 bis N): der, dessen Teile gerade wandern oder zuletzt angekommen sind, in beiden Richtungen gleich. „Alle
+   * zugleich“ zeigt dieselbe Lage wie der letzte Schritt, bei 0 % wie das zusammengebaute Modell.
+   */
+  private shownStep(): number {
+    const n = this.order.length;
+    if (this.stepPos === null) return this.amount > 0 ? n : 0;
+    return Math.min(n, Math.max(0, Math.ceil(this.stepPos - 1e-6)));
+  }
+
+  /**
+   * In den Schrittmodus, an der Stelle, die „alle zugleich“ gerade zeigt (siehe shownStep). Bei 0 % geht der Abstand auf den beim
+   * Öffnen, sonst bliebe jeder Schritt unsichtbar.
+   */
+  private enterSteps(): void {
+    if (this.stepPos === null) this.stepPos = this.amount > 0 ? this.order.length : 0;
+    if (this.amount <= 0) this.amount = OPEN_AMOUNT;
+    this.show(this.amount);
+  }
+
+  /** Einen Schritt weiter (auseinander) oder zurück (zusammen). */
+  private stepBy(dir: 1 | -1): void {
     if (!this.active || !this.order.length) return;
     this.stopAnim();
-    const n = this.order.length;
-    if (this.stepPos === null) { this.stepPos = dir > 0 ? 0 : n; this.show(this.amount); }
-    const p = this.stepPos!;
+    this.enterSteps();
+    const n = this.order.length, p = this.stepPos!;
     this.stepTo(dir > 0 ? Math.min(n, Math.floor(p + 1e-6) + 1) : Math.max(0, Math.ceil(p - 1e-6) - 1));
   }
 
-  /** Abspielen bis zum Ende (vom Anfang, falls schon am Ende) oder anhalten (der laufende Schritt wird noch fertig). */
-  private togglePlay(): void {
+  /**
+   * Abspielen in Richtung `dir` (1 auseinander, -1 zusammen) bis ans Ende, vom anderen Ende, falls es schon dort steht. Läuft es
+   * schon in diese Richtung: anhalten, der laufende Schritt wird noch fertig. Läuft es in die andere: umkehren, ohne Sprung.
+   */
+  private togglePlay(dir: 1 | -1): void {
     if (!this.active || !this.order.length) return;
     const n = this.order.length;
-    if (this.playing) { this.stopAnim(); this.stepTo(Math.ceil((this.stepPos ?? 0) - 1e-6)); return; }
+    if (this.playing && this.playDir === dir) {
+      this.stopAnim();
+      const p = this.stepPos ?? 0;
+      this.stepTo(dir > 0 ? Math.ceil(p - 1e-6) : Math.floor(p + 1e-6));
+      return;
+    }
     this.stopAnim();
-    if (this.stepPos === null || this.stepPos >= n - 1e-6) { this.stepPos = 0; this.show(this.amount); }
-    this.stepTo(n, true);
+    this.enterSteps();
+    const end = dir > 0 ? n : 0;
+    if (Math.abs(this.stepPos! - end) < 1e-6) { this.stepPos = n - end; this.show(this.amount); }
+    this.playDir = dir;
+    this.stepTo(end, true);
   }
 
-  /** Gleichmäßig zum Schritt `target`. Ohne Bildwiederholung (unsichtbares Fenster) steht es nach Ablauf trotzdem dort. */
+  /** Neues Tempo. Läuft gerade ein Schritt, geht es von der aktuellen Lage aus im neuen Tempo weiter. */
+  private setSpeed(v: number): void {
+    this.speed = SPEEDS.includes(v) ? v : 1;
+    const goal = this.anim?.goal;
+    if (goal) this.stepTo(goal.target, goal.play);
+    else this.render();
+  }
+
+  /**
+   * Gleichmäßig zum Schritt `target`, im eingestellten Tempo. Die Lage hängt nur an der Zeit: Ohne Bildwiederholung (unsichtbares
+   * Fenster) steht es nach Ablauf trotzdem dort, und Anhalten, Umkehren oder ein neues Tempo setzen an der richtigen Stelle an.
+   */
   private stepTo(target: number, play = false): void {
     this.stopAnim();
     const from = this.stepPos ?? 0;
-    const ms = Math.abs(target - from) * STEP_MS;
+    const ms = (Math.abs(target - from) * STEP_MS) / this.speed;
     if (ms < 1) { this.stepPos = target; this.show(this.amount); this.render(); return; }
     const t0 = performance.now();
+    const at = () => from + (target - from) * Math.min(1, (performance.now() - t0) / ms);
     let raf = 0, done = false;
-    const stop = () => { done = true; cancelAnimationFrame(raf); clearTimeout(timer); if (this.anim === handle) this.anim = null; this.playing = false; };
+    const stop = () => {
+      if (done) return;
+      done = true; cancelAnimationFrame(raf); clearTimeout(timer);
+      // Unterbrochen: Hier geht es weiter. Wer den Schrittmodus verlassen hat (stepPos null), bleibt draußen
+      if (this.stepPos !== null) this.stepPos = at();
+      if (this.anim === handle) this.anim = null;
+      this.playing = false;
+    };
     const finish = () => { if (done) return; stop(); this.stepPos = target; this.show(this.amount); this.render(); this.deps.settled(); };
     const tick = () => {
       if (done) return;
-      const k = (performance.now() - t0) / ms;
-      if (k >= 1) { finish(); return; }
-      this.stepPos = from + (target - from) * k;
+      if (performance.now() - t0 >= ms) { finish(); return; }
+      this.stepPos = at();
       this.show(this.amount);
       this.render();
       raf = requestAnimationFrame(tick);
     };
     const timer = setTimeout(finish, ms + 60);
-    const handle = { stop };
+    const handle = { stop, goal: { target, play } };
     this.anim = handle;
     this.playing = play;
     this.render();
@@ -681,26 +761,47 @@ export class ExplodeTool {
     ui.value.textContent = `${pct} %`;
     ui.trails.setAttribute('aria-pressed', String(this.trails));
     const n = this.order.length;
-    ui.play.replaceChildren(icon(this.playing ? 'pause' : 'play', 15));
-    ui.play.setAttribute('aria-label', this.playing ? 'Anhalten' : 'Abspielen');
-    ui.play.title = this.playing ? 'Anhalten' : 'Den Auseinanderbau Schritt für Schritt abspielen';
-    ui.back.disabled = ui.play.disabled = ui.next.disabled = ui.send.disabled = !n;
-    if (this.stepPos === null) ui.step.textContent = n ? `${n} ${n === 1 ? 'Schritt' : 'Schritte'}, alle zugleich` : '';
-    else {
-      const k = Math.floor(this.stepPos + 1e-6);
-      const names = new Map(this.deps.viewer.partList().map((x) => [x.id, x.name]));
-      const who = k > 0 ? this.order[k - 1].map((id) => this.label(id, names)).join(', ') : 'zusammengebaut';
-      ui.step.textContent = `Schritt ${k} von ${n}: ${who}`;
+    // Zwei Abspielknöpfe, je Richtung einer. Der laufende zeigt „Anhalten“ und leuchtet, der andere kehrt um
+    const playButton = (b: HTMLButtonElement, on: boolean, name: string, title: string) => {
+      b.replaceChildren(icon(on ? 'pause' : 'play', 15));
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-label', on ? 'Anhalten' : name);
+      b.title = on ? 'Anhalten (der laufende Schritt wird noch fertig)' : title;
+    };
+    playButton(ui.play, this.playing && this.playDir > 0, 'Auseinanderbauen abspielen', 'Den Auseinanderbau Schritt für Schritt abspielen');
+    playButton(ui.assemble, this.playing && this.playDir < 0, 'Zusammenbauen abspielen', 'Den Zusammenbau Schritt für Schritt abspielen');
+    const pos = this.stepPos ?? this.shownStep();
+    ui.back.disabled = !n || pos <= 1e-6;
+    ui.next.disabled = !n || pos >= n - 1e-6;
+    ui.play.disabled = ui.assemble.disabled = ui.speed.disabled = ui.send.disabled = !n;
+    // Nur bei Abweichung: render() läuft beim Abspielen in jedem Bild, eine offene Auswahlliste soll dabei stehen bleiben
+    if (ui.speed.value !== String(this.speed)) ui.speed.value = String(this.speed);
+    const k = this.shownStep();
+    ui.step.textContent = n ? `Schritt ${k} von ${n}` : '';
+    // Darunter, was in diesem Schritt herauskommt (Namen können lang sein, die Zeile hat die volle Breite)
+    let what = '';
+    if (n) {
+      if (k === 0) what = 'Zusammengebaut';
+      else if (this.stepPos === null) what = 'Alle Schritte zugleich';
+      else {
+        const names = new Map(this.deps.viewer.partList().map((x) => [x.id, x.name]));
+        what = this.order[k - 1].map((id) => this.label(id, names)).join(', ');
+      }
     }
-    ui.step.title = ui.step.textContent;
+    ui.names.textContent = what;
+    ui.names.title = what;
+    ui.names.hidden = !what;
+    ui.step.title = what ? `${ui.step.textContent}: ${what}` : ui.step.textContent;
     if (!this.active) return;
-    let hint: string;
-    if (!this.plan?.base) hint = 'Keine Bauteile zum Auseinanderziehen.';
-    else if (!this.moving) hint = 'Nur ein Bauteil, da rückt nichts auseinander.';
-    else hint = 'Jedes Teil kommt dort heraus, wo es frei ist, in der Reihenfolge des Auseinanderbaus.';
-    if (this.forced) hint += ` ${this.forced === 1 ? 'Ein Teil steckt' : `${this.forced} Teile stecken`} fest (verklemmt oder eingeschlossen) und ${this.forced === 1 ? 'fährt' : 'fahren'} durch andere hindurch.`;
-    if (this.refs && this.plan?.base) hint += ' Referenzen bleiben stehen.';
-    ui.hint.textContent = hint;
+    // Im Normalfall kein Hinweis: Die Zeile verschwindet dann ganz, statt leer Platz zu nehmen
+    const notes: string[] = [];
+    if (!this.plan?.base) notes.push('Keine Bauteile zum Auseinanderziehen.');
+    else if (!this.moving) notes.push('Nur ein Bauteil, da rückt nichts auseinander.');
+    if (this.forced) notes.push(`${this.forced === 1 ? 'Ein Teil steckt' : `${this.forced} Teile stecken`} fest (verklemmt oder eingeschlossen) und ${this.forced === 1 ? 'fährt' : 'fahren'} durch andere hindurch.`);
+    if (this.refs && this.plan?.base) notes.push('Referenzen bleiben stehen.');
+    ui.hint.textContent = notes.join(' ');
+    ui.hint.hidden = !notes.length;
+    ui.hint.classList.toggle('warn', this.forced > 0);
     // Ein offener Schnitt steht über dieser Karte (style.css), ihre Höhe hängt am Hinweis
     ui.viewerEl.style.setProperty('--excard-h', `${ui.card.offsetHeight}px`);
   }
@@ -724,6 +825,8 @@ export class ExplodeTool {
       steps: plan ? flatSteps(plan) : {},
       spreads: vec(this.near.offsets), far: vec(this.far.offsets),
       order: this.order, stepPos: this.stepPos, playing: this.playing, chains: Object.fromEntries(this.chain), orderText: this.orderText(),
+      direction: this.playing ? (this.playDir > 0 ? 'apart' : 'together') : null, speed: this.speed,
+      shownStep: this.order.length ? this.shownStep() : null, hint: this.ui.hint.hidden ? null : this.ui.hint.textContent,
       text: this.ui.card.innerText, agent: this.agentText(),
     };
   }

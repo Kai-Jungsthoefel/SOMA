@@ -7,7 +7,7 @@ import { el } from './ui';
 // Gerechnet wird in Python, hier wird nur gezeigt. Neu berechnen nutzt die Angaben, mit denen der Agent es erzeugt hat.
 
 interface Ui {
-  card: HTMLElement; button: HTMLButtonElement; close: HTMLButtonElement; select: HTMLSelectElement;
+  card: HTMLElement; close: HTMLButtonElement; select: HTMLSelectElement;
   legend: HTMLElement; summary: HTMLElement; probe: HTMLElement; hint: HTMLElement;
   rerun: HTMLButtonElement; agent: HTMLButtonElement;
   viewerEl: HTMLElement;
@@ -20,11 +20,15 @@ interface Deps {
   beforeOn(): void;
   insert(text: string): void;
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
+  /** An, aus oder ein anderes Ergebnis: der Umschalter oben links zeigt, was zu sehen ist. */
+  changed(): void;
 }
 
 const num = (v: number, unit: string) => (+v.toFixed(unit === '°' ? 1 : 2) + 0).toLocaleString('de-DE'); // + 0: kein „-0“
 const withUnit = (v: number, unit: string) => `${num(v, unit)}${unit === '°' ? '°' : ` ${unit}`}`;
 const dot = (v: number, unit: string) => `${v.toFixed(unit === '°' ? 1 : 2)}${unit === '°' ? '°' : ` ${unit}`}`;
+/** Abstand des Schilds vom Zeiger (px): neben den Armen des Fadenkreuzes, nicht darauf. */
+const TIP_GAP = 14;
 
 export class ResultTool {
   private active = false;
@@ -34,21 +38,46 @@ export class ResultTool {
   private pinned: ResultProbe | null = null;
   private loading = 0;
   private busy = false;
+  /** Beim nächsten Laden dieses Ergebnis zeigen (Wahl im Umschalter). */
+  private want: string | null = null;
+  // Schild am Zeiger: Der Wert steht dort, wo man hinschaut, die Zeile in der Karte bleibt für das Merken per Klick.
+  // Ein einziges Element, das nur verschoben und per textContent befüllt wird (Bauteilnamen kommen aus dem Projekt).
+  private readonly tipDot = el('span', { className: 'rs-tip-dot' });
+  private readonly tipVal = el('b');
+  private readonly tipName = el('div', { className: 'rs-tip-n' });
+  private readonly tip = el('div', { className: 'rs-tip', hidden: true }, el('div', { className: 'rs-tip-v' }, this.tipDot, this.tipVal), this.tipName);
 
   constructor(private readonly ui: Ui, private readonly d: Deps) {
-    ui.button.addEventListener('click', () => this.setActive(!this.active));
     ui.close.addEventListener('click', () => this.setActive(false));
-    ui.select.addEventListener('change', () => { const e = this.list.find((r) => r.id === ui.select.value); if (e) void this.show(e); });
+    ui.select.addEventListener('change', () => { const e = this.list.find((r) => r.id === ui.select.value); if (e) void this.load(e); });
     ui.rerun.addEventListener('click', () => void this.rerun());
     ui.agent.addEventListener('click', () => { const t = this.agentNote(); if (t) d.insert(t); });
-    let queued = false, pos: [number, number] = [0, 0];
-    ui.viewerEl.addEventListener('pointermove', (e) => {
-      if (!this.active || e.buttons) return;
+    ui.viewerEl.append(this.tip);
+    let queued = false, pos: [number, number] | null = null, away = true;
+    // Zeiger nicht mehr über dem Bild: Schild weg, die Karte zeigt wieder die gemerkte Stelle (wichtig vor „An Agent geben“)
+    const leave = () => { pos = null; this.hideTip(); if (!away) { away = true; this.showProbe(null, false); } };
+    const track = (e: MouseEvent) => {
+      if (!this.active) return;
+      // Beim Drehen und Verschieben bliebe das Schild mit altem Wert stehen, die Zeile in der Karte bleibt wie bisher
+      if (e.buttons) { pos = null; this.hideTip(); return; }
+      // Über Karten, Knöpfen, Würfel oder Video kein Wert vom Modell dahinter
+      if (!this.overImage(e.target)) { leave(); return; }
+      away = false;
       pos = [e.clientX, e.clientY];
       if (queued) return;
       queued = true;
-      requestAnimationFrame(() => { queued = false; this.showProbe(this.d.layer.probe(pos[0], pos[1]), false); });
-    });
+      requestAnimationFrame(() => {
+        queued = false;
+        if (!pos || !this.active) return;
+        const p = this.d.layer.probe(pos[0], pos[1]);
+        this.showProbe(p, false);
+        this.showTip(p, pos);
+      });
+    };
+    ui.viewerEl.addEventListener('pointermove', track);
+    // Beim Zoomen wandert das Modell unter dem stehenden Zeiger weg: Wert an derselben Stelle neu holen
+    ui.viewerEl.addEventListener('wheel', track, { passive: true });
+    ui.viewerEl.addEventListener('pointerleave', () => { if (this.active) leave(); });
     let down: [number, number] | null = null;
     ui.viewerEl.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
     ui.viewerEl.addEventListener('pointerup', (e) => {
@@ -60,16 +89,29 @@ export class ResultTool {
   }
 
   get isActive(): boolean { return this.active; }
+  /** Titel des gezeigten Ergebnisses (null: keines geladen). */
+  get currentTitle(): string | null { return this.active ? this.current?.title ?? null : null; }
+  get currentId(): string | null { return this.active ? this.current?.id ?? null : null; }
+
+  /** Ein bestimmtes Ergebnis zeigen (aus dem Umschalter oben links), null: das zuletzt gezeigte oder das erste. */
+  show(id: string | null): void {
+    this.want = id;
+    if (!this.active) { this.setActive(true); return; }
+    const e = id ? this.list.find((r) => r.id === id) : undefined;
+    if (e && e.id !== this.current?.id) void this.load(e);
+    else void this.refresh();
+  }
 
   setActive(on: boolean): void {
     if (on === this.active) return;
     if (on) this.d.beforeOn();
     this.active = on;
     this.ui.card.hidden = !on;
-    this.ui.button.setAttribute('aria-pressed', String(on));
     this.ui.viewerEl.classList.toggle('analyzing', on);
+    this.d.changed();
     if (on) { void this.refresh(); return; }
     this.loading++;
+    this.hideTip();
     this.d.layer.hide();
     this.current = null;
     this.pinned = null;
@@ -83,12 +125,13 @@ export class ResultTool {
     if (seq !== this.loading || !this.active) return;
     this.ui.select.replaceChildren(...this.list.map((r) => el('option', { value: r.id, textContent: r.id === r.kind ? r.title : `${r.title} (${r.id})` })));
     this.ui.select.disabled = this.list.length < 2;
-    const want = this.list.find((r) => r.id === this.current?.id) ?? this.list[0];
-    if (want) await this.show(want, seq);
+    const want = this.list.find((r) => r.id === (this.want ?? this.current?.id)) ?? this.list[0];
+    this.want = null;
+    if (want) await this.load(want, seq);
     else { this.d.layer.hide(); this.current = null; this.render(); }
   }
 
-  private async show(e: ResultEntry, seq = ++this.loading): Promise<void> {
+  private async load(e: ResultEntry, seq = ++this.loading): Promise<void> {
     try {
       const buf = await this.d.readBinary(e.file);
       if (seq !== this.loading || !this.active) return;
@@ -99,6 +142,7 @@ export class ResultTool {
       this.current = e;
       this.ui.select.value = e.id;
       this.pinned = null;
+      this.d.changed();
     } catch (err) {
       this.d.toast(`Das Ergebnis ließ sich nicht laden: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
@@ -112,6 +156,8 @@ export class ResultTool {
     this.ui.legend.replaceChildren();
     this.ui.summary.replaceChildren();
     this.ui.probe.textContent = '';
+    // Anderes Ergebnis oder neu berechnet: Der Wert im Schild gilt nicht mehr, die nächste Bewegung holt den neuen
+    this.hideTip();
     this.ui.hint.classList.toggle('warn', !!r?.stale);
     if (!r) {
       this.ui.hint.textContent = 'Noch kein Ergebnis. Der Agent erzeugt es mit soma analyze (Überhang, Wandstärke, Abstand).';
@@ -151,6 +197,37 @@ export class ResultTool {
     this.ui.probe.textContent = this.probeText(p, pinned);
   }
 
+  /**
+   * Frei über dem Bild? Die Ebenen darüber (Beschriftungen, Malfläche, dieses Schild) lassen den Zeiger durch, das Ziel ist
+   * dann die 3D-Fläche selbst. Karten, Knöpfe, Würfel und Video sind eigene Elemente und zählen nicht.
+   */
+  private overImage(t: EventTarget | null): boolean {
+    const v = this.ui.viewerEl;
+    return t === v || (t instanceof HTMLCanvasElement && t.parentElement === v);
+  }
+
+  /** Schild neben dem Zeiger: Wert groß, Bauteil klein, Punkt in der Farbe des Werts. Kein Bauteil unter dem Zeiger: weg. */
+  private showTip(p: ResultProbe | null, at: [number, number]): void {
+    const r = this.current;
+    if (!p || !r) { this.hideTip(); return; }
+    this.tipVal.textContent = withUnit(p.value, r.unit);
+    this.tipName.textContent = p.name;
+    this.tipDot.style.background = `rgb(${resultColor(p.value, r).map(Math.round).join(',')})`;
+    this.tip.hidden = false;
+    // Rechts oberhalb wie die Messbeschriftung, am Rand des Viewers auf die andere Seite, damit nichts abgeschnitten wird
+    const v = this.ui.viewerEl.getBoundingClientRect();
+    const w = this.tip.offsetWidth, h = this.tip.offsetHeight;
+    const x = at[0] - v.left, y = at[1] - v.top;
+    const left = x + TIP_GAP + w > v.width - 6 ? Math.max(6, x - TIP_GAP - w) : x + TIP_GAP;
+    const top = y - TIP_GAP - h < 6 ? y + TIP_GAP : y - TIP_GAP - h;
+    this.tip.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+  }
+
+  private hideTip(): void { this.tip.hidden = true; }
+
+  /** Teil aus- oder eingeblendet: Der Wert unter dem Zeiger gilt nicht mehr, bis sich die Maus wieder bewegt. */
+  forgetProbe(): void { if (this.active) { this.hideTip(); this.showProbe(null, false); } }
+
   private probeText(p: ResultProbe, pinned: boolean): string {
     const r = this.current!;
     return `${pinned ? 'Gewählt' : 'Zeiger'}: ${p.name}, ${withUnit(p.value, r.unit)} bei (${p.point.map((v) => (v + 0).toLocaleString('de-DE')).join('; ')})`;
@@ -189,6 +266,7 @@ export class ResultTool {
       active: this.active, id: this.current?.id ?? null, stale: this.current?.stale ?? null, options: [...this.ui.select.options].map((o) => o.textContent),
       rows: [...this.ui.summary.querySelectorAll('.rs-row')].map((x) => x.textContent), probe: this.ui.probe.textContent, hint: this.ui.hint.textContent,
       note: this.agentNote(), meta: this.d.layer.meta ? { threshold: this.d.layer.meta.threshold, unit: this.d.layer.meta.unit } : null,
+      tip: this.tip.hidden ? null : `${this.tipVal.textContent} · ${this.tipName.textContent}`,
     };
   }
 

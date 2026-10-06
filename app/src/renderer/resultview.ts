@@ -5,7 +5,8 @@ import { resultColor } from './overlay';
 import type { Viewer } from './viewer';
 
 // Ergebnis einer Auswertung (E58, .soma/results/<name>.glb von `soma analyze`): je Bauteil ein Netz mit einem Wert je Dreieck
-// (Attribut _VALUE) und seinen Kanten. Solange es angezeigt wird, tritt das Modell zurück. Der Schnitt gilt auch hier.
+// (Attribut _VALUE) und seinen Kanten. Solange es angezeigt wird, tritt das Modell zurück und die Netze vertreten seine Bauteile
+// (Viewer.setStandIns): Ausblenden und Transparent aus der Seitenleiste gelten für sie, der Schnitt füllt sie wie das Modell.
 
 interface ResultMesh { mesh: THREE.Mesh; name: string; values: THREE.BufferAttribute }
 
@@ -26,9 +27,11 @@ export class ResultLayer {
     if (!meta || !Array.isArray(meta.range)) throw new Error('Kein Ergebnis von soma (extras.soma_result fehlt)');
     this.hide();
     const meshes: ResultMesh[] = [];
+    const standIns: { mesh: THREE.Mesh; name: string; lines: THREE.LineSegments[] }[] = [];
     gltf.scene.traverse((o) => {
       const name = (o.userData as { soma?: { name?: string } }).soma?.name;
       if (!name) return;
+      const own: ResultMesh[] = [], lines: THREE.LineSegments[] = [];
       o.traverse((c) => {
         const m = c as THREE.Mesh;
         if (m.isMesh) {
@@ -38,12 +41,16 @@ export class ResultLayer {
             vertexColors: true, side: THREE.DoubleSide, roughness: 0.75, metalness: 0,
             polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: this.viewer.clipPlanes,
           });
-          meshes.push({ mesh: m, name, values });
+          own.push({ mesh: m, name, values });
         } else if ((c as THREE.LineSegments).isLineSegments) {
           const l = c as THREE.LineSegments;
           l.material = new THREE.LineBasicMaterial({ color: 0x1a1d22, clippingPlanes: this.viewer.clipPlanes });
+          lines.push(l);
         }
       });
+      // Die Kanten stehen neben dem Netz im selben Knoten: Sie verschwinden mit ihm, wenn das Bauteil ausgeblendet wird
+      meshes.push(...own);
+      standIns.push(...own.map((m) => ({ mesh: m.mesh, name, lines })));
     });
     this.meta = meta;
     this.meshes = meshes;
@@ -51,6 +58,7 @@ export class ResultLayer {
     this.recolor();
     this.viewer.setModelHidden(true);
     this.viewer.addLayer(this.group);
+    this.viewer.setStandIns(standIns);
     return meta;
   }
 
@@ -73,6 +81,8 @@ export class ResultLayer {
 
   hide(): void {
     if (!this.group) return;
+    // Zuerst abmelden: Die Deckel des Schnitts hängen an den Netzen und werden dabei mit freigegeben
+    this.viewer.setStandIns(null);
     this.viewer.removeLayer(this.group);
     this.group.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -85,11 +95,14 @@ export class ResultLayer {
     this.viewer.setModelHidden(false);
   }
 
-  /** Wert unter dem Zeiger: Bauteil, Wert des Dreiecks und der Punkt (mm). */
+  /**
+   * Wert unter dem Zeiger: Bauteil, Wert des Dreiecks und der Punkt (mm). Ausgeblendete Teile zählen nicht, durch transparente
+   * geht der Zeiger hindurch. Auf der Schnittfläche gibt es keinen Wert (die Werte gelten an der Oberfläche).
+   */
   probe(clientX: number, clientY: number): ResultProbe | null {
     if (!this.group) return null;
-    const hit = this.viewer.pickObjects(clientX, clientY, this.meshes.map((m) => m.mesh));
-    if (!hit || hit.face == null) return null;
+    const hit = this.viewer.pickLayer(clientX, clientY);
+    if (!hit || hit.cut || hit.face == null) return null;
     const m = this.meshes.find((x) => x.mesh === hit.object);
     if (!m) return null;
     return { name: m.name, value: m.values.getX(hit.face.a), point: hit.point.toArray().map((v) => +v.toFixed(2)) };

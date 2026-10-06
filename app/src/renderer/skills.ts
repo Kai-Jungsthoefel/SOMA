@@ -1,6 +1,6 @@
 import type { SkillInfo, SkillMode, SkillResult, SkillValue, SkillVar } from '../shared/types';
 import { icon } from './icons';
-import { el } from './ui';
+import { el, menus } from './ui';
 
 interface Deps {
   list(): Promise<SkillInfo[]>;
@@ -8,13 +8,23 @@ interface Deps {
   configure(id: string, values: Record<string, SkillValue | null>): Promise<SkillResult>;
   /** Stufe für neue Modelle (gilt für die App, E46, E55). */
   setDefault(id: string, mode: SkillMode): Promise<SkillResult>;
-  /** Kopie im Projekt im Code-Panel zeigen (nur lesen). */
+  /** Kopie im Projekt im Code zeigen (nur lesen). */
   open(file: string): void;
   /** Text in die Eingabe des Agenten einfügen (E11). */
   insert(text: string): void;
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
   /** Dateien im Projekt haben sich geändert (Speicherstand, Dateibaum). */
   changed(): void;
+}
+
+interface Ui {
+  list: HTMLElement;
+  /** Zeile über der Liste: wie viele Skills auf welcher Stufe stehen. */
+  sum: HTMLElement;
+  /** Karte neben der Liste mit Beschreibung, Stufe und Einstellungen eines Skills. */
+  detail: HTMLElement;
+  /** Menü für den Stufen-Schalter einer Zeile. */
+  menu: HTMLElement;
 }
 
 const unitOf = (v: SkillVar) => (v.unit ? (v.unit === '°' ? '°' : ` ${v.unit}`) : '');
@@ -27,11 +37,14 @@ const changedVars = (s: SkillInfo) => s.vars.filter((v) => v.value !== v.default
 
 /** Die drei Stufen (E55), benannt nach dem, was der Agent tut. */
 const MODES: { mode: SkillMode; label: string; title: string }[] = [
-  { mode: 'off', label: 'Aus', title: 'Der Agent sieht diesen Skill nicht' },
-  { mode: 'demand', label: 'Bei Bedarf', title: 'Der Agent liest ihn, wenn das Gespräch auf das Thema kommt' },
-  { mode: 'always', label: 'Immer', title: 'Der Agent befolgt ihn bei jeder Änderung' },
+  { mode: 'off', label: 'Aus', title: 'Der Agent sieht diesen Skill nicht.' },
+  { mode: 'demand', label: 'Bei Bedarf', title: 'Der Agent liest ihn, wenn das Gespräch auf das Thema kommt.' },
+  { mode: 'always', label: 'Immer', title: 'Der Agent befolgt ihn bei jeder Änderung.' },
 ];
-const labelOf = (m: SkillMode) => MODES.find((x) => x.mode === m)!.label;
+const modeOf = (m: SkillMode) => MODES.find((x) => x.mode === m)!;
+/** Symbol vor der Überschrift einer Kategorie: Die Liste ist lang, so findet man die Gruppen schneller. */
+const CATEGORY_ICON: Record<string, string> = { Arbeitsweise: 'route', Fertigungsverfahren: 'wrench', Konstruktionswissen: 'compass', 'Prüfen und Zeigen': 'gauge' };
+const labelOf = (m: SkillMode) => modeOf(m).label;
 
 /** Text für die Eingabe des Agenten: Pfad und die vom Standard abweichenden Einstellungen. */
 export function skillNote(s: SkillInfo): string {
@@ -40,17 +53,23 @@ export function skillNote(s: SkillInfo): string {
 }
 
 /**
- * Seitenpanel „Skills“ (E17): mitgelieferte Regelwerke mit einer Stufe je Modell (E55). Das Umstellen erledigt der
- * Hauptprozess (Kopie in .soma/skills/, project.json, AGENTS.md). Das Panel zeigt nur, was er meldet.
+ * Seitenleiste „Skills“ (E17, Entwurf 2): eine Zeile je Skill mit der Stufe als kleinem Schalter (E55). Ein Klick auf die
+ * Zeile öffnet daneben eine Karte mit Beschreibung, Stufe, Einstellungen und Aktionen. Orange steht nur für „Immer“.
+ * Das Umstellen erledigt der Hauptprozess (Kopie in .soma/skills/, project.json, AGENTS.md), hier wird nur gezeigt, was er meldet.
  */
 export class SkillsPanel {
   private skills: SkillInfo[] = [];
   private error = '';
   private busy = new Set<string>();
-  private expanded = new Set<string>();
   private loaded = false;
+  /** Skill, dessen Karte offen ist. */
+  private openId: string | null = null;
 
-  constructor(private list: HTMLElement, private deps: Deps) {}
+  constructor(private ui: Ui, private deps: Deps) {
+    ui.detail.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !(e.target as HTMLElement).closest('input, select')) { e.stopPropagation(); this.closeDetail(); }
+    });
+  }
 
   async refresh(): Promise<void> {
     try { this.skills = await this.deps.list(); this.error = ''; } catch (e) { this.error = e instanceof Error ? e.message : String(e); }
@@ -59,9 +78,13 @@ export class SkillsPanel {
   }
 
   /** Neues Modell: alte Liste weg, beim nächsten Öffnen neu laden. */
-  reset(): void { this.skills = []; this.expanded.clear(); this.loaded = false; this.render(); }
+  reset(): void { this.skills = []; this.openId = null; this.loaded = false; this.render(); }
 
   get isLoaded(): boolean { return this.loaded; }
+
+  /** Karte eines Skills öffnen (null: schließen). */
+  openDetail(id: string | null): void { this.openId = id; this.render(); }
+  closeDetail(): void { if (this.openId) this.openDetail(null); }
 
   private async setMode(s: SkillInfo, mode: SkillMode): Promise<void> {
     if (this.busy.has(s.id) || mode === s.mode) return;
@@ -88,15 +111,23 @@ export class SkillsPanel {
   }
 
   private render(): void {
-    if (this.error) { this.list.replaceChildren(el('div', { className: 'hint', textContent: `Skills nicht lesbar: ${this.error}` })); return; }
-    if (!this.skills.length) { this.list.replaceChildren(el('div', { className: 'hint', textContent: this.loaded ? 'Diese App bringt keine Skills mit.' : 'Lädt …' })); return; }
+    const { list, sum } = this.ui;
+    if (this.error) { list.replaceChildren(el('div', { className: 'hint', textContent: `Skills nicht lesbar: ${this.error}` })); sum.textContent = ''; this.renderDetail(); return; }
+    if (!this.skills.length) {
+      list.replaceChildren(el('div', { className: 'hint', textContent: this.loaded ? 'Diese App bringt keine Skills mit.' : 'Lädt …' }));
+      sum.textContent = '';
+      this.renderDetail();
+      return;
+    }
+    const count = (m: SkillMode) => this.skills.filter((s) => s.mode === m).length;
+    sum.textContent = `Regeln für den Agenten, je Modell · ${count('always')} immer, ${count('demand')} bei Bedarf, ${count('off')} aus`;
     // Der Hauptprozess liefert die Skills nach Kategorien sortiert: Überschrift, wo eine neue beginnt
     const out: HTMLElement[] = [];
     let cat: string | null = null;
     for (const s of this.skills) {
       const c = s.category || 'Weitere';
       if (c !== cat) {
-        const h = el('div', { className: 'sk-cat', textContent: c });
+        const h = el('div', { className: 'sk-cat' }, icon(CATEGORY_ICON[c] ?? 'book', 14, 1.9), el('span', { textContent: c }));
         h.setAttribute('role', 'heading');
         h.setAttribute('aria-level', '3');
         out.push(h);
@@ -104,21 +135,46 @@ export class SkillsPanel {
       }
       out.push(this.row(s));
     }
-    this.list.replaceChildren(...out);
+    list.replaceChildren(...out);
+    this.renderDetail();
   }
 
-  /** Stufe für neue Modelle festlegen. Am offenen Modell ändert sich nichts. */
-  private async setDefault(s: SkillInfo, mode: SkillMode): Promise<void> {
-    if (this.busy.has(s.id)) return;
-    this.busy.add(s.id);
-    this.render();
-    let r: SkillResult;
-    try { r = await this.deps.setDefault(s.id, mode); } catch (e) { r = { ok: false, error: e instanceof Error ? e.message : String(e), skills: this.skills }; }
-    this.busy.delete(s.id);
-    this.skills = r.skills;
-    this.render();
-    if (!r.ok) { this.deps.toast(r.error ?? 'Die Vorgabe für neue Modelle ließ sich nicht ändern.', 'error'); return; }
-    this.deps.toast(`„${s.title}“ steht bei neuen Modellen auf „${labelOf(mode)}“. Dieses Modell bleibt, wie es ist.`);
+  /** Eine Zeile: Name, darunter die Kurzbeschreibung oder die angepassten Einstellungen, rechts die Stufe. */
+  private row(s: SkillInfo): HTMLElement {
+    const set = changedVars(s);
+    const note = s.problems.length || s.changed
+      ? el('span', { className: 'warn', textContent: s.problems[0] ?? 'Kopie weicht von der Fassung der App ab' })
+      : set.length ? el('span', { className: 'cust', textContent: `${set.map((v) => shown(v)).join(' · ')} · angepasst` })
+        : el('span', { textContent: s.summary });
+    const open = el('button', { className: 'sk-open', title: `${s.title}: Beschreibung, Stufe und Einstellungen` }, el('b', { textContent: s.title }), note);
+    open.addEventListener('click', () => this.openDetail(this.openId === s.id ? null : s.id));
+    const row = el('div', { className: `sk-row ${s.mode}${this.openId === s.id ? ' sel' : ''}` }, open, this.levelChip(s));
+    row.setAttribute('role', 'listitem');
+    row.dataset.id = s.id;
+    return row;
+  }
+
+  /** Kleiner Schalter mit der Stufe. Klick öffnet ein Menü mit den drei Stufen und was sie bedeuten. */
+  private levelChip(s: SkillInfo): HTMLButtonElement {
+    const b = el('button', { className: `sk-lvl ${s.mode}`, disabled: this.busy.has(s.id), title: `Stufe: ${labelOf(s.mode)}. ${modeOf(s.mode).title}` },
+      el('span', { className: 'ld' }), el('span', { textContent: labelOf(s.mode) }), icon('down', 12, 2));
+    b.setAttribute('aria-haspopup', 'menu');
+    b.setAttribute('aria-label', `${s.title}: Stufe ${labelOf(s.mode)}`);
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const m = this.ui.menu;
+      m.replaceChildren(el('div', { className: 'mh', textContent: s.title.toUpperCase() }), ...MODES.map((x) => {
+        const item = el('button', { className: 'mi two', disabled: x.mode !== 'off' && !s.bundled && !s.file },
+          el('span', { className: 'chk' }, icon('check', 15, 2.2)), el('span', { className: 't' }, el('span', { textContent: x.label }), el('span', { className: 'sub', textContent: x.title })));
+        item.setAttribute('role', 'menuitemradio');
+        item.setAttribute('aria-checked', String(x.mode === s.mode));
+        item.dataset.mode = x.mode;
+        item.addEventListener('click', () => void this.setMode(s, x.mode));
+        return item;
+      }));
+      menus.toggle(m, b, 'right');
+    });
+    return b;
   }
 
   /** Umschalter mit drei Stufen. Ein Skill, den die App nicht mitbringt und der nicht im Projekt liegt, lässt sich nur ausschalten. */
@@ -138,70 +194,99 @@ export class SkillsPanel {
     return box;
   }
 
-  private row(s: SkillInfo): HTMLElement {
-    const open = this.expanded.has(s.id);
-    const more = el('button', { className: 'sk-more' + (open ? ' open' : ''), title: open ? 'Weniger zeigen' : 'Inhalt und Aktionen' }, icon('down', 15, 2));
-    more.setAttribute('aria-expanded', String(open));
-    more.setAttribute('aria-label', `${s.title}: ${open ? 'weniger zeigen' : 'Inhalt zeigen'}`);
-    more.addEventListener('click', () => { if (open) this.expanded.delete(s.id); else this.expanded.add(s.id); this.render(); });
-    // Die Vorgabe für neue Modelle nur nennen, wenn sie vom Üblichen (Bei Bedarf) abweicht
-    const text = el('div', { className: 'sk-text' }, el('b', { textContent: s.title }), el('span', { textContent: s.summary }),
-      s.bundled && s.defaultMode !== 'demand' ? el('span', { className: 'sk-defnote', textContent: `Bei neuen Modellen: ${labelOf(s.defaultMode)}` }) : null);
-    const row = el('div', { className: `sk-row ${s.mode}` }, el('div', { className: 'sk-head' }, text, more), this.modeSwitch(s));
-    row.setAttribute('role', 'listitem');
-    row.dataset.id = s.id;
-    const set = changedVars(s);
-    if (set.length) row.append(el('div', { className: 'sk-setline', textContent: `Eingestellt: ${set.map((v) => `${v.label} ${shown(v)}`).join(' · ')}` }));
-    if (s.changed) row.append(el('div', { className: 'sk-note', textContent: 'Die Kopie im Projekt weicht von der Fassung dieser App ab. Aus- und wieder Einschalten übernimmt die Fassung der App, die bisherige kommt in die Sicherung.' }));
-    for (const p of s.problems) row.append(el('div', { className: 'sk-warn', textContent: p }));
-    if (open) {
-      const body = el('div', { className: 'sk-body' });
-      if (s.vars.length) {
-        body.append(el('div', { className: 'sk-h', textContent: 'Einstellungen' }), el('div', { className: 'sk-vars' }, ...s.vars.map((v) => this.field(s, v))));
-      }
-      if (s.topics.length) body.append(el('div', { className: 'sk-h', textContent: 'Darauf achtet der Agent' }), el('ul', {}, ...s.topics.map((t) => el('li', { textContent: t }))));
-      if (s.bundled) {
-        const id = `sk-${s.id}-default`;
-        const sel = el('select', { id, className: 'sk-select', disabled: this.busy.has(s.id) }, ...MODES.map((m) => el('option', { value: m.mode, textContent: m.label })));
-        sel.value = s.defaultMode;
-        sel.addEventListener('change', () => void this.setDefault(s, sel.value as SkillMode));
-        body.append(el('div', { className: 'sk-h', textContent: 'Neue Modelle' }),
-          el('div', { className: 'sk-var', title: 'Gilt für alle Modelle, die ab jetzt angelegt werden. Dieses Modell bleibt, wie es ist.' },
-            el('label', { textContent: 'Stufe bei neuen Modellen', htmlFor: id }), el('span', { className: 'sk-in' }, sel)));
-      }
-      const actions = el('div', { className: 'sk-actions' });
-      if (s.file) {
-        const view = el('button', { className: 'btn sm', title: 'Die Kopie im Projekt im Code-Panel zeigen' }, icon('file', 14, 1.9), 'Ansehen');
-        view.addEventListener('click', () => this.deps.open(s.file!));
-        actions.append(view);
-      }
-      if (s.mode !== 'off' && s.file) {
-        const send = el('button', { className: 'btn sm acc', title: 'Den Pfad in die Eingabe des Agenten einfügen' }, icon('send', 14, 1.9), 'An Agent geben');
-        send.addEventListener('click', () => this.deps.insert(skillNote(s)));
-        actions.append(send);
-      }
-      if (!s.file) body.append(el('div', { className: 'c3', textContent: 'Auf „Bei Bedarf“ oder „Immer“ liegt der Skill als Markdown im Projekt und lässt sich ansehen.' }));
-      if (actions.childElementCount) body.append(actions);
-      row.append(body);
+  /** Karte neben der Liste. Bleibt offen, bis sie geschlossen wird (Kreuz, Escape, Zeile noch einmal), auch beim Umstellen. */
+  private renderDetail(): void {
+    const box = this.ui.detail;
+    const s = this.openId ? this.skills.find((x) => x.id === this.openId) : undefined;
+    box.hidden = !s;
+    if (!s) { box.replaceChildren(); return; }
+    box.dataset.id = s.id;
+    const close = el('button', { className: 'ibtn s', title: 'Schließen (Escape)' }, icon('x', 14, 2));
+    close.setAttribute('aria-label', 'Karte schließen');
+    close.addEventListener('click', () => this.closeDetail());
+    const kids: (HTMLElement | null)[] = [
+      el('div', { className: 'mc-hd' }, el('span', { className: 'mc-ico sk-ico' }, icon('book', 15)),
+        el('div', { className: 'sk-title' }, el('b', { textContent: s.title }), el('span', { className: 'c3', textContent: s.category || 'Weitere' })), el('span', { className: 'grow' }), close),
+      el('div', { className: 'sk-desc', textContent: s.summary }),
+    ];
+    if (s.changed) kids.push(el('div', { className: 'sk-note', textContent: 'Die Kopie im Projekt weicht von der Fassung dieser App ab. Aus- und wieder Einschalten übernimmt die Fassung der App, die bisherige kommt in die Sicherung.' }));
+    for (const p of s.problems) kids.push(el('div', { className: 'sk-warn', textContent: p }));
+    kids.push(el('div', { className: 'sk-sec' }, el('div', { className: 'sk-h', textContent: 'Für dieses Modell' }), this.modeSwitch(s),
+      el('div', { className: 'c3 small', textContent: modeOf(s.mode).title })));
+    if (s.vars.length) {
+      const set = changedVars(s);
+      const reset = set.length ? el('button', { className: 'sk-resetall', textContent: 'Zurücksetzen', title: 'Alle Einstellungen dieses Skills zurück auf den Standard' }) : null;
+      reset?.addEventListener('click', () => void this.resetAll(s));
+      kids.push(el('div', { className: 'sk-sec' },
+        el('div', { className: 'sk-h' }, el('span', { textContent: 'Einstellungen' }), el('span', { className: 'grow' }), set.length ? el('span', { className: 'sk-hn', textContent: `${set.length} angepasst · ` }) : null, reset),
+        el('div', { className: 'sk-vars' }, ...s.vars.map((v) => this.field(s, v)))));
     }
-    return row;
+    if (s.topics.length) kids.push(el('div', { className: 'sk-sec' }, el('div', { className: 'sk-h', textContent: 'Darauf achtet der Agent' }), el('ul', { className: 'sk-topics' }, ...s.topics.map((t) => el('li', { textContent: t })))));
+    if (s.bundled) {
+      const id = `sk-${s.id}-default`;
+      const sel = el('select', { id, className: 'sk-select', disabled: this.busy.has(s.id) }, ...MODES.map((m) => el('option', { value: m.mode, textContent: m.label })));
+      sel.value = s.defaultMode;
+      sel.addEventListener('change', () => void this.setDefault(s, sel.value as SkillMode));
+      kids.push(el('div', { className: 'sk-sec sk-def', title: 'Gilt für alle Modelle, die ab jetzt angelegt werden. Dieses Modell bleibt, wie es ist.' },
+        el('label', { textContent: 'Bei neuen Modellen', htmlFor: id }), sel));
+    }
+    const actions = el('div', { className: 'sc-actions sk-actions' });
+    if (s.file) {
+      const view = el('button', { className: 'btn sm', title: 'Die Kopie im Projekt im Code zeigen (nur lesen)' }, icon('file', 14, 1.9), 'Datei ansehen');
+      view.addEventListener('click', () => this.deps.open(s.file!));
+      actions.append(view);
+    }
+    if (s.mode !== 'off' && s.file) {
+      const send = el('button', { className: 'btn sm acc', title: 'Pfad und angepasste Einstellungen in die Eingabe des Agenten einfügen, damit ein laufender Agent davon erfährt' }, icon('send', 14, 1.9), 'An Agent geben');
+      send.addEventListener('click', () => this.deps.insert(skillNote(s)));
+      actions.append(send);
+    }
+    if (!s.file) kids.push(el('div', { className: 'sk-note', textContent: 'Auf „Bei Bedarf“ oder „Immer“ liegt der Skill als Markdown im Projekt und lässt sich ansehen.' }));
+    if (actions.childElementCount) kids.push(actions);
+    box.replaceChildren(...kids.filter((x): x is HTMLElement => !!x));
   }
 
-  /** Einstellung ändern (null: Standard). Der Hauptprozess prüft den Wert und schreibt die Kopie neu, wenn der Skill nicht aus ist. */
-  private async configure(s: SkillInfo, v: SkillVar, value: SkillValue | null): Promise<void> {
+  /** Stufe für neue Modelle festlegen. Am offenen Modell ändert sich nichts. */
+  private async setDefault(s: SkillInfo, mode: SkillMode): Promise<void> {
+    if (this.busy.has(s.id)) return;
+    this.busy.add(s.id);
+    this.render();
+    let r: SkillResult;
+    try { r = await this.deps.setDefault(s.id, mode); } catch (e) { r = { ok: false, error: e instanceof Error ? e.message : String(e), skills: this.skills }; }
+    this.busy.delete(s.id);
+    this.skills = r.skills;
+    this.render();
+    if (!r.ok) { this.deps.toast(r.error ?? 'Die Vorgabe für neue Modelle ließ sich nicht ändern.', 'error'); return; }
+    this.deps.toast(`„${s.title}“ steht bei neuen Modellen auf „${labelOf(mode)}“. Dieses Modell bleibt, wie es ist.`);
+  }
+
+  /** Einstellungen ändern (null: Standard). Der Hauptprozess prüft die Werte und schreibt die Kopie neu, wenn der Skill nicht aus ist. */
+  private async configure(s: SkillInfo, values: Record<string, SkillValue | null>, what: (now: SkillInfo) => string): Promise<void> {
     if (this.busy.has(s.id)) return;
     this.busy.add(s.id);
     let r: SkillResult;
-    try { r = await this.deps.configure(s.id, { [v.name]: value }); } catch (e) { r = { ok: false, error: e instanceof Error ? e.message : String(e), skills: this.skills }; }
+    try { r = await this.deps.configure(s.id, values); } catch (e) { r = { ok: false, error: e instanceof Error ? e.message : String(e), skills: this.skills }; }
     this.busy.delete(s.id);
     this.skills = r.skills;
     this.render();
     if (!r.ok) { this.deps.toast(r.error ?? 'Die Einstellung ließ sich nicht ändern.', 'error'); return; }
     this.deps.changed();
-    const now = r.skills.find((x) => x.id === s.id)?.vars.find((x) => x.name === v.name) ?? v;
+    const now = r.skills.find((x) => x.id === s.id) ?? s;
     const kept = r.backup ? ' Die vorige Fassung im Projekt liegt in der Sicherung.' : '';
-    this.deps.toast(`„${s.title}“: ${v.label} ${shown(now)}${value === null ? ' (Standard)' : ''}. `
+    this.deps.toast(`„${s.title}“: ${what(now)}. `
       + (s.mode !== 'off' ? `Steht in ${s.file}. Einem laufenden Agenten sagt „An Agent geben“ Bescheid.${kept}` : 'Gilt, sobald der Skill nicht mehr aus ist.'));
+  }
+
+  private setVar(s: SkillInfo, v: SkillVar, value: SkillValue | null): Promise<void> {
+    return this.configure(s, { [v.name]: value }, (now) => {
+      const x = now.vars.find((y) => y.name === v.name) ?? v;
+      return `${v.label} ${shown(x)}${value === null ? ' (Standard)' : ''}`;
+    });
+  }
+
+  private resetAll(s: SkillInfo): Promise<void> {
+    const set = changedVars(s);
+    return this.configure(s, Object.fromEntries(set.map((v) => [v.name, null])), () => `${set.map((v) => v.label).join(', ')} zurück auf den Standard`);
   }
 
   /** Eingabe einer Einstellung: Zahlenfeld (Komma oder Punkt, Enter übernimmt, Escape verwirft) oder Auswahl. */
@@ -211,16 +296,16 @@ export class SkillsPanel {
     if (v.kind === 'choice') {
       const sel = el('select', { id, className: 'sk-select' }, ...(v.options ?? []).map((o) => el('option', { value: o.value, textContent: o.label })));
       sel.value = String(v.value);
-      sel.addEventListener('change', () => void this.configure(s, v, sel.value));
+      sel.addEventListener('change', () => void this.setVar(s, v, sel.value));
       input = sel;
     } else {
       const shownNum = typeof v.value === 'number' ? v.value.toLocaleString('de-DE', { maximumFractionDigits: 6 }) : String(v.value);
       const inp = el('input', { id, className: 'sk-num', type: 'text', value: shownNum, spellcheck: false, autocomplete: 'off' });
       inp.inputMode = 'decimal';
       inp.title = v.min != null && v.max != null ? `Erlaubt ${shown(v, v.min)} bis ${shown(v, v.max)}` : '';
-      inp.addEventListener('change', () => { if (inp.value.trim() !== shownNum) void this.configure(s, v, inp.value); });
+      inp.addEventListener('change', () => { if (inp.value.trim() !== shownNum) void this.setVar(s, v, inp.value); });
       inp.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); inp.blur(); if (inp.value.trim() !== shownNum) void this.configure(s, v, inp.value); }
+        if (e.key === 'Enter') { e.preventDefault(); inp.blur(); if (inp.value.trim() !== shownNum) void this.setVar(s, v, inp.value); }
         else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); inp.value = shownNum; inp.blur(); }
       });
       input = inp;
@@ -231,7 +316,7 @@ export class SkillsPanel {
     const reset = el('button', { className: 'sk-reset', title: `Zurück auf den Standard (${shown(v, v.default)})` }, icon('undo', 13, 2));
     reset.setAttribute('aria-label', `${v.label} zurück auf den Standard`);
     reset.hidden = isDefault;
-    reset.addEventListener('click', () => void this.configure(s, v, null));
+    reset.addEventListener('click', () => void this.setVar(s, v, null));
     const row = el('div', { className: 'sk-var' + (isDefault ? '' : ' set') }, label, el('span', { className: 'sk-in' }, input, el('span', { className: 'c3', textContent: v.unit })), reset);
     row.dataset.var = v.name;
     return row;
@@ -242,7 +327,7 @@ export class SkillsPanel {
     return {
       skills: this.skills.map((s) => ({ id: s.id, title: s.title, summary: s.summary, category: s.category, defaultMode: s.defaultMode, mode: s.mode, file: s.file, changed: s.changed, problems: s.problems,
         vars: Object.fromEntries(s.vars.map((v) => [v.name, v.value])) })),
-      busy: [...this.busy], text: this.list.innerText,
+      busy: [...this.busy], text: this.ui.list.innerText, detail: this.ui.detail.hidden ? null : this.ui.detail.innerText, open: this.openId,
     };
   }
 }

@@ -1,8 +1,8 @@
 import { affectsBuild } from '../shared/editable';
-import type { AgentInfo, BuildStatus, ModelMap, PartMap, PreviewResult, ProjectInfo, SaveState } from '../shared/types';
+import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ResultEntry, SaveState } from '../shared/types';
 import { CodePanel, codeRows, isPdf, type Mark } from './code';
 import { AnimTool } from './animtool';
-import { FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
+import { DRAG_FILE, FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
 import { MAX_QUOTE } from './pdfview';
@@ -10,7 +10,7 @@ import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
 import { SkillsPanel } from './skills';
-import { PartsCard } from './parts';
+import { DRAG_PART, PartsCard } from './parts';
 import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
 import { TerminalTabs } from './terminals';
@@ -56,23 +56,52 @@ const SURFACE: Record<string, string> = {
 const surfaceName = (s: string | null) => (s ? SURFACE[s] ?? s.toLowerCase() : 'Fläche');
 const ERROR_KIND: Record<string, string> = { Timeout: 'Zeitlimit überschritten', PythonStart: 'Python ließ sich nicht starten', NoResult: 'Build ohne Ergebnis' };
 
-// ---- Seitenpanels: Dateien, Code, Skills ------------------------------------------------------------------------
+// ---- Seitenleiste (Bauteile, Dateien, Skills) und Code-Spalte (Entwurf 2) -----------------------------------------
 
-type PanelName = 'files' | 'code' | 'skills';
+type PanelName = 'parts' | 'files' | 'skills';
 let panel: PanelName | null = null;
+/** Zuletzt gezeigte Ansicht der Seitenleiste: Der Schalter oben bringt sie wieder. */
+let lastPanel: PanelName = 'parts';
 let filesDirty = true;
+let codeOpen = false;
+/** Der Dateibaum entsteht nach dem Code-Panel, das ihm schon beim Aufbau die offene Datei meldet. */
+let fileTree: FileTree | null = null;
 
 function showPanel(p: PanelName | null): void {
   panel = p;
+  if (p) lastPanel = p;
   $('side').hidden = !p;
   $('split-side').hidden = !p;
-  $('side').classList.toggle('code', p === 'code');
+  $('panel-parts').hidden = p !== 'parts';
   $('panel-files').hidden = p !== 'files';
-  $('panel-code').hidden = p !== 'code';
   $('panel-skills').hidden = p !== 'skills';
   document.querySelectorAll<HTMLButtonElement>('#rail [data-panel]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.panel === p)));
   if (p === 'files' && filesDirty) void refreshFiles();
   if (p === 'skills') void skills.refresh();
+  else skills.closeDetail();
+  store.set('soma.side', p ?? '');
+  renderLayout();
+}
+
+/** Code als eigene Spalte neben der Seitenleiste, damit Dateien und Code gleichzeitig offen sein können. */
+function showCode(on: boolean): void {
+  codeOpen = on;
+  $('editor').hidden = !on;
+  $('split-code').hidden = !on;
+  // Leer aufgemacht: die Stelle der Auswahl zeigen, sonst model.py
+  if (on && !code.activeFile) {
+    const e = selection ? partEntry(selection.partId) : undefined;
+    if (e?.file && e.line) void code.open(e.file, { ...lineRange(e), label: e.name, color: partInfo(e.id)?.color });
+    else if (project) void code.open('model.py');
+  }
+  renderLayout();
+}
+
+/** Spalten-Schalter oben rechts: zeigen, welche Spalten offen sind. */
+function renderLayout(): void {
+  $('btn-lay-side').setAttribute('aria-pressed', String(!!panel));
+  $('btn-lay-code').setAttribute('aria-pressed', String(codeOpen));
+  $('btn-lay-agent').setAttribute('aria-pressed', String(!$('terminals').classList.contains('collapsed')));
 }
 
 const code = new CodePanel(
@@ -80,6 +109,7 @@ const code = new CodePanel(
   {
     read: (rel) => api.fs.readText(rel), readBinary: (rel) => api.fs.readBinary(rel), projectId: () => project?.id ?? null, toast, ask: (o) => api.dialog.choose(o),
     changed: () => { if (saveState) renderSaveState(saveState); },
+    active: (f) => fileTree?.setActive(f),
     saveAndBuild: () => void saveCode(),
     build: () => void api.build.run(),
     link: (href) => openLink(href),
@@ -111,11 +141,11 @@ function openLink(href: string): void {
 }
 
 async function openCode(file: string, mark?: Mark): Promise<void> {
-  showPanel('code');
+  if (!codeOpen) { codeOpen = true; $('editor').hidden = false; $('split-code').hidden = false; renderLayout(); }
   await code.open(file, mark);
 }
 
-const skills = new SkillsPanel($('skills-list'), {
+const skills = new SkillsPanel({ list: $('skills-list'), sum: $('skills-sum'), detail: $('skill-detail'), menu: $('menu-ctx') }, {
   list: () => api.skills.list(),
   set: (id, mode) => api.skills.set(id, mode),
   configure: (id, values) => api.skills.configure(id, values),
@@ -168,6 +198,8 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
   toAgent: (rel) => insertToAgent(`[Datei: ${rel}] `),
   copyPath: (rel) => void navigator.clipboard.writeText(rel).then(() => toast(`Pfad kopiert: ${rel}`), (e) => toast(`Der Pfad ließ sich nicht kopieren: ${e instanceof Error ? e.message : String(e)}`, 'error')),
 });
+fileTree = files;
+files.setActive(code.activeFile);
 
 async function openExternal(rel: string): Promise<void> {
   const r = await api.fs.openExternal(rel);
@@ -192,18 +224,34 @@ $('btn-file-new').addEventListener('click', () => files.startCreate('', false));
 $('btn-folder-new').addEventListener('click', () => files.startCreate('', true));
 
 // Dateien und Ordner ziehen: überall im Fenster ablegen landet in inputs/. Ohne das würde Electron die Datei als Seite öffnen.
+// Bauteile und Dateien aus der App lassen sich ins Terminal ziehen (ersetzt die Übergabeleiste, Entwurf 2).
 let dragDepth = 0;
 const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+const isInternal = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].some((t) => t === DRAG_PART || t === DRAG_FILE);
+const overTerminal = (e: DragEvent) => !!(e.target as HTMLElement | null)?.closest?.('#term-panes');
 document.addEventListener('dragenter', (e) => {
   if (!hasFiles(e)) return;
   if (dragDepth++ === 0) { document.body.classList.add('dragging'); if (project) showPanel('files'); }
 });
 document.addEventListener('dragleave', (e) => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
-document.addEventListener('dragover', (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = hasFiles(e) && project ? 'copy' : 'none'; });
+document.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  const term = isInternal(e) && overTerminal(e);
+  $('term-panes').classList.toggle('dropping', term);
+  if (e.dataTransfer) e.dataTransfer.dropEffect = (hasFiles(e) && project) || term ? 'copy' : 'none';
+});
+document.addEventListener('dragend', () => $('term-panes').classList.remove('dropping'));
 document.addEventListener('drop', (e) => {
   e.preventDefault();
   dragDepth = 0;
   document.body.classList.remove('dragging');
+  $('term-panes').classList.remove('dropping');
+  if (isInternal(e)) {
+    if (!overTerminal(e)) return;
+    const partId = e.dataTransfer?.getData(DRAG_PART), rel = e.dataTransfer?.getData(DRAG_FILE);
+    if (partId) { selectPart(partId, null); insertToAgent(selectionText()); } else if (rel) insertToAgent(`[Datei: ${rel}] `);
+    return;
+  }
   const list = [...(e.dataTransfer?.files ?? [])];
   if (list.length && project) void importFiles(list);
 });
@@ -223,19 +271,18 @@ async function importFiles(list: File[]): Promise<void> {
 // ---- Bauteile und Auswahl ---------------------------------------------------------------------------------------
 
 const partsCard = new PartsCard({
-  card: $('parts'), list: $('tab-model'), count: $('parts-count'), toggle: $<HTMLButtonElement>('btn-parts-toggle'),
-  search: $<HTMLButtonElement>('btn-parts-search'), filter: $<HTMLInputElement>('parts-filter'),
+  list: $('tab-model'), count: $('parts-count'), search: $<HTMLButtonElement>('btn-parts-search'), filter: $<HTMLInputElement>('parts-filter'),
 }, {
   select: (id) => selectPart(id, null, true),
-  setVisible: (ids, on) => viewer.setVisible(ids, on),
+  setVisible: (ids, on) => { viewer.setVisible(ids, on); resultTool.forgetProbe(); },
   isVisible: (id) => viewer.isVisible(id),
-  setGhost: (ids, on) => viewer.setGhosted(ids, on),
+  setGhost: (ids, on) => { viewer.setGhosted(ids, on); resultTool.forgetProbe(); },
   isGhost: (id) => viewer.isGhosted(id),
   context: (id, x, y) => openPartMenu(id, x, y),
   groupContext: (ids, name, x, y) => openGroupMenu(ids, name, x, y),
 });
 
-const refreshPartsCard = () => partsCard.set(viewer.partList(), viewer.selection);
+const refreshPartsCard = () => { partsCard.set(viewer.partList(), viewer.selection); renderViewSwitch(); };
 const partEntry = (id: string): PartMap | undefined => map?.parts.find((x) => x.id === id);
 const partInfo = (id: string) => viewer.partList().find((x) => x.id === id);
 const lineRange = (e: PartMap) => ({ from: e.line!, to: e.end_line && e.end_line >= e.line! ? e.end_line : e.line! });
@@ -252,7 +299,6 @@ viewer.onPick = (r) => selectPart(r?.partId ?? null, r);
 
 async function renderSelection(): Promise<void> {
   const card = $('selcard');
-  $<HTMLButtonElement>('btn-ins-sel').disabled = !selection;
   if (!selection) { card.hidden = true; return; }
   const { partId, pick } = selection;
   const p = partInfo(partId);
@@ -280,7 +326,7 @@ async function renderSelection(): Promise<void> {
     peek.replaceChildren(head, ...codeRows(src.slice(from - 1, last), from, { from, to, kind: 'hl' }));
     if (to > last) peek.append(el('div', { className: 'ph', textContent: `… bis Zeile ${to}` }));
   } catch { peek.replaceChildren(head, el('div', { className: 'ph', textContent: `${e!.file} nicht lesbar` })); }
-  if (panel === 'code') void code.follow(e!.file!, { from, to, label: name, color: p?.color });
+  if (codeOpen) void code.follow(e!.file!, { from, to, label: name, color: p?.color });
 }
 
 /** Text für die Eingabe des Agenten. Zahlen mit Punkt, damit sie eindeutig bleiben. */
@@ -457,21 +503,23 @@ const endOthers = (keep: 'measure' | 'explode' | 'anim' | 'result') => {
   if (keep !== 'result') resultTool.setActive(false);
 };
 const animTool = new AnimTool({
-  card: $('anim-card'), button: $<HTMLButtonElement>('btn-anim'), close: $<HTMLButtonElement>('btn-anim-close'),
+  card: $('anim-card'), close: $<HTMLButtonElement>('btn-anim-close'),
   select: $<HTMLSelectElement>('anim-select'), play: $<HTMLButtonElement>('btn-anim-play'), range: $<HTMLInputElement>('anim-range'), time: $('anim-time'),
   loop: $<HTMLButtonElement>('btn-anim-loop'), follow: $<HTMLButtonElement>('btn-anim-follow'), speed: $<HTMLSelectElement>('anim-speed'), hint: $('anim-hint'),
   video: $<HTMLButtonElement>('btn-anim-video'), agent: $<HTMLButtonElement>('btn-anim-agent'), viewerEl: $('viewer'),
 }, {
   viewer, list: () => api.anim.list(), build: (f) => api.anim.build(f), readBinary: (rel) => api.fs.readBinary(rel), renderVideo: (id) => api.render.video(id),
   beforeOn: () => endOthers('anim'), insert: (t) => insertToAgent(t), toast, showVideo: (rel) => { void refreshFiles(); void videoView.open(rel); },
+  changed: () => renderViewSwitch(),
 });
 const resultTool = new ResultTool({
-  card: $('result-card'), button: $<HTMLButtonElement>('btn-result'), close: $<HTMLButtonElement>('btn-result-close'), select: $<HTMLSelectElement>('result-select'),
+  card: $('result-card'), close: $<HTMLButtonElement>('btn-result-close'), select: $<HTMLSelectElement>('result-select'),
   legend: $('result-legend'), summary: $('result-summary'), probe: $('result-probe'), hint: $('result-hint'),
   rerun: $<HTMLButtonElement>('btn-result-rerun'), agent: $<HTMLButtonElement>('btn-result-agent'), viewerEl: $('viewer'),
 }, {
   layer: resultLayer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
   beforeOn: () => endOthers('result'), insert: (t) => insertToAgent(t), toast,
+  changed: () => renderViewSwitch(),
 });
 // Messen und Explosion schalten die beiden aus, bevor sie selbst anfangen (Lauscher in der Erfassungsphase laufen vor denen
 // der Werkzeuge): Beide rechnen mit der Einbaulage
@@ -488,7 +536,6 @@ const videoView = new VideoView({
 });
 
 $('btn-mark').addEventListener('click', startMarkup);
-$('btn-ins-mark').addEventListener('click', startMarkup);
 $('btn-mark-cancel').addEventListener('click', () => markup.close());
 $('btn-mark-send').addEventListener('click', () => void sendMarkup());
 
@@ -566,7 +613,6 @@ function renderBuild(s: BuildStatus): void {
     main.textContent = 'Bereit';
     detail.textContent = '';
   }
-  $<HTMLButtonElement>('btn-ins-err').disabled = s.state !== 'error';
   void renderErrorCard();
 }
 
@@ -654,6 +700,7 @@ const versions = new VersionsBar({
       selectPart(null, null);
       void renderErrorCard();
     } catch (e) { toast(`Vorschau nicht darstellbar: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
+    renderViewSwitch();
   },
   toast,
   beforeRestore: () => leaveEditor('Stand wiederherstellen'), // Wiederherstellen ersetzt Dateien
@@ -680,6 +727,8 @@ async function onProject(p: ProjectInfo): Promise<void> {
   code.reset();
   skills.reset();
   if (panel === 'skills') void skills.refresh();
+  if (codeOpen) void code.open('model.py'); // die Code-Spalte bleibt offen, dann nicht leer
+  resetViewLists();
   selection = null;
   void renderSelection();
   partsCard.message('Modell wird gebaut …');
@@ -739,7 +788,7 @@ async function refreshSaveState(): Promise<void> {
  */
 async function saveCode(): Promise<void> {
   const r = await code.saveAll();
-  if (!r.ok) { toast('Nicht alles ließ sich speichern (siehe Hinweis im Code-Panel). Gebaut wird erst danach.', 'error'); return; }
+  if (!r.ok) { toast('Nicht alles ließ sich speichern (siehe Hinweis im Code). Gebaut wird erst danach.', 'error'); return; }
   if (r.saved.some(affectsBuild)) await api.build.run();
 }
 
@@ -759,20 +808,39 @@ async function leaveEditor(title: string): Promise<boolean> {
   return c === 1 ? code.discardAll() : false;
 }
 
+let saving = false;
+/**
+ * Speichern kann dauern (ein laufender oder veralteter Build wird abgewartet, dann Snapshot und ZIP): Der Knopf zeigt das
+ * sofort, weitere Klicks und Strg+S zählen solange nicht.
+ */
 async function doSave(saveAs = false): Promise<void> {
-  // Erst die Eingaben im Editor, sonst fehlten sie in Snapshot und ZIP. Das Speichern baut danach, falls nötig.
-  const c = await code.saveAll();
-  if (!c.ok) { toast('Nicht alles im Editor ließ sich speichern (siehe Hinweis im Code-Panel). Das Modell ist deshalb nicht gespeichert.', 'error'); return; }
-  const r = await api.project.save(saveAs);
-  if (r.cancelled) return;
-  if (r.error) { toast(r.error, 'error'); return; }
-  const kb = Math.round((r.bytes ?? 0) / 1024);
-  const lines = [`Gespeichert: ${r.zipPath}`, `${r.files} Dateien, ${kb} KB${r.snapshot ? ' · Snapshot im Verlauf angelegt' : ''}`];
-  if (r.warnings?.length) lines.push(`Hinweis: ${r.warnings.join(' ')}`);
-  toast(lines.join('\n'), r.warnings?.length ? 'error' : 'ok');
-  project = await api.project.current(); // der Modellname folgt dem Dateinamen
-  $('doc-name').textContent = project.name;
-  void refreshSaveState();
+  if (saving) return;
+  saving = true;
+  const btn = $<HTMLButtonElement>('btn-save');
+  const label = btn.innerHTML;
+  btn.disabled = true;
+  btn.classList.add('busy');
+  btn.replaceChildren(el('span', { className: 'spin' }, icon('spin', 14, 2.4)), 'Speichert …');
+  try {
+    // Erst die Eingaben im Editor, sonst fehlten sie in Snapshot und ZIP. Das Speichern baut danach, falls nötig.
+    const c = await code.saveAll();
+    if (!c.ok) { toast('Nicht alles im Editor ließ sich speichern (siehe Hinweis im Code). Das Modell ist deshalb nicht gespeichert.', 'error'); return; }
+    const r = await api.project.save(saveAs);
+    if (r.cancelled) return;
+    if (r.error) { toast(r.error, 'error'); return; }
+    const kb = Math.round((r.bytes ?? 0) / 1024);
+    const lines = [`Gespeichert: ${r.zipPath}`, `${r.files} Dateien, ${kb} KB${r.snapshot ? ' · Snapshot im Verlauf angelegt' : ''}`];
+    if (r.warnings?.length) lines.push(`Hinweis: ${r.warnings.join(' ')}`);
+    toast(lines.join('\n'), r.warnings?.length ? 'error' : 'ok');
+    project = await api.project.current(); // der Modellname folgt dem Dateinamen
+    $('doc-name').textContent = project.name;
+    void refreshSaveState();
+  } finally {
+    saving = false;
+    btn.disabled = false;
+    btn.classList.remove('busy');
+    btn.innerHTML = label; // fester Text aus index.html, kein Text aus dem Projekt
+  }
 }
 
 async function doOpen(): Promise<boolean> {
@@ -800,6 +868,9 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'o' && !e.shiftKey) { e.preventDefault(); void doOpen().then((ok) => { if (ok) showStart(false); }); }
   else if (k === 'n' && !e.shiftKey) { e.preventDefault(); void doNew().then(() => showStart(false)); }
   else if (k === 'b' && !e.shiftKey) { e.preventDefault(); void doBuild(); }
+  else if (k === '1' && !e.shiftKey) { e.preventDefault(); toggleSide(); }
+  else if (k === '2' && !e.shiftKey) { e.preventDefault(); showCode(!codeOpen); }
+  else if (k === '3' && !e.shiftKey) { e.preventDefault(); setAgentCollapsed(!$('terminals').classList.contains('collapsed')); }
 }, true);
 
 // ---- Menüs der Kopfzeile ----------------------------------------------------------------------------------------
@@ -849,7 +920,7 @@ $('btn-buildinfo').addEventListener('click', () => {
 });
 
 // Darstellung
-$('btn-display').addEventListener('click', () => menus.toggle($('menu-display'), $('btn-display')));
+$('btn-display').addEventListener('click', () => menus.toggle($('menu-display'), $('btn-display'), 'beside'));
 document.querySelectorAll<HTMLButtonElement>('[data-display]').forEach((b) => b.addEventListener('click', () => {
   const on = b.getAttribute('aria-checked') !== 'true';
   b.setAttribute('aria-checked', String(on));
@@ -872,29 +943,169 @@ function renderExportScope(): void {
   $('exp-all').setAttribute('aria-pressed', String(exportScope === 'all'));
   sel.setAttribute('aria-pressed', String(exportScope === 'sel'));
 }
-function openExportMenu(): void {
+function openExportMenu(anchor: HTMLElement = $('btn-export')): void {
   renderExportScope();
   const m = $('menu-export');
-  if (!menus.isOpen(m)) menus.toggle(m, $('btn-export'), 'right');
+  if (!menus.isOpen(m)) menus.toggle(m, anchor, anchor.id === 'btn-export' ? 'right' : 'left');
 }
 $('btn-export').addEventListener('click', () => {
   if (menus.isOpen($('menu-export'))) { menus.close(); return; }
   exportScope = selection ? exportScope : 'all';
   openExportMenu();
 });
+$('btn-sel-export').addEventListener('click', () => {
+  if (menus.isOpen($('menu-export'))) { menus.close(); return; }
+  exportScope = 'sel';
+  openExportMenu($('btn-sel-export'));
+});
 $('exp-all').addEventListener('click', () => { exportScope = 'all'; renderExportScope(); });
 $('exp-sel').addEventListener('click', () => { exportScope = 'sel'; renderExportScope(); });
 document.querySelectorAll<HTMLButtonElement>('#menu-export [data-fmt]').forEach((b) => b.addEventListener('click', () => void doExport(b.dataset.fmt!, b.textContent!)));
 
-async function doExport(fmt: string, label: string): Promise<void> {
+/** Exportieren: Der Hauptprozess fragt nach Datei (ein Bauteil) oder Ordner (alle Bauteile) und schreibt erst danach. */
+async function doExport(fmt: string, label: string): Promise<ExportResult> {
   menus.close();
   const e = selection ? partEntry(selection.partId) : undefined;
   const part = exportScope === 'sel' ? e?.name ?? partInfo(selection?.partId ?? '')?.name ?? null : null;
-  toast(`Exportiere ${part ? `„${part}“` : 'alle Bauteile'} als ${label} …`, 'info');
   const r = await api.build.export(fmt, part);
-  if (r.ok) toast(`Exportiert nach exports/:\n${r.files.map((f) => f.replace(/^exports\//, '')).join(', ') || '(keine Datei)'}`);
+  if (r.cancelled) return r;
+  const name = (f: string) => f.split(/[\\/]/).pop() ?? f;
+  if (r.ok && part) toast(`„${part}“ als ${label} exportiert:\n${r.target ?? r.files[0] ?? ''}`);
+  else if (r.ok) toast(`${r.files.length} Datei${r.files.length === 1 ? '' : 'en'} als ${label} exportiert nach ${r.target ?? ''}:\n${r.files.map(name).join(', ') || '(keine Datei)'}`);
   else toast(`Export fehlgeschlagen: ${r.error}`, 'error');
+  return r;
 }
+
+// ---- Umschalter oben links: was der Viewer zeigt (Entwurf 2) -----------------------------------------------------
+// Analysen, Animationen und Videos sind Ergebnisse des Agenten, keine Werkzeuge. Hier wählt man, was der Viewer zeigt.
+
+let viewLists: { results: ResultEntry[]; anims: AnimEntry[]; videos: string[] } = { results: [], anims: [], videos: [] };
+/** Schon gesehene Ergebnisse. Was danach dazukommt, bekommt einen Punkt am Umschalter. */
+const seen = new Set<string>();
+let seenReady = false;
+let viewSeq = 0;
+let viewTimer: ReturnType<typeof setTimeout> | undefined;
+
+const resultKey = (r: ResultEntry) => `r:${r.id}:${String((r as { created?: unknown }).created ?? '')}`;
+const animKey = (a: AnimEntry) => `a:${a.id}`;
+const viewKeys = () => [...viewLists.results.map(resultKey), ...viewLists.anims.map(animKey), ...viewLists.videos.map((v) => `v:${v}`)];
+
+function videosIn(nodes: FileNode[], out: string[] = []): string[] {
+  for (const n of nodes) {
+    if (n.dir) { if (!n.name.startsWith('.')) videosIn(n.children ?? [], out); }
+    else if (VIDEO_EXT.test(n.name)) out.push(n.path);
+  }
+  return out;
+}
+
+function resetViewLists(): void {
+  viewSeq++;
+  viewLists = { results: [], anims: [], videos: [] };
+  seen.clear();
+  seenReady = false;
+  renderViewSwitch();
+  void refreshViewLists();
+}
+
+async function refreshViewLists(): Promise<void> {
+  if (!project) return;
+  const seq = ++viewSeq;
+  const [results, anims, nodes] = await Promise.all([
+    api.results.list().catch(() => [] as ResultEntry[]), api.anim.list().then((l) => l.animations).catch(() => [] as AnimEntry[]), api.fs.list().catch(() => [] as FileNode[]),
+  ]);
+  if (seq !== viewSeq) return;
+  viewLists = { results, anims, videos: videosIn(nodes) };
+  // Was beim Öffnen des Modells schon da ist, gilt als gesehen
+  if (!seenReady) { for (const k of viewKeys()) seen.add(k); seenReady = true; }
+  renderViewSwitch();
+}
+const scheduleViewLists = () => { clearTimeout(viewTimer); viewTimer = setTimeout(() => void refreshViewLists(), 400); };
+
+function renderViewSwitch(): void {
+  const prev = versions.previewed;
+  let ico = 'cube', name = 'Modell', sub = '', closable = false;
+  const n = viewer.partList().length;
+  if (prev) { ico = 'history'; name = `Stand ${prev.short}`; sub = 'nur ansehen'; closable = true; }
+  // Bei Analyse und Animation sagt das Symbol, was es ist: Der Platz gehört dem Namen
+  else if (resultTool.isActive) { ico = 'gauge'; name = resultTool.currentTitle ?? 'Analyse'; closable = true; }
+  else if (animTool.isActive) { ico = 'anim'; name = animTool.currentName ?? 'Animation'; closable = true; }
+  else sub = n ? `${n} Bauteil${n === 1 ? '' : 'e'}` : '';
+  $('view-ico').replaceChildren(icon(ico, 16));
+  $('view-name').textContent = name;
+  $('view-sub').textContent = sub;
+  $('btn-view').title = resultTool.isActive && !prev ? `Analyse: ${name}` : animTool.isActive && !prev ? `Animation: ${name}` : 'Was der Viewer zeigt: das Modell, eine Analyse, eine Animation oder ein Video';
+  $('view-switch').classList.toggle('vio', !!prev);
+  $('view-switch').classList.toggle('result', !prev && (resultTool.isActive || animTool.isActive));
+  $('btn-view-close').hidden = !closable;
+  $('view-sep').hidden = !closable;
+  const unseen = viewKeys().filter((k) => !seen.has(k)).length;
+  const badge = $('view-new');
+  badge.hidden = !unseen;
+  badge.dataset.n = String(unseen);
+  badge.textContent = `${unseen} neu`;
+  badge.title = 'Neue Ergebnisse des Agenten. Klick zeigt die Liste.';
+}
+
+/** Eintrag im Menü des Umschalters. `dot`: Statusfarbe (Fundstellen), `isNew`: noch nicht gesehen. */
+function viewItem(ico: string, label: string, opts: { sub?: string; on?: boolean; dot?: string; isNew?: boolean; title?: string; onClick: () => void }): HTMLButtonElement {
+  const d = opts.dot ? el('span', { className: 'dot' }) : null;
+  if (d) d.style.background = opts.dot!;
+  const b = el('button', { className: 'mi' + (opts.on ? ' cur' : ''), title: opts.title ?? '' },
+    icon(ico, 15), el('span', { className: 'vl', textContent: label }), opts.isNew ? el('span', { className: 'tag acc', textContent: 'neu' }) : null,
+    el('span', { className: 'k' }, d, opts.sub ?? '', el('span', { className: 'chk' }, icon('check', 14, 2.2))));
+  b.setAttribute('role', 'menuitemradio');
+  b.setAttribute('aria-checked', String(!!opts.on));
+  b.addEventListener('click', opts.onClick);
+  return b;
+}
+
+async function openViewMenu(): Promise<void> {
+  const m = $('menu-view');
+  if (menus.isOpen(m)) { menus.close(); return; }
+  await refreshViewLists();
+  const n = viewer.partList().length;
+  const items: HTMLElement[] = [viewItem('cube', 'Modell', { sub: `${n} Bauteil${n === 1 ? '' : 'e'}`, on: !resultTool.isActive && !animTool.isActive, onClick: () => showModelView() })];
+  const { results, anims, videos } = viewLists;
+  const head = (t: string, src: string) => el('div', { className: 'mh' }, t, el('span', { className: 'src', textContent: src }));
+  if (results.length) {
+    items.push(el('div', { className: 'msep' }), head('ANALYSEN', '.soma/results/'));
+    for (const r of results) {
+      const bad = r.parts.filter((x) => x.critical > 0).length;
+      items.push(viewItem('gauge', r.id === r.kind ? r.title : `${r.title} (${r.id})`, {
+        sub: r.stale ? 'veraltet' : bad ? `${bad} Bauteil${bad === 1 ? '' : 'e'} kritisch` : 'in Ordnung', dot: r.stale ? 'var(--tx3)' : bad ? 'var(--err)' : 'var(--ok)',
+        on: resultTool.isActive && resultTool.currentId === r.id, isNew: !seen.has(resultKey(r)), onClick: () => resultTool.show(r.id),
+      }));
+    }
+  }
+  if (anims.length) {
+    items.push(el('div', { className: 'msep' }), head('ANIMATIONEN', 'animations/'));
+    for (const a of anims) {
+      items.push(viewItem('anim', a.name, { sub: `${a.duration.toFixed(1).replace('.', ',')} s`, on: animTool.isActive && animTool.currentId === a.id, isNew: !seen.has(animKey(a)), title: a.file, onClick: () => animTool.show(a.id) }));
+    }
+  }
+  if (videos.length) {
+    items.push(el('div', { className: 'msep' }), head('VIDEOS', 'renders/'));
+    for (const v of videos) items.push(viewItem('f-video', v.split('/').pop() ?? v, { isNew: !seen.has(`v:${v}`), title: v, onClick: () => void videoView.open(v) }));
+  }
+  if (!results.length && !anims.length && !videos.length) {
+    items.push(el('div', { className: 'msep' }), el('div', {
+      className: 'mnote', textContent: 'Noch keine Ergebnisse. Der Agent legt sie an: Analysen mit soma analyze, Animationen in animations/, Videos mit soma render (Skills „Analyse“ und „Animation und Video“).',
+    }));
+  }
+  m.replaceChildren(...items);
+  for (const k of viewKeys()) seen.add(k);
+  renderViewSwitch();
+  menus.toggle(m, $('btn-view'));
+}
+
+/** Zurück zum Modell: Analyse und Animation beenden, eine Vorschau verlassen. */
+function showModelView(): void {
+  if (versions.previewing) { $('btn-live').click(); return; }
+  animTool.setActive(false);
+  resultTool.setActive(false);
+}
+$('btn-view').addEventListener('click', () => void openViewMenu());
+$('btn-view-close').addEventListener('click', () => showModelView());
 
 // ---- Viewer-Bedienung -------------------------------------------------------------------------------------------
 
@@ -906,8 +1117,6 @@ $('btn-sel-code').addEventListener('click', () => {
   if (e?.file && e.line) void openCode(e.file, { ...lineRange(e), label: e.name, color: partInfo(e.id)?.color });
 });
 $('btn-sel-agent').addEventListener('click', () => insertToAgent(selectionText()));
-$('btn-ins-sel').addEventListener('click', () => insertToAgent(selectionText()));
-$('btn-ins-err').addEventListener('click', () => insertToAgent(errorText()));
 $('btn-err-agent').addEventListener('click', () => insertToAgent(errorText()));
 $('btn-err-code').addEventListener('click', () => {
   const e = buildStatus.result?.error;
@@ -929,13 +1138,13 @@ $('btn-err-fold').addEventListener('click', () => {
 document.querySelectorAll<HTMLButtonElement>('#rail [data-panel]').forEach((b) => b.addEventListener('click', () => {
   const p = b.dataset.panel as PanelName;
   showPanel(panel === p ? null : p);
-  if (p === 'code' && panel === 'code' && !code.activeFile) {
-    const e = selection ? partEntry(selection.partId) : undefined;
-    if (e?.file && e.line) void code.open(e.file, { ...lineRange(e), label: e.name, color: partInfo(e.id)?.color });
-    else void code.open('model.py');
-  }
 }));
 document.querySelectorAll<HTMLButtonElement>('.side-close').forEach((b) => b.addEventListener('click', () => showPanel(null)));
+const toggleSide = () => showPanel(panel ? null : lastPanel);
+$('btn-lay-side').addEventListener('click', toggleSide);
+$('btn-lay-code').addEventListener('click', () => showCode(!codeOpen));
+$('btn-lay-agent').addEventListener('click', () => setAgentCollapsed(!$('terminals').classList.contains('collapsed')));
+$('btn-code-close').addEventListener('click', () => showCode(false));
 
 // ---- Agent-Bereich ----------------------------------------------------------------------------------------------
 
@@ -945,8 +1154,8 @@ function setAgentCollapsed(on: boolean): void {
   $('split-right').hidden = on;
   if (!on) terminals.refit();
   store.set('soma.agentCollapsed', on ? '1' : '0');
+  renderLayout();
 }
-$('btn-agent-collapse').addEventListener('click', () => setAgentCollapsed(true));
 $('btn-agent-expand').addEventListener('click', () => setAgentCollapsed(false));
 terminals.onStripClick = () => setAgentCollapsed(false);
 
@@ -981,7 +1190,8 @@ function splitter(id: string, target: () => HTMLElement, prop: () => string, sig
     bar.addEventListener('pointerup', up);
   });
 }
-splitter('split-side', () => $('side'), () => (panel === 'code' ? '--side-code' : '--side'), 1, 200, () => innerWidth * 0.5);
+splitter('split-side', () => $('side'), () => '--side', 1, 200, () => innerWidth * 0.4);
+splitter('split-code', () => $('editor'), () => '--editor', 1, 280, () => innerWidth * 0.6);
 splitter('split-right', () => $('terminals'), () => '--right', -1, 300, () => innerWidth - 560);
 
 // ---- Startseite -------------------------------------------------------------------------------------------------
@@ -1022,10 +1232,10 @@ let buildStarts = 0; // Prüfhilfe: Wie oft hat ein Build begonnen?
 api.build.onStatus((s) => {
   if (s.state === 'building' && buildStatus.state !== 'building') buildStarts++;
   renderBuild(s);
-  if (s.state === 'ok' && !s.stale) { void loadModel(); void refreshFiles(); }
+  if (s.state === 'ok' && !s.stale) { void loadModel(); void refreshFiles(); void refreshViewLists(); }
 });
-// Auch bei geschlossenem Code-Panel abgleichen: Offene Dateien können ungesicherte Eingaben enthalten
-api.fs.onChanged(() => { textCache.clear(); void refreshFiles(); void code.refresh(); });
+// Auch bei geschlossenem Code abgleichen: Offene Dateien können ungesicherte Eingaben enthalten
+api.fs.onChanged(() => { textCache.clear(); void refreshFiles(); void code.refresh(); scheduleViewLists(); });
 // Beim Beenden fragt der Hauptprozess, was im Editor ungespeichert ist, und lässt speichern oder verwerfen
 api.fs.onEditorRequest(async (action) => {
   if (action === 'status') return { dirty: code.unsaved() };
@@ -1033,18 +1243,27 @@ api.fs.onEditorRequest(async (action) => {
   return { ok: await code.discardAll() };
 });
 api.versions.onChanged(() => void versions.refresh());
-api.anim.onChanged(() => void animTool.refresh());
+api.anim.onChanged(() => { void animTool.refresh(); scheduleViewLists(); });
 api.render.onProgress((f) => animTool.progress(f));
 // Bilder und Videos, die der Agent erzeugt hat: kurz Bescheid geben, ein Klick im Dateibaum öffnet sie
 api.render.onNotice((n) => {
   if (!n.byAgent) return;
   if (n.ok) toast(`Der Agent hat ${n.files.join(', ')} erzeugt.`, 'info');
   void refreshFiles();
+  scheduleViewLists();
 });
+// Ergebnisse von soma analyze melden sich nicht von selbst (.soma/results/ beobachtet niemand): ab und zu nachsehen
+setInterval(() => { if (project && !document.hidden) void refreshViewLists(); }, 10000);
+window.addEventListener('focus', () => scheduleViewLists());
 api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (der Hauptprozess öffnet es beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
 if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
+// Seitenleiste wie beim letzten Mal, beim ersten Start mit den Bauteilen
+{
+  const side = store.get('soma.side');
+  showPanel(side === null ? 'parts' : side === 'parts' || side === 'files' || side === 'skills' ? side : null);
+}
 // Beim allerersten Start die Startseite zeigen (mit dem Hinweis auf die Rechte des Agenten). Tests überspringen das.
 if (!api.testMode && store.get('soma.startSeen') !== '1') { store.set('soma.startSeen', '1'); void showStart(true); }
 
@@ -1086,7 +1305,16 @@ if (api.testMode) {
     markHandles: () => markup.handles(),
     markImage: (rel: string) => markImage(rel),
     insert: (text: string) => insertToAgent(text),
-    showPanel: (p: PanelName | null) => showPanel(p),
+    showPanel: (p: PanelName | 'code' | null) => (p === 'code' ? showCode(true) : showPanel(p)),
+    showCode,
+    layout: () => ({ side: panel, code: codeOpen, agent: !$('terminals').classList.contains('collapsed') }),
+    viewSwitch: () => ({ name: $('view-name').textContent, sub: $('view-sub').textContent, unseen: $('view-new').hidden ? 0 : Number($('view-new').dataset.n ?? 0), closable: !$('btn-view-close').hidden }),
+    openViewMenu: () => openViewMenu(),
+    viewMenu: () => [...$('menu-view').querySelectorAll('.mi')].map((x) => x.textContent),
+    refreshViewLists: () => refreshViewLists(),
+    openSkill: (id: string | null) => skills.openDetail(id),
+    /** Export wie über das Menü (`sel`: das ausgewählte Bauteil), liefert das Ergebnis. */
+    exportAs: (fmt: string, scope: 'all' | 'sel') => { exportScope = scope; return doExport(fmt, fmt.toUpperCase()); },
     showStart: (on: boolean) => showStart(on),
     setAgentCollapsed,
     fileRows: () => [...document.querySelectorAll('#tab-files .frow .fn')].map((x) => x.textContent),

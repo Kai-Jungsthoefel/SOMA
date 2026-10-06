@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import type { AnimEntry, AnimList, RenderResult } from '../shared/types';
-import { AnimData } from './animdata';
+import { AnimData, type AnimFrame } from './animdata';
 import { icon } from './icons';
 import { paintOverlay } from './overlay';
 import { el } from './ui';
 import type { Viewer } from './viewer';
 
 // Animationen im Viewer (E58): auswählen, abspielen, an eine Stelle springen. Die Bauteile bewegen sich im echten Modell,
-// angehalten gehen Schnitt, Auswahl und Markieren. Untertitel und Beschriftungen stehen wie im Video über dem Bild.
+// angehalten gehen Schnitt, Auswahl und Markieren. Untertitel und Beschriftungen stehen wie im Video über dem Bild, lassen sich
+// im Viewer aber ausblenden (das Video behält sie).
 
 interface Ui {
-  card: HTMLElement; button: HTMLButtonElement; close: HTMLButtonElement;
+  card: HTMLElement; close: HTMLButtonElement;
   select: HTMLSelectElement; play: HTMLButtonElement; range: HTMLInputElement; time: HTMLElement;
   loop: HTMLButtonElement; follow: HTMLButtonElement; speed: HTMLSelectElement; hint: HTMLElement;
   video: HTMLButtonElement; agent: HTMLButtonElement;
@@ -29,6 +30,8 @@ interface Deps {
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
   /** Ein erzeugtes Video zeigen. */
   showVideo(rel: string): void;
+  /** An, aus oder eine andere Animation: der Umschalter oben links zeigt, was zu sehen ist. */
+  changed(): void;
 }
 
 export class AnimTool {
@@ -41,19 +44,26 @@ export class AnimTool {
   private last = 0;
   private follow = true;
   private loop = false;
+  /** Titel, Untertitel und Beschriftungen zeigen. Gilt für alle Animationen der Sitzung: Wer sie ausblendet, will meist nur die Bewegung sehen. */
+  private texts = true;
+  /** Der Schalter steht in der Karte, gesucht statt übergeben (fehlt er, gibt es eben keinen Schalter). */
+  private readonly textsBtn: HTMLButtonElement | null;
   private rendering = false;
   /** Für welche veraltete Animation schon ein Neubau angestoßen ist (nicht in jeder Runde erneut). */
   private rebuilt = '';
   private loading = 0;
+  /** Beim nächsten Laden diese Animation zeigen (Wahl im Umschalter). */
+  private want: string | null = null;
 
   constructor(private readonly ui: Ui, private readonly d: Deps) {
-    ui.button.addEventListener('click', () => this.setActive(!this.active));
     ui.close.addEventListener('click', () => this.setActive(false));
     ui.select.addEventListener('change', () => void this.choose(ui.select.value));
     ui.play.addEventListener('click', () => (this.playing ? this.pause() : this.play()));
     ui.range.addEventListener('input', () => { this.pause(); this.seek(Number(ui.range.value)); });
     ui.loop.addEventListener('click', () => { this.loop = !this.loop; ui.loop.setAttribute('aria-pressed', String(this.loop)); });
     ui.follow.addEventListener('click', () => this.setFollow(!this.follow));
+    this.textsBtn = ui.card.querySelector<HTMLButtonElement>('#btn-anim-texts');
+    this.textsBtn?.addEventListener('click', () => this.setTexts(!this.texts));
     ui.speed.addEventListener('change', () => { this.last = performance.now(); });
     ui.video.addEventListener('click', () => void this.makeVideo());
     ui.agent.addEventListener('click', () => { const t = this.agentNote(); if (t) d.insert(t); });
@@ -66,14 +76,24 @@ export class AnimTool {
   }
 
   get isActive(): boolean { return this.active; }
+  /** Name der gezeigten Animation (null: keine geladen). */
+  get currentName(): string | null { return this.active ? this.current?.entry.name ?? null : null; }
+  get currentId(): string | null { return this.active ? this.current?.entry.id ?? null : null; }
+
+  /** Eine bestimmte Animation zeigen (aus dem Umschalter oben links), null: die zuletzt gezeigte oder die erste. */
+  show(id: string | null): void {
+    this.want = id;
+    if (!this.active) this.setActive(true);
+    else if (id && id !== this.current?.entry.id) void this.choose(id);
+  }
 
   setActive(on: boolean): void {
     if (on === this.active) return;
     if (on) this.d.beforeOn();
     this.active = on;
     this.ui.card.hidden = !on;
-    this.ui.button.setAttribute('aria-pressed', String(on));
     this.ui.viewerEl.classList.toggle('animating', on);
+    this.d.changed();
     if (on) { void this.refresh(); return; }
     this.loading++; // ein noch laufendes Laden darf danach nichts mehr ins Modell setzen
     this.pause();
@@ -91,7 +111,8 @@ export class AnimTool {
     const anims = this.list.animations;
     this.ui.select.replaceChildren(...anims.map((a) => el('option', { value: a.id, textContent: `${a.name} (${a.duration.toFixed(1).replace('.', ',')} s)` })));
     this.ui.select.disabled = anims.length < 2;
-    const want = anims.find((a) => a.id === this.current?.entry.id) ?? anims[0];
+    const want = anims.find((a) => a.id === (this.want ?? this.current?.entry.id)) ?? anims[0];
+    this.want = null;
     if (want) {
       this.ui.select.value = want.id;
       // Veraltet (Code oder Animationsdatei geändert): einmal neu bauen lassen, die Liste kommt danach wieder
@@ -134,6 +155,7 @@ export class AnimTool {
       this.ui.range.step = String(Math.min(0.01, data.duration / 1000));
       this.t = Math.min(this.t, data.duration);
       this.apply();
+      this.d.changed();
     } catch (e) {
       this.current = null;
       this.d.toast(`Die Animation ließ sich nicht laden: ${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -144,6 +166,13 @@ export class AnimTool {
     this.follow = on;
     this.ui.follow.setAttribute('aria-pressed', String(on));
     if (on && this.current) this.apply();
+  }
+
+  private setTexts(on: boolean): void {
+    this.texts = on;
+    this.textsBtn?.setAttribute('aria-pressed', String(on));
+    // Nur die Texte neu malen: Ein ganzes apply() würde angehalten die frei gedrehte Kamera zurücksetzen
+    if (this.current) this.paintTexts(this.current.data.frame(this.t));
   }
 
   private seek(t: number): void {
@@ -164,14 +193,20 @@ export class AnimTool {
     this.d.viewer.setPoses(poses);
     this.d.viewer.setAnimState({ hidden: byId(f.hidden), ghost: byId(f.ghost), highlight: byId(f.highlight) });
     if (this.follow) this.d.viewer.setCamera(f.camera.position, f.camera.target);
-    this.d.viewer.setPainter((g, w, h, project) => paintOverlay(g, w, h, {
-      caption: f.caption, title: f.title,
-      // Im Viewer steht unten links die Karte: Untertitel darüber, sonst verdeckt sie ihn (im Video steht er unten)
-      captionLift: this.ui.card.hidden ? 0 : (this.ui.card.offsetHeight + 24) * (w / Math.max(1, this.ui.viewerEl.clientWidth)),
-      labels: f.labels.map((l) => ({ text: l.text, p: project(l.at) })).filter((l) => l.p).map((l) => ({ text: l.text, x: l.p!.x, y: l.p!.y })),
-    }));
+    this.paintTexts(f);
     this.ui.range.value = String(this.t);
     this.ui.time.textContent = `${this.t.toFixed(2).replace('.', ',')} / ${c.data.duration.toFixed(2).replace('.', ',')} s`;
+  }
+
+  /** Titel, Untertitel und Beschriftungen über das Bild, ausgeschaltet gar nichts (auch nicht im Bild für die Markierung). */
+  private paintTexts(f: AnimFrame): void {
+    if (!this.texts) { this.d.viewer.setPainter(null); return; }
+    this.d.viewer.setPainter((g, w, h, project) => paintOverlay(g, w, h, {
+      caption: f.caption, title: f.title,
+      // Im Viewer stehen unten links die Karten: Untertitel darüber, sonst verdecken sie ihn (im Video steht er unten)
+      captionLift: this.ui.card.hidden ? 0 : ((this.ui.card.parentElement ?? this.ui.card).offsetHeight + 24) * (w / Math.max(1, this.ui.viewerEl.clientWidth)),
+      labels: f.labels.map((l) => ({ text: l.text, p: project(l.at) })).filter((l) => l.p).map((l) => ({ text: l.text, x: l.p!.x, y: l.p!.y })),
+    }));
   }
 
   play(): void {
@@ -212,7 +247,7 @@ export class AnimTool {
     const c = this.current, hint = this.ui.hint;
     const err = this.list.errors[0];
     const has = !!c;
-    for (const b of [this.ui.play, this.ui.agent, this.ui.video, this.ui.follow, this.ui.loop]) b.disabled = !has;
+    for (const b of [this.ui.play, this.ui.agent, this.ui.video, this.ui.follow, this.ui.loop, this.textsBtn]) if (b) b.disabled = !has;
     this.ui.range.disabled = !has;
     this.ui.video.disabled = !has || this.rendering;
     hint.classList.toggle('warn', !!err || !!c?.entry.stale);
@@ -253,7 +288,9 @@ export class AnimTool {
 
   /** Für die Markierung: Welche Animation zu welcher Zeit zu sehen ist (null: keine). */
   agentText(): string | null {
-    return this.active && this.current ? `Animation „${this.current.entry.name}“ bei ${this.t.toFixed(2)} s` : null;
+    if (!this.active || !this.current) return null;
+    // Ausgeblendete Texte fehlen auch im Bild: Sonst sucht der Agent einen Untertitel, den er selbst angelegt hat, vergeblich
+    return `Animation „${this.current.entry.name}“ bei ${this.t.toFixed(2)} s${this.texts ? '' : ' (ohne Titel, Untertitel und Beschriftungen)'}`;
   }
 
   private agentNote(): string | null {
@@ -264,7 +301,7 @@ export class AnimTool {
   /** Prüfhilfe: Zustand der Karte. */
   state() {
     return {
-      active: this.active, playing: this.playing, t: +this.t.toFixed(3), follow: this.follow, loop: this.loop,
+      active: this.active, playing: this.playing, t: +this.t.toFixed(3), follow: this.follow, loop: this.loop, texts: this.texts,
       name: this.current?.entry.name ?? null, duration: this.current?.data.duration ?? null,
       options: [...this.ui.select.options].map((o) => o.textContent), hint: this.ui.hint.textContent, time: this.ui.time.textContent,
       note: this.agentNote(), building: this.list.building, errors: this.list.errors.length,

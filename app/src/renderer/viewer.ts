@@ -31,6 +31,17 @@ interface PartEntry {
   pose?: THREE.Matrix4;
 }
 
+/**
+ * Netz einer eigenen Ebene (Ergebnis, E58), das an Stelle eines Bauteils zu sehen ist, solange das Modell zurücktritt. `part`:
+ * das Bauteil gleichen Namens (fehlt, wenn es das Teil im Modell nicht mehr gibt). Ausblenden, Transparent und der Schnitt mit
+ * Deckel und Kontur gelten für dieses Netz wie für das Bauteil.
+ */
+interface StandIn {
+  mesh: THREE.Mesh; lines: THREE.LineSegments[]; name: string; part?: PartEntry;
+  cap?: PartEntry['cap'];
+  world?: PartEntry['world'];
+}
+
 /** Zeichnet Texte über das Bild (E58). `project`: Weltpunkt → Bildpunkt in dieser Fläche, null hinter der Kamera. */
 export type OverlayPainter = (g: CanvasRenderingContext2D, w: number, h: number, project: (p: THREE.Vector3) => { x: number; y: number } | null) => void;
 
@@ -105,6 +116,8 @@ const ORANGE = 0xf29a38;
 const CAP_ORDER = 100;
 const CONTOUR_ORDER = 100000;
 const CONTOUR_COLOR = 0x0d0f12;
+/** Deckel der Netze einer Ebene: neutrales Grau, die Farben dort gehören den Werten des Ergebnisses. */
+const LAYER_CAP = new THREE.Color(0x6c727a);
 
 export class Viewer {
   private renderer: THREE.WebGLRenderer;
@@ -150,8 +163,8 @@ export class Viewer {
   /** Platten der Schnittflächen, je Bauteil eine. */
   private caps = new THREE.Group();
   private contour: LineSegments2 | null = null;
-  /** Zu jedem Segment der Schnittkontur Bauteil und Fläche: Beim Messen lässt sich so die Kontur anklicken. */
-  private contourOf: { part: PartEntry; face: number }[] = [];
+  /** Zu jedem Segment der Schnittkontur Bauteil und Fläche: Beim Messen lässt sich so die Kontur anklicken. null: Netz einer Ebene. */
+  private contourOf: { part: PartEntry | null; face: number }[] = [];
   private contourDirty = false;
   /** Explosionsansicht: Wege der verschobenen Bauteile, gestrichelt. */
   private trails = new THREE.Group();
@@ -166,6 +179,8 @@ export class Viewer {
   private animHighlight = new Set<string>();
   /** Ergebnisansicht (E58): Das Modell tritt zurück, eine eigene Ebene zeigt die gefärbten Netze. */
   private modelHidden = false;
+  /** Netze dieser Ebene, die je ein Bauteil vertreten (setStandIns). */
+  private standIns: StandIn[] = [];
   /** 2D-Fläche über dem Bild für Untertitel, Beschriftungen und Legende (E58). */
   private paint: HTMLCanvasElement;
   private painter: OverlayPainter | null = null;
@@ -253,6 +268,7 @@ export class Viewer {
     this.disposeModel();
     this.model = gltf.scene;
     this.parts = fresh;
+    this.linkStandIns();
     this.scene.add(gltf.scene);
     for (const id of [...this.hidden]) if (!this.parts.has(id)) this.hidden.delete(id);
     for (const id of [...this.ghosted]) if (!this.parts.has(id)) this.ghosted.delete(id);
@@ -274,6 +290,7 @@ export class Viewer {
     this.clearCaps();
     this.disposeModel();
     this.parts.clear();
+    this.linkStandIns();
     this.hidden.clear();
     this.ghosted.clear();
     this.hasFitted = false;
@@ -281,6 +298,7 @@ export class Viewer {
     this.clearGroup(this.hover);
     this.clearGroup(this.trails);
     this.setMeasureMarks(null);
+    this.applyStandIns();
     this.syncSection();
     this.requestRender();
   }
@@ -337,8 +355,39 @@ export class Viewer {
 
   private applyVisibility(): void {
     for (const [id, p] of this.parts) p.group.visible = !this.hidden.has(id) && !this.animHidden.has(id) && !this.modelHidden;
+    this.applyStandIns();
     this.syncTrails();
     this.syncSection();
+  }
+
+  /** Ein Bauteil ist einzeln transparent, vom Nutzer oder von einer Animation. */
+  private ownGhost(id: string): boolean { return this.ghosted.has(id) || this.animGhost.has(id); }
+
+  /**
+   * Netze einer Ebene folgen ihrem Bauteil: ausgeblendet, transparent, Kanten, Drahtgitter. So gilt die Seitenleiste auch, solange
+   * das Modell zurücktritt, und ein Ergebnis, das erst danach lädt, übernimmt den Stand. Ohne Bauteil (älteres Ergebnis) bleibt
+   * das Netz sichtbar und deckend.
+   */
+  private applyStandIns(): void {
+    for (const s of this.standIns) {
+      const id = s.part?.meta.partId;
+      const shown = !id || (!this.hidden.has(id) && !this.animHidden.has(id));
+      const own = !!id && this.ownGhost(id);
+      s.mesh.visible = shown;
+      const mat = s.mesh.material as THREE.MeshStandardMaterial;
+      mat.wireframe = this.wire;
+      mat.opacity = own ? 0.18 : this.ghost ? 0.35 : 1;
+      mat.transparent = own || this.ghost;
+      mat.depthWrite = !own;
+      s.mesh.renderOrder = own ? 2 : 0;
+      mat.needsUpdate = true;
+      for (const l of s.lines) {
+        l.visible = shown && this.edges;
+        const lm = l.material as THREE.LineBasicMaterial;
+        lm.transparent = own;
+        lm.opacity = own ? 0.3 : 1;
+      }
+    }
   }
 
   setEdges(on: boolean): void { this.edges = on; this.applyDisplay(); this.requestRender(); }
@@ -366,12 +415,19 @@ export class Viewer {
         mat.needsUpdate = true;
       }
     }
+    this.applyStandIns();
     this.syncSection();
   }
 
-  /** Sichtbare Bauteile, getrennt nach deckend und einzeln transparent. Treffer gehen zuerst an die deckenden. */
+  /**
+   * Sichtbare Bauteile, getrennt nach deckend und einzeln transparent. Treffer gehen zuerst an die deckenden. Tritt das Modell
+   * hinter einer Ebene zurück, zählen die Bauteile, deren Netz dort zu sehen ist: Die Ebene hat dieselbe Form (nur feiner
+   * unterteilt), ihre Flächen kennt aber nur das Modell (Schnitt an Fläche ausrichten, Drehpunkt per Doppelklick).
+   */
   private pickSets(): [PartEntry[], PartEntry[]] {
-    const vis = [...this.parts.values()].filter((p) => p.group.visible);
+    const vis = this.modelHidden
+      ? this.standIns.flatMap((s) => (s.part && s.mesh.visible ? [s.part] : []))
+      : [...this.parts.values()].filter((p) => p.group.visible);
     return [vis.filter((p) => !this.ghosted.has(p.meta.partId)), vis.filter((p) => this.ghosted.has(p.meta.partId))];
   }
 
@@ -399,10 +455,20 @@ export class Viewer {
     if (!at) return first;
     const d = at.distanceTo(ray.origin);
     const back = first.face.normal.clone().transformDirection(first.object.matrixWorld).dot(ray.direction) > 0;
-    if (d < first.distance && back && this.partOf(first.object)?.cap?.plate.visible) {
+    if (d < first.distance && back && this.capShown(first.object)) {
       return { ...first, point: at, distance: d, face: null, faceIndex: undefined, cut: true };
     }
     return first;
+  }
+
+  /**
+   * Hat der Körper dieses Netzes gerade einen Deckel? Netz eines Bauteils: sein eigener oder, solange eine Ebene es vertritt,
+   * der des Netzes dort (dessen Deckel ist dann zu sehen). Netz einer Ebene: sein eigener.
+   */
+  private capShown(o: THREE.Object3D): boolean {
+    const p = this.partOf(o);
+    if (p) return !!p.cap?.plate.visible || this.standIns.some((s) => s.part === p && !!s.cap?.plate.visible);
+    return this.standIns.some((s) => s.mesh === o && !!s.cap?.plate.visible);
   }
 
   /** Liegt der Punkt auf der weggeschnittenen Seite? Etwas Toleranz, sonst flackerten Punkte genau in der Ebene. */
@@ -419,12 +485,18 @@ export class Viewer {
       if (!ids && !p.group.visible) continue;
       box.expandByObject(p.group);
     }
+    // Ohne Auswahl zählt, was zu sehen ist: auch die Netze einer Ebene an Stelle des Modells (sonst passte „Einpassen“ auf nichts)
+    if (!ids) for (const s of this.standIns) if (s.mesh.visible) box.expandByObject(s.mesh);
     return box;
   }
 
-  /** Mitte und Radius aller Bauteile in ihrer aktuellen Lage (die Explosionsansicht vergrößert das Modell). */
+  /**
+   * Mitte und Radius aller Bauteile in ihrer aktuellen Lage (die Explosionsansicht vergrößert das Modell). Mit den Netzen einer
+   * Ebene: Ein Ergebnis von einem älteren Stand kann über das Modell hinausragen, die Deckel im Schnitt müssen es abdecken.
+   */
   private updateExtent(): void {
     const box = this.bounds([...this.parts.keys()]);
+    for (const s of this.standIns) box.expandByObject(s.mesh);
     if (!box.isEmpty()) { box.getCenter(this.center); this.radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1); }
   }
 
@@ -566,7 +638,8 @@ export class Viewer {
 
   pickAt(ndcX: number, ndcY: number): PickResult | null {
     this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
-    const hit = this.firstHit();
+    // Vertritt eine Ebene das Modell, wählt ein Klick kein Bauteil: Er gehört dort der Ebene (Wert eines Ergebnisses merken)
+    const hit = this.modelHidden ? undefined : this.firstHit();
     this.highlight.clear();
     if (!hit) { this.selectedId = null; this.applySelection(); this.requestRender(); return null; }
     const part = this.partOf(hit.object)!;
@@ -785,7 +858,8 @@ export class Viewer {
     const a = new THREE.Vector3(), b = new THREE.Vector3(), sa = new THREE.Vector3(), sb = new THREE.Vector3();
     const cands: { k: number; d: number; point: THREE.Vector3 }[] = [];
     for (let k = 0; k < this.contourOf.length; k++) {
-      if (!allowed.has(this.contourOf[k].part)) continue;
+      const of = this.contourOf[k].part;
+      if (!of || !allowed.has(of)) continue;
       a.fromBufferAttribute(pos, k); b.fromBufferAttribute(end, k);
       sa.copy(a).project(this.camera); sb.copy(b).project(this.camera);
       if (sa.z > 1 || sb.z > 1) continue;
@@ -799,8 +873,8 @@ export class Viewer {
     for (const c of cands.slice(0, 8)) {
       if (this.occluded(c.point, occluders)) continue;
       const { part, face: fid } = this.contourOf[c.k];
-      const face = part.meta.faces.find((f) => f.id === fid);
-      if (!face) continue;
+      const face = part?.meta.faces.find((f) => f.id === fid);
+      if (!part || !face) continue;
       return { partId: part.meta.partId, name: part.meta.name, kind: 'face', id: face.id, type: face.surface, size: face.area ?? null, point: c.point.toArray() };
     }
     return null;
@@ -1023,7 +1097,7 @@ export class Viewer {
     try { this.paintSnapshot(c); } finally {
       this.selectedId = sel;
       this.applySelection();
-      this.highlight.visible = true;
+      this.highlight.visible = !this.modelHidden;
       this.hover.visible = true;
       this.marks.visible = true;
       this.pivot.visible = pivotShown;
@@ -1100,9 +1174,8 @@ export class Viewer {
   extent(dir: number[], ids?: string[]): [number, number] | null {
     const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
     let lo = Infinity, hi = -Infinity;
-    for (const [id, p] of this.parts) {
-      if (ids ? !ids.includes(id) : !p.group.visible) continue;
-      for (const w of this.worldOf(p)) {
+    const take = (world: NonNullable<PartEntry['world']>) => {
+      for (const w of world) {
         const pos = w.pos;
         for (let i = 0; i < pos.length; i += 3) {
           const v = d.x * pos[i] + d.y * pos[i + 1] + d.z * pos[i + 2];
@@ -1110,7 +1183,13 @@ export class Viewer {
           if (v > hi) hi = v;
         }
       }
+    };
+    for (const [id, p] of this.parts) {
+      if (ids ? !ids.includes(id) : !p.group.visible) continue;
+      take(this.worldOf(p));
     }
+    // Tritt das Modell zurück, sind seine Teile unsichtbar: Der Schieber reicht dann über die Netze der Ebene
+    if (!ids) for (const s of this.standIns) if (s.mesh.visible) take(this.standInWorld(s));
     return lo <= hi ? [lo, hi] : null;
   }
 
@@ -1147,16 +1226,28 @@ export class Viewer {
   private worldOf(p: PartEntry): NonNullable<PartEntry['world']> {
     if (p.world) return p.world;
     p.group.updateMatrixWorld(true);
+    p.world = Viewer.worldTriangles(p.meshes, p.meshes.find((m) => m.geometry.index));
+    return p.world;
+  }
+
+  /** Dasselbe für ein Netz einer Ebene (es bewegt sich nicht, einmal berechnet reicht). */
+  private standInWorld(s: StandIn): NonNullable<StandIn['world']> {
+    if (s.world) return s.world;
+    s.mesh.updateWorldMatrix(true, false);
+    s.world = Viewer.worldTriangles([s.mesh]);
+    return s.world;
+  }
+
+  /** Dreiecke der Netze in Weltkoordinaten. `faceMesh`: das Netz, dessen Dreiecke den Flächen des Bauteils folgen. */
+  private static worldTriangles(meshes: THREE.Mesh[], faceMesh?: THREE.Mesh): NonNullable<PartEntry['world']> {
     const v = new THREE.Vector3();
-    const faceMesh = p.meshes.find((m) => m.geometry.index);
-    p.world = p.meshes.map((m) => {
+    return meshes.map((m) => {
       const src = m.geometry.getAttribute('position');
       const pos = new Float32Array(src.count * 3);
       for (let i = 0; i < src.count; i++) { v.fromBufferAttribute(src, i).applyMatrix4(m.matrixWorld); pos[i * 3] = v.x; pos[i * 3 + 1] = v.y; pos[i * 3 + 2] = v.z; }
       const idx = m.geometry.index ? m.geometry.index.array : Array.from({ length: src.count }, (_, i) => i);
       return { pos, idx, faces: m === faceMesh };
     });
-    return p.world;
   }
 
   /**
@@ -1166,16 +1257,23 @@ export class Viewer {
   private syncSection(): void {
     const on = this.clip.length > 0;
     let k = 0;
+    const order = (cap: NonNullable<PartEntry['cap']>, want: boolean) => {
+      for (const s of cap.stencils) { s.visible = want; s.renderOrder = CAP_ORDER + 2 * k; }
+      cap.plate.visible = want;
+      cap.plate.renderOrder = CAP_ORDER + 2 * k + 1;
+      if (want) k++;
+    };
     for (const [id, p] of this.parts) {
       const mat = p.meshes[0]?.material as THREE.MeshStandardMaterial | undefined;
       const want = on && !this.wire && p.group.visible && p.meta.solid !== false && !this.ghosted.has(id) && !!mat && !mat.userData.baseTransparent;
-      if (want && !p.cap) p.cap = this.makeCap(p);
-      if (p.cap) {
-        for (const s of p.cap.stencils) { s.visible = want; s.renderOrder = CAP_ORDER + 2 * k; }
-        p.cap.plate.visible = want;
-        p.cap.plate.renderOrder = CAP_ORDER + 2 * k + 1;
-      }
-      if (want) k++;
+      if (want && !p.cap) p.cap = this.makeCap(p.meshes, mat!.color);
+      if (p.cap) order(p.cap, want);
+    }
+    // Netze einer Ebene (das Modell ist dann versteckt, seine Deckel aus): sonst sähe man in die hohlen, gefärbten Netze hinein
+    for (const s of this.standIns) {
+      const want = on && !this.wire && s.mesh.visible && s.part?.meta.solid !== false && !(s.part && this.ownGhost(s.part.meta.partId));
+      if (want && !s.cap) s.cap = this.makeCap([s.mesh], LAYER_CAP);
+      if (s.cap) order(s.cap, want);
     }
     if (on) this.placeCaps();
     this.contourDirty = true;
@@ -1186,9 +1284,9 @@ export class Viewer {
    * die Vorderseiten herunter. Wo etwas übrig bleibt, liegt die Schnittebene im Material, dort zeichnet die Platte in der Ebene.
    * Sie setzt den Puffer dabei zurück, damit das nächste Bauteil von vorn zählt.
    */
-  private makeCap(p: PartEntry): NonNullable<PartEntry['cap']> {
+  private makeCap(meshes: THREE.Mesh[], base: THREE.Color): NonNullable<PartEntry['cap']> {
     const stencils: THREE.Mesh[] = [];
-    for (const m of p.meshes) {
+    for (const m of meshes) {
       for (const back of [true, false]) {
         const op = back ? THREE.IncrementWrapStencilOp : THREE.DecrementWrapStencilOp;
         const mat = new THREE.MeshBasicMaterial({
@@ -1202,7 +1300,6 @@ export class Viewer {
         stencils.push(s);
       }
     }
-    const base = (p.meshes[0].material as THREE.MeshStandardMaterial).color;
     const mat = new THREE.MeshBasicMaterial({
       color: base.clone().multiplyScalar(0.72), side: THREE.DoubleSide,
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
@@ -1236,15 +1333,21 @@ export class Viewer {
     for (const o of this.caps.children) { o.position.copy(at); o.quaternion.copy(q); o.scale.set(s, s, 1); }
   }
 
+  /** Alle Deckel weg, auch die der Netze einer Ebene. syncSection legt sie bei Bedarf neu an. */
   private clearCaps(): void {
-    for (const p of this.parts.values()) {
-      if (!p.cap) continue;
-      for (const s of p.cap.stencils) { s.removeFromParent(); (s.material as THREE.Material).dispose(); }
-      (p.cap.plate.material as THREE.Material).dispose();
-      p.cap = undefined;
+    for (const o of [...this.parts.values(), ...this.standIns]) {
+      if (!o.cap) continue;
+      Viewer.dropCap(o.cap);
+      o.cap = undefined;
     }
     this.caps.clear();
     this.setContour(null);
+  }
+
+  private static dropCap(cap: NonNullable<PartEntry['cap']>): void {
+    for (const s of cap.stencils) { s.removeFromParent(); (s.material as THREE.Material).dispose(); }
+    cap.plate.removeFromParent();
+    (cap.plate.material as THREE.Material).dispose();
   }
 
   /** Vor dem Zeichnen: Kontur neu berechnen, wenn sich Ebene oder Sichtbarkeit geändert haben. */
@@ -1255,16 +1358,16 @@ export class Viewer {
   }
 
   /** Schnittlinien der Dreiecke mit der Ebene, je Segment mit Bauteil und Fläche. Transparente Teile bleiben ohne Kontur. */
-  private computeContour(): { flat: number[]; of: { part: PartEntry; face: number }[] } {
+  private computeContour(): { flat: number[]; of: { part: PartEntry | null; face: number }[] } {
     const n = this.plane.normal, c = this.plane.constant;
-    const flat: number[] = [], of: { part: PartEntry; face: number }[] = [];
+    const flat: number[] = [], of: { part: PartEntry | null; face: number }[] = [];
     const cross = (pos: Float32Array, i: number, j: number, di: number, dj: number) => {
       const t = di / (di - dj);
       flat.push(pos[i] + (pos[j] - pos[i]) * t, pos[i + 1] + (pos[j + 1] - pos[i + 1]) * t, pos[i + 2] + (pos[j + 2] - pos[i + 2]) * t);
     };
-    for (const [id, p] of this.parts) {
-      if (!p.group.visible || this.ghosted.has(id)) continue;
-      for (const w of this.worldOf(p)) {
+    // `p`: Bauteil mit Flächen, null bei Netzen einer Ebene (ihre Kontur lässt sich nicht als Fläche anklicken)
+    const add = (world: NonNullable<PartEntry['world']>, p: PartEntry | null) => {
+      for (const w of world) {
         const { pos, idx } = w;
         let face: FaceEntry | null = null;
         for (let t = 0; t + 2 < idx.length; t += 3) {
@@ -1279,15 +1382,23 @@ export class Viewer {
           if (sb !== sc) cross(pos, b, cc, db, dc);
           if (sc !== sa) cross(pos, cc, a, dc, da);
           const tri = t / 3;
-          if (w.faces && !(face && tri >= face.triStart && tri < face.triStart + face.triCount)) face = Viewer.faceOfTriangle(p.meta.faces, tri);
-          of.push({ part: p, face: w.faces && face ? face.id : -1 });
+          if (p && w.faces && !(face && tri >= face.triStart && tri < face.triStart + face.triCount)) face = Viewer.faceOfTriangle(p.meta.faces, tri);
+          of.push({ part: p, face: p && w.faces && face ? face.id : -1 });
         }
       }
+    };
+    for (const [id, p] of this.parts) {
+      if (!p.group.visible || this.ghosted.has(id)) continue;
+      add(this.worldOf(p), p);
+    }
+    for (const s of this.standIns) {
+      if (!s.mesh.visible || (s.part && this.ownGhost(s.part.meta.partId))) continue;
+      add(this.standInWorld(s), null);
     }
     return { flat, of };
   }
 
-  private setContour(c: { flat: number[]; of: { part: PartEntry; face: number }[] } | null): void {
+  private setContour(c: { flat: number[]; of: { part: PartEntry | null; face: number }[] } | null): void {
     if (this.contour) {
       this.scene.remove(this.contour);
       this.contour.geometry.dispose();
@@ -1579,6 +1690,8 @@ export class Viewer {
   setModelHidden(on: boolean): void {
     if (this.modelHidden === on) return;
     this.modelHidden = on;
+    // Die angeklickte Fläche gehört zum versteckten Modell und läge sonst orange über den Farben der Ebene
+    this.highlight.visible = !on;
     this.applyVisibility();
     this.requestRender();
   }
@@ -1588,6 +1701,45 @@ export class Viewer {
   removeLayer(o: THREE.Object3D): void { this.scene.remove(o); this.requestRender(); }
   /** Die Liste der Schnittebenen (leer ohne Schnitt). Dieselbe Liste für alle Materialien, sie ändert sich an Ort und Stelle. */
   get clipPlanes(): THREE.Plane[] { return this.clip; }
+
+  /**
+   * Netze einer Ebene (addLayer), die je ein Bauteil vertreten, zugeordnet über den Namen. Der Viewer blendet sie mit ihrem
+   * Bauteil aus, schaltet sie transparent und gibt ihnen im Schnitt Deckel und Kontur. Ihre Materialien gehören ihm dafür,
+   * solange sie hier stehen. null: keine (vor dem Freigeben der Netze aufrufen, die Deckel hängen an ihnen).
+   */
+  setStandIns(items: { mesh: THREE.Mesh; name: string; lines?: THREE.LineSegments[] }[] | null): void {
+    for (const s of this.standIns) if (s.cap) Viewer.dropCap(s.cap);
+    this.standIns = (items ?? []).map((x) => ({ mesh: x.mesh, name: x.name, lines: x.lines ?? [] }));
+    this.linkStandIns();
+    this.updateExtent();
+    this.applyVisibility(); // mit applyStandIns: Stand der Seitenleiste und der Darstellung, dazu Deckel im Schnitt
+    this.fitClip();
+    this.requestRender();
+  }
+
+  /** Netze der Ebene ihren Bauteilen zuordnen. Gleichnamige der Reihe nach (beide Seiten folgen der Reihenfolge des Modells). */
+  private linkStandIns(): void {
+    const byName = new Map<string, PartEntry[]>();
+    for (const p of this.parts.values()) {
+      const l = byName.get(p.meta.name);
+      if (l) l.push(p); else byName.set(p.meta.name, [p]);
+    }
+    for (const s of this.standIns) s.part = byName.get(s.name)?.shift();
+  }
+
+  /**
+   * Netz einer Ebene unter dem Zeiger, wie ein Klick ins Modell: Ausgeblendete Teile zählen nicht, transparent geschaltete nur,
+   * wenn dahinter nichts Deckendes liegt, was der Schnitt wegnimmt, auch nicht. `cut`: Der Zeiger steht auf einer Schnittfläche.
+   */
+  pickLayer(clientX: number, clientY: number): (THREE.Intersection & { cut?: boolean }) | null {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    this.camera.updateMatrixWorld();
+    this.raycaster.setFromCamera(new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1), this.camera);
+    const shown = this.standIns.filter((s) => s.mesh.visible);
+    const own = (s: StandIn) => !!s.part && this.ownGhost(s.part.meta.partId);
+    return this.visibleHit(shown.filter((s) => !own(s)).map((s) => s.mesh)) ?? this.visibleHit(shown.filter(own).map((s) => s.mesh)) ?? null;
+  }
 
   /** Erster sichtbarer Treffer unter dem Zeiger auf diesen Objekten (was der Schnitt wegnimmt, zählt nicht). */
   pickObjects(clientX: number, clientY: number, objects: THREE.Object3D[]): THREE.Intersection | null {
@@ -1673,6 +1825,15 @@ export class Viewer {
     const capped = [...this.parts.values()].filter((p) => p.cap?.plate.visible).map((p) => p.meta.partId);
     const clipped = [...this.parts.values()].every((p) => p.meshes.every((m) => (m.material as THREE.Material).clippingPlanes === this.clip));
     return { plane: this.section, capped, contour: this.contourOf.length, clipped, picking: !!this.planePick };
+  }
+
+  /** Netze einer Ebene, für Tests: Name, zugeordnetes Bauteil, sichtbar, Deckkraft, Deckel im Schnitt. */
+  layerState() {
+    this.prepareSection();
+    return this.standIns.map((s) => ({
+      name: s.name, partId: s.part?.meta.partId ?? null, visible: s.mesh.visible, opacity: (s.mesh.material as THREE.Material).opacity,
+      capped: !!s.cap?.plate.visible, edges: s.lines.some((l) => l.visible),
+    }));
   }
 
   /**

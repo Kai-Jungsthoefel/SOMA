@@ -58,11 +58,12 @@ class Menus {
 
   isOpen(menu: HTMLElement): boolean { return this.cur?.menu === menu; }
 
-  /** Unter dem Auslöser öffnen, ist es schon offen: schließen. */
-  toggle(menu: HTMLElement, anchor: HTMLElement, align: 'left' | 'right' = 'left', onClose?: () => void): void {
+  /** Unter dem Auslöser öffnen (`beside`: links daneben, oben bündig), ist es schon offen: schließen. */
+  toggle(menu: HTMLElement, anchor: HTMLElement, align: 'left' | 'right' | 'beside' = 'left', onClose?: () => void): void {
     if (this.isOpen(menu)) { this.close(); return; }
     const r = anchor.getBoundingClientRect();
-    this.show(menu, align === 'left' ? r.left : r.right, r.bottom + 6, anchor, align, onClose);
+    if (align === 'beside') this.show(menu, r.left - 8, r.top, anchor, 'right', onClose);
+    else this.show(menu, align === 'left' ? r.left : r.right, r.bottom + 6, anchor, align, onClose);
   }
 
   /** An einer Stelle öffnen (Kontextmenü). */
