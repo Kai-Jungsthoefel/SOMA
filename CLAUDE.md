@@ -18,7 +18,7 @@ Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten
 | `design/ui-entwurf-2.html` | Freigegebener Oberflächenentwurf 2 „Aufgeräumt“ (E62), im Browser öffnen, Pfeiltasten blättern. Maßstab für Aufbau, Farben und Texte der Oberfläche. Bild 6 ist das geplante Parameter-Panel |
 | `design/ui-entwurf.html` | Erster Oberflächenentwurf (E38), Farben und Bausteine gelten weiter, der Aufbau ist durch Entwurf 2 ersetzt |
 | `design/icon-vorschlaege.html` | Die fünf Icon-Entwürfe, aus denen „Dialog“ gewählt wurde (E44). Nur noch Referenz |
-| `python/soma/` | Hilfsbibliothek und CLI: `add_part` (mit `group=` und `role=`), `import_step`, `import_assembly`, `fasteners.py` (Normteile, Maßtabellen aus bd_warehouse in `data/fasteners/`), `soma build`, `soma export`, `soma glb`, `soma serve` (Messdienst, `measure.py`), `soma anim` (`anim.py`, `animrun.py`), `soma analyze` (`analysis.py`), `soma render` (`render.py`, über die App) |
+| `python/soma/` | Hilfsbibliothek und CLI: `add_part` (mit `group=` und `role=`), `import_step`, `import_assembly`, `fasteners.py` (Normteile, Maßtabellen aus bd_warehouse in `data/fasteners/`), `soma build`, `soma export`, `soma glb`, `soma serve` (Messdienst, `measure.py`), `soma anim` (`anim.py`, `animrun.py`), `soma analyze` (`analysis.py`, FEM in `fem.py`), `soma render` (`render.py`, über die App) |
 | `prototype/phase0/` | Abgeschlossener technischer Prototyp mit `ERGEBNISSE.md`. Nur noch Referenz |
 
 Details: `app/README.md`.
@@ -34,7 +34,7 @@ uv pip install --python "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/python.ex
 npm install
 npm start               # baut und startet
 npm run typecheck
-npm test                # baut, dann alle Suiten (unit, smoke, versions, editor, measure, groups, section, explode, skills, fasteners, animation) parallel über test/run-all.mjs (echte App, unsichtbares Fenster)
+npm test                # baut, dann alle Suiten (unit, smoke, versions, editor, measure, groups, section, explode, skills, fasteners, animation, fem) parallel über test/run-all.mjs (echte App, unsichtbares Fenster)
 node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run build
 
 # soma direkt
