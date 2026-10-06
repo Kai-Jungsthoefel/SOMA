@@ -280,7 +280,8 @@ def measure(model, req):
 
 def serve(stdin=sys.stdin, stdout=sys.stdout):
     """Anfragen als JSON-Zeilen: {"id", "folder", "build", "a", "b"?}. Antwort: {"id", "ok", "result"|"error", "stale"?}.
-    Geladene Staende bleiben im Speicher, bis sich die Kennung in model.map.json aendert."""
+    Geladene Staende bleiben im Speicher, bis sich die Kennung in model.map.json aendert. {"prepare": true} statt "a" laedt
+    nur den Stand (bei grossen Baugruppen dauert das), damit der erste Klick nicht darauf warten muss."""
     models = {}
     stdout.write(json.dumps(dict(ready=True)) + "\n")
     stdout.flush()
@@ -299,7 +300,10 @@ def serve(stdin=sys.stdin, stdout=sys.stdout):
             m = models.get(folder)
             if m is None or m.build != current:
                 m = models[folder] = Model(folder)
-            out = dict(id=rid, ok=True, result=measure(m, req))
+            if req.get("prepare"):
+                out = dict(id=rid, ok=True, result=dict(build=m.build, parts=len(m.shapes)))
+            else:
+                out = dict(id=rid, ok=True, result=measure(m, req))
         except MeasureError as e:
             out = dict(id=rid, ok=False, error=str(e), stale=e.stale)
         except Exception as e:  # nie abstuerzen: der Dienst bedient auch die naechste Anfrage
