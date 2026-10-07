@@ -9,6 +9,9 @@ from pathlib import Path
 # build (und damit cadquery, rund 4 s) laden nur die Befehle, die es brauchen
 from . import _STARTED, __version__
 
+# Ordner beim Start. `python -m` setzt ihn vorn in den Suchpfad, `soma warm` tauscht ihn gegen den Ordner des Auftrags
+START_DIR = os.getcwd()
+
 EXPORT_FORMATS = ["step", "stl", "3mf", "amf", "brep", "iges", "obj", "vrml", "glb", "gltf", "dxf", "svg"]
 
 
@@ -30,16 +33,9 @@ def _print_build(res, as_json, seconds):
 
 
 def cmd_build(args):
-    from . import build  # vor dem Warten: der vorgewaermte Prozess soll cadquery schon geladen haben
-    t0 = _STARTED
-    if args.wait:
-        # Vorgewaermter Prozess der App: cadquery ist geladen, gebaut wird erst auf eine Zeile hin.
-        # EOF (App beendet oder Prozess verworfen) heisst: nicht bauen.
-        if not sys.stdin.readline():
-            return 0
-        t0 = time.perf_counter()
+    from . import build
     res = build.run_build(args.project)
-    _print_build(res, args.json, time.perf_counter() - t0)
+    _print_build(res, args.json, time.perf_counter() - _STARTED)
     # Das Aufraeumen von OCP und vtk beim normalen Beenden kostet fast eine Sekunde und bringt nichts:
     # alle Dateien sind geschrieben und geschlossen, also Puffer leeren und sofort beenden
     sys.stdout.flush()
@@ -126,6 +122,33 @@ def cmd_glb(args):
     print(json.dumps(dict(status="ok", parts=[p["name"] for p in parts]), ensure_ascii=False) if args.json
           else f"{len(parts)} Bauteil(e) nach {args.out}")
     return 0
+
+
+def cmd_warm(args):
+    """Vorgewaermter Prozess der App: Python und cadquery sind geladen (rund 3 s), bevor es etwas zu tun gibt. Den Auftrag
+    schickt die App als eine JSON-Zeile, z. B. {"cwd": "<Ordner>", "argv": ["build", "--project", "<Ordner>", "--json"]}.
+    Es bleibt bei einem Auftrag je Prozess (E24). EOF (App beendet oder Prozess verworfen) heisst: nichts tun."""
+    from . import build, preview  # noqa: F401  (laedt cadquery, Bauen und Vorschau)
+    line = sys.stdin.readline()
+    if not line.strip():
+        return 0
+    try:
+        job = json.loads(line)
+        argv = [str(a) for a in job["argv"]]
+        cwd = str(job["cwd"])
+        if not argv or argv[0] == "warm":
+            raise ValueError("kein Befehl")
+        os.chdir(cwd)
+    except (ValueError, KeyError, TypeError, OSError) as e:
+        return _fail(f"Ungueltiger Auftrag fuer den vorgewaermten Prozess: {type(e).__name__}: {e}")
+    # Wie bei `python -m soma` im Ordner des Auftrags: dieser Ordner vorn im Suchpfad (gestartet wurde in einem leeren Ordner)
+    if sys.path and sys.path[0] in ("", START_DIR):
+        sys.path[0] = os.getcwd()
+    else:
+        sys.path.insert(0, os.getcwd())
+    global _STARTED
+    _STARTED = time.perf_counter()  # die Dauer zaehlt ab dem Auftrag, nicht ab dem Vorwaermen
+    return main(argv)
 
 
 def cmd_serve(args):
@@ -262,7 +285,6 @@ def main(argv=None):
     b = sub.add_parser("build", help="model.py ausfuehren und STEP, GLB und Mapping schreiben")
     b.add_argument("--project", default=".", help="Projektordner (Standard: aktueller Ordner)")
     b.add_argument("--json", action="store_true", help="Ergebnis als JSON ausgeben")
-    b.add_argument("--wait", action="store_true", help=argparse.SUPPRESS)  # nur fuer die App: auf Startzeile warten
     b.set_defaults(func=cmd_build)
 
     e = sub.add_parser("export", help="Einzelne Bauteile exportieren")
@@ -316,6 +338,9 @@ def main(argv=None):
 
     s = sub.add_parser("serve", help="Messdienst fuer die App (JSON-Zeilen auf stdin/stdout)")
     s.set_defaults(func=cmd_serve)
+
+    w = sub.add_parser("warm", help=argparse.SUPPRESS)  # nur fuer die App: vorgewaermt auf einen Auftrag warten
+    w.set_defaults(func=cmd_warm)
 
     args = ap.parse_args(argv)
     return args.func(args)

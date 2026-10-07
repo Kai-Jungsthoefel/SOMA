@@ -17,6 +17,10 @@ import cadquery as cq
 from . import measure, mesher, registry
 
 DEFAULT_ENTRY = "model.py"
+# Fassung von model.glb, model.map.json und geometry/. Die App zeigt beim Oeffnen den letzten Build ohne neu zu bauen, aber
+# nur, wenn build.json diese Nummer traegt (app/src/main/build.ts, OUTPUT_FORMAT). Erhoehen, sobald sich daran etwas aendert,
+# das der Viewer braucht: dann baut die App jedes Projekt beim naechsten Oeffnen einmal neu.
+OUTPUT_FORMAT = 1
 
 
 class BuildError(Exception):
@@ -191,7 +195,7 @@ def run_build(project_dir):
     root = Path(project_dir).resolve()
     started = time.time()
     timings = {}
-    result = dict(status="ok", started=started, warnings=[])
+    result = dict(status="ok", format=OUTPUT_FORMAT, started=started, warnings=[])
     try:
         pj = read_project_json(root)
         t = time.perf_counter()
