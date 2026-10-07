@@ -26,6 +26,8 @@ export interface BuildStatus {
   state: BuildState; result?: BuildResult; startedAt?: number; queued?: boolean; reason?: string;
   /** Gesamtdauer des letzten Builds in Sekunden, vom Start bis zum Ergebnis (inkl. Python-Start). */
   seconds?: number;
+  /** Zeitpunkt des Ergebnisses (ms). Hat die App beim Öffnen den letzten Build übernommen, liegt er vor dem Öffnen. */
+  builtAt?: number;
   /** Auto-Build ist aus und der Quelltext hat sich seit dem letzten Build geändert. */
   stale?: boolean;
 }

@@ -1,6 +1,7 @@
 // Gemeinsame Testhilfe: startet die echte Electron-App mit isolierten App-Daten und steuert sie per CDP.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { electronExe } from '../scripts/electron-local.mjs';
@@ -8,6 +9,13 @@ import { connectPage } from './cdp.mjs';
 
 export const APP = path.resolve(import.meta.dirname, '..');
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Ist der Port frei? Probeweise belegen, wie Electron es für den Debug-Port tut. */
+const portFree = (port) => new Promise((resolve) => {
+  const srv = net.createServer();
+  srv.once('error', () => resolve(false));
+  srv.listen(port, '127.0.0.1', () => srv.close(() => resolve(true)));
+});
 
 /**
  * Startet die App. Standard: Fenster unsichtbar (SMOKE_VISIBLE=1 zeigt es), eigener App-Daten-Ordner,
@@ -18,6 +26,9 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
   const mode = process.env.SMOKE_VISIBLE;
   const visible = mode === '1';
   const ud = userData ?? fs.mkdtempSync(path.join(os.tmpdir(), `soma-${name}-`));
+  // Nach einem harten Beenden kann ein Kindprozess der alten App den Debug-Port noch kurz halten (geerbter Socket):
+  // warten, sonst startet Electron ohne Debug-Port und der Test findet kein Fenster
+  for (const t0 = Date.now(); !(await portFree(port)) && Date.now() - t0 < 30000;) await sleep(300);
   const child = spawn(electronExe(APP), ['.', `--remote-debugging-port=${port}`], {
     cwd: APP, env: { ...process.env, SOMA_USER_DATA: ud, SOMA_TEST: '1', SOMA_HIDDEN: visible ? '0' : mode === 'offscreen' ? 'offscreen' : '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -25,8 +36,24 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
   child.stdout.on('data', (d) => { log += d; });
   child.stderr.on('data', (d) => { log += d; });
   const kill = () => {
-    if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true });
-    else child.kill('SIGKILL');
+    if (process.platform !== 'win32') { child.kill('SIGKILL'); return; }
+    if (spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }).status === 0) return;
+    // taskkill /T lässt den ganzen Baum stehen, sobald sich ein Kind nicht beenden lässt. Das passiert mit den kurzlebigen
+    // Hilfsprozessen von node-pty (entstehen beim Schließen eines Terminals). Und unter Last braucht der Hauptprozess nach
+    // dem Beenden teils viele Sekunden, bis er wirklich weg ist (etwa wenn App und Git auf einem Netzlaufwerk liegen). Solange hält er
+    // Debug-Port und App-Daten fest, ein Neustart mit denselben Daten fände kein Fenster. Deshalb: Kinder einzeln beenden
+    // (sie können den Port geerbt haben), dann den Hauptprozess, warten, bis er weg ist, und noch einmal die Kinder.
+    const killKids = () => {
+      const kids = spawnSync('powershell', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ParentProcessId=${child.pid}").ProcessId`], { encoding: 'utf8', windowsHide: true }).stdout ?? '';
+      for (const pid of kids.split(/\s+/).filter((p) => /^\d+$/.test(p))) spawnSync('taskkill', ['/PID', pid, '/T', '/F'], { windowsHide: true });
+    };
+    killKids();
+    const alive = () => new RegExp(`\\b${child.pid}\\b`).test(spawnSync('tasklist', ['/FI', `PID eq ${child.pid}`, '/NH'], { encoding: 'utf8', windowsHide: true }).stdout ?? '');
+    for (const t0 = Date.now(); alive() && Date.now() - t0 < 60000;) {
+      spawnSync('taskkill', ['/PID', String(child.pid), '/F'], { windowsHide: true });
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+    }
+    killKids();
   };
   const dog = setTimeout(() => { console.log('ABBRUCH: Watchdog'); kill(); process.exit(1); }, watchdogMs);
   dog.unref();

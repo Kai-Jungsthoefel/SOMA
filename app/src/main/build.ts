@@ -2,11 +2,18 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { affectsBuild } from '../shared/editable';
 import type { BuildResult, BuildStatus } from '../shared/types';
-import { pythonExe } from './paths';
+import { pythonExe, warmDir } from './paths';
+import { IGNORED_TOP } from './watcher';
 
 const DEBOUNCE_MS = 700;
 const TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * Fassung von model.glb, model.map.json und geometry/, gleich OUTPUT_FORMAT in python/soma/build.py. Nur ein Build mit
+ * dieser Nummer wird beim Öffnen ohne Neubau gezeigt (currentBuild).
+ */
+export const OUTPUT_FORMAT = 1;
 
 /**
  * Startet `soma build` als eigenen Einmal-Prozess (E24) und haelt den Stand fest.
@@ -18,14 +25,12 @@ const TIMEOUT_MS = 5 * 60 * 1000;
  * - Fehler sind Ergebnisse, keine Ausnahmen: der zuletzt gute Stand bleibt auf der Platte und im Viewer.
  *
  * Python zu starten und cadquery zu laden dauert einige Sekunden, das Bauen selbst oft nur Bruchteile davon.
- * Deshalb liegt immer ein vorgewärmter Prozess bereit (`soma build --wait`), der erst auf eine Startzeile hin baut.
- * Jeder Build bleibt trotzdem ein eigener, frischer Prozess.
+ * Deshalb nimmt jeder Build einen vorgewärmten Prozess aus dem Vorrat der App (startJob, unten).
  */
 export class BuildManager extends EventEmitter {
   status: BuildStatus = { state: 'idle' };
   autoBuild = true;
   private proc: ChildProcess | null = null;
-  private spare: WarmProcess | null = null;
   private timer: NodeJS.Timeout | null = null;
   private rerun = false;
   private disposed = false;
@@ -67,10 +72,7 @@ export class BuildManager extends EventEmitter {
     }
     const startedAt = Date.now();
     this.setStatus({ state: 'building', startedAt, reason, result: this.status.result });
-    // Ein schon beendeter Vorrat (abgestürzt, Python fehlt) wird nicht genommen: frisch starten, damit der Fehler sichtbar wird
-    let w = this.spare && !this.spare.ended ? this.spare : null;
-    if (!w) { this.spare?.child.kill(); w = spawnWarm(this.dir); }
-    this.spare = null;
+    const w = startJob(this.dir, ['build', '--project', this.dir, '--json']);
     const { child } = w;
     this.proc = child;
     let done = false;
@@ -83,7 +85,7 @@ export class BuildManager extends EventEmitter {
       clearTimeout(timeout);
       this.proc = null;
       if (this.disposed) return;
-      this.setStatus({ state: result.status === 'ok' ? 'ok' : 'error', result, seconds: (Date.now() - startedAt) / 1000 });
+      this.setStatus({ state: result.status === 'ok' ? 'ok' : 'error', result, seconds: (Date.now() - startedAt) / 1000, builtAt: Date.now() });
       if (this.rerun) { this.rerun = false; this.start('Änderung während des Builds'); }
     };
 
@@ -98,10 +100,18 @@ export class BuildManager extends EventEmitter {
       if (killedByTimeout) return finish(errorResult('Timeout', `Der Build wurde nach ${TIMEOUT_MS / 1000} s abgebrochen (Zeitlimit).`));
       finish(errorResult('NoResult', `Der Build lieferte kein Ergebnis (Exit-Code ${code}).\n${(w.err || w.out).slice(-2000)}`));
     };
-    try { child.stdin?.write('go\n'); } catch { /* Prozess schon weg: onClose meldet es */ }
+  }
 
-    // Den nächsten Prozess schon jetzt vorwärmen, damit ein Folge-Build (Agent speichert erneut) nicht wieder wartet
-    if (!this.disposed) this.spare = spawnWarm(this.dir);
+  /**
+   * Den letzten Build übernehmen, ohne neu zu bauen (beim Öffnen, wenn er noch gilt, siehe currentBuild). Der Viewer lädt
+   * dann gleich, was auf der Platte liegt. Läuft schon ein Build oder steht einer an, zählt dessen Ergebnis.
+   */
+  adopt(last: LastBuild): void {
+    if (this.disposed || this.busy) return;
+    const result: BuildResult = { status: 'ok', parts: last.parts, timings: last.timings, warnings: last.warnings };
+    const seconds = typeof last.started === 'number' && typeof last.finished === 'number' ? Math.max(0, last.finished - last.started) : undefined;
+    const builtAt = typeof last.finished === 'number' ? last.finished * 1000 : undefined;
+    this.setStatus({ state: 'ok', result, reason: 'letzter Build', seconds, builtAt });
   }
 
   /** Läuft gerade ein Build oder steht einer an? */
@@ -127,8 +137,6 @@ export class BuildManager extends EventEmitter {
   dispose(): void {
     this.disposed = true;
     this.cancel();
-    this.spare?.child.kill();
-    this.spare = null;
     this.removeAllListeners();
   }
 
@@ -138,7 +146,42 @@ export class BuildManager extends EventEmitter {
   }
 }
 
-/** Vorgewärmter `soma build --wait`. Ausgaben werden schon gesammelt, bevor ein Build ihn übernimmt. */
+// ---- Vorgewärmte Python-Prozesse ------------------------------------------------------------------------------------
+
+/**
+ * Python starten und cadquery laden dauert rund 3 s. Deshalb liegt für die ganze App ein vorgewärmter Prozess bereit
+ * (`soma warm`), unabhängig vom Projekt. Wer ihn nimmt (Build, Vorschau alter Stände, Export, Animationen, Auswertungen),
+ * schickt ihm eine Zeile mit Ordner und Befehl, und gleich danach wärmt der nächste vor. So wartet auch der erste Build
+ * nach dem Öffnen oder Anlegen eines Modells nicht auf Python. Jeder Auftrag bleibt ein eigener, frischer Prozess (E24).
+ */
+let spare: WarmProcess | null = null;
+let warming = true;
+
+/** Vorrat anlegen, falls keiner bereitliegt (beim Start der App und nach jeder Entnahme). */
+export function warmUp(): void {
+  if (warming && (!spare || spare.ended)) spare = spawnWarm();
+}
+
+/** Beim Beenden der App: Vorrat verwerfen und keinen neuen mehr anlegen. */
+export function stopWarm(): void {
+  warming = false;
+  spare?.child.kill();
+  spare = null;
+}
+
+/**
+ * Auftrag an einen vorgewärmten Prozess. Ein schon beendeter Vorrat (abgestürzt, Python fehlt) wird nicht genommen:
+ * frisch starten, damit der Fehler beim Auftrag sichtbar wird.
+ */
+function startJob(cwd: string, argv: string[]): WarmProcess {
+  const w = spare && !spare.ended ? spare : spawnWarm();
+  spare = null;
+  warmUp();
+  try { w.child.stdin?.end(JSON.stringify({ cwd, argv }) + '\n'); } catch { /* Prozess schon weg: onClose meldet es */ }
+  return w;
+}
+
+/** Vorgewärmter `soma warm`. Ausgaben werden schon gesammelt, bevor ein Auftrag ihn übernimmt. */
 interface WarmProcess {
   child: ChildProcess;
   out: string;
@@ -152,9 +195,11 @@ interface WarmProcess {
   onClose: ((code: number | null) => void) | null;
 }
 
-function spawnWarm(dir: string): WarmProcess {
-  const child = spawn(pythonExe(), ['-m', 'soma', 'build', '--project', dir, '--json', '--wait'], {
-    cwd: dir, windowsHide: true,
+function spawnWarm(): WarmProcess {
+  const cwd = warmDir();
+  try { fs.mkdirSync(cwd, { recursive: true }); } catch { /* dann scheitert der Start und meldet es */ }
+  const child = spawn(pythonExe(), ['-m', 'soma', 'warm'], {
+    cwd, windowsHide: true,
     env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
   });
   const w: WarmProcess = { child, out: '', err: '', lines: [], ended: false, error: null, onLine: null, onError: null, onClose: null };
@@ -167,7 +212,7 @@ function spawnWarm(dir: string): WarmProcess {
     for (const l of parts) emitLine(w, l);
   });
   child.stderr?.on('data', (d: Buffer) => { w.err += d.toString('utf8'); });
-  // Ohne Listener würde ein Schreibfehler auf die Startzeile (Prozess schon weg) die App abstürzen lassen
+  // Ohne Listener würde ein Schreibfehler auf die Auftragszeile (Prozess schon weg) die App abstürzen lassen
   child.stdin?.on('error', () => { /* onClose meldet den Grund */ });
   child.on('error', (e) => { w.ended = true; w.error = e; w.onError?.(e); });
   child.on('close', (code) => {
@@ -188,6 +233,18 @@ function errorResult(kind: string, message: string): BuildResult {
   return { status: 'error', error: { kind, message, file: null, line: null, traceback: '' } };
 }
 
+/** Führt `python -m soma <args>` aus (z. B. glb für Vorschauen). Kein Wurf: das Ergebnis trägt den Fehler. */
+export function runSoma(args: string[], cwd: string, timeoutMs = 120000): Promise<{ ok: boolean; out: string; err: string }> {
+  return new Promise((resolve) => {
+    const w = startJob(cwd, args);
+    const timer = setTimeout(() => w.child.kill(), timeoutMs);
+    w.onError = (e) => { clearTimeout(timer); resolve({ ok: false, out: w.out, err: e.message }); };
+    w.onClose = (code) => { clearTimeout(timer); resolve({ ok: code === 0, out: w.out, err: w.err }); };
+  });
+}
+
+// ---- Stand des letzten Builds ---------------------------------------------------------------------------------------
+
 /** Neuester Änderungszeitpunkt von Einstiegspunkt, parts/ und inputs/ (Quelltext des Modells). */
 export function newestSourceMtime(dir: string): number {
   let newest = 0;
@@ -207,22 +264,68 @@ export function newestSourceMtime(dir: string): number {
   return newest;
 }
 
-/** Ist der Quelltext neuer als das letzte Build-Ergebnis (oder gibt es noch keines)? */
-export function buildIsStale(dir: string): boolean {
-  try { return newestSourceMtime(dir) > fs.statSync(path.join(dir, '.soma', 'build.json')).mtimeMs; } catch { return true; }
+/**
+ * Neuester Änderungszeitpunkt aller Dateien, deren Änderung bei offener App einen Build auslöst (dieselbe Regel wie der
+ * Watcher). Weiter gefasst als newestSourceMtime: Was sich bei geschlossener App geändert hat, soll beim Öffnen auffallen.
+ * Zu viele Dateien: Infinity, dann gilt der Build als veraltet (lieber einmal zu viel bauen).
+ */
+export function newestBuildInput(dir: string): number {
+  let newest = 0, seen = 0;
+  const walk = (d: string, rel: string, depth: number): boolean => {
+    if (depth > 8) return true;
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return true; }
+    for (const e of entries) {
+      if (++seen > 20000) return false;
+      if (e.isSymbolicLink()) continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        if ((!rel && IGNORED_TOP.has(e.name)) || e.name === '__pycache__') continue;
+        if (!walk(path.join(d, e.name), r, depth + 1)) return false;
+      } else if (affectsBuild(r)) {
+        try { newest = Math.max(newest, fs.statSync(path.join(d, e.name)).mtimeMs); } catch { /* verschwunden */ }
+      }
+    }
+    return true;
+  };
+  return walk(dir, '', 0) ? newest : Infinity;
 }
 
-/** Führt `python -m soma <args>` aus (z. B. glb für Vorschauen). Kein Wurf: das Ergebnis trägt den Fehler. */
-export function runSoma(args: string[], cwd: string, timeoutMs = 120000): Promise<{ ok: boolean; out: string; err: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(pythonExe(), ['-m', 'soma', ...args], {
-      cwd, windowsHide: true, env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
-    });
-    let out = '', err = '';
-    child.stdout.on('data', (d: Buffer) => { out += d.toString('utf8'); });
-    child.stderr.on('data', (d: Buffer) => { err += d.toString('utf8'); });
-    const timer = setTimeout(() => child.kill(), timeoutMs);
-    child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, out, err: e.message }); });
-    child.on('close', (code) => { clearTimeout(timer); resolve({ ok: code === 0, out, err }); });
-  });
+/** Inhalt von .soma/build.json (soma build schreibt sie bei jedem Lauf, auch bei Fehlern). */
+export interface LastBuild extends BuildResult { format?: number; started?: number; finished?: number }
+
+export function readLastBuild(dir: string): LastBuild | null {
+  try {
+    const b = JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'build.json'), 'utf8')) as LastBuild;
+    return b && typeof b === 'object' && (b.status === 'ok' || b.status === 'error') ? b : null;
+  } catch { return null; }
+}
+
+/**
+ * Ist der Quelltext neuer als das letzte Build-Ergebnis (oder gibt es noch keines)? Maßgeblich ist der Start des Builds:
+ * Eine Änderung, während er lief, steckt womöglich nicht darin.
+ */
+export function buildIsStale(dir: string): boolean {
+  const last = readLastBuild(dir);
+  if (!last) return true;
+  let at = typeof last.started === 'number' ? last.started * 1000 : NaN;
+  if (!Number.isFinite(at)) try { at = fs.statSync(path.join(dir, '.soma', 'build.json')).mtimeMs; } catch { return true; }
+  return newestBuildInput(dir) > at;
+}
+
+/**
+ * Der letzte Build, wenn er noch gilt: erfolgreich, in der Fassung dieser App (OUTPUT_FORMAT), mit allem, was Viewer und
+ * Messen brauchen, und kein Quelltext neuer als sein Start. Sonst null, dann wird gebaut wie bisher.
+ * Die Geometrie zum Messen hat die Kennung aus model.map.json im Namen. Fehlt sie, ist ein Build mittendrin abgebrochen.
+ */
+export function currentBuild(dir: string): LastBuild | null {
+  const last = readLastBuild(dir);
+  if (!last || last.status !== 'ok' || last.format !== OUTPUT_FORMAT) return null;
+  const soma = path.join(dir, '.soma');
+  try {
+    const map = JSON.parse(fs.readFileSync(path.join(soma, 'model.map.json'), 'utf8')) as { build?: unknown };
+    if (typeof map.build !== 'string' || !/^[0-9a-f]{32}$/.test(map.build)) return null;
+    if (!fs.statSync(path.join(soma, 'model.glb')).isFile() || !fs.statSync(path.join(soma, 'geometry', `${map.build}.brep`)).isFile()) return null;
+  } catch { return null; }
+  return buildIsStale(dir) ? null : last;
 }

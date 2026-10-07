@@ -37,6 +37,9 @@ try {
   const zipPath = path.join(workDir, 'Testmodell.zip');
   const versions = () => ev(() => window.__t.versions());
   const saveState = () => ev(() => window.__t.saveState());
+  // Vorschau-Cache eines Standes (previews/<Projekt>/<Commit>) und Warten auf Dateien außerhalb des Fensters
+  const cached = (hash) => path.join(ud, 'previews', proj.id, hash);
+  const until = async (fn, ms = 15000) => { const t0 = Date.now(); while (!fn() && Date.now() - t0 < ms) await sleep(200); return fn(); };
 
   // ---- 1) Neues Projekt hat einen Git-Verlauf, mitgeliefertes Git im Terminal ----
   await waitFor('Verlauf geladen', () => window.__t.versions().count === 1);
@@ -59,6 +62,12 @@ try {
   await type('git add -A; git commit -q -m "Laenge auf 80"');
   await waitFor('zweiter Stand im Verlauf', () => window.__t.versions().count === 2, 20000);
   check('Commit des Agenten erscheint in der Verlaufsleiste', (await versions()).subjects.includes('Laenge auf 80'));
+  // Sauberer Arbeitsordner und aktueller Build: Der Build zeigt genau den neuen Commit und wird dessen Vorschau
+  const head2 = await g('rev-parse', 'HEAD');
+  check('Neuer Commit bei sauberem Ordner: Build liegt gleich als Vorschau bereit', await until(() => fs.existsSync(path.join(cached(head2), 'model.glb'))));
+  const cmap = fs.existsSync(path.join(cached(head2), 'model.map.json')) ? JSON.parse(fs.readFileSync(path.join(cached(head2), 'model.map.json'), 'utf8')) : { parts: [] };
+  check('Vorschau aus dem Build: Rollen bleiben, ohne Code-Verweise, mit Geometrie zum Messen', cmap.parts.length === 2
+    && cmap.parts.every((x) => x.role !== 'basic' && !('file' in x) && !('line' in x)) && fs.existsSync(path.join(cached(head2), 'geometry', `${cmap.build}.brep`)));
   const kinds = (await versions()).byApp;
   check('Leiste unterscheidet App-Stand (Start) und Agenten-Stand', kinds[0] === true && kinds[1] === false, JSON.stringify(kinds));
   check('App-Commits tragen den Trailer „Erstellt-von: SOMA"', (await g('log', '--format=%(trailers:key=Erstellt-von,valueonly)', 'HEAD~1')).includes('SOMA'));
@@ -89,10 +98,15 @@ try {
 
   // ---- 4) Vorschau alter Stände ----
   const first = await g('rev-parse', 'HEAD~2');
+  check('Erster Stand liegt schon als Vorschau bereit (beim Anlegen abgelegt)', fs.existsSync(path.join(cached(first), 'model.glb')));
+  // Ohne Cache entsteht die Vorschau wie bisher aus der STEP-Datei des Standes
+  fs.rmSync(cached(first), { recursive: true, force: true });
   await ev(() => document.querySelectorAll('#vdots .vdot')[0].click());
   await waitFor('Vorschau aktiv', () => !!window.__t.versions().previewing, 60000);
   await waitFor('Vorschau geladen', () => window.__t.partCount() === 2 && !window.__t.banner().hidden);
   check('Vorschau des ersten Standes: Body ist 60 mm lang (Arbeitsstand: 80)', (await ev(() => window.__t.partSize('Body')))[0] === 60);
+  const smap = JSON.parse(fs.readFileSync(path.join(cached(first), 'model.map.json'), 'utf8'));
+  check('Ohne Cache: Vorschau aus der STEP-Datei des Standes erzeugt (Basismodus)', smap.parts.length === 2 && smap.parts.every((x) => x.role === 'basic'));
   const bn = (await ev(() => window.__t.banner())).text.replace(/\s+/g, ' ').trim();
   check('Banner zeigt „Vorschau · Stand 1 von …, nur ansehen"', bn.includes('Vorschau · Stand 1 von') && bn.includes('nur ansehen') && bn.includes('Arbeitsstand bleibt unverändert'), bn.slice(0, 60));
   check('Viewer hat den Vorschau-Rahmen', await ev(() => document.getElementById('viewer').classList.contains('preview')));
@@ -119,6 +133,8 @@ try {
   await app.answers([0]);
   await domClick('btn-restore');
   await waitFor('wiederhergestellt', () => !window.__t.versions().previewing && window.__t.versions().subjects.some((s) => s.startsWith('Stand wiederhergestellt')), 60000);
+  // Vorher lud die Ansicht hier den vorherigen Build (Body 80) und zeigte ihn, bis der neue fertig war
+  check('Gleich nach dem Wiederherstellen ist der wiederhergestellte Stand zu sehen (Body 60, nicht 80)', (await ev(() => window.__t.partSize('Body')))[0] === 60);
   check('Wiederherstellen legt einen NEUEN Commit an', (await g('log', '-1', '--format=%s')).startsWith('Stand wiederhergestellt: Neues Modell angelegt'));
   check('Verlauf blieb vollständig (alter Startcommit unverändert vorhanden)', (await g('cat-file', '-t', first)) === 'commit' && (await g('rev-list', '--count', 'HEAD')) > commitsBefore);
   check('Dateien sind zurück: model.py mit 60, Notiz-Wunsch entfernt', fs.readFileSync(modelPy, 'utf8').includes('LENGTH = 60.0') && !fs.readFileSync(path.join(dir, 'NOTES.md'), 'utf8').includes('Wunsch'));
@@ -164,8 +180,10 @@ try {
   check('Bisheriger Arbeitsordner liegt gesichert in workspace-backups/', backups.length === 1 && fs.readFileSync(path.join(ud, 'workspace-backups', backups[0], 'NOTES.md'), 'utf8').includes('LOKALE ÄNDERUNG'));
   const logBefore = await g('log', '--format=%s');
   // C) anderer Rechner: Arbeitsordner existiert nicht -> entpacken
+  const startsBefore = await ev(() => window.__t.buildStarts());
   await domClick('btn-new');
-  await waitFor('zweites Projekt', (id) => window.__t.project().id !== id && window.__t.status().state === 'ok', 90000, proj.id);
+  await waitFor('zweites Projekt', (id) => window.__t.project().id !== id && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000, proj.id);
+  check('Neues Modell: gebaut wird beim Anlegen, beim Öffnen nicht noch einmal', (await ev(() => window.__t.buildStarts())) === startsBefore);
   await rmRetry(dir);
   fs.rmSync(path.join(ud, 'projects', `${proj.id}.json`), { force: true });
   await app.answers([zipPath]);
@@ -204,7 +222,12 @@ try {
   app = await startApp({ name: 'versions', userData: ud2 });
   await app.waitFor('Projekt wieder da', () => !!window.__t && !!window.__t.project() && window.__t.status().state === 'ok');
   check('Nach hartem Beenden öffnet die App dasselbe Projekt wieder', (await app.ev(() => window.__t.project().id)) === proj.id);
-  check('Die ungespeicherte Änderung ist noch da und als ungespeichert markiert', fs.readFileSync(path.join(dir, 'NOTES.md'), 'utf8').includes('vor dem Absturz') && (await app.ev(() => window.__t.saveState().unsaved)));
+  await app.waitFor('Modell sichtbar', () => window.__t.partCount() === 2, 20000).catch(() => {});
+  check('Modell unverändert seit dem letzten Build: Es ist gleich zu sehen, ohne Neubau', (await app.ev(() => window.__t.partCount())) === 2
+    && (await app.ev(() => window.__t.buildStarts())) === 0, `Builds: ${await app.ev(() => window.__t.buildStarts())}`);
+  // Ohne Neubau ist das Modell da, bevor das Fenster den Speicherstand abgefragt hat
+  await app.waitFor('Speicherstand', () => !!window.__t.saveState(), 20000).catch(() => {});
+  check('Die ungespeicherte Änderung ist noch da und als ungespeichert markiert', fs.readFileSync(path.join(dir, 'NOTES.md'), 'utf8').includes('vor dem Absturz') && (await app.ev(() => window.__t.saveState()?.unsaved)));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer (vor dem Neustart)', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 120));

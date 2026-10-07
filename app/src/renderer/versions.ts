@@ -15,8 +15,11 @@ interface Ui {
 }
 
 interface Hooks {
-  /** `res` = Vorschau eines alten Standes, `null` = zurück zum Arbeitsstand. */
-  show(res: PreviewResult | null): Promise<void>;
+  /**
+   * `res` = Vorschau eines alten Standes, `null` = zurück zum Arbeitsstand. `restored`: Der Stand in der Vorschau wurde eben
+   * wiederhergestellt, sie zeigt also schon den neuen Arbeitsstand.
+   */
+  show(res: PreviewResult | null, restored?: boolean): Promise<void>;
   toast(text: string, kind: 'ok' | 'info' | 'error'): void;
   /** Vor dem Wiederherstellen: ungespeicherte Eingaben im Editor klären. false = abbrechen. */
   beforeRestore(): Promise<boolean>;
@@ -115,7 +118,7 @@ export class VersionsBar {
     this.hooks.toast(r.commit ? 'Stand wiederhergestellt und als neuer Stand im Verlauf abgelegt.' : 'Dieser Stand war schon der aktuelle.', 'ok');
     this.previewHash = null;
     await this.refresh();
-    await this.hooks.show(null);
+    await this.hooks.show(null, true);
   }
 
   private render(): void {

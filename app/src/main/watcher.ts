@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { affectsAnimation, affectsBuild } from '../shared/editable';
 
 /** Ordner, die nie einen Build oder eine Neuanzeige der Dateiliste ausloesen (Ausgaben wuerden sich sonst selbst anstossen). */
-const IGNORED_TOP = new Set(['.git', '.soma', 'output', 'exports', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
+export const IGNORED_TOP = new Set(['.git', '.soma', 'output', 'exports', '__pycache__', 'node_modules', '.venv', 'venv', 'env']);
 
 const topSegment = (rel: string) => rel.split(/[\\/]/)[0] ?? '';
 /** Markierungen (E16) stehen im Dateibaum: Änderungen dort frischen die Liste auf, bauen aber nie. */

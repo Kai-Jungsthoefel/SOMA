@@ -8,12 +8,13 @@ import type {
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
 import { AnimBuilder, listResults, readAnimList, rerunResult, samePath } from './animations';
-import { BuildManager, buildIsStale, newestSourceMtime, runSoma } from './build';
+import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, chooseExportTarget, choosePath, documentsDir } from './dialogs';
-import { GitRepo } from './git';
+import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { previewsDir, skillBackupsDir, skillsDir } from './paths';
+import { storeBuildAsPreview } from './previews';
 import {
   agentsEntries, bundledSkill, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
 } from './skills';
@@ -39,6 +40,8 @@ interface Session {
   stopWatch: () => void;
   poll: NodeJS.Timeout;
   signature: string;
+  /** Legt gerade den Build als Vorschau des letzten Commits ab (cachePreview). */
+  caching?: boolean;
 }
 
 const POLL_MS = 2000;
@@ -88,17 +91,24 @@ export class ProjectController {
     const terminals = new TerminalManager(this.wc, dir);
     const git = new GitRepo(dir);
     void git.ensureIgnored(); // ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten
-    builds.on('status', (st) => this.send('build:status', st));
     const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
     const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'),
       (rel) => this.animFileChanged(rel));
     const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, stopWatch, signature: '', poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
+    builds.on('status', (st) => {
+      this.send('build:status', st);
+      if (st.state === 'ok' && !st.stale) void this.cachePreview(session);
+    });
     setLastProject(id);
-    // Erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
-    builds.start('Projekt geöffnet');
+    // Gilt der letzte Build noch (seit seinem Start nichts geändert), zeigt der Viewer ihn gleich, statt neu zu bauen. Sonst
+    // erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
+    const last = currentBuild(dir);
+    if (!last) builds.start('Projekt geöffnet');
     const info = this.info();
     this.send('project:changed', info);
+    // Erst nach project:changed: Das Fenster räumt beim Projektwechsel den Viewer leer und lädt danach das Modell
+    if (last) builds.adopt(last);
     return info;
   }
 
@@ -119,7 +129,28 @@ export class ProjectController {
       s.signature = sig;
       this.send('versions:changed');
       this.send('save:state', await this.saveState());
+      if (hasRepo) void this.cachePreview(s, st as GitStatus);
     } catch { /* nächster Durchlauf */ }
+  }
+
+  /**
+   * Vorschau-Cache für die Zeitleiste: Ist der Arbeitsordner sauber (alles wie im letzten Commit) und gilt der letzte Build,
+   * zeigt das aktuelle Modell genau diesen Commit. Dann wird es als dessen Vorschau abgelegt, und ein Sprung zurück muss die
+   * STEP-Datei nicht wieder einlesen und vernetzen (bei großen Modellen rund 10 s). Ausgelöst von neuen Commits (auch des
+   * Agenten) und fertigen Builds. Was nicht passt, bleibt einfach ohne Cache.
+   */
+  private async cachePreview(s: Session, known?: GitStatus): Promise<void> {
+    if (this.session !== s || s.caching || s.builds.busy) return;
+    s.caching = true;
+    try {
+      const st = known ?? (fs.existsSync(path.join(s.dir, '.git')) ? await s.git.status() : null);
+      if (!st || st.dirty || !st.head || this.session !== s || s.builds.busy) return;
+      const target = path.join(previewsDir(), s.id, st.head);
+      if (fs.existsSync(path.join(target, 'model.glb')) && fs.existsSync(path.join(target, 'geometry'))) return;
+      const last = currentBuild(s.dir);
+      if (!last) return;
+      await storeBuildAsPreview(s.dir, target, last, () => this.session === s && !s.builds.busy);
+    } catch { /* ohne Cache: Die Vorschau entsteht beim Ansehen aus der STEP-Datei */ } finally { s.caching = false; }
   }
 
   // ---- Speicherstand ----------------------------------------------------------------------------------------------

@@ -21,6 +21,11 @@ export const skillBackupsDir = (id: string) => path.join(backupsDir(), `${id}-sk
 export const previewsDir = () => path.join(userDataDir(), 'previews');
 /** Vorschaubilder für die Startseite (vom Viewer nach dem Laden des Modells, jederzeit neu erzeugbar). */
 export const thumbnailsDir = () => path.join(userDataDir(), 'thumbnails');
+/**
+ * Leerer Startordner der vorgewärmten Python-Prozesse (build.ts). Python setzt ihn vorn in den Suchpfad, also darf dort
+ * nichts liegen, was Module überdeckt. Ein Projektordner geht nicht: Windows hielte ihn als aktuelles Verzeichnis fest.
+ */
+export const warmDir = () => path.join(userDataDir(), 'python-start');
 
 /** Vorlage fuer neue Projekte (liegt neben dem Programm, spaeter im Installationspaket). */
 export const templateDir = () => path.join(app.getAppPath(), 'resources', 'template');

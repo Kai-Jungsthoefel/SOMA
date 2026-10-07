@@ -264,6 +264,64 @@ try {
   } finally {
     fs.rmSync(gz, { force: true });
   }
+
+  // Letzter Build beim Öffnen übernehmen (statt neu zu bauen) und als Vorschau eines Commits ablegen. paths.ts braucht
+  // electron nur in Funktionen, die hier nicht laufen: ersetzt durch eine leere Attrappe.
+  const bp = path.join(tmp, 'buildstate.mjs');
+  const noElectron = { name: 'ohne-electron', setup(b) {
+    b.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'attrappe' }));
+    b.onLoad({ filter: /.*/, namespace: 'attrappe' }, () => ({ contents: 'export const app = undefined;', loader: 'js' }));
+  } };
+  await build({ stdin: { contents: "export { newestBuildInput, buildIsStale, currentBuild, OUTPUT_FORMAT } from './src/main/build.ts'; export { storeBuildAsPreview } from './src/main/previews.ts';", resolveDir: APP, loader: 'ts' },
+    outfile: bp, bundle: true, platform: 'node', format: 'esm', plugins: [noElectron], logLevel: 'silent' });
+  const { newestBuildInput, buildIsStale, currentBuild, OUTPUT_FORMAT, storeBuildAsPreview } = await import(pathToFileURL(bp).href);
+  const bd = path.join(tmp, 'gebaut');
+  const put2 = (rel, data, secs) => {
+    const f = path.join(bd, rel);
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, data);
+    if (secs != null) fs.utimesSync(f, secs, secs);
+  };
+  const T = 1_700_000_000; // Sekunden
+  put2('model.py', 'x', T); put2('parts/a.py', 'x', T + 10);
+  // Neuer, aber ohne Einfluss auf das Modell: Notizen, Ausgaben, App-Daten, Animationen, Caches
+  put2('NOTES.md', 'x', T + 500); put2('output/model.step', 'x', T + 500); put2('.soma/x.py', 'x', T + 500);
+  put2('animations/a.py', 'x', T + 500); put2('parts/__pycache__/a.py', 'x', T + 500);
+  check('Quellen des Modells: .py überall und inputs/, nicht Notizen, Ausgaben, .soma, Animationen', newestBuildInput(bd) === (T + 10) * 1000, String(newestBuildInput(bd)));
+  put2('lib/tief/hilfe.py', 'x', T + 20); put2('inputs/teil.step', 'x', T + 30);
+  check('Auch Hilfsmodule außerhalb von parts/ und Dateien in inputs/ zählen', newestBuildInput(bd) === (T + 30) * 1000);
+
+  const BID = 'ab'.repeat(16);
+  const glb = Buffer.alloc(20);
+  glb.writeUInt32LE(0x46546c67, 0); glb.writeUInt32LE(2, 4); glb.writeUInt32LE(20, 8);
+  const map = { version: 0, build: BID, parts: [{ id: '0:Body', name: 'Body', step_name: 'Body', role: 'part', file: 'model.py', line: 3, end_line: 4 }] };
+  const writeBuild = (b) => put2('.soma/build.json', JSON.stringify({ status: 'ok', format: OUTPUT_FORMAT, started: T + 40, finished: T + 45, parts: [], ...b }));
+  writeBuild({});
+  put2('.soma/model.glb', glb); put2('.soma/model.map.json', JSON.stringify(map)); put2(`.soma/geometry/${BID}.brep`, 'BREP');
+  check('Build nach der letzten Änderung, alles da: gilt noch (kein Neubau beim Öffnen)', !buildIsStale(bd) && currentBuild(bd)?.finished === T + 45);
+  writeBuild({ started: T + 25 });
+  check('Quelle neuer als der Start des Builds (Änderung während des Builds): veraltet', buildIsStale(bd) && currentBuild(bd) === null);
+  writeBuild({ format: undefined });
+  check('build.json ohne Fassung (ältere soma): neu bauen', currentBuild(bd) === null);
+  writeBuild({ status: 'error' });
+  check('Letzter Build fehlgeschlagen: neu bauen', currentBuild(bd) === null);
+  writeBuild({});
+  fs.renameSync(path.join(bd, '.soma', 'geometry', `${BID}.brep`), path.join(bd, '.soma', 'geometry', 'weg.brep'));
+  check('Geometrie zum Messen fehlt (Build mittendrin abgebrochen): neu bauen', currentBuild(bd) === null);
+  fs.renameSync(path.join(bd, '.soma', 'geometry', 'weg.brep'), path.join(bd, '.soma', 'geometry', `${BID}.brep`));
+
+  const last = currentBuild(bd);
+  const target = path.join(tmp, 'previews', 'p', 'c1');
+  check('Vorschau aus dem Build ablegen', await storeBuildAsPreview(bd, target, last, () => true));
+  const pm = JSON.parse(fs.readFileSync(path.join(target, 'model.map.json'), 'utf8'));
+  check('Vorschau: GLB und Geometrie kopiert, Mapping ohne Code-Verweise, Rolle bleibt', fs.readFileSync(path.join(target, 'model.glb')).equals(glb)
+    && fs.readFileSync(path.join(target, 'geometry', `${BID}.brep`), 'utf8') === 'BREP' && pm.build === BID && pm.parts[0].role === 'part'
+    && !('file' in pm.parts[0]) && !('line' in pm.parts[0]) && !('end_line' in pm.parts[0]), JSON.stringify(pm.parts[0]));
+  const target2 = path.join(tmp, 'previews', 'p', 'c2');
+  check('Inzwischen neu gebaut (stillValid false): keine Vorschau', !(await storeBuildAsPreview(bd, target2, last, () => false)) && !fs.existsSync(target2));
+  put2('.soma/model.glb', glb.subarray(0, 16));
+  check('Abgeschnittene GLB (Build schreibt gerade): keine Vorschau', !(await storeBuildAsPreview(bd, target2, last, () => true)) && !fs.existsSync(target2));
+  check('Keine halben Ordner übrig', fs.readdirSync(path.join(tmp, 'previews', 'p')).join(',') === 'c1');
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

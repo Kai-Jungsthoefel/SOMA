@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
+import { stopWarm, warmUp } from './build';
 import { choose, setTestAnswers } from './dialogs';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
@@ -250,6 +251,8 @@ function createWindow(): void {
 
 // Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
 app.whenReady().then(async () => {
+  // Python schon jetzt vorwärmen: Bis das Fenster steht und das letzte Modell offen ist, ist cadquery geladen (build.ts)
+  warmUp();
   await startBridge(async (route, body) => {
     if (!controller) return { status: 503, body: { ok: false, error: 'Die App hat gerade kein Fenster.' } };
     if (route === 'render') return controller.renderForAgent(body);
@@ -257,4 +260,4 @@ app.whenReady().then(async () => {
   });
   createWindow();
 });
-app.on('window-all-closed', () => { stopBridge(); app.quit(); });
+app.on('window-all-closed', () => { stopBridge(); stopWarm(); app.quit(); });

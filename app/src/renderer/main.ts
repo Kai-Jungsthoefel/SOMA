@@ -588,7 +588,7 @@ function openGroupMenu(ids: string[], name: string, x: number, y: number): void 
 
 function renderBuild(s: BuildStatus): void {
   buildStatus = s;
-  if (s.state === 'ok') lastOkAt = Date.now();
+  if (s.state === 'ok') lastOkAt = s.builtAt ?? Date.now();
   if (s.state === 'error') errorAt = Date.now();
   const dot = $('build-dot'), main = $('status'), detail = $('status-detail');
   $('build-pill').classList.toggle('err', s.state === 'error' && !s.stale);
@@ -692,7 +692,10 @@ const versions = new VersionsBar({
   dots: $('vdots'), info: $('vinfo'), problem: $('vproblem'), restore: $<HTMLButtonElement>('btn-restore'), live: $<HTMLButtonElement>('btn-live'),
   banner: $('preview-banner'), bannerTitle: $('bn-title'), bannerSub: $('bn-sub'), viewer: $('viewer'),
 }, {
-  async show(res: PreviewResult | null) {
+  async show(res: PreviewResult | null, restored = false) {
+    // Nach dem Wiederherstellen bleibt das Bild der Vorschau stehen, bis der Build danach fertig ist (er lädt dann wie jeder
+    // Build von selbst). Sonst wäre so lange wieder der vorherige Build zu sehen, bei großen Modellen viele Sekunden.
+    if (!res && restored && buildStatus.state === 'building') return;
     if (!res) { await loadModel(); return; }
     animTool.setActive(false);
     resultTool.setActive(false);
