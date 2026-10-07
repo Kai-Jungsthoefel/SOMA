@@ -775,9 +775,7 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
         sf = np.minimum(strength / np.maximum(node_vm, 1e-12), VALUE_CAP)
         sub = t6[:, SUB].reshape(-1, 3)  # Knoten je ebenem Dreieck
         tri = nodes[sub]
-        fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
-        area = np.linalg.norm(fn, axis=1) / 2
-        fn = fn / np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+        area = np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1) / 2
         vals = sf[sub].min(axis=1)  # schlechteste Ecke: kritisch ist die Stelle, wenn eine Ecke es ist
         crit = vals < safety
         on = np.unique(t6.reshape(-1))
@@ -812,10 +810,19 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
             flags.append("an einer Lastfläche")
         st["peakAt"] = flags
         stats.append(st)
-        # Netz fuers Bild: jede Ecke eigen, Werte an den Ecken (die Farben verlaufen)
-        flat = sub.reshape(-1)
+        # Netz fuers Bild: die geschlossene Huelle des Teils. Wo es ein anderes Teil beruehrt, liegt die Flaeche im Ganzen innen und
+        # fehlt in t6. Ohne sie waere das Netz dort offen, und der Schnitt der App (Deckel ueber den Schablonenpuffer) schraffierte
+        # alles, was hinter der Beruehrflaeche liegt. Kennzahlen oben bleiben bei der Aussenflaeche
+        own = np.nonzero(fine["epart"] == pi)[0]
+        oel, ok = _boundary(fine["tets"][own])
+        img = _tri6(nodes, fine["tets"], own[oel], ok)[:, SUB].reshape(-1, 3)
+        ip = nodes[img]
+        inrm = np.cross(ip[:, 1] - ip[:, 0], ip[:, 2] - ip[:, 0])
+        inrm = inrm / np.maximum(np.linalg.norm(inrm, axis=1, keepdims=True), 1e-12)
+        # jede Ecke eigen, Werte an den Ecken (die Farben verlaufen)
+        flat = img.reshape(-1)
         prims = [dict(mode=4, material=face_mat, attributes=dict(
-            POSITION=g.accessor(nodes[flat], "VEC3", gltf.ARRAY_BUFFER, True), NORMAL=g.accessor(np.repeat(fn, 3, axis=0), "VEC3", gltf.ARRAY_BUFFER),
+            POSITION=g.accessor(nodes[flat], "VEC3", gltf.ARRAY_BUFFER, True), NORMAL=g.accessor(np.repeat(inrm, 3, axis=0), "VEC3", gltf.ARRAY_BUFFER),
             _VALUE=g.accessor(sf[flat], "SCALAR", gltf.ARRAY_BUFFER), _STRESS=g.accessor(node_vm[flat], "SCALAR", gltf.ARRAY_BUFFER),
             _DISP=g.accessor(u[flat], "VEC3", gltf.ARRAY_BUFFER)))]
         m = mesher.mesh_shape(p["shape"], tol, 0.3)
