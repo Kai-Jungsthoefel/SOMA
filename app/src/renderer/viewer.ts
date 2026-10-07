@@ -1232,7 +1232,7 @@ export class Viewer {
     return p.world;
   }
 
-  /** Dasselbe für ein Netz einer Ebene (es bewegt sich nicht, einmal berechnet reicht). */
+  /** Dasselbe für ein Netz einer Ebene (einmal berechnet, bis die überhöhte Verformung es bewegt, siehe standInsMoved). */
   private standInWorld(s: StandIn): NonNullable<StandIn['world']> {
     if (s.world) return s.world;
     s.mesh.updateWorldMatrix(true, false);
@@ -1739,6 +1739,13 @@ export class Viewer {
     this.requestRender();
   }
 
+  /** Die Netze der Ebene haben sich bewegt (andere Überhöhung der Verformung): Kontur und Bereich des Schnitts neu bestimmen. */
+  standInsMoved(): void {
+    for (const s of this.standIns) s.world = undefined;
+    this.contourDirty = true;
+    this.requestRender();
+  }
+
   /** Netze der Ebene ihren Bauteilen zuordnen. Gleichnamige der Reihe nach (beide Seiten folgen der Reihenfolge des Modells). */
   private linkStandIns(): void {
     const byName = new Map<string, PartEntry[]>();
@@ -1841,12 +1848,13 @@ export class Viewer {
       zoomToCursor: this.controls.zoomToCursor, animating: !!this.anim };
   }
 
-  /** Stand des Schnitts, für Tests: Ebene, Bauteile mit Deckel, Segmente der Kontur, geschnittene Materialien. */
+  /** Stand des Schnitts, für Tests: Ebene, Bauteile mit Deckel, Segmente und Ausdehnung der Kontur, geschnittene Materialien. */
   sectionState() {
     this.prepareSection();
     const capped = [...this.parts.values()].filter((p) => p.cap?.plate.visible).map((p) => p.meta.partId);
     const clipped = [...this.parts.values()].every((p) => p.meshes.every((m) => (m.material as THREE.Material).clippingPlanes === this.clip));
-    return { plane: this.section, capped, contour: this.contourOf.length, clipped, picking: !!this.planePick };
+    const box = this.contour?.geometry.boundingBox;
+    return { plane: this.section, capped, contour: this.contourOf.length, contourBox: box ? [box.min.toArray(), box.max.toArray()] : null, clipped, picking: !!this.planePick };
   }
 
   /** Netze einer Ebene, für Tests: Name, zugeordnetes Bauteil, sichtbar, Deckkraft, Deckel im Schnitt. */

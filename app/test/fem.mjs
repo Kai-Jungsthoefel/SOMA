@@ -199,6 +199,35 @@ try {
   await domClick('btn-result-close');
   check('Analyse aus: Modell wieder sichtbar', !(await ev(() => window.__t.viewer.animViewState())).modelHidden);
 
+  // Schnitt durch verschmolzene Teile: Jedes Netz ist für sich geschlossen, auch an der Fläche, an der die Wand auf dem Fuß
+  // steht. Sonst füllt der Deckel des Schnitts auch Stellen, an denen der Blick durch diese Fläche geht
+  await ev(() => window.__t.openViewMenu());
+  await ev(() => { [...document.querySelectorAll('#menu-view .mi')].find((b) => b.textContent.includes('Winkel')).click(); });
+  await waitFor('Ergebnis Winkel geladen', () => window.__t.result().id === 'winkel', 20000);
+  const scaleW = (await ev(() => window.__t.result())).fem.scale;
+  // Waagerecht durch die Wand bei z = 40, behalten wird darunter: Die Kontur folgt der Überhöhung (die Wand kippt nach −X)
+  await ev(() => window.__t.viewer.setSection({ normal: [0, 0, -1], constant: 40 }));
+  const boxBent = (await ev(() => window.__t.viewer.sectionState())).contourBox;
+  await pick('result-deform', '0');
+  const boxFlat = (await ev(() => window.__t.viewer.sectionState())).contourBox;
+  check('Schnitt im Ergebnis: Kontur folgt der Überhöhung (verformt nach −X, unverformt bis x = 30)', scaleW > 0 && near(boxFlat?.[1][0], 30, 0.05)
+    && boxBent?.[1][0] < 29.5, JSON.stringify({ scaleW, boxBent, boxFlat }));
+  // Senkrecht bei y = 100, behalten wird dahinter. Der Blick auf die Außenseite der Wand knapp über dem Fuß geht durch die
+  // Berührfläche: keine Schraffur. Auf der Schnittfläche der Wand: Schraffur
+  await ev(() => window.__t.viewer.setSection({ normal: [0, 1, 0], constant: -100 }));
+  const wIds = await ev(() => window.__t.viewer.partList().filter((p) => p.name === 'Fuss' || p.name === 'Wand').map((p) => p.id));
+  await ev((ids) => window.__t.viewer.setView('iso', ids), wIds);
+  await sleep(400);
+  const pxAt = async (p) => ev((q) => window.__t.viewer.pixels(q.x, q.y), await ev((q) => window.__t.viewer.screenAt(q), p));
+  const outside = await pxAt([30, 110, 8]);
+  const cutFace = await pxAt([27.5, 100, 25]);
+  const layers = await ev(() => window.__t.viewer.layerState());
+  check('Schnitt im Ergebnis: Fuß und Wand mit Deckel, Schraffur nur auf der Schnittfläche, nicht hinter der Berührfläche', outside.span < 12
+    && cutFace.span > 25 && ['Fuss', 'Wand'].every((n) => layers.find((l) => l.name === n)?.capped), JSON.stringify({ outside, cutFace, layers }));
+  await shot('fem-3-schnitt');
+  await ev(() => window.__t.viewer.setSection(null));
+  await domClick('btn-result-close');
+
   // 7) Das Beispiel im Skill läuft so, wie es dasteht
   const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'fem.md'), 'utf8');
   const block = /```python\r?\n([\s\S]*?)\r?\n```/.exec(skill)?.[1] ?? '';

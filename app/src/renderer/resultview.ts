@@ -243,7 +243,7 @@ export class ResultLayer {
       d.geo.computeBoundingSphere();
     }
     for (const a of this.arrows) a.obj.position.copy(a.base).addScaledVector(a.shift, s);
-    this.viewer.requestRender();
+    this.viewer.standInsMoved();
   }
 
   /** Lastfall (Einspannungen, Lastflächen, Pfeile) ein- oder ausblenden. */
