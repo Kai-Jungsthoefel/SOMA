@@ -16,8 +16,9 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 | `exports/` | Single-part exports written by `soma export` |
 | `animations/` | Optional. Motion, camera flights and captions in Python (`soma.anim`), one file per topic. The skill for animation explains them |
 | `analyses/` | Optional. Load cases for `soma analyze fem` in Python (`soma.fem`), one file per load case. The skill for FEM explains them |
+| `drawings/` | Optional. Technical drawings in Python (`soma.drawing`), one file per drawing or set of sheets. `soma drawing build` writes PDF and DXF to `output/drawings/`. The skill for technical drawings explains them |
 | `renders/` | Pictures and videos written by `soma render`. Not in the version history and not in the saved ZIP |
-| `.soma/` | App data (viewer cache, build status, feedback images, skills, built animations, analysis results). Do not edit. Read the skills in `.soma/skills/` as the list at the end of this file says, and files in `.soma/feedback/` when the user points you to them |
+| `.soma/` | App data (viewer cache, build status, feedback images, skills, built animations, analysis results, drawing pictures). Do not edit. Read the skills in `.soma/skills/` as the list at the end of this file says, and files in `.soma/feedback/` when the user points you to them |
 
 ## Rules for model.py
 
@@ -44,6 +45,7 @@ Run them in this terminal. They work without the app.
 | `soma analyze overhang` (or `thickness`, `clearance`) | Value at every spot of the surface with a summary per part. Details in the skill for analysis |
 | `soma analyze fem analyses/x.py` | Stresses, safety and deflection under a load case described in `analyses/x.py`. Details in the skill for FEM |
 | `soma anim build`, `soma anim info "Name"` | Animations from `animations/`. Details in the skill for animation |
+| `soma drawing build`, `soma drawing info "Name"` | Technical drawings from `drawings/` as PDF, DXF and a picture to check. Details in the skill for technical drawings |
 
 If `soma build` fails, fix the error before doing anything else. Keep the model buildable at all times.
 

@@ -17,7 +17,7 @@ const SKIP_FILES = new Set(['.soma/model.glb', '.soma/model.map.json', '.soma/bu
  * Die Projektumgebung (E67) legt die App beim Öffnen an und installiert dabei requirements.txt. Bilder und Videos von
  * soma render entstehen aus dem Code neu (E75, beim Hotwire 41 % der ZIP).
  */
-const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/results', '.soma/env', 'renders']);
+const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/results', '.soma/drawings', '.soma/env', 'renders']);
 /** Schon gepackt (Git-Objekte sind zlib, Bilder und Videos komprimiert): nur ablegen, nochmal Deflate kostet nur Zeit. */
 const STORED = /^\.git\/objects\/|\.(png|jpe?g|webp|mp4|webm|zip|gz|7z|pack)$/i;
 const MAX_UNPACKED = 2 * 1024 ** 3;

@@ -242,7 +242,7 @@ export async function backupWorkspace(id: string): Promise<string> {
  * Ordner, die Git nicht sieht (in der .gitignore), in denen aber Eigenes des Nutzers liegen kann: Markierungen, Bilder und
  * Videos von `soma render`, Ergebnisse, gebaute Animationen.
  */
-const UNTRACKED_CONTENT = ['.soma/feedback', 'renders', '.soma/results', '.soma/anim'];
+const UNTRACKED_CONTENT = ['.soma/feedback', 'renders', '.soma/results', '.soma/anim', '.soma/drawings'];
 
 const hasFiles = (dir: string): boolean => {
   try { return fs.readdirSync(dir).length > 0; } catch { return false; }

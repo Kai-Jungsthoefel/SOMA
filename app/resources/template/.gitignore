@@ -13,10 +13,11 @@ __pycache__/
 .soma/feedback/
 .soma/geometry/
 
-# Pictures and videos from soma render, built animations and analysis results (regenerated from the code)
+# Pictures and videos from soma render, built animations, analysis results and drawing previews (regenerated from the code)
 renders/
 .soma/anim/
 .soma/results/
+.soma/drawings/
 
 # Environment with the model's extra packages (only requirements.txt is versioned)
 .soma/env/

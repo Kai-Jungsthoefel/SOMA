@@ -24,7 +24,7 @@ const COMMON = ['-c', 'core.quotepath=false', '-c', 'core.autocrlf=false'];
  * nicht in der .gitignore, deshalb klammert die App sie selbst aus, beim Status und beim Hinzufügen (siehe addAll), und
  * trägt sie beim Öffnen in .git/info/exclude ein, damit auch die Commits des Agenten sie nicht aufnehmen (ensureIgnored).
  */
-const APP_CACHES = ['.soma/geometry', '.soma/anim', '.soma/results', '.soma/env', 'renders'];
+const APP_CACHES = ['.soma/geometry', '.soma/anim', '.soma/results', '.soma/drawings', '.soma/env', 'renders'];
 /** `output/` zählt nicht als Änderung: STEP-Dateien sind nicht byte-stabil (Zeitstempel, teils Reihenfolge). */
 const NOT_OUTPUT = ['--', '.', ':(exclude)output', ...APP_CACHES.map((p) => `:(exclude)${p}`)];
 /** Was die Vorlage in der .gitignore hat (resources/template/.gitignore), für ältere Projekte in .git/info/exclude. */
