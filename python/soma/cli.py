@@ -1,4 +1,4 @@
-"""Command line: `soma build`, `soma export`, `soma anim`, `soma analyze` and `soma render`."""
+"""Command line: `soma build`, `soma export`, `soma anim`, `soma drawing`, `soma analyze` and `soma render`."""
 import argparse
 import json
 import os
@@ -237,6 +237,74 @@ def cmd_anim(args):
         return _fail(str(e))
 
 
+def cmd_drawing(args):
+    """Technische Zeichnungen in drawings/*.py (E76): bauen, auflisten, beschreiben."""
+    from . import drawrun
+    root = Path(args.project).resolve()
+    try:
+        if args.action == "build":
+            target = None
+            if args.name and args.name.endswith(".py"):
+                target = root / args.name
+                if not target.is_file():
+                    return _fail(f"{args.name} does not exist")
+            res = drawrun.build_all(root, target, args.dpi)
+            if args.json:
+                print(json.dumps(dict(built=res["built"], errors=res["errors"], orphans=res["orphans"]), ensure_ascii=False))
+            else:
+                for b in res["built"]:
+                    print(f"Drawing ok: \"{b['name']}\" ({b['size']}, {b['scale']}, {len(b['views'])} view(s), "
+                          f"{len(b['dims'])} dimension(s)) from {b['file']}")
+                    print(f"  {b['pdf']}, {b['dxf']}")
+                    print(f"  Picture: {b['png']} ({b['png_size'][0]} x {b['png_size'][1]} px). Open it to check the "
+                          "drawing, crop it to read small text.")
+                    for w in b["warnings"]:
+                        print("  " + drawrun.warning_text(w))
+                for e in res["errors"]:
+                    where = f"{e['file']}{':' + str(e['line']) if e.get('line') else ''}"
+                    print(f"Drawing ERROR ({where}): {e['message']}", file=sys.stderr)
+                    if e.get("traceback"):
+                        print(e["traceback"], file=sys.stderr)
+                for p in res["orphans"]:
+                    print(f"Note: {p} belongs to no sheet anymore (renamed or removed). Delete it if it is not needed.")
+                if not res["built"] and not res["errors"]:
+                    print(f"No drawings: create a file in {drawrun.DRAW_DIR}/ (from soma.drawing import Sheet).")
+            if args.name and not args.name.endswith(".py") and not drawrun.find(root, args.name):
+                return _fail(f"No drawing {args.name!r} found")
+            return 1 if res["errors"] else 0
+        idx = drawrun.read_index(root)
+        if args.action == "list":
+            rows = [dict(x, stale=drawrun.is_stale(root, x)) for x in idx.get("drawings", [])]
+            if args.json:
+                print(json.dumps(dict(drawings=rows, errors=idx.get("errors", [])), ensure_ascii=False))
+                return 0
+            for x in rows:
+                print(f"\"{x['name']}\"  {x['size']}  {x['scale']}  {x['pdf']}  from {x['file']}"
+                      + ("  (outdated, soma drawing build)" if x["stale"] else "")
+                      + (f"  {len(x['warnings'])} warning(s)" if x["warnings"] else ""))
+            for e in idx.get("errors", []):
+                print(f"ERROR {e['file']}{':' + str(e['line']) if e.get('line') else ''}: {e['message']}")
+            if not rows and not idx.get("errors"):
+                print("No drawing built yet (soma drawing build).")
+            return 0
+        entries = idx.get("drawings", [])
+        if not args.name and len(entries) != 1:
+            return _fail("soma drawing info needs the name of the sheet" + (
+                f": {', '.join(repr(x['name']) for x in entries)}" if entries else " (none built yet: soma drawing build)"))
+        entry = drawrun.find(root, args.name) if args.name else entries[0]
+        if entry is None:
+            return _fail(f"No drawing {args.name!r} found (soma drawing list)")
+        if args.json:
+            print(json.dumps(entry, ensure_ascii=False))
+        else:
+            print(drawrun.info_text(entry))
+            if drawrun.is_stale(root, entry):
+                print("\nOutdated: the model or the drawing changed since (soma drawing build).")
+        return 0
+    except drawrun.DrawingError as e:
+        return _fail(str(e))
+
+
 def cmd_analyze(args):
     """Auswertung mit einem Wert je Stelle der Oberflaeche (E58)."""
     from . import analysis
@@ -327,6 +395,14 @@ def main(argv=None):
     a.add_argument("--project", default=".")
     a.add_argument("--json", action="store_true")
     a.set_defaults(func=cmd_anim)
+
+    d = sub.add_parser("drawing", help="build, list and describe technical drawings from drawings/*.py (DXF, PDF, PNG)")
+    d.add_argument("action", choices=["build", "list", "info"])
+    d.add_argument("name", nargs="?", help="name of the sheet (for build also a file drawings/x.py)")
+    d.add_argument("--dpi", type=int, default=200, help="build: resolution of the picture (default 200)")
+    d.add_argument("--project", default=".")
+    d.add_argument("--json", action="store_true")
+    d.set_defaults(func=cmd_drawing)
 
     z = sub.add_parser("analyze", help="analysis: overhang (3D printing), thickness (wall thickness), clearance (gap to other parts), fem (strength)")
     z.add_argument("kind", choices=["overhang", "thickness", "clearance", "fem", "list"])
