@@ -9,6 +9,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 ### Neu
 
 - Technische Zeichnungen: Der Agent beschreibt eine Zeichnung in `drawings/*.py` (`soma.drawing`) mit Ansichten, Schnitten, Einzelheiten, Maßen, Texten und Stückliste, `soma drawing build` schreibt PDF und DXF nach `output/drawings/` und ein Bild, mit dem der Agent sein Ergebnis prüft. Die Maße werden immer am Modell gemessen, eine Prüfung meldet Überschneidungen, Maße neben Kanten und getippte Zahlen. Dazu der Skill „Technical drawings“ mit den Regeln nach ISO (E76).
+- Skill „Parametric models“, bei neuen Modellen immer an: Der Agent legt erst fest, was die Größe bestimmt und was beim Ändern stehen bleibt, gibt wenige unabhängige Werte als Parameter frei, leitet den Rest daraus ab und baut das Modell an den Grenzen jedes Bereichs zur Probe. Einstellbar sind die Höchstzahl der Parameter und der Umfang dieser Prüfung (E77).
 
 ### Geändert
 
