@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+## [0.2.0] - 2026-10-08
+
+Parameter für den Nutzer, die App auf Englisch, Start auf der Startseite und die Lizenz.
+
 ### Neu
 
 - Die App beginnt auf der Startseite. Ein neues Modell, das noch der Vorlage entspricht und nie gespeichert wurde, verschwindet beim Verlassen wieder. Andere Modelle lassen sich auf der Startseite entfernen, der Arbeitsordner kommt in den Papierkorb (E69).
@@ -39,5 +43,6 @@ Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
 - Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
 - Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.1.0...HEAD
+[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Kai-Jungsthoefel/SOMA/releases/tag/v0.1.0

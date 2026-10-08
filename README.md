@@ -93,7 +93,7 @@ add_part("Body", body, color=(0.25, 0.45, 0.75))
 
 ## Status
 
-Early prototype, version 0.1.0. See [CHANGELOG.md](CHANGELOG.md).
+Early prototype, version 0.2.0. See [CHANGELOG.md](CHANGELOG.md).
 
 - Developed and tested on Windows only
 - No installer yet. Python, CadQuery and Git are meant to ship with the app, for now you set them up yourself
