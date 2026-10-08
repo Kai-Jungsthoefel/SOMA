@@ -19,9 +19,13 @@ def _print_build(res, as_json, seconds):
     if as_json:
         print(json.dumps(res, ensure_ascii=False))
         return
+    from . import params
+    line = params.summary(res.get("params"))
     if res["status"] == "ok":
         n = len(res.get("parts", []))
         print(f"Build ok: {n} part(s), {seconds:.1f} s -> output/model.step")
+        if line:
+            print(line)
         for w in res.get("warnings", []):
             print("Warning:", w)
     else:
@@ -30,6 +34,11 @@ def _print_build(res, as_json, seconds):
         print(f"Build ERROR{where}: {e['message']}", file=sys.stderr)
         if e.get("traceback"):
             print(e["traceback"], file=sys.stderr)
+        # Werte aus dem Parameter-Panel koennen die Ursache sein
+        if line and any(p.get("source") == "user" for p in res.get("params", [])):
+            print(line, file=sys.stderr)
+        for w in res.get("warnings", []):
+            print("Warning:", w, file=sys.stderr)
 
 
 def cmd_build(args):

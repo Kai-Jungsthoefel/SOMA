@@ -14,7 +14,7 @@ from pathlib import Path
 
 import cadquery as cq
 
-from . import measure, mesher, registry
+from . import measure, mesher, params, registry
 
 DEFAULT_ENTRY = "model.py"
 # Fassung von model.glb, model.map.json und geometry/. Die App zeigt beim Oeffnen den letzten Build ohne neu zu bauen, aber
@@ -91,6 +91,7 @@ def run_model(root, entry=None):
             kind="EntryMissing")
     global LAST_RUN
     registry.REGISTRY.clear()
+    params.begin(root)  # Werte des Nutzers aus parameters.json (Parameter-Panel)
     LAST_RUN = None
     old_cwd = os.getcwd()
     os.chdir(root)
@@ -206,6 +207,7 @@ def run_build(project_dir):
         timings.update(out["timings"])
         result.update(parts=[dict(name=p["name"], role=p["role"], file=p["file"], line=p["line"]) for p in out["map_parts"]],
                       glb_bytes=out["glb_bytes"], tolerance=out["tolerance"])
+        result["warnings"].extend(params.unused_warnings())
         # Zusatzpakete, die das Modell geladen hat, in requirements.txt (E67). Ein Fehler dabei kostet den Build nicht
         try:
             from . import env
@@ -219,6 +221,10 @@ def run_build(project_dir):
     except BaseException as e:  # Fehler im Ausgabeteil (Export, Mesher): melden statt abstuerzen
         err = _error_from_exception(e, root)
         result.update(status="error", error=dict(kind="OutputError", message=err.message, file=None, line=None, traceback=err.tb))
+    # Parameter auch nach einem Fehler: Die App zeigt sie weiter, damit der Nutzer einen Wert zuruecknehmen kann, an dem
+    # der Build scheiterte. Die Hinweise dazu (Wert ausserhalb des Bereichs) helfen beim Verstehen des Fehlers
+    result["params"] = params.export(lambda f: _rel(f, root))
+    result["warnings"][:0] = params.WARNINGS
     result["timings"] = {k: round(v, 3) for k, v in timings.items()}
     result["finished"] = time.time()
     try:
