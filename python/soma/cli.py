@@ -151,6 +151,14 @@ def cmd_warm(args):
     return main(argv)
 
 
+def cmd_env(args):
+    """Projektumgebung anlegen oder auf den Stand der Basis bringen (E67). Nur fuer die App: Sie ruft das beim Oeffnen."""
+    from . import env
+    res = env.ensure(args.project)
+    print(json.dumps(res, ensure_ascii=False) if args.json else (res.get("note") or res.get("error") or f"Projektumgebung: {res['env']}"))
+    return 0 if res["ok"] else 1
+
+
 def cmd_serve(args):
     """Messdienst der App: JSON-Zeilen auf stdin/stdout (siehe measure.serve)."""
     from . import measure
@@ -342,5 +350,14 @@ def main(argv=None):
     w = sub.add_parser("warm", help=argparse.SUPPRESS)  # nur fuer die App: vorgewaermt auf einen Auftrag warten
     w.set_defaults(func=cmd_warm)
 
+    v = sub.add_parser("env", help=argparse.SUPPRESS)  # nur fuer die App: Projektumgebung anlegen (E67)
+    v.add_argument("--project", default=".")
+    v.add_argument("--json", action="store_true")
+    v.set_defaults(func=cmd_env)
+
     args = ap.parse_args(argv)
+    # Zusatzpakete des Projekts (E67): soma laeuft mit dem Python der Basis, das Modell darf sie trotzdem importieren
+    if args.cmd != "env" and getattr(args, "project", None) is not None:
+        from . import env
+        env.activate(args.project)
     return args.func(args)

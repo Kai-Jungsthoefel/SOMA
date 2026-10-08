@@ -205,6 +205,14 @@ def run_build(project_dir):
         timings.update(out["timings"])
         result.update(parts=[dict(name=p["name"], role=p["role"], file=p["file"], line=p["line"]) for p in out["map_parts"]],
                       glb_bytes=out["glb_bytes"], tolerance=out["tolerance"])
+        # Zusatzpakete, die das Modell geladen hat, in requirements.txt (E67). Ein Fehler dabei kostet den Build nicht
+        try:
+            from . import env
+            w = env.record_requirements(root)
+        except Exception as e:  # noqa: BLE001
+            w = f"requirements.txt konnte nicht aktualisiert werden: {type(e).__name__}: {e}"
+        if w:
+            result["warnings"].append(w)
     except BuildError as e:
         result.update(status="error", error=dict(kind=e.kind, message=e.message, file=e.file, line=e.line, traceback=e.tb))
     except BaseException as e:  # Fehler im Ausgabeteil (Export, Mesher): melden statt abstuerzen
