@@ -49,7 +49,7 @@ node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run bu
 - **Git in Nutzerprojekten nur vorwärts (E35):** neue Commits, kein Reset, Checkout, Rebase oder Branch. Schreibende Git-Aufrufe der App laufen über `GitRepo` nacheinander.
 - **Renderer ohne Node-Zugriff:** Alles geht über `preload.ts` und die Typen in `src/shared/types.ts`. Dateizugriffe nur über `resolveInside`. Texte aus dem Projekt nie per `innerHTML`.
 - **STEP-Namen nur ASCII** (`ascii_name`), Anzeigenamen stehen in `model.map.json`. `output/` zählt nicht als ungespeicherte Änderung, weil STEP-Dateien nicht byte-stabil sind.
-- **Sprache:** Oberfläche, Doku, Code-Kommentare und Commit-Nachrichten auf Deutsch. `AGENTS.md` und `model.py` der Vorlage auf Englisch (Agenten folgen englischen Anweisungen zuverlässiger).
+- **Sprache:** Oberfläche, Doku, Code-Kommentare und Commit-Nachrichten auf Deutsch. `AGENTS.md` und `model.py` der Vorlage auf Englisch (Agenten folgen englischen Anweisungen zuverlässiger). `README.md` im Hauptordner auf Englisch (Startseite des GitHub-Repos, E70): schlicht und knapp, ohne Emojis, Bilder in `docs/images/`.
 - Kommentare erklären das Warum, im Stil des umgebenden Codes.
 
 ## Tests
@@ -79,9 +79,9 @@ node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run bu
 
 ## Doku und Arbeitsweise
 
-- Nach einem Schritt `PLAN.md` nachziehen (Phasenstand, offene Punkte, Risiken) und `app/README.md`, wenn sich Befehle oder Aufbau ändern.
+- Nach einem Schritt `PLAN.md` nachziehen (Phasenstand, offene Punkte, Risiken) und `app/README.md`, wenn sich Befehle oder Aufbau ändern. Was der Nutzer davon merkt, kommt als kurzer Eintrag in `CHANGELOG.md` unter „Unveröffentlicht“ (E70). Die englische `README.md` nur bei neuen großen Funktionen anpassen.
 - Entscheidungen, die ich ohne Rückfrage treffe, stehen in `PLAN.md` unter „Noch nicht ausdrücklich bestätigt".
 - Der Nutzer spricht Deutsch. Ist eine Entscheidung wirklich seine, eine einzelne Frage stellen.
 - Im Prototyp erst die volle, funktionierende Variante, nicht früh optimieren (E37).
 - Commits nur auf Wunsch, thematisch aufgeteilt (z. B. `python/`, `app/`, Doku), mit deutscher Nachricht.
-- **Versionsnummer (E68):** Major.minor.bugfix, eine für App und `soma`, steht in `app/package.json` und `python/soma/__init__.py` (beide gleich ändern, `npm run test:unit` prüft es). Hochzählen nur auf Wunsch des Nutzers: bugfix für Fehlerbehebungen, minor für neue Funktionen, major für Änderungen, die ältere Modelle oder Agenten-Anweisungen brechen.
+- **Versionsnummer (E68):** Major.minor.bugfix, eine für App und `soma`, steht in `app/package.json` und `python/soma/__init__.py` (beide gleich ändern, `npm run test:unit` prüft es). Beim Hochzählen wird „Unveröffentlicht“ im Changelog zur neuen Version mit Datum, dazu ein annotiertes Tag `vX.Y.Z`. Hochzählen nur auf Wunsch des Nutzers: bugfix für Fehlerbehebungen, minor für neue Funktionen, major für Änderungen, die ältere Modelle oder Agenten-Anweisungen brechen.
