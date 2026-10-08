@@ -60,13 +60,13 @@ try {
   /** Die beiden Listen des Abschnitts: Immer vor „Read when relevant“, Bei Bedarf danach. */
   const always = () => (block() ?? '').split('### Read when relevant')[0];
   const demand = () => (block() ?? '').split('### Read when relevant')[1] ?? '';
-  const DEMAND_NEW = '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem';
+  const DEMAND_NEW = '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung';
 
   // 1) Panel: die mitgelieferten Skills nach Kategorien und `order`
   await ev(() => document.querySelector('#rail [data-panel="skills"]').click());
   await waitFor('Skills geladen', () => window.__t.skills().skills.length >= 3, 10000);
   let s = await st();
-  const ORDER = 'konstruktionsablauf,cadquery,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,normteile,festigkeit,baugruppen,analyse,animation,fem';
+  const ORDER = 'konstruktionsablauf,cadquery,parametrik,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,normteile,festigkeit,baugruppen,analyse,animation,fem,zeichnung';
   const heads = await ev(() => [...document.querySelectorAll('#skills-list .sk-cat')].map((h) => h.textContent).join(','));
   check('Panel „Skills": Überschriften Way of working, Manufacturing, Design knowledge, Check and present, darunter die Skills nach `order`',
     s.skills.map((x) => x.id).join(',') === ORDER && heads === 'Way of working,Manufacturing,Design knowledge,Check and present'
@@ -77,10 +77,10 @@ try {
   await waitFor('Speicherstand', () => !!window.__t.saveState(), 10000);
   const bdir = path.join(ud, 'workspace-backups', `${proj.id}-skills`);
   const modesOf = (sk, m) => sk.skills.filter((x) => x.mode === m).map((x) => x.id).join(',');
-  check('Neues Modell: Konstruktionsablauf, Sauber modellieren und Normteile immer, die übrigen bei Bedarf, Vorgabe für neue Modelle wie im Kopf',
-    JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","normteile"]' && (pj().skills_on_demand ?? []).join(',') === DEMAND_NEW
-    && modesOf(s, 'always') === 'konstruktionsablauf,cadquery,normteile' && modesOf(s, 'demand') === DEMAND_NEW && !modesOf(s, 'off')
-    && s.skills.filter((x) => x.defaultMode === 'always').map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery,normteile'
+  check('Neues Modell: Konstruktionsablauf, Sauber modellieren, Parametrik und Normteile immer, die übrigen bei Bedarf, Vorgabe für neue Modelle wie im Kopf',
+    JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","parametrik","normteile"]' && (pj().skills_on_demand ?? []).join(',') === DEMAND_NEW
+    && modesOf(s, 'always') === 'konstruktionsablauf,cadquery,parametrik,normteile' && modesOf(s, 'demand') === DEMAND_NEW && !modesOf(s, 'off')
+    && s.skills.filter((x) => x.defaultMode === 'always').map((x) => x.id).join(',') === 'konstruktionsablauf,cadquery,parametrik,normteile'
     && s.skills.every((x) => !x.problems.length && !x.changed), JSON.stringify(pj()));
   const fdmNew = read('.soma/skills/3d-druck.md') ?? '';
   check('Neues Modell: Kopien mit Standardwerten, bei Bedarf mit Hinweis (Standardwerte, NOTES.md), Immer ohne',
@@ -88,10 +88,11 @@ try {
     && fdmNew.includes('# Skill: 3D printing (FDM)\n\n> **On demand:**') && fdmNew.includes('defaults of the app') && fdmNew.includes('`NOTES.md`') && fdmNew.includes('Overhangs up to 45°'), fdmNew.slice(0, 300));
   check('Neues Modell: AGENTS.md mit zwei Listen, bei Bedarf mit Anlass, alles im Startcommit (nichts ungespeichert)',
     always().includes('- `.soma/skills/konstruktionsablauf.md`: Design workflow') && always().includes('- `.soma/skills/cadquery.md`: Clean CadQuery modeling')
-    && always().includes('- `.soma/skills/normteile.md`: Standard parts') && !always().includes('3d-druck')
+    && always().includes('- `.soma/skills/normteile.md`: Standard parts')
+    && always().includes('- `.soma/skills/parametrik.md`: Parametric models') && !always().includes('3d-druck')
     && demand().includes('- `.soma/skills/3d-druck.md`: 3D printing (FDM). Read when the parts will be 3D printed on a filament printer (FDM).')
     && DEMAND_NEW.split(',').every((id) => demand().includes(`.soma/skills/${id}.md`))
-    && (await g('ls-files', '.soma/skills')).split('\n').length === 15
+    && (await g('ls-files', '.soma/skills')).split('\n').length === 17
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, `${String((await ev(() => window.__t.saveState())).dirtyFiles)} | ${String(block()).slice(0, 200)}`);
   check('Zeile mit Stufen-Schalter, Klick auf die Zeile öffnet die Karte mit drei Stufen, die eingestellte gewählt', await ev(() => {
     document.querySelector('#skills-list .sk-row[data-id="3d-druck"] .sk-open').click();
@@ -116,7 +117,7 @@ try {
   check('3D-Druck immer: Kopie mit den Standardwerten, ohne Hinweis, die unveränderte Fassung „bei Bedarf“ ohne Sicherung', copy !== null && bundledText.includes('{{overhang}}') && !copy.includes('{{')
     && copy.includes('Overhangs up to 45° from vertical') && copy.includes('| Nozzle | 0.4 mm |') && copy.split('\n').length === bundledText.split('\n').length
     && !copy.includes('On demand') && !fs.existsSync(bdir));
-  check('project.json und die Kopie in den App-Daten führen ihn unter „Immer“', JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","normteile","3d-druck"]'
+  check('project.json und die Kopie in den App-Daten führen ihn unter „Immer“', JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","parametrik","normteile","3d-druck"]'
     && !(pj().skills_on_demand ?? []).includes('3d-druck')
     && JSON.stringify(JSON.parse(fs.readFileSync(path.join(ud, 'projects', `${proj.id}.json`), 'utf8')).skills) === JSON.stringify(pj().skills)
     && JSON.stringify(JSON.parse(fs.readFileSync(path.join(ud, 'projects', `${proj.id}.json`), 'utf8')).skills_on_demand) === JSON.stringify(pj().skills_on_demand));
@@ -196,7 +197,7 @@ try {
   await setMode('toleranzen', 'always');
   const b2 = always();
   check('Toleranzen immer: AGENTS.md nennt beide unter „Immer“, project.json auch', b2.indexOf('3d-druck.md') > 0 && b2.indexOf('toleranzen.md') > b2.indexOf('3d-druck.md')
-    && !demand().includes('toleranzen.md') && JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","normteile","3d-druck","toleranzen"]', b2);
+    && !demand().includes('toleranzen.md') && JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","parametrik","normteile","3d-druck","toleranzen"]', b2);
   // Immer → Bei Bedarf: Kopie bekommt den Hinweis, keine Sicherung, Meldung
   await setMode('normteile', 'demand');
   check('Normteile bei Bedarf: Kopie mit Hinweis, Liste „Bei Bedarf“, ohne Sicherung, Meldung „nur noch bei Bedarf“', (read('.soma/skills/normteile.md') ?? '').includes('> **On demand:**')
@@ -221,7 +222,7 @@ try {
   check('Ausschalten: Kopie weg, unveränderte Kopie ohne neue Sicherung, Einstellungen bleiben', read('.soma/skills/3d-druck.md') === null && backups.length === 1
     && settings()['3d-druck']?.overhang === 55, backups.join(','));
   check('AGENTS.md und project.json ohne 3D-Druck, Toleranzen bleibt', !(block() ?? '').includes('3d-druck') && always().includes('toleranzen.md')
-    && JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","toleranzen"]' && !(pj().skills_on_demand ?? []).includes('3d-druck'));
+    && JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","parametrik","toleranzen"]' && !(pj().skills_on_demand ?? []).includes('3d-druck'));
   check('Meldung nennt den laufenden Agenten', /is off\..*tell it/.test((await ev(() => window.__t.toast())).text), (await ev(() => window.__t.toast())).text);
 
   // 6) Datei eines aktiven Skills fehlt: gemeldet, nicht neu angelegt (E28)
@@ -234,7 +235,7 @@ try {
     && info.problems.some((p) => p.includes('toleranzen')) && read('.soma/skills/toleranzen.md') === null, JSON.stringify(info.problems));
   await setMode('toleranzen', 'off');
   check('Ausschalten räumt auf: kein Problem mehr, nicht mehr in AGENTS.md und project.json', !(await skill('toleranzen')).problems.length && !(block() ?? '').includes('toleranzen')
-    && JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery"]');
+    && JSON.stringify(pj().skills) === '["konstruktionsablauf","cadquery","parametrik"]');
 
   // 7) Älteres Projekt ohne Abschnitt in AGENTS.md: Er wird am Ende angehängt, nicht doppelt
   const agents = read('AGENTS.md');
@@ -291,6 +292,8 @@ try {
   };
   const before = JSON.stringify(pj());
   await setDefault('3d-druck', 'always');
+  // Die Meldung kommt erst nach der neuen Stufe im Panel
+  await waitFor('Meldung Vorgabe', () => window.__t.toast().text.includes('for new models'), 10000).catch(() => {});
   check('Stufe bei neuen Modellen „Always“ (3D-Druck): in state.json, Meldung, das offene Modell unverändert', JSON.stringify(appState().skill_defaults) === '{"3d-druck":"always"}'
     && JSON.stringify(pj()) === before && !(await ev(() => window.__t.saveState())).unsaved
     && (await ev(() => window.__t.toast())).text.includes('is set to “Always” for new models. This model stays as it is.'), JSON.stringify(appState().skill_defaults));
@@ -307,13 +310,13 @@ try {
   const pj2 = JSON.parse(fs.readFileSync(path.join(p2.dir, '.soma', 'project.json'), 'utf8'));
   const fdm2 = fs.readFileSync(path.join(p2.dir, '.soma', 'skills', '3d-druck.md'), 'utf8');
   const ka2 = fs.readFileSync(path.join(p2.dir, '.soma', 'skills', 'konstruktionsablauf.md'), 'utf8');
-  check('Neues Modell nach der Vorgabe: immer Sauber modellieren, 3D-Druck, Normteile, Laser aus, Konstruktionsablauf bei Bedarf, Standardwerte statt 55° und PETG',
-    JSON.stringify(pj2.skills) === '["cadquery","3d-druck","normteile"]' && pj2.skills_on_demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem'
+  check('Neues Modell nach der Vorgabe: immer Sauber modellieren, Parametrik, 3D-Druck, Normteile, Laser aus, Konstruktionsablauf bei Bedarf, Standardwerte statt 55° und PETG',
+    JSON.stringify(pj2.skills) === '["cadquery","parametrik","3d-druck","normteile"]' && pj2.skills_on_demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung'
     && !pj2.skill_settings && fdm2.includes('Overhangs up to 45°') && fdm2.includes('| Material | PLA |') && !fdm2.includes('On demand') && ka2.includes('> **On demand:**')
     && !fs.existsSync(path.join(p2.dir, '.soma', 'skills', 'laser.md'))
     && norm(fs.readFileSync(path.join(p2.dir, 'AGENTS.md'), 'utf8')).includes('- `.soma/skills/3d-druck.md`: 3D printing (FDM)\n'), JSON.stringify(pj2));
   await waitFor('Speicherstand neu', () => window.__t.saveState() && !window.__t.saveState().unsaved, 10000).catch(() => {});
-  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 14
+  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 16
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, String((await ev(() => window.__t.saveState())).dirtyFiles));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));

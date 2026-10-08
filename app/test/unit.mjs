@@ -198,11 +198,11 @@ try {
   check('Mitgelieferte Skills: jeder mit Kategorie, vier Kategorien', shipped.every((s) => s.category) && cats.length === 4, cats.join(','));
   const SKD = path.join(APP, 'resources', 'skills');
   const dm = defaultModes(SKD, {});
-  check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'konstruktionsablauf,cadquery,normteile'
-    && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem', JSON.stringify(dm));
+  check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise (mit Parametrik) und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'konstruktionsablauf,cadquery,parametrik,normteile'
+    && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm));
   const dm2 = defaultModes(SKD, { konstruktionsablauf: 'demand', toleranzen: 'always', '3d-druck': 'always', laser: 'off' });
-  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,3d-druck,toleranzen,normteile'
-    && dm2.demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen,analyse,animation,fem', JSON.stringify(dm2));
+  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,parametrik,3d-druck,toleranzen,normteile'
+    && dm2.demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm2));
   // Bei Bedarf (E55): Hinweis unter der ersten Überschrift, Werte als Standard der App, vom Nutzer gesetzte mit Namen
   const rd = renderSkill(SRC, {}, 'demand');
   check('Bei Bedarf: Hinweis direkt unter der Überschrift, mit Leerzeilen, Werte als Standard der App, NOTES.md', rd.includes('# Skill\n\n> **On demand:**')
@@ -282,17 +282,18 @@ try {
       && fs.readFileSync(path.join(old, '.gitignore'), 'utf8') === '__pycache__/\n', excl.slice(-160));
     put('.soma/results/thickness.glb', 'NEU UND GROSS');
     put('.soma/anim/deckel.glb', 'ANIM');
+    put('.soma/drawings/Halter.png', 'BILD'); // Bild der Zeichnung für den Agenten (E76), PDF und DXF liegen in output/
     check('Neues Ergebnis zählt nicht als ungespeicherte Änderung', !(await repo.status()).dirty);
     put('model.py', 'x = 2\n');
     await repo.snapshot('Automatic snapshot on save');
     const tracked = (await repo.run(['ls-files'])).out;
     check('Snapshot nimmt Ergebnis und Bilder aus dem Verlauf, die Dateien bleiben', tracked.includes('model.py') && !tracked.includes('.soma/results')
-      && !tracked.includes('renders/') && fs.existsSync(path.join(old, '.soma', 'results', 'thickness.glb')), tracked);
+      && !tracked.includes('renders/') && !tracked.includes('.soma/drawings') && fs.existsSync(path.join(old, '.soma', 'results', 'thickness.glb')), tracked);
     const zip = path.join(tmp, 'altprojekt.zip');
     await saveProjectZip(old, zip, { savedAt: '', head: null, id: 'x', name: 'x' });
-    const inZip = await readZipTexts(zip, ['model.py', '.soma/results/thickness.glb', '.soma/anim/deckel.glb', 'renders/view-iso.png']);
-    check('ZIP: ohne .soma/results, .soma/anim und renders/ (E75), mit Modell', inZip['model.py'] === 'x = 2\n' && inZip['.soma/results/thickness.glb'] === null
-      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/view-iso.png'] === null, JSON.stringify(inZip));
+    const inZip = await readZipTexts(zip, ['model.py', '.soma/results/thickness.glb', '.soma/anim/deckel.glb', 'renders/view-iso.png', '.soma/drawings/Halter.png']);
+    check('ZIP: ohne .soma/results, .soma/anim, .soma/drawings und renders/ (E75, E76), mit Modell', inZip['model.py'] === 'x = 2\n' && inZip['.soma/results/thickness.glb'] === null
+      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/view-iso.png'] === null && inZip['.soma/drawings/Halter.png'] === null, JSON.stringify(inZip));
 
     // Packen vor der ZIP (E75): Verlauf und Hashes bleiben. Unerreichbares geht nicht verloren: der Blob, den addAll oben aus
     // dem Index genommen hat (lose), und ein Objekt, das nur in einem älteren Pack liegt (ohne --keep-unreachable weg).
