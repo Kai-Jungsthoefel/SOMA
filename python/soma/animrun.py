@@ -38,7 +38,8 @@ def anim_files(root):
 
 
 def newest_source(root, extra=()):
-    """Neuester Aenderungszeitpunkt des Modells (Einstiegspunkt, *.py im Projektordner, parts/, inputs/) und weiterer Dateien."""
+    """Neuester Aenderungszeitpunkt des Modells (Einstiegspunkt, *.py im Projektordner, parts/, inputs/, die Werte aus dem
+    Parameter-Panel in parameters.json) und weiterer Dateien. Gleiche Regel wie newestSourceMtime in der App (build.ts)."""
     root = Path(root)
     newest = 0.0
     for top in ("parts", "inputs"):
@@ -49,7 +50,7 @@ def newest_source(root, extra=()):
                     newest = max(newest, os.path.getmtime(os.path.join(dirpath, f)))
                 except OSError:
                     pass
-    for p in list(root.glob("*.py")) + [Path(x) for x in extra]:
+    for p in list(root.glob("*.py")) + [root / "parameters.json"] + [Path(x) for x in extra]:
         try:
             newest = max(newest, p.stat().st_mtime)
         except OSError:
