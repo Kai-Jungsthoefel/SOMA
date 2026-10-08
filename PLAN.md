@@ -69,7 +69,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
 ├── animations/        Animationen in Python (optional, E58)
 ├── renders/           Bilder und Videos von soma render (nicht in Git, E58)
 ├── .soma/
-│   ├── project.json   ID, App-/Framework-Version, api_version, Stufen der Skills, Hauptdatei
+│   ├── project.json   ID, App-Version (`app_version`, zuletzt gespeichert mit, E68), api_version, Stufen der Skills, Hauptdatei
 │   ├── skills/        eingeschaltete Skills (Bei Bedarf, Immer) als Markdown
 │   ├── feedback/      Screenshots und Skizzen (nicht in Git)
 │   ├── anim/, results/  gebaute Animationen und Ergebnisse von soma analyze (nicht in Git, E58)
@@ -413,6 +413,12 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - **Nachinstallieren:** Fehlen beim Öffnen oder nach „Wiederherstellen“ Pakete aus der Liste in der Umgebung (anderer Rechner, alter Stand), installiert die App sie mit pip der Umgebung. Pakete, die die Basis hat, überspringt sie. Builds warten so lange, die Statuszeile zeigt „Installiert Pakete …“ mit den Namen. Scheitert pip (kein Netz, Paket unbekannt), erscheint ein Hinweis mit den letzten Zeilen von pip, gebaut wird trotzdem.
 - **Nicht in ZIP und Git:** `.soma/env` steht in der `.gitignore` der Vorlage, bei älteren Projekten in `.git/info/exclude` und bei den Zwischenergebnissen der App (`git.ts`), dazu in den Ausschlüssen der ZIP.
 
+*Versionsnummer (E68, Wunsch des Nutzers; Prüfungen in `app/test/unit.mjs`, `smoke.mjs` und `packages.mjs`):*
+
+- **Eine Nummer für SOMA:** Major.minor.bugfix, Start 0.1.0, gemeinsam für App und `soma`. Sie steht in `app/package.json` und gleichlautend in `python/soma/__init__.py` (`pyproject.toml` liest sie dort, ein Unit-Test prüft, dass beide gleich sind). esbuild setzt sie beim Bauen in Hauptprozess und Oberfläche ein (`src/shared/version.ts`).
+- **Sichtbar:** auf der Startseite neben „SOMA“, im Hinweis des Logos oben links („Startseite · SOMA 0.1.0“) und bei `soma --version`.
+- **Im Modell:** `project.json` hält in `app_version` fest, mit welcher Version das Modell zuletzt gespeichert wurde (beim Anlegen und beim Speichern, steht damit auch im Snapshot). Ist sie neuer als die App, meldet der Projekt-Check das. Repariert wird nichts.
+
 *Offen in Phase 1:* Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Zukaufteile wie NEMA-17-Motoren und V-Slot-Profile (E48, Wunsch des Nutzers), Versions-Schieber, `soma check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
@@ -427,6 +433,8 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - Der Modellname folgt dem Dateinamen der ZIP
 - Speichern baut vorher neu, wenn der Quelltext neuer ist als das letzte Ergebnis, und wartet auf laufende Builds
 - Die ZIP enthält `.git` und Feedback-Bilder, aber weder Umgebungen noch GLB-Cache, Mapping und `build.json`, seit E64 auch keine gebauten Animationen und Analyseergebnisse (`.soma/anim/`, `.soma/results/`). Bilder und Videos aus `renders/` bleiben in der ZIP, aber nicht im Verlauf
+- Versionsnummer (E68), Regeln zum Hochzählen: **bugfix** für Fehlerbehebungen ohne neue Funktion, **minor** für neue Funktionen, **major** für Änderungen, nach denen ältere Modelle oder Agenten-Anweisungen nicht mehr ohne Weiteres passen (z. B. eine neue `api_version`). Hochgezählt wird nur auf Wunsch des Nutzers, wie Commits. Bis zur ersten Auslieferung bleibt Major bei 0. Kein Changelog und keine Git-Tags bisher
+- Versionsnummer (E68) im Modell: nur „zuletzt gespeichert mit“ (`app_version`), nicht „angelegt mit“. Ein Modell aus einer älteren App bekommt die neue Nummer erst beim Speichern, nicht schon beim Öffnen (sonst wäre es gleich nach dem Öffnen ungespeichert). Eine neuere Nummer im Modell meldet nur der Projekt-Check, die App öffnet es trotzdem
 - Projektumgebung (E67): Sie liegt im Arbeitsordner unter `.soma/env` (nicht in den App-Daten daneben), wandert also beim Sichern eines Arbeitsordners mit in `workspace-backups/`. Ist sie für eine andere Python-Version angelegt, leert `soma env` sie ohne Sicherung (die Pakete liefen dort nicht mehr)
 - `requirements.txt` (E67) nennt nur Pakete, die das Modell beim Build importiert, nicht alles, was installiert ist (so passt die Liste auch nach „Wiederherstellen“ zum Stand). Pakete, die nur Animationen oder Auswertungen brauchen, fehlen darin. Ein Eintrag für ein Paket, das nicht installiert ist, bleibt stehen, auch wenn das Modell es nicht mehr braucht
 - Nachinstallieren (E67) nur beim Öffnen und nach „Wiederherstellen“, nicht bei jeder Änderung der Liste. Pakete werden dabei nie entfernt. Ein Fehler erscheint als Hinweis (Toast), nicht im Projekt-Check

@@ -84,3 +84,4 @@ node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run bu
 - Der Nutzer spricht Deutsch. Ist eine Entscheidung wirklich seine, eine einzelne Frage stellen.
 - Im Prototyp erst die volle, funktionierende Variante, nicht früh optimieren (E37).
 - Commits nur auf Wunsch, thematisch aufgeteilt (z. B. `python/`, `app/`, Doku), mit deutscher Nachricht.
+- **Versionsnummer (E68):** Major.minor.bugfix, eine für App und `soma`, steht in `app/package.json` und `python/soma/__init__.py` (beide gleich ändern, `npm run test:unit` prüft es). Hochzählen nur auf Wunsch des Nutzers: bugfix für Fehlerbehebungen, minor für neue Funktionen, major für Änderungen, die ältere Modelle oder Agenten-Anweisungen brechen.
