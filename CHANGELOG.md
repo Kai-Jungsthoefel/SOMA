@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Geändert
+
+- Kleinere ZIP beim Speichern: Bilder und Videos aus `renders/` kommen nicht mehr mit, und die Versionsgeschichte wird vorher gepackt, sodass ähnliche Fassungen des Modells kaum zusätzlichen Platz brauchen. Am Modellmotor schrumpft der Verlauf von 81 auf 35 MB (E75).
+
 ## [0.2.0] - 2026-10-08
 
 Parameter für den Nutzer, die App auf Englisch, Start auf der Startseite und die Lizenz.

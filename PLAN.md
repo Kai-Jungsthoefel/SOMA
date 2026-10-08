@@ -68,7 +68,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
 │   └── model.step     Hauptergebnis mit allen Bauteilen, benannt, farbig
 ├── exports/           Einzelexporte (Ort noch nicht festgelegt)
 ├── animations/        Animationen in Python (optional, E58)
-├── renders/           Bilder und Videos von soma render (nicht in Git, E58)
+├── renders/           Bilder und Videos von soma render (nicht in Git und ZIP, E58, E75)
 ├── .soma/
 │   ├── project.json   ID, App-Version (`app_version`, zuletzt gespeichert mit, E68), api_version, Stufen der Skills, Hauptdatei
 │   ├── skills/        eingeschaltete Skills (Bei Bedarf, Immer) als Markdown
@@ -448,6 +448,13 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - **Vorlage und Agent:** Die Vorlage macht LENGTH, WIDTH, HEIGHT und WALL zu Parametern (an allen Bereichsgrenzen gebaut). `AGENTS.md` (Regel 7) sagt, welche Werte Parameter werden (Hauptmaße, Anzahlen, Optionen, Stellungen, meist 3 bis 15), dass der Bereich über die ganze Spanne funktionieren soll und was mit `parameters.json` zu tun ist. Der Skill „Clean CadQuery modeling“ verweist darauf. Leerer Zustand mit „Ask the agent“.
 - **Grenzen:** Jede Änderung baut das ganze Modell, auch eine reine Stellung wie ein Kurbelwinkel (bei großen Modellen Sekunden). Getestet unter Windows.
 
+*Kleinere ZIP (E75, Wunsch des Nutzers nach Prüfung zweier ZIPs; Prüfungen in `app/test/unit.mjs`):*
+
+- **Anlass:** Motor 153 MB (vor E64 gespeichert: Analyseergebnisse im Ordner und im Verlauf), Hotwire 12.5 MB. Der Code macht in beiden unter 100 KB aus. Beim Hotwire waren 41 % Bilder aus `renders/`, der Rest `output/model.step` (14.8 MB) im Ordner und in jedem Commit. Git legt jede Fassung lose ab, nur mit zlib komprimiert, die ZIP kann sie nicht weiter verkleinern.
+- **`renders/` nicht mehr in der ZIP** (im Verlauf schon seit E64 nicht). Die Bilder entstehen aus dem Code neu.
+- **Packen vor der ZIP:** Nach dem Snapshot packt `GitRepo.pack()` die Objekte (`git repack -a -d --keep-unreachable -n`), ähnliche Fassungen werden als Unterschied gespeichert. Commits und Hashes bleiben, nichts wird gelöscht (E35), auch nicht Unerreichbares. Ohne lose Objekte passiert nichts. Scheitert es, kommt eine Warnung, und die ZIP wird trotzdem geschrieben. Verlauf am Motor 81 statt 35 MB (erstes Packen 8.9 s, danach 0.4 s), am Hotwire 5 statt 4 MB.
+- **Grenzen:** Was ältere Projekte schon im Verlauf haben (Analyseergebnisse, Bilder), bleibt drin. Jeder Commit mit geändertem Modell legt weiter eine neue STEP-Fassung ab, gepackt nur kleiner. Getestet unter Windows.
+
 *Offen in Phase 1:* Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Zukaufteile wie NEMA-17-Motoren und V-Slot-Profile (E48, Wunsch des Nutzers), Versions-Schieber, `soma check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
@@ -462,7 +469,8 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - Beim Öffnen eines Projekts wird sofort gebaut, damit der Viewer nicht leer ist, außer der letzte Build gilt noch (E66), dann wird er gezeigt. Beim Anlegen läuft vor dem Startcommit ein Build (im vorgewärmten Prozess unter 1 s)
 - Der Modellname folgt dem Dateinamen der ZIP
 - Speichern baut vorher neu, wenn der Quelltext neuer ist als das letzte Ergebnis, und wartet auf laufende Builds
-- Die ZIP enthält `.git` und Feedback-Bilder, aber weder Umgebungen noch GLB-Cache, Mapping und `build.json`, seit E64 auch keine gebauten Animationen und Analyseergebnisse (`.soma/anim/`, `.soma/results/`). Bilder und Videos aus `renders/` bleiben in der ZIP, aber nicht im Verlauf
+- Die ZIP enthält `.git` und Feedback-Bilder, aber weder Umgebungen noch GLB-Cache, Mapping und `build.json`, seit E64 auch keine gebauten Animationen und Analyseergebnisse (`.soma/anim/`, `.soma/results/`), seit E75 keine Bilder und Videos aus `renders/`
+- Packen vor der ZIP (E75): mit `--keep-unreachable`, also auch unerreichbare Objekte ins Pack statt löschen (etwa Blobs, die der Snapshot wieder aus dem Index nimmt, oder Reste nach `git gc` des Agenten). Gepackt wird bei jedem Speichern mit losen Objekten, ohne Schwelle wie bei `git gc --auto`. Ein Fehler beim Packen ist eine Warnung, gespeichert wird trotzdem
 - Versionsnummer (E68), Regeln zum Hochzählen: **bugfix** für Fehlerbehebungen ohne neue Funktion, **minor** für neue Funktionen, **major** für Änderungen, nach denen ältere Modelle oder Agenten-Anweisungen nicht mehr ohne Weiteres passen (z. B. eine neue `api_version`). Hochgezählt wird nur auf Wunsch des Nutzers, wie Commits. Bis zur ersten Auslieferung bleibt Major bei 0. Seit E70 mit `CHANGELOG.md` und einem Git-Tag je Version (`v0.1.0`)
 - Versionsnummer (E68) im Modell: nur „zuletzt gespeichert mit“ (`app_version`), nicht „angelegt mit“. Ein Modell aus einer älteren App bekommt die neue Nummer erst beim Speichern, nicht schon beim Öffnen (sonst wäre es gleich nach dem Öffnen ungespeichert). Eine neuere Nummer im Modell meldet nur der Projekt-Check, die App öffnet es trotzdem
 - Projektumgebung (E67): Sie liegt im Arbeitsordner unter `.soma/env` (nicht in den App-Daten daneben), wandert also beim Sichern eines Arbeitsordners mit in `workspace-backups/`. Ist sie für eine andere Python-Version angelegt, leert `soma env` sie ohne Sicherung (die Pakete liefen dort nicht mehr)
@@ -566,7 +574,7 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - **Lizenzen der Komponenten:** Hinweise und Texte aller mitgelieferten Teile (Git, Python-Pakete, gmsh, pdf.js, IBM Plex, Tabellen aus bd_warehouse) für den Installer sammeln. Die Lizenz von SOMA selbst ist entschieden (GPL-3.0, E71)
 - **Mittelbereich:** Tab-Umschaltung oder geteilte Ansicht zwischen Viewer und Sketch (E15)
 - **Build:** Auto-Build standardmäßig an oder aus, Statusanzeige, Fehlerpanel, Verhalten bei erneuter Änderung während des Builds (E20)
-- **Speichern/Öffnen:** mehrere Projekte parallel (bisher eines pro Fenster), Aufräumen alter Workspaces und Sicherungen, ZIP auf Netzlaufwerk (Speichern dorthin geht, Verhalten bei Verbindungsverlust ungetestet), ZIP-Größe bei langen Verläufen und vielen Markierungen (je Bild einige hundert KB) (E21)
+- **Speichern/Öffnen:** mehrere Projekte parallel (bisher eines pro Fenster), Aufräumen alter Workspaces und Sicherungen, ZIP auf Netzlaufwerk (Speichern dorthin geht, Verhalten bei Verbindungsverlust ungetestet), ZIP-Größe bei langen Verläufen (seit E75 gepackt, jede STEP-Fassung bleibt aber im Verlauf) und vielen Markierungen (je Bild einige hundert KB) (E21)
 - **Git:** Einbettung und Updates des Git-Binaries (E31), Verhalten bei sehr langen Verläufen (die Leiste zeigt bisher bis zu 500 Stände), Umschreiben des Verlaufs durch den Agenten trotz Verbot (die Leiste bleibt tolerant, es gibt nur eine Meldung bei fehlendem Repository, losem HEAD oder anderem Branch)
 - **Pakete (E25, E67):** Ohne Internet scheitert das Nachinstallieren mit Hinweis, einen eigenen Paketcache gibt es nicht (pip nutzt seinen eigenen). `uv pip install` sieht die Basispakete nicht und ignoriert die `pip.ini`, es würde z. B. numpy doppelt installieren. Ein Panel „Pakete“ fehlt noch (die Liste steht in `requirements.txt`). Für die Auslieferung: Basisumgebung mit pip, eigenständiges Python statt venv (dann ginge auch `--system-site-packages` statt der `.pth`). Getestet nur unter Windows
 - **Plattformen:** Phase 0 lief nur unter Windows. Python-Bundling, Bibliothekspfade und Wheels auf macOS und Linux sind ungetestet (E2)
