@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Neu
+
+- Technische Zeichnungen: Der Agent beschreibt eine Zeichnung in `drawings/*.py` (`soma.drawing`) mit Ansichten, Schnitten, Einzelheiten, Maßen, Texten und Stückliste, `soma drawing build` schreibt PDF und DXF nach `output/drawings/` und ein Bild, mit dem der Agent sein Ergebnis prüft. Die Maße werden immer am Modell gemessen, eine Prüfung meldet Überschneidungen, Maße neben Kanten und getippte Zahlen. Dazu der Skill „Technical drawings“ mit den Regeln nach ISO (E76).
+
 ### Geändert
 
 - Jede Zeile im Panel „Parameters“ zeigt den Bereich, den der Agent gesetzt hat, ohne Aufklappen („30–200 mm“, „3 options“), rot, wenn der Wert außerhalb liegt (E74).

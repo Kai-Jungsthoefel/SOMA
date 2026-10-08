@@ -18,7 +18,7 @@ Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten
 | `design/ui-entwurf-2.html` | Freigegebener Oberflächenentwurf 2 „Aufgeräumt“ (E62), im Browser öffnen, Pfeiltasten blättern. Maßstab für Aufbau, Farben und Texte der Oberfläche. Bild 6 ist das Parameter-Panel (umgesetzt mit E74, Werte des Nutzers getrennt vom Code) |
 | `design/ui-entwurf.html` | Erster Oberflächenentwurf (E38), Farben und Bausteine gelten weiter, der Aufbau ist durch Entwurf 2 ersetzt |
 | `design/icon-vorschlaege.html` | Die fünf Icon-Entwürfe, aus denen „Dialog“ gewählt wurde (E44). Nur noch Referenz |
-| `python/soma/` | Hilfsbibliothek und CLI: `add_part` (mit `group=` und `role=`), `param` (`params.py`, Werte für das Parameter-Panel, E74), `import_step`, `import_assembly`, `fasteners.py` (Normteile, Maßtabellen aus bd_warehouse in `data/fasteners/`), `soma build`, `soma export`, `soma glb`, `soma serve` (Messdienst, `measure.py`), `soma anim` (`anim.py`, `animrun.py`), `soma analyze` (`analysis.py`, FEM in `fem.py`), `soma render` (`render.py`, über die App), `soma env` (`env.py`, Projektumgebung `.soma/env` und `requirements.txt`, E67) |
+| `python/soma/` | Hilfsbibliothek und CLI: `add_part` (mit `group=` und `role=`), `param` (`params.py`, Werte für das Parameter-Panel, E74), `import_step`, `import_assembly`, `fasteners.py` (Normteile, Maßtabellen aus bd_warehouse in `data/fasteners/`), `soma build`, `soma export`, `soma glb`, `soma serve` (Messdienst, `measure.py`), `soma anim` (`anim.py`, `animrun.py`), `soma analyze` (`analysis.py`, FEM in `fem.py`), `soma drawing` (`drawing.py`, `drawrun.py`, technische Zeichnungen, E76), `soma render` (`render.py`, über die App), `soma env` (`env.py`, Projektumgebung `.soma/env` und `requirements.txt`, E67) |
 | `prototype/phase0/` | Abgeschlossener technischer Prototyp mit `ERGEBNISSE.md`. Nur noch Referenz |
 
 Details: `app/README.md`.
@@ -34,7 +34,7 @@ uv pip install --python "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/python.ex
 npm install
 npm start               # baut und startet
 npm run typecheck
-npm test                # baut, dann alle Suiten (unit, smoke, versions, editor, measure, groups, section, explode, skills, params, fasteners, animation, fem, packages) parallel über test/run-all.mjs (echte App, unsichtbares Fenster)
+npm test                # baut, dann alle Suiten (unit, smoke, versions, editor, measure, groups, section, explode, skills, params, fasteners, drawing, animation, fem, packages) parallel über test/run-all.mjs (echte App, unsichtbares Fenster)
 node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run build
 
 # soma direkt
