@@ -59,7 +59,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
 ├── AGENTS.md          app-verwaltet: Regeln, Konventionen, Skill-Liste, Git-Regeln, Befehle
 ├── CLAUDE.md          Verweis auf AGENTS.md (für Claude Code)
 ├── NOTES.md           Nutzer/Agent, wird nie überschrieben (Arbeitsname)
-├── requirements.txt   gepinnte Pakete, von der App aus `pip freeze` gepflegt
+├── requirements.txt   Zusatzpakete, die das Modell importiert, mit Version, von `soma build` gepflegt (E67)
 ├── model.py           fester Einstiegspunkt
 ├── parts/             Bauteile (optional)
 ├── inputs/            mitgebrachte Dateien (z. B. STEP), Drag-and-drop im Dateien-Tab
@@ -73,6 +73,7 @@ Eine Desktop-App, in der ein Nutzer zusammen mit einem KI-Coding-Agenten seiner 
 │   ├── skills/        eingeschaltete Skills (Bei Bedarf, Immer) als Markdown
 │   ├── feedback/      Screenshots und Skizzen (nicht in Git)
 │   ├── anim/, results/  gebaute Animationen und Ergebnisse von soma analyze (nicht in Git, E58)
+│   ├── env/           Projektumgebung für Zusatzpakete (nicht in Git und ZIP, E67)
 │   ├── model.map.json und GLB-Cache (nicht in Git)
 └── .git/  .gitignore
 ```
@@ -83,7 +84,7 @@ Einfacher Fall: alles steht in `model.py`. Bei wachsender Komplexität lagert de
 
 - Jedes Projekt bekommt ein Git-Repo, das in der ZIP mitwandert. Das Git-Binary wird mitgeliefert (E31).
 - Der **Agent committet selbst** nach sinnvollen Iterationen (Anweisung in `AGENTS.md`). Beim Speichern legt die App verbliebene Änderungen als **Auto-Snapshot** an.
-- **Getrackt:** Skripte, `inputs/`, `output/model.step`, `requirements.txt`, `project.json`, `skills/`. **Nicht getrackt:** GLB-Cache, Mapping, `feedback/`, `renders/`, `.soma/anim/`, `.soma/results/` (entstehen aus dem Code neu, wandern aber mit der ZIP).
+- **Getrackt:** Skripte, `inputs/`, `output/model.step`, `requirements.txt`, `project.json`, `skills/`. **Nicht getrackt:** GLB-Cache, Mapping, `feedback/`, `renders/`, `.soma/anim/`, `.soma/results/` (entstehen aus dem Code neu, wandern aber mit der ZIP) und die Projektumgebung `.soma/env/` (auch nicht in der ZIP, E67).
 - **Umsetzung und Befund:** Die App nutzt das mitgelieferte Git (dugite, Git 2.53, rund 115 MB) und stellt es auch den Terminals vorn im PATH bereit. **STEP-Dateien sind nicht byte-stabil** (jeder Build ändert den Zeitstempel, manchmal die Reihenfolge einzelner Zeilen). Deshalb zählt `output/` nicht als ungespeicherte Änderung, wird aber mitcommittet, damit alte Stände als Vorschau anzeigbar bleiben. Der Startcommit entsteht nach einem ersten Build und enthält bereits eine STEP.
 - **Versions-Schieber:** Leiste unter dem Viewer, Commits als Punkte, letzter Punkt ist der aktuelle Arbeitsstand. Alte Stände sind **Vorschau** (STEP per `git show`, Arbeitsordner bleibt unberührt). Der Knopf **„Stand wiederherstellen"** kopiert die Dateien und legt einen **neuen Commit** an. Es gibt keinen Checkout oder Reset und keine Branches.
 
@@ -108,7 +109,7 @@ Das Paket `soma` liegt in der mitgelieferten **Basisumgebung**, nicht im Projekt
 
 **Bauen (E20):** Auto-Build bei Änderung von `model.py` und `parts/` (Hintergrund, Debounce, abbrechbar). Er ist **abschaltbar**, weil große Modelle sonst die App bremsen. Dann baut der Nutzer per Knopf oder der Agent per Befehl.
 
-**Pakete (E25):** Die Basisumgebung bleibt unverändert. Jedes Projekt hat eine eigene Umgebung im Arbeitsordner (nicht in der ZIP), die die Basis sieht. Jedes Terminal startet mit **aktivierter Projektumgebung im PATH**, der Agent nutzt normales `pip`. Die App liest die Pakete per `pip freeze` aus und pflegt `requirements.txt`. Auf einem anderen Rechner wird die Umgebung daraus neu aufgebaut.
+**Pakete (E25, E67):** Zusatzpakete sind der Sonderfall. Die Basisumgebung bleibt unverändert. Jedes Projekt hat eine eigene kleine Umgebung im Arbeitsordner (`.soma/env`, nicht in der ZIP), die die Basis mitbenutzt. Der Agent tippt nur `pip install <paket>`, die Terminals leiten pip dorthin. `soma build` trägt die Pakete, die das Modell importiert, in `requirements.txt` ein. Auf einem anderen Rechner installiert die App sie vor dem ersten Build. Umsetzung in Abschnitt 10.
 
 ## 6. Agenten-Anbindung
 
@@ -161,8 +162,9 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 | `model.py` fehlt, umbenannt oder verschoben | Kein Build | Einstiegspunkt in `project.json` wählbar, Hinweis |
 | Agent exportiert selbst oder ohne Hilfsbibliothek | Kein Mapping/GLB | STEP-Fallback im Viewer, Hinweis |
 | Mehrere oder anders benannte STEP-Dateien | Unklar, was angezeigt wird | Hauptausgabe in `project.json`, sonst Auswahlliste |
-| Agent legt `.venv` an und installiert dort | Build findet Pakete nicht, `.venv` landet in ZIP/Git | `.venv`/`venv` immer ausschließen, Build-Fehler mit Hinweis auf die Projektumgebung |
-| Agent nutzt anderes Python oder `pip --user` | Paketliste unvollständig | Abgleich beim Build, Warnung |
+| Agent legt `.venv` an und installiert dort | Build findet Pakete nicht, `.venv` landet in ZIP/Git | **Umgesetzt:** `.venv`/`venv`/`env` nie in ZIP, Dateibaum und Watcher, der Projekt-Check meldet sie. `AGENTS.md` verbietet sie (E67) |
+| Agent nutzt anderes Python oder `pip --user` | Paketliste unvollständig | **Umgesetzt (E67):** Jedes `pip` im Terminal installiert über `PIP_PYTHON` in die Projektumgebung, `--user` lehnt pip dort ab. Ein Python mit vollem Pfad am Terminal vorbei bleibt möglich, der Build scheitert dann am Import |
+| Agent will ein Paket, das eine andere Version eines Basispakets braucht (z. B. `numpy<2`) | CadQuery oder OCP liefen nicht mehr | **Umgesetzt (E67):** Die Versionen der Basis sind in der `pip.ini` der Projektumgebung festgelegt, pip lehnt mit klarer Meldung ab |
 | `AGENTS.md` verändert oder gelöscht | Regeln fehlen | Prüfsumme, im Check melden. Erneuerung nur beim Versions-Update (E36) |
 | `.soma/` oder `project.json` gelöscht | ID und Einstellungen weg | Aus App-Daten bzw. ZIP wiederherstellen (siehe offene Punkte) |
 | `.git` gelöscht, neu initialisiert, History umgeschrieben, anderer Branch | Zeitleiste kaputt | Zeitleiste tolerant aus `git log`, Bruch im Check melden |
@@ -401,7 +403,17 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - **Gemessen mit Hotwire in der App:** Öffnen bzw. App-Start bis zum sichtbaren Modell 1,9 s (vorher rund 13 s), Sprung zu einem Stand im Cache 0,3 s (vorher rund 10 s), ein Stand ohne Cache 8,5 s, neues Modell 3,6 s (vorher rund 8 s, der Rest ist vor allem Git auf dem Netzlaufwerk). Der Build selbst ist unverändert (rund 10 s).
 - **Testwerkzeug:** `taskkill /T` lässt den ganzen Baum stehen, wenn ein Kind sich nicht beenden lässt (Hilfsprozesse von node-pty beim Schließen eines Terminals), und unter Last braucht der Hauptprozess bis zu 40 s, bis er weg ist. Ein Neustart mit denselben App-Daten fand dann kein Fenster (Debug-Port noch belegt). `harness.mjs` beendet in dem Fall Kinder und Hauptprozess einzeln, wartet auf das Ende und vor dem Start auf einen freien Port.
 
-*Offen in Phase 1:* Projektumgebung mit `pip freeze` und `requirements.txt` (bisher landet `pip install` noch in der gemeinsamen Basisumgebung), Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
+*Projektumgebung (E25, E67, Wunsch des Nutzers; Prüfungen in `app/test/packages.mjs`):*
+
+- **Anlass:** Bisher landete `pip install` im Terminal nicht in einer Projektumgebung. Auf dem Entwicklungsrechner hatte die Basisumgebung (`venv-full`, mit uv angelegt) gar kein pip, `pip` im Terminal war das globale Python des Rechners.
+- **Umgebung je Modell:** `soma env` (`python/soma/env.py`, von der App beim Öffnen gestartet, rund 0,5 s, danach nur, wenn sich die Basis ändert) legt `.soma/env` als venv ohne eigenes pip an, rund 0,6 MB. Eine `.pth`-Datei hängt die site-packages der Basis an, so sieht das Python der Umgebung CadQuery, soma und alle Basispakete, ohne sie zu kopieren. `soma-env.json` hält fest, zu welcher Basis sie gehört (Python, Pfade, Änderungszeit der site-packages). Eine andere Python-Version leert die Umgebung, die App installiert die Liste danach neu.
+- **pip:** Die Terminals haben vorn im PATH die Umgebung (`python`), dahinter die Basis (`pip`, `soma`), und `PIP_PYTHON` zeigt auf das Python der Umgebung. Jedes `pip install`, auch `python -m pip`, installiert damit dorthin. Basispakete gelten als vorhanden (pip sieht sie über die `.pth`) und sind in der `pip.ini` der Umgebung über `base-constraints.txt` auf ihre Version festgelegt (als `file:`-URL, weil pip Pfade mit Leerzeichen dort trennen würde). Die Basisumgebung bekommt dafür pip (`requirements-phase0.txt`).
+- **soma sieht die Pakete:** `soma` läuft mit dem Python der Basis, auch im vorgewärmten Prozess. Jeder Befehl mit `--project` hängt die site-packages der Projektumgebung hinten an den Suchpfad (`env.activate`), was die Basis hat, gilt also zuerst.
+- **requirements.txt:** Nach einem erfolgreichen Build trägt `soma build` die Pakete der Projektumgebung ein, deren Module das Modell geladen hat, mit Version (Kopfzeilen auf Englisch für den Agenten). Ohne Zusatzpakete entsteht keine Datei. Was in der Liste steht, aber nicht installiert ist, bleibt stehen. Die Datei ändert sich nur, wenn sich ihr Inhalt ändert. Der Agent committet sie mit, weil er nach `soma build` committet.
+- **Nachinstallieren:** Fehlen beim Öffnen oder nach „Wiederherstellen“ Pakete aus der Liste in der Umgebung (anderer Rechner, alter Stand), installiert die App sie mit pip der Umgebung. Pakete, die die Basis hat, überspringt sie. Builds warten so lange, die Statuszeile zeigt „Installiert Pakete …“ mit den Namen. Scheitert pip (kein Netz, Paket unbekannt), erscheint ein Hinweis mit den letzten Zeilen von pip, gebaut wird trotzdem.
+- **Nicht in ZIP und Git:** `.soma/env` steht in der `.gitignore` der Vorlage, bei älteren Projekten in `.git/info/exclude` und bei den Zwischenergebnissen der App (`git.ts`), dazu in den Ausschlüssen der ZIP.
+
+*Offen in Phase 1:* Auto-Start des Agenten ohne Resume, Agent-Test mit weiteren Agenten und längeren Sitzungen, Bündelung von Python und Installer, macOS und Linux.
 
 **Danach:** Zukaufteile wie NEMA-17-Motoren und V-Slot-Profile (E48, Wunsch des Nutzers), Versions-Schieber, `soma check` und Projekt-Check, MCP-Server. **Später:** Volumen/Gewicht, Versionsvergleich, eigene Nutzer-Skills, maßhaltiger Sketcher (nur bei Bedarf).
 
@@ -415,6 +427,10 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - Der Modellname folgt dem Dateinamen der ZIP
 - Speichern baut vorher neu, wenn der Quelltext neuer ist als das letzte Ergebnis, und wartet auf laufende Builds
 - Die ZIP enthält `.git` und Feedback-Bilder, aber weder Umgebungen noch GLB-Cache, Mapping und `build.json`, seit E64 auch keine gebauten Animationen und Analyseergebnisse (`.soma/anim/`, `.soma/results/`). Bilder und Videos aus `renders/` bleiben in der ZIP, aber nicht im Verlauf
+- Projektumgebung (E67): Sie liegt im Arbeitsordner unter `.soma/env` (nicht in den App-Daten daneben), wandert also beim Sichern eines Arbeitsordners mit in `workspace-backups/`. Ist sie für eine andere Python-Version angelegt, leert `soma env` sie ohne Sicherung (die Pakete liefen dort nicht mehr)
+- `requirements.txt` (E67) nennt nur Pakete, die das Modell beim Build importiert, nicht alles, was installiert ist (so passt die Liste auch nach „Wiederherstellen“ zum Stand). Pakete, die nur Animationen oder Auswertungen brauchen, fehlen darin. Ein Eintrag für ein Paket, das nicht installiert ist, bleibt stehen, auch wenn das Modell es nicht mehr braucht
+- Nachinstallieren (E67) nur beim Öffnen und nach „Wiederherstellen“, nicht bei jeder Änderung der Liste. Pakete werden dabei nie entfernt. Ein Fehler erscheint als Hinweis (Toast), nicht im Projekt-Check
+- `AGENTS.md` der Vorlage (E67) nennt `pip install`, verbietet eigene Umgebungen, `--user`, `uv` und ein anderes Python und sagt, was bei einem Versionskonflikt mit der Basis zu tun ist. Bestehende Projekte behalten ihre `AGENTS.md`, bis es die Erneuerung nach E36 gibt
 - Ältere Projekte (vor E58) bekommen die Zwischenergebnisse beim Öffnen in `.git/info/exclude`, der nächste Snapshot der App nimmt schon committete aus dem Index (die Dateien bleiben). Das ändert den Verlauf vorwärts, ohne Rückfrage (wie bisher bei `.soma/geometry/`)
 - Ohne `.git` gibt es **keinen** Knopf „Verlauf neu anlegen“, nur die Meldung (sonst widerspricht es E28). Offene Frage: Für Nicht-Programmierer wäre ein ausdrücklicher Knopf freundlicher
 - Änderung während eines Builds: laufenden Build fertig laufen lassen, danach genau ein weiterer (statt abbrechen und neu starten)
@@ -511,7 +527,7 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - **Build:** Auto-Build standardmäßig an oder aus, Statusanzeige, Fehlerpanel, Verhalten bei erneuter Änderung während des Builds (E20)
 - **Speichern/Öffnen:** mehrere Projekte parallel (bisher eines pro Fenster), Aufräumen alter Workspaces und Sicherungen, ZIP auf Netzlaufwerk (Speichern dorthin geht, Verhalten bei Verbindungsverlust ungetestet), ZIP-Größe bei langen Verläufen und vielen Markierungen (je Bild einige hundert KB) (E21)
 - **Git:** Einbettung und Updates des Git-Binaries (E31), Verhalten bei sehr langen Verläufen (die Leiste zeigt bisher bis zu 500 Stände), Umschreiben des Verlaufs durch den Agenten trotz Verbot (die Leiste bleibt tolerant, es gibt nur eine Meldung bei fehlendem Repository, losem HEAD oder anderem Branch)
-- **Pakete:** Offline-Fall, Paketcache, Verhalten ohne Internet beim Öffnen (E25). Versionen fest pinnen (ein ungepinnter Install zieht inkompatible OCP- und multimethod-Versionen)
+- **Pakete (E25, E67):** Ohne Internet scheitert das Nachinstallieren mit Hinweis, einen eigenen Paketcache gibt es nicht (pip nutzt seinen eigenen). `uv pip install` sieht die Basispakete nicht und ignoriert die `pip.ini`, es würde z. B. numpy doppelt installieren. Ein Panel „Pakete“ fehlt noch (die Liste steht in `requirements.txt`). Für die Auslieferung: Basisumgebung mit pip, eigenständiges Python statt venv (dann ginge auch `--system-site-packages` statt der `.pth`). Getestet nur unter Windows
 - **Plattformen:** Phase 0 lief nur unter Windows. Python-Bundling, Bibliothekspfade und Wheels auf macOS und Linux sind ungetestet (E2)
 - **Echte Fremddateien:** Herstellerplatinen und große Baugruppen mit Stückliste in Phase 1 testen
 - **Netzlaufwerke (Windows):** Liegt das Programm auf einem Netzlaufwerk, starten die sandboxed Prozesse von Electron nicht. Die installierte App muss lokal liegen, Fehlermeldung ist vorhanden. Klären, wie der Installer damit umgeht und ob Firmenrechner mit umgeleiteten Profilen Probleme machen
