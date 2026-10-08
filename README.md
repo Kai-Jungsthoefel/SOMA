@@ -97,6 +97,8 @@ Early prototype, version 0.1.0. See [CHANGELOG.md](CHANGELOG.md).
 - No installer yet. Python, CadQuery and Git are meant to ship with the app, for now you set them up yourself
 - The user interface is in German for now
 
+> **Note:** SOMA itself is vibe coded. Most of the code was written by coding agents (mainly Claude Code) under human direction and review. It has tests, but expect rough edges.
+
 ## Running from source
 
 Requirements: Windows, Node.js 22, Python 3.12 and [uv](https://github.com/astral-sh/uv).
@@ -122,4 +124,8 @@ More in [app/README.md](app/README.md).
 
 ## License
 
-Not decided yet.
+SOMA is free software under the [GNU General Public License v3.0](LICENSE) or any later version. You can use, change and share it. If you distribute a changed version, its source code has to be open under the same license.
+
+What you design with SOMA is yours. The [SOMA Model Exception](MODEL-EXCEPTION.md) lets you license your model files under any terms you like, even though they import `soma`. Exported files like STEP or STL are not affected by the GPL at all.
+
+Third-party components keep their own licenses. Among them are CadQuery (Apache-2.0), OpenCascade (LGPL-2.1), Git (GPL-2.0), gmsh (GPL-2.0-or-later) and pdf.js (Apache-2.0).

@@ -10,6 +10,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 - Die App beginnt auf der Startseite. Ein neues Modell, das noch der Vorlage entspricht und nie gespeichert wurde, verschwindet beim Verlassen wieder. Andere Modelle lassen sich auf der Startseite entfernen, der Arbeitsordner kommt in den Papierkorb (E69).
 - README auf Englisch mit Bildern für die Startseite des Repos, dazu dieser Changelog (E70).
+- Lizenz: GPL-3.0 oder später, Text in `LICENSE` (E71). Die Modelle der Nutzer sind davon frei (`MODEL-EXCEPTION.md`, E72).
 
 ## [0.1.0] - 2026-10-08
 
