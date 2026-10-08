@@ -4,14 +4,14 @@ import path from 'node:path';
 import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
-import { choose, setTestAnswers } from './dialogs';
+import { choose, setTestAnswers, trashItem } from './dialogs';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
 import { appIcon, editBackupsDir, thumbnailsDir } from './paths';
 import { fileOpBlockReason } from '../shared/editable';
 import type { FileOpResult } from '../shared/types';
-import { createProject, getLastProject, isProjectId } from './workspace';
+import { createProject, getLastProject, isProjectId, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
 // umgeleitet oder synchronisiert sein, das ist für Arbeitsordner und GPU-Cache ungeeignet. Tests leiten alles um.
@@ -39,6 +39,7 @@ function registerIpc(ctl: ProjectController): void {
     fs.mkdirSync(thumbnailsDir(), { recursive: true });
     fs.writeFileSync(path.join(thumbnailsDir(), `${ctl.session.id}.jpg`), Buffer.from(m[1], 'base64'));
   });
+  ipcMain.handle('project:remove', (_e, id: string) => ctl.remove(String(id)));
   ipcMain.handle('project:thumb', (_e, id: string) => {
     if (!isProjectId(String(id))) return null;
     try { return `data:image/jpeg;base64,${fs.readFileSync(path.join(thumbnailsDir(), `${id}.jpg`)).toString('base64')}`; } catch { return null; }
@@ -121,7 +122,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.on('term:resize', (_e, id: number, cols: number, rows: number) => ctl.session?.terminals.resize(id, cols, rows));
   ipcMain.on('term:kill', (_e, id: number) => ctl.session?.terminals.kill(id));
 
-  ipcMain.handle('agents:detect', () => detectAgents(terminalEnv(dir())));
+  ipcMain.handle('agents:detect', () => detectAgents(ctl.session ? terminalEnv(dir()) : process.env));
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('measure:start', () => ctl.measureStart());
   ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));
@@ -146,6 +147,8 @@ function registerIpc(ctl: ProjectController): void {
     ipcMain.handle('test:answers', (_e, a: unknown[]) => setTestAnswers(a));
     // Adresse und Schlüssel für soma render, damit Tests es auch außerhalb eines Terminals aufrufen können
     ipcMain.handle('test:bridge', () => bridgeEnv());
+    // Fenster schließen wie mit dem Kreuz (mit Rückfrage und Verlassen des Modells). window.close() der Seite umgeht das
+    ipcMain.handle('test:close', (e) => { BrowserWindow.fromWebContents(e.sender)?.close(); });
     // Screenshot auch aus unsichtbaren Fenstern (CDP liefert dort kein Bild)
     ipcMain.handle('test:screenshot', async (e, file: string) => {
       const img = await e.sender.capturePage();
@@ -166,17 +169,6 @@ function onRendererGone(wc: WebContents, reason: string, exitCode: number): void
     app.quit();
   }
   void wc;
-}
-
-/**
- * Papierkorb. Im Testmodus ein eigener Ordner in den App-Daten: Tests sollen den Papierkorb des Nutzers nicht füllen
- * und prüfen können, was dort gelandet ist.
- */
-async function trashItem(abs: string): Promise<void> {
-  if (process.env.SOMA_TEST !== '1') { await shell.trashItem(abs); return; }
-  const bin = path.join(app.getPath('userData'), 'test-papierkorb');
-  fs.mkdirSync(bin, { recursive: true });
-  fs.renameSync(abs, path.join(bin, `${Date.now()}-${path.basename(abs)}`));
 }
 
 let editorReq = 0;
@@ -223,7 +215,9 @@ function createWindow(): void {
   wc.on('unresponsive', () => console.error('[soma] Renderer reagiert nicht'));
   wc.on('console-message', (_e, level, message, line, source) => { if (level >= 2) console.error(`[renderer] ${message} (${source}:${line})`); });
   wc.once('did-finish-load', () => {
-    // Zuletzt geöffnetes Projekt (ungespeicherter Arbeitsstand bleibt so nach einem Absturz erhalten), sonst ein neues.
+    // Die App beginnt auf der Startseite, dort stehen die zuletzt geöffneten Modelle (E69). Ein Arbeitsstand von vor einem
+    // Absturz ist dort zu finden. Nur die Tests öffnen gleich das letzte Modell, sonst ein neues (SOMA_TEST_START=home nicht).
+    if (process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_START === 'home') return;
     void (async () => {
       try { await ctl.open(getLastProject() ?? (await createProject()).id); }
       catch (e) { console.error('[soma] Projekt konnte nicht geöffnet werden:', e); }
@@ -243,7 +237,8 @@ function createWindow(): void {
         save: async () => !!(await askEditor<{ ok?: boolean }>(wc, 'save', { ok: false })).ok,
         discard: async () => { await askEditor(wc, 'discard', {}); },
       });
-      if (ok) { allowClose = true; win?.close(); }
+      // Erst das Modell verlassen: Ein unverändertes neues verschwindet dabei (E69), danach erst das Fenster schließen
+      if (ok) { await ctl.leave().catch(() => {}); allowClose = true; win?.close(); }
     })();
   });
   win.on('closed', () => { ctl.close(); ctl.renders.close(); controller = null; win = null; });
@@ -253,6 +248,7 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   // Python schon jetzt vorwärmen: Bis das Fenster steht und das letzte Modell offen ist, ist cadquery geladen (build.ts)
   warmUp();
+  sweepDiscarded(); // Reste verworfener Modelle (E69) vom letzten Mal
   await startBridge(async (route, body) => {
     if (!controller) return { status: 503, body: { ok: false, error: 'Die App hat gerade kein Fenster.' } };
     if (route === 'render') return controller.renderForAgent(body);

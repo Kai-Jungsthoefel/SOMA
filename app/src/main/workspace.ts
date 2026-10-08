@@ -5,7 +5,7 @@ import type { ProjectListEntry, SkillMode } from '../shared/types';
 import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
-import { appStateFile, backupsDir, projectStateDir, skillBackupsDir, skillsDir, templateDir, workspacesDir } from './paths';
+import { appStateFile, backupsDir, editBackupsDir, previewsDir, projectStateDir, skillBackupsDir, skillsDir, templateDir, thumbnailsDir, workspacesDir } from './paths';
 import { SKILLS_DIR, applyDefaultSkills, isSkillId, isSkillMode, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
@@ -178,7 +178,7 @@ export function listProjects(): ProjectListEntry[] {
     if (!isProjectId(id)) continue;
     const dir = path.join(root, id);
     const pj = readJson<ProjectJson>(path.join(dir, '.soma', 'project.json'));
-    out.push({ id, name: pj?.name ?? id.slice(0, 8), modified: fs.statSync(dir).mtimeMs });
+    out.push({ id, name: pj?.name ?? id.slice(0, 8), modified: fs.statSync(dir).mtimeMs, saved: !!getAppState(id).zipPath });
   }
   return out.sort((a, b) => b.modified - a.modified);
 }
@@ -236,6 +236,74 @@ export async function backupWorkspace(id: string): Promise<string> {
       await new Promise((r) => setTimeout(r, 300));
     }
   }
+}
+
+/**
+ * Ordner, die Git nicht sieht (in der .gitignore), in denen aber Eigenes des Nutzers liegen kann: Markierungen, Bilder und
+ * Videos von `soma render`, Ergebnisse, gebaute Animationen.
+ */
+const UNTRACKED_CONTENT = ['.soma/feedback', 'renders', '.soma/results', '.soma/anim'];
+
+const hasFiles = (dir: string): boolean => {
+  try { return fs.readdirSync(dir).length > 0; } catch { return false; }
+};
+
+/**
+ * Ein neues Modell, das noch genau der Vorlage entspricht (E69): nie als ZIP gespeichert, im Verlauf nur der Startcommit,
+ * nichts geändert oder hinzugekommen, auch nicht dort, wo Git nicht hinsieht, und keine Sicherungen. Verschwindet es,
+ * geht nichts verloren. Im Zweifel (Git unlesbar, Fehler) gilt es als verändert und bleibt.
+ */
+export async function isUntouched(id: string): Promise<boolean> {
+  try {
+    const dir = projectDir(id);
+    if (!fs.existsSync(dir) || getAppState(id).zipPath) return false;
+    if (UNTRACKED_CONTENT.some((rel) => hasFiles(path.join(dir, rel)))) return false;
+    if (hasFiles(editBackupsDir(id)) || hasFiles(skillBackupsDir(id))) return false;
+    const git = new GitRepo(dir);
+    if (!(await git.isRepo())) return false;
+    const count = await git.run(['rev-list', '--count', 'HEAD']);
+    if (!count.ok || count.out.trim() !== '1') return false;
+    return !(await git.status()).dirty;
+  } catch { return false; }
+}
+
+/**
+ * Löscht die Daten der App zu einem Modell, das es nicht mehr gibt: die zweite Kopie des Projektzustands, Vorschauen alter
+ * Stände und das Vorschaubild der Startseite. Sicherungen in workspace-backups/ bleiben (nichts geht still verloren).
+ */
+export function forgetProject(id: string): void {
+  if (!isProjectId(id)) return;
+  for (const p of [stateFile(id), path.join(previewsDir(), id), path.join(thumbnailsDir(), `${id}.jpg`)]) {
+    try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* Cache, nächstes Mal */ }
+  }
+}
+
+/**
+ * Verwirft den Arbeitsordner eines unveränderten Modells (isUntouched, vorher prüfen). Erst umbenennen, dann löschen: Hält
+ * ein eben beendetes Terminal den Ordner noch fest, schlägt das Umbenennen als Ganzes fehl (mehrere Versuche), statt einen
+ * halb gelöschten Ordner zu hinterlassen. Klappt es nicht, bleibt das Modell stehen. Liefert true, wenn es weg ist.
+ */
+export async function discardWorkspace(id: string): Promise<boolean> {
+  const src = projectDir(id);
+  const tmp = path.join(workspacesDir(), `.tmp-verworfen-${randomUUID()}`);
+  for (let attempt = 0; ; attempt++) {
+    try { fs.renameSync(src, tmp); break; } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code ?? '';
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(code) || attempt >= 20) return false;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+  forgetProject(id);
+  // Einzelne Dateien können noch kurz gesperrt sein (eben beendete Prozesse): mehrere Versuche, ein Rest räumt sweepDiscarded weg
+  await fs.promises.rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }).catch(() => {});
+  return true;
+}
+
+/** Reste verworfener Modelle (discardWorkspace), deren Löschen beim letzten Mal nicht ganz klappte. Beim Start der App. */
+export function sweepDiscarded(): void {
+  let names: string[] = [];
+  try { names = fs.readdirSync(workspacesDir()).filter((n) => n.startsWith('.tmp-verworfen-')); } catch { return; }
+  for (const n of names) void fs.promises.rm(path.join(workspacesDir(), n), { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }).catch(() => {});
 }
 
 /** Entpackt eine ZIP als Arbeitsordner `id`. Erst in einen Temp-Ordner, dann umbenennen: nie ein halb entpacktes Projekt. */

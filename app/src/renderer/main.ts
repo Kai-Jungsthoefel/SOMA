@@ -1,5 +1,5 @@
 import { affectsBuild } from '../shared/editable';
-import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ResultEntry, SaveState } from '../shared/types';
+import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
 import { SOMA_VERSION } from '../shared/version';
 import { CodePanel, codeRows, isPdf, type Mark } from './code';
 import { AnimTool } from './animtool';
@@ -885,6 +885,8 @@ const openProject = async (id: string) => { if (await leaveEditor('Modell öffne
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement | null)?.closest?.('#terminals') || !e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
+  // Ohne offenes Modell (Startseite beim Start, E69) gibt es nur Neu und Öffnen
+  if (!project && k !== 'n' && k !== 'o') return;
   // Im Editor speichert Strg+S den Code und baut, sonst das ganze Modell als ZIP
   if (k === 's') { e.preventDefault(); if (!e.shiftKey && (e.target as HTMLElement | null)?.closest?.('#code-view')) void saveCode(); else void doSave(e.shiftKey); }
   else if (k === 'o' && !e.shiftKey) { e.preventDefault(); void doOpen().then((ok) => { if (ok) showStart(false); }); }
@@ -1227,20 +1229,30 @@ async function showStart(on: boolean): Promise<void> {
   menus.close();
   $('btn-start-close').hidden = !project;
   $('start-note').hidden = store.get('soma.noteSeen') === '1';
-  let list: { id: string; name: string; modified: number }[] = [];
+  let list: ProjectListEntry[] = [];
   try { list = await api.project.list(); } catch { /* ohne Liste */ }
   list.sort((a, b) => b.modified - a.modified);
   $('start-recent').replaceChildren(...list.slice(0, 12).map((p) => {
     const th = el('div', { className: 'th' }, icon('cube', 36, 1.2));
     void api.project.thumb(p.id).then((url) => { if (url) th.replaceChildren(el('img', { src: url, alt: '' })); });
     const cur = p.id === project?.id;
+    // Viele heißen „Neues Modell“: Ob es je gespeichert wurde, hilft beim Wiederfinden und beim Aufräumen
+    const when = cur ? 'geöffnet' : `geändert ${fmtWhen(p.modified, true)}`;
     const card = el('button', { className: 'recent' + (cur ? ' cur' : ''), title: cur ? 'Gerade geöffnet' : `${p.name} öffnen` },
-      th, el('div', { className: 'meta' }, el('b', { textContent: p.name }), el('span', { textContent: cur ? 'geöffnet' : `geändert ${fmtWhen(p.modified, true)}` })));
+      th, el('div', { className: 'meta' }, el('b', { textContent: p.name }), el('span', { textContent: when }), !p.saved && el('span', { textContent: 'nie gespeichert' })));
     card.addEventListener('click', () => { if (!cur) void openProject(p.id); showStart(false); });
-    return card;
+    if (cur) return el('div', { className: 'recent-item' }, card);
+    // Entfernen (E69): Arbeitsordner in den Papierkorb, die Rückfrage im Hauptprozess sagt, was dabei verloren geht
+    const rm = el('button', { className: 'recent-rm', title: `„${p.name}“ von diesem Rechner entfernen`, ariaLabel: `${p.name} entfernen` }, icon('trash', 15));
+    rm.addEventListener('click', () => void (async () => {
+      const r = await api.project.remove(p.id).catch((e: unknown) => ({ removed: false, error: e instanceof Error ? e.message : String(e) }));
+      if (r.error) toast(r.error, 'error');
+      if (r.removed) { toast(`„${p.name}“ entfernt. Der Arbeitsordner liegt im Papierkorb.`, 'ok'); void showStart(true); }
+    })());
+    return el('div', { className: 'recent-item' }, card, rm);
   }));
   if (!list.length) $('start-recent').append(el('div', { className: 'c3', textContent: 'Noch keine Modelle auf diesem Rechner.' }));
-  if (!agents.length && project) await refreshAgents();
+  if (!agents.length) await refreshAgents();
   $('start-agents').replaceChildren(...agents.map((a) => el('div', { className: 'agrow' },
     el('span', { className: a.found ? 'ok' : 'no' }, icon(a.found ? 'check' : 'x', 16, 2.2)),
     el('div', {}, el('b', { textContent: a.label }), el('span', { textContent: a.found ? `gefunden (${a.command})` : 'nicht installiert' })))));
@@ -1281,7 +1293,7 @@ api.render.onNotice((n) => {
 setInterval(() => { if (project && !document.hidden) void refreshViewLists(); }, 10000);
 window.addEventListener('focus', () => scheduleViewLists());
 api.project.onSaveState((st) => renderSaveState(st));
-// Das Projekt kommt ausschließlich über das Ereignis (der Hauptprozess öffnet es beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
+// Das Projekt kommt ausschließlich über das Ereignis (Startseite, Menü, im Testmodus öffnet es der Hauptprozess beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
 if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
 // Seitenleiste wie beim letzten Mal, beim ersten Start mit den Bauteilen
@@ -1289,8 +1301,8 @@ if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
   const side = store.get('soma.side');
   showPanel(side === null ? 'parts' : side === 'parts' || side === 'files' || side === 'skills' ? side : null);
 }
-// Beim allerersten Start die Startseite zeigen (mit dem Hinweis auf die Rechte des Agenten). Tests überspringen das.
-if (!api.testMode && store.get('soma.startSeen') !== '1') { store.set('soma.startSeen', '1'); void showStart(true); }
+// Die App beginnt auf der Startseite (E69), der Hauptprozess öffnet kein Modell. Nur im Testmodus öffnet er gleich eins.
+if (api.startsHome) void showStart(true);
 
 // Prüfschnittstelle, nur im Testmodus
 if (api.testMode) {

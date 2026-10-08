@@ -685,6 +685,13 @@ code { font-family:var(--mono); font-size:.95em; }
 .bigcard .ico.acc { background:var(--acc); color:#1b1206; }
 .cap { font-size:11px; letter-spacing:.06em; color:var(--tx3); margin:34px 0 12px; }
 .recent-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:14px; }
+.recent-item { position:relative; display:flex; min-width:0; }
+.recent-item > .recent { flex:1; }
+/* Entfernen (E69): erst beim Überfahren, über dem Vorschaubild, neutral (Rot bleibt Statusmeldungen vorbehalten) */
+.recent-rm { position:absolute; top:6px; right:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--line2); border-radius:7px; background:var(--s1); color:var(--tx2); opacity:0; transition:opacity .12s; }
+.recent-item:hover .recent-rm, .recent-rm:focus-visible { opacity:1; }
+.recent-rm:hover { color:var(--tx); border-color:var(--tx3); }
 .recent { display:flex; flex-direction:column; border:1px solid var(--line2); border-radius:10px; background:var(--s2); overflow:hidden; text-align:left; min-width:0; }
 .recent:hover { border-color:var(--acc-line); }
 .recent.cur { border-color:var(--acc-line); }

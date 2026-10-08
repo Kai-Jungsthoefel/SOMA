@@ -4,6 +4,7 @@ import type { SomaApi } from '../shared/types';
 /** Schmale, feste Schnittstelle zwischen Renderer und Hauptprozess. Der Renderer hat keinen Node-Zugriff. */
 const api: SomaApi = {
   testMode: process.env.SOMA_TEST === '1',
+  startsHome: process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_START === 'home',
   project: {
     current: () => ipcRenderer.invoke('project:current'),
     create: () => ipcRenderer.invoke('project:create'),
@@ -17,6 +18,7 @@ const api: SomaApi = {
     reveal: () => ipcRenderer.invoke('project:reveal'),
     setThumb: (dataUrl) => ipcRenderer.invoke('project:setThumb', dataUrl),
     thumb: (id) => ipcRenderer.invoke('project:thumb', id),
+    remove: (id) => ipcRenderer.invoke('project:remove', id),
   },
   versions: {
     log: () => ipcRenderer.invoke('versions:log'),
@@ -89,7 +91,7 @@ const api: SomaApi = {
   openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'
-    ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f), bridge: () => ipcRenderer.invoke('test:bridge') }
+    ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f), bridge: () => ipcRenderer.invoke('test:bridge'), close: () => ipcRenderer.invoke('test:close') }
     : undefined,
 };
 

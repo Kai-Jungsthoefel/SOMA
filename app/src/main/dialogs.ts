@@ -1,4 +1,5 @@
-import { app, dialog, type BrowserWindow } from 'electron';
+import { app, dialog, shell, type BrowserWindow } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -52,6 +53,17 @@ export async function choose(win: BrowserWindow | null, o: { title: string; mess
   const opts = { type: 'question' as const, title: o.title, message: o.message, detail: o.detail, buttons: o.buttons, defaultId: 0, cancelId: o.buttons.length - 1, noLink: true };
   const r = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
   return r.response;
+}
+
+/**
+ * Papierkorb. Im Testmodus ein eigener Ordner in den App-Daten: Tests sollen den Papierkorb des Nutzers nicht füllen
+ * und prüfen können, was dort gelandet ist.
+ */
+export async function trashItem(abs: string): Promise<void> {
+  if (!testMode()) { await shell.trashItem(abs); return; }
+  const bin = path.join(app.getPath('userData'), 'test-papierkorb');
+  fs.mkdirSync(bin, { recursive: true });
+  fs.renameSync(abs, path.join(bin, `${Date.now()}-${path.basename(abs)}`));
 }
 
 export function notify(win: BrowserWindow | null, title: string, message: string): void {

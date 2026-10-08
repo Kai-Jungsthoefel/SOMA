@@ -121,7 +121,8 @@ try {
   fs.writeFileSync(modelPy, fs.readFileSync(modelPy, 'utf8').replace('\n# Kommentar während der Vorschau\n', ''));
   // Markierung einer Vorschau: Der Agent erfährt, dass das Bild einen alten Stand zeigt (sonst vergleicht er es mit dem aktuellen Code)
   await domClick('btn-mark');
-  await waitFor('Zeichenfläche', () => window.__t.markup().active, 5000).catch(() => {});
+  // Unter Last braucht das Öffnen (Bild des Viewers) mehrere Sekunden. Ein Klick auf „An Agent“ davor bliebe still wirkungslos
+  await waitFor('Zeichenfläche', () => window.__t.markup().active, 30000).catch(() => {});
   await domClick('btn-mark-send');
   const firstShort = await g('rev-parse', '--short', first);
   await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markierung: .soma/feedback/'), 30000, await term()).catch(() => {});
@@ -191,6 +192,8 @@ try {
   await waitFor('entpackt und geöffnet', (id) => window.__t.project().id === id && window.__t.status().state === 'ok' && window.__t.versions().count > 1, 90000, proj.id);
   check('Arbeitsordner fehlt (anderer Rechner): ZIP wird entpackt und geöffnet', fs.existsSync(modelPy) && fs.readFileSync(modelPy, 'utf8').includes('LENGTH = 60.0'));
   check('Der Verlauf ist mitgekommen (gleiche Commits wie vorher)', (await g('log', '--format=%s')) === logBefore);
+  // Der Build ist oft schneller da als der Speicherstand des neuen Modells (bis dahin gilt noch der des vorherigen)
+  await waitFor('Speicherstand', () => window.__t.saveState() && !window.__t.saveState().unsaved, 15000).catch(() => {});
   check('Entpacktes Projekt gilt als gespeichert', (await saveState()).unsaved === false);
   // D) böse ZIP (Zip-Slip)
   const evil = path.join(workDir, 'boese.zip');
@@ -231,6 +234,55 @@ try {
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer (vor dem Neustart)', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 120));
+
+  // ---- 9) Start auf der Startseite, unveränderte neue Modelle verschwinden, Entfernen (E69) ----
+  // Wie außerhalb der Tests: Die App öffnet kein Modell, eigene App-Daten
+  await app.stop();
+  cleanup(app.ud);
+  app = await startApp({ name: 'versions-home', env: { SOMA_TEST_START: 'home' } });
+  const h = app;
+  await h.waitFor('Startseite', () => !!window.__t && !document.getElementById('start').hidden, 30000);
+  await sleep(1500);
+  const wsDir = path.join(h.ud, 'workspaces');
+  const models = () => (fs.existsSync(wsDir) ? fs.readdirSync(wsDir).filter((n) => /^[0-9a-f-]{36}$/.test(n)) : []);
+  check('Start auf der Startseite: kein Modell offen oder angelegt, nicht wegzuklicken', (await h.ev(() => window.__t.project())) === null && models().length === 0
+    && await h.ev(() => document.getElementById('btn-start-close').hidden), `Modelle: ${models().length}`);
+  await h.waitFor('Agenten', () => document.querySelectorAll('#start-agents .agrow').length > 0, 15000).catch(() => {});
+  check('Startseite ohne offenes Modell nennt die Agenten', (await h.ev(() => document.querySelectorAll('#start-agents .agrow').length)) > 0);
+  await h.domClick('start-new');
+  await h.waitFor('erstes neues Modell', () => !!window.__t.project() && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000);
+  const m1 = await h.ev(() => window.__t.project());
+  check('„Neues Modell“ auf der Startseite: Modell offen, Startseite zu', fs.existsSync(m1.dir) && await h.ev(() => document.getElementById('start').hidden));
+  await h.domClick('btn-new');
+  await h.waitFor('zweites neues Modell', (id) => window.__t.project()?.id !== id && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000, m1.id);
+  const m2 = await h.ev(() => window.__t.project());
+  check('Unverändertes neues Modell verschwindet beim Wechsel, mit seinen App-Daten', await until(() => !fs.existsSync(m1.dir))
+    && !fs.existsSync(path.join(h.ud, 'projects', `${m1.id}.json`)) && models().length === 1, `Modelle: ${models().join(', ')}`);
+  fs.appendFileSync(path.join(m2.dir, 'NOTES.md'), '\nEigene Notiz\n');
+  await h.waitFor('Notiz geändert', () => window.__t.saveState()?.dirtyFiles === 1, 20000);
+  await h.domClick('btn-new');
+  await h.waitFor('drittes neues Modell', (id) => window.__t.project()?.id !== id && window.__t.status().state === 'ok', 90000, m2.id);
+  const m3 = await h.ev(() => window.__t.project());
+  await sleep(1000);
+  check('Geändertes Modell bleibt beim Wechsel', fs.existsSync(m2.dir));
+  await h.ev(() => window.__t.showStart(true));
+  await h.waitFor('Karten', () => document.querySelectorAll('#start-recent .recent-item').length === 2, 10000).catch(() => {});
+  const cards = await h.ev(() => [...document.querySelectorAll('#start-recent .recent-item')].map((c) => ({ text: c.textContent, rm: !!c.querySelector('.recent-rm') })));
+  check('Karten nennen „nie gespeichert“, Entfernen gibt es nur beim nicht geöffneten', cards.length === 2 && cards.every((c) => c.text.includes('nie gespeichert'))
+    && cards.filter((c) => c.rm).length === 1, JSON.stringify(cards).slice(0, 120));
+  await h.answers([1]);
+  await h.ev(() => document.querySelector('#start-recent .recent-rm').click());
+  await sleep(1500);
+  check('Entfernen mit Rückfrage, Abbrechen lässt das Modell stehen', fs.existsSync(m2.dir) && !(await h.ev(() => window.__t.toast().error)));
+  await h.answers([0]);
+  await h.ev(() => document.querySelector('#start-recent .recent-rm').click());
+  const bin = path.join(h.ud, 'test-papierkorb');
+  check('Entfernen: Arbeitsordner im Papierkorb, App-Daten weg', await until(() => !fs.existsSync(m2.dir))
+    && fs.existsSync(bin) && fs.readdirSync(bin).some((n) => n.endsWith(m2.id)) && !fs.existsSync(path.join(h.ud, 'projects', `${m2.id}.json`)));
+  check('Entferntes Modell verschwindet von der Startseite', await h.waitFor('Karte weg', () => document.querySelectorAll('#start-recent .recent-item').length === 1, 10000).then(() => true, () => false));
+  // Beenden wie mit dem Kreuz des Fensters: Das offene, unveränderte Modell verschwindet
+  await h.ev(() => { void window.soma.test.close(); return true; });
+  check('Beim Beenden verschwindet das unveränderte neue Modell', await until(() => !fs.existsSync(m3.dir), 30000));
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

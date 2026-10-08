@@ -62,4 +62,14 @@ export class TerminalManager {
   }
   kill(id: number): void { try { this.terms.get(id)?.kill(); } catch { /* schon beendet */ } this.terms.delete(id); }
   killAll(): void { for (const id of [...this.terms.keys()]) this.kill(id); }
+
+  /**
+   * Beendet alle Terminals und wartet, bis ihre Shells wirklich weg sind (höchstens `ms`). Unter Windows endet eine Shell
+   * erst eine Weile nach kill() (node-pty sucht dafür erst die Prozesse der Konsole), bis dahin hält sie den Ordner fest.
+   */
+  killAllAndWait(ms = 10000): Promise<void> {
+    const exited = Promise.all([...this.terms.values()].map((p) => new Promise<void>((r) => p.onExit(() => r()))));
+    this.killAll();
+    return Promise.race([exited.then(() => undefined), new Promise<void>((r) => setTimeout(r, ms))]);
+  }
 }

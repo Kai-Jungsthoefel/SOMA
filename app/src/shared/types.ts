@@ -9,7 +9,10 @@ export interface ProjectInfo {
   autoBuild: boolean;
 }
 
-export interface ProjectListEntry { id: string; name: string; modified: number }
+/** `saved`: Es gibt eine ZIP-Datei dazu (das Modell wurde mindestens einmal gespeichert). */
+export interface ProjectListEntry { id: string; name: string; modified: number; saved?: boolean }
+/** Modell von der Startseite entfernen (E69). `cancelled`: Rückfrage abgebrochen, nichts geändert. */
+export interface RemoveResult { removed: boolean; cancelled?: boolean; error?: string }
 
 export interface BuildError { kind: string; message: string; file: string | null; line: number | null; traceback: string }
 
@@ -221,6 +224,8 @@ export interface RenderNotice extends RenderResult { kind: 'still' | 'sheet' | '
 
 export interface SomaApi {
   testMode: boolean;
+  /** Die App beginnt auf der Startseite (E69). Im Testmodus öffnet der Hauptprozess gleich ein Modell, außer SOMA_TEST_START=home. */
+  startsHome: boolean;
   project: {
     current(): Promise<ProjectInfo>;
     create(): Promise<ProjectInfo>;
@@ -236,6 +241,8 @@ export interface SomaApi {
     /** Vorschaubild des offenen Modells für die Startseite (JPEG als Data-URL). */
     setThumb(dataUrl: string): Promise<void>;
     thumb(id: string): Promise<string | null>;
+    /** Arbeitsordner eines Modells in den Papierkorb, nach Rückfrage. Nicht das gerade geöffnete. */
+    remove(id: string): Promise<RemoveResult>;
   };
   versions: {
     log(): Promise<GitLog>;
@@ -244,7 +251,7 @@ export interface SomaApi {
     onChanged(cb: () => void): void;
   };
   /** Nur im Testmodus (SOMA_TEST=1) vorhanden. */
-  test?: { answers(a: unknown[]): Promise<void>; screenshot(file: string): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>> };
+  test?: { answers(a: unknown[]): Promise<void>; screenshot(file: string): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>>; close(): Promise<void> };
   build: {
     run(): Promise<void>;
     cancel(): Promise<void>;

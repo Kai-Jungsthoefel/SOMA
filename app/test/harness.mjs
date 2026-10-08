@@ -19,9 +19,10 @@ const portFree = (port) => new Promise((resolve) => {
 
 /**
  * Startet die App. Standard: Fenster unsichtbar (SMOKE_VISIBLE=1 zeigt es), eigener App-Daten-Ordner,
- * Watchdog (hängt etwas, wird alles hart beendet). `userData` erlaubt einen Neustart mit denselben Daten.
+ * Watchdog (hängt etwas, wird alles hart beendet). `userData` erlaubt einen Neustart mit denselben Daten, `env` setzt weitere
+ * Umgebungsvariablen (etwa `SOMA_TEST_START: 'home'`: Start auf der Startseite wie außerhalb der Tests, statt gleich mit einem Modell).
  */
-export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 9333, userData, watchdogMs = (Number(process.env.SOMA_TEST_WATCHDOG_S) || 6 * 60) * 1000, name = 'test' } = {}) {
+export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 9333, userData, watchdogMs = (Number(process.env.SOMA_TEST_WATCHDOG_S) || 6 * 60) * 1000, name = 'test', env = {} } = {}) {
   // SMOKE_VISIBLE=1 sichtbar, =offscreen angezeigt außerhalb des Bildschirms (frische Screenshots, kein Fokusklau), sonst unsichtbar
   const mode = process.env.SMOKE_VISIBLE;
   const visible = mode === '1';
@@ -30,7 +31,7 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
   // warten, sonst startet Electron ohne Debug-Port und der Test findet kein Fenster
   for (const t0 = Date.now(); !(await portFree(port)) && Date.now() - t0 < 30000;) await sleep(300);
   const child = spawn(electronExe(APP), ['.', `--remote-debugging-port=${port}`], {
-    cwd: APP, env: { ...process.env, SOMA_USER_DATA: ud, SOMA_TEST: '1', SOMA_HIDDEN: visible ? '0' : mode === 'offscreen' ? 'offscreen' : '1' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: APP, env: { ...process.env, SOMA_USER_DATA: ud, SOMA_TEST: '1', SOMA_HIDDEN: visible ? '0' : mode === 'offscreen' ? 'offscreen' : '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
   child.stdout.on('data', (d) => { log += d; });

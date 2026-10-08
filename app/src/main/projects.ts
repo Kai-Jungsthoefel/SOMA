@@ -4,13 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import type {
   AnimBuildResult, AnimList, ExportResult, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
-  ProjectInfo, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
+  ProjectInfo, RemoveResult, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
 import { AnimBuilder, listResults, readAnimList, rerunResult, samePath } from './animations';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
-import { choose, chooseExportTarget, choosePath, documentsDir } from './dialogs';
+import { choose, chooseExportTarget, choosePath, documentsDir, trashItem } from './dialogs';
 import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
@@ -22,7 +22,7 @@ import {
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
-  backupWorkspace, createProject, extractProject, getAppState, inspectProject, isProjectId, patchAppState, projectDir,
+  backupWorkspace, createProject, discardWorkspace, extractProject, forgetProject, getAppState, inspectProject, isProjectId, isUntouched, patchAppState, projectDir,
   getSkillDefaults, readProjectJson, readSkillModes, renameProject, setLastProject, setSkillDefault, stampAppVersion, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
@@ -87,8 +87,25 @@ export class ProjectController {
     this.session = null;
   }
 
-  async open(id: string): Promise<ProjectInfo> {
+  /**
+   * Verlässt das offene Modell (Wechsel zu einem anderen, Beenden der App). Ein neues Modell, das noch genau der Vorlage
+   * entspricht, verschwindet dabei (E69): Es gibt nichts, was verloren gehen könnte, und die Startseite füllt sich nicht
+   * mit leeren „Neues Modell“. Alles andere bleibt liegen wie bisher.
+   */
+  async leave(): Promise<void> {
+    const s = this.session;
+    if (!s) return;
+    const untouched = await isUntouched(s.id);
+    // Die Shells halten den Ordner fest, bis sie wirklich beendet sind
+    const shells = untouched ? s.terminals.killAllAndWait() : null;
     this.close();
+    if (shells) await shells;
+    if (untouched && !(await discardWorkspace(s.id))) console.error(`[soma] Unverändertes Modell ${s.id} ließ sich nicht verwerfen (Ordner in Benutzung), es bleibt.`);
+  }
+
+  async open(id: string): Promise<ProjectInfo> {
+    // Dasselbe Modell neu öffnen (etwa „Arbeitsstand behalten“ beim Öffnen seiner ZIP) verwirft es nie
+    if (this.session?.id === id) this.close(); else await this.leave();
     const dir = projectDir(id);
     const builds = new BuildManager(dir);
     const terminals = new TerminalManager(this.wc, dir);
@@ -637,13 +654,15 @@ export class ProjectController {
 
   async confirmClose(editor: { dirty: string[]; save(): Promise<boolean>; discard(): Promise<void> }): Promise<boolean> {
     if (!this.session || process.env.SOMA_TEST === '1') return true;
+    // Ein unverändertes neues Modell hat nichts zu speichern, es verschwindet beim Beenden (leave, E69)
+    if (!editor.dirty.length && (await isUntouched(this.session.id))) return true;
     const st = await this.saveState();
     if (!st.unsaved && !editor.dirty.length) return true;
     const inEditor = editor.dirty.length ? `Im Editor noch nicht gespeichert: ${editor.dirty.join(', ')}. ` : '';
     const c = await choose(this.getWin(), {
       title: 'SOMA beenden',
       message: 'Das Modell hat ungespeicherte Änderungen.',
-      detail: `${inEditor}Der Arbeitsstand bleibt auf diesem Rechner erhalten und wird beim nächsten Start wieder geöffnet. Die ZIP-Datei wird nur beim Speichern aktualisiert.`,
+      detail: `${inEditor}Der Arbeitsstand bleibt auf diesem Rechner erhalten, die Startseite zeigt ihn unter den zuletzt geöffneten Modellen. Die ZIP-Datei wird nur beim Speichern aktualisiert.`,
       buttons: ['Speichern', 'Nicht speichern', 'Abbrechen'],
     });
     if (c === 2) return false;
@@ -653,5 +672,44 @@ export class ProjectController {
       if (r.cancelled || r.error) return false;
     } else await editor.discard();
     return true;
+  }
+
+  /**
+   * Modell von der Startseite entfernen (E69): Der Arbeitsordner kommt in den Papierkorb (dort lässt er sich wiederherstellen),
+   * die Daten der App dazu werden gelöscht, Sicherungen bleiben. Die Rückfrage sagt, was dabei verloren geht: nichts, wenn
+   * der Stand in der ZIP-Datei steckt, sonst die Änderungen seit dem Speichern bzw. das ganze Modell. Ein unverändertes neues
+   * Modell geht ohne Rückfrage. Das gerade geöffnete Modell nicht (erst ein anderes öffnen).
+   */
+  async remove(id: string): Promise<RemoveResult> {
+    if (!isProjectId(id) || !fs.existsSync(projectDir(id))) return { removed: false, error: 'Dieses Modell gibt es auf diesem Rechner nicht mehr.' };
+    if (this.session?.id === id) return { removed: false, error: 'Das geöffnete Modell lässt sich nicht entfernen. Öffne zuerst ein anderes.' };
+    const dir = projectDir(id);
+    if (!(await isUntouched(id))) {
+      const name = readProjectJson(id)?.name ?? id.slice(0, 8);
+      const app = getAppState(id);
+      const git = new GitRepo(dir);
+      const st = (await git.isRepo()) ? await git.status() : null;
+      const zip = app.zipPath && fs.existsSync(app.zipPath) ? app.zipPath : null;
+      const inZip = !!zip && !!st && !st.dirty && st.head === (app.savedHead ?? null);
+      const where = 'Der Arbeitsordner auf diesem Rechner kommt in den Papierkorb, dort lässt er sich wiederherstellen.';
+      const c = await choose(this.getWin(), {
+        title: 'Modell entfernen',
+        message: inZip ? `„${name}“ von diesem Rechner entfernen?` : zip ? `„${name}“ hat Änderungen, die nicht in der ZIP-Datei stehen.` : `„${name}“ wurde nie gespeichert.`,
+        detail: inZip ? `${where} Die ZIP-Datei bleibt (${zip}), Öffnen holt das Modell zurück.`
+          : zip ? `${where} Die ZIP-Datei (${zip}) bleibt, ihr fehlen die Änderungen seit dem letzten Speichern.`
+            : `${where} Wird er dort gelöscht, ist das Modell verloren.`,
+        buttons: ['Entfernen', 'Abbrechen'],
+      });
+      if (c !== 0) return { removed: false, cancelled: true };
+    }
+    // Ein eben verlassenes Modell hält seine beendete Shell unter Windows noch einige Sekunden fest: mehrere Versuche
+    for (let attempt = 0; ; attempt++) {
+      try { await trashItem(dir); break; } catch (e) {
+        if (attempt >= 20) return { removed: false, error: `Der Arbeitsordner ließ sich nicht in den Papierkorb verschieben (noch in Benutzung?), es wurde nichts entfernt: ${e instanceof Error ? e.message : String(e)}` };
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+    forgetProject(id);
+    return { removed: true };
   }
 }
