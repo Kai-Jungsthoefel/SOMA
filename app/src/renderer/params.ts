@@ -46,6 +46,15 @@ function usable(p: ParamInfo, v: ParamValue): boolean {
 }
 const outside = (p: ParamInfo, v: ParamValue) => typeof v === 'number' && ((p.min != null && v < p.min) || (p.max != null && v > p.max));
 const rangeText = (p: ParamInfo) => `${p.min != null ? shownValue(p, p.min) : '…'} to ${p.max != null ? shownValue(p, p.max) : '…'}`;
+/** Bereich kurz für die Zeile, wie der Agent ihn gesetzt hat: „30–200 mm“, „≥ 2 mm“, „3 options“. Ohne Bereich leer. */
+function rangeShort(p: ParamInfo): string {
+  if (p.kind === 'choice') return `${p.options?.length ?? 0} options`;
+  if (p.kind !== 'number' && p.kind !== 'int') return '';
+  if (p.min != null && p.max != null) return `${numText(p.min)}–${numText(p.max)}${unitOf(p)}`;
+  if (p.min != null) return `≥ ${numText(p.min)}${unitOf(p)}`;
+  if (p.max != null) return `≤ ${numText(p.max)}${unitOf(p)}`;
+  return '';
+}
 
 /** Text für die Eingabe des Agenten: Name, Wert, ggf. der Wert aus dem Code, Stelle im Code. */
 export function paramNote(p: ParamInfo, v: ParamValue, changed: boolean): string {
@@ -246,7 +255,11 @@ export class ParamsPanel {
     const out = outside(p, v);
     const open = this.openName === p.name;
     const cls = ['prm', changed && 'chg', (out || bad) && 'err', open && 'open'].filter(Boolean).join(' ');
-    const lb = el('button', { className: 'lb', title: `${p.label} (${p.name})${p.help ? `\n${p.help}` : ''}` }, el('span', { className: 'lt', textContent: p.label }), el('span', { className: 'cn', textContent: p.name }));
+    // Zweite Zeile: Name im Code und der Bereich, den der Agent gesetzt hat (ohne Aufklappen sichtbar)
+    const range = rangeShort(p);
+    const lb = el('button', { className: 'lb', title: `${p.label} (${p.name})${range ? `, range set by the agent: ${p.kind === 'choice' ? range : rangeText(p)}` : ''}${p.help ? `\n${p.help}` : ''}` },
+      el('span', { className: 'lt', textContent: p.label }),
+      el('span', { className: 'sub' }, el('span', { className: 'cn', textContent: p.name }), range ? el('span', { className: 'rg', textContent: range }) : null));
     lb.setAttribute('aria-expanded', String(open));
     lb.addEventListener('click', () => { this.openName = open ? null : p.name; this.render(); });
     const rst = el('button', { className: 'rst', disabled: this.busy, title: `Back to the value from the code (${shownValue(p, p.default)})` }, icon('reset', 13, 2));

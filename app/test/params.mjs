@@ -4,6 +4,7 @@
 // überschreiben), leerer Zustand, Snapshot und ZIP. Aufruf: node test/run-all.mjs params (nach npm run build).
 // SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 legt Bilder in test/shots/ ab.
 import { exec } from 'dugite';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +15,7 @@ const t = checker();
 const { check } = t;
 let app;
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-params-'));
+const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'cadide-phase0', 'venv-full', 'Scripts', 'python.exe');
 
 const listZip = (p) => new Promise((resolve, reject) => yauzl.open(p, { lazyEntries: true }, (e, z) => {
   if (e) return reject(e);
@@ -86,6 +88,9 @@ try {
   check('Leiste „Parameters“: Vorlage mit LENGTH, WIDTH, HEIGHT, WALL, Werte aus dem Code, nichts geändert',
     s.names.join(',') === 'LENGTH,WIDTH,HEIGHT,WALL' && s.shown.LENGTH === '60 mm' && s.shown.WALL === '2 mm' && !s.changed.length && !s.foot && !fs.existsSync(pfile), JSON.stringify(s.shown));
   check('Zeile: Name, Name im Code, Feld mit Einheit', s.text.includes('Length') && s.text.includes('LENGTH') && await ev(() => document.querySelector('#pm-LENGTH')?.closest('.valbox')?.textContent === 'mm'));
+  const rowText = (n) => ev((x) => document.querySelector(`#params-list .prm[data-name="${x}"] .lb`)?.textContent ?? '', n);
+  check('Bereich des Agenten in der Zeile, ohne Aufklappen: LENGTH 30–200 mm, WALL 1.2–4 mm', (await rowText('LENGTH')).includes('30–200 mm')
+    && (await rowText('WALL')).includes('1.2–4 mm') && s.open === null, await rowText('LENGTH'));
   await shot('params-1-panel');
 
   // 2) Wert ändern: landet in parameters.json, baut, der Code bleibt beim Wert des Agenten
@@ -173,6 +178,8 @@ try {
     && [...document.getElementById('pm-FINISH').options].map((o) => o.textContent).join(',') === 'Matte,Glossy' && document.getElementById('pm-LABEL')?.classList.contains('pm-text')));
   check('Unpassender Wert (2.5 für eine ganze Zahl): Zeile rot, der Wert aus dem Code gilt', s.errors.includes('PLATES') && s.shown.PLATES === '2' && (await buildState()).result.warnings.some((w) => w.includes('2.5 for PLATES is not a whole number')));
   check('Wert ohne Parameter: eigener Abschnitt mit „Remove“, soma build meldet ihn', s.text.includes('OLD') && (await buildState()).result.warnings.some((w) => w.includes('no parameter OLD')));
+  check('Bereich je Art: ganze Zahl 1–4, Auswahl „2 options“, Schalter und Text ohne', (await rowText('PLATES')).endsWith('1–4') && (await rowText('FINISH')).endsWith('2 options')
+    && (await rowText('LID')) === 'With lidLID' && (await rowText('LABEL')) === 'LabelLABEL', `${await rowText('PLATES')} | ${await rowText('FINISH')} | ${await rowText('LID')}`);
   await shot('params-3-types');
 
   await clickText('#params-list .pm-orow button', 'Remove');
@@ -271,7 +278,21 @@ try {
   await built(b0, 'Size 55');
   check('Geänderter Wert zählt als ungespeicherte Änderung', await waitFor('ungespeichert', () => window.__t.saveState()?.unsaved, 10000).catch(() => false));
 
-  // 11) Modell ohne Parameter: leerer Zustand mit Bitte an den Agenten
+  // 11) Auswertungen rechnen mit den Werten des Nutzers und gelten nach einer Änderung als veraltet (App und soma)
+  const soma = (args) => spawnSync(PY, ['-m', 'soma', ...args], { cwd: dir, env: { ...process.env, PYTHONUTF8: '1' }, encoding: 'utf8', timeout: 5 * 60 * 1000 });
+  let r = soma(['analyze', 'thickness', '--name', 'wand']);
+  const meta = (JSON.parse(soma(['analyze', 'list', '--json']).stdout || '[]')).find((m) => m.id === 'wand');
+  const frame = meta?.parts?.find((p) => p.name === 'Frame');
+  check('soma analyze nimmt den Wert aus dem Panel (Rahmen 55 mm statt 40 mm)', r.status === 0 && Math.abs((frame?.area ?? 0) - (2 * 55 * 55 + 4 * 55 * 5)) < 5, `${r.stderr.slice(0, 200)} ${frame?.area}`);
+  check('Ergebnis aktuell, solange sich nichts ändert', (await ev(() => window.soma.results.list())).find((x) => x.id === 'wand')?.stale === false);
+  b0 = await builds();
+  await typeValue('SIZE', '60');
+  await built(b0, 'Size 60');
+  check('Nach einer Parameteränderung: Ergebnis in der App veraltet', (await ev(() => window.soma.results.list())).find((x) => x.id === 'wand')?.stale === true);
+  r = spawnSync(PY, ['-c', 'import os, sys; from soma import animrun; print(animrun.newest_source(".") >= os.path.getmtime("parameters.json"))'], { cwd: dir, encoding: 'utf8' });
+  check('soma zählt parameters.json zum Modell (Animationen, soma render --result)', r.stdout.trim() === 'True', r.stdout + r.stderr.slice(0, 200));
+
+  // 12) Modell ohne Parameter: leerer Zustand mit Bitte an den Agenten
   b0 = await builds();
   fs.writeFileSync(modelPy, 'import cadquery as cq\nfrom soma import add_part\n\nadd_part("Block", cq.Workplane("XY").box(10, 10, 10))\n');
   await waitFor('ohne Parameter', (b) => window.__t.buildStarts() > b && window.__t.status().state === 'ok' && window.__t.params().names?.length === 0, 60000, b0);
