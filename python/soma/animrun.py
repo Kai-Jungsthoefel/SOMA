@@ -19,6 +19,9 @@ from . import anim, build, gltf, registry
 
 ANIM_DIR = "animations"
 OUT_DIR = Path(".soma") / "anim"
+# Arten eines Treffers in soma anim check. Vor E73 standen sie deutsch in .check.json, read_check() setzt sie um
+COLLISION, TOO_CLOSE = "collision", "too close"
+_OLD_KINDS = {"Kollision": COLLISION, "zu nah": TOO_CLOSE}
 
 
 class AnimError(Exception):
@@ -91,7 +94,7 @@ def _run_file(root, path):
         runpy.run_path(str(path), run_name="__main__")
     except SystemExit as e:
         if e.code not in (None, 0):
-            raise build.BuildError(f"{_rel(path, root)} hat sich mit Code {e.code} beendet", file=_rel(path, root), kind="SystemExit")
+            raise build.BuildError(f"{_rel(path, root)} exited with code {e.code}", file=_rel(path, root), kind="SystemExit")
     except BaseException as e:
         raise build._error_from_exception(e, root)
     finally:
@@ -106,7 +109,7 @@ def _run_file(root, path):
             sys.path.pop(0)
     found = list(anim.ANIMATIONS)
     if not found:
-        raise build.BuildError(f"{_rel(path, root)} legt keine Animation an. Beginne mit a = Animation(\"Name\") "
+        raise build.BuildError(f"{_rel(path, root)} creates no animation. Start with a = Animation(\"Name\") "
                                "(from soma.anim import Animation).", file=_rel(path, root), kind="NoAnimation")
     return found
 
@@ -282,7 +285,7 @@ def finalize(a):
     """Abgetastete Daten einer Animation (fuer die Datei, die Textausgabe und die Pruefung)."""
     duration = a.duration
     if duration <= 0:
-        raise build.BuildError(f"Die Animation {a.name!r} ist leer: Sie braucht play(), wait() oder title(), damit Zeit vergeht.",
+        raise build.BuildError(f"The animation {a.name!r} is empty: it needs play(), wait() or title() for time to pass.",
                                file=a.file, line=a.line, kind="EmptyAnimation")
     times = sample_times(duration)
     poses = [a.poses(t) for t in times]
@@ -361,7 +364,7 @@ def build_all(root, only=None):
     try:
         _parts, results = load(root, only)
     except build.BuildError as e:
-        raise AnimError(f"Das Modell laesst sich nicht bauen, deshalb auch keine Animation: {e.message}"
+        raise AnimError(f"The model does not build, so no animation does either: {e.message}"
                         + (f" ({e.file}:{e.line})" if e.file and e.line else "")) from None
     done_files = {_rel(f, root) for f, _ in results}
     keep = [x for x in old.get("animations", []) if x.get("file") not in done_files and (root / x.get("file", "")).is_file()]
@@ -375,7 +378,7 @@ def build_all(root, only=None):
         for a in res:
             try:
                 if a.id in taken:
-                    raise build.BuildError(f"Die Animation {a.name!r} gibt es schon (in {taken[a.id]}). Namen muessen eindeutig sein.",
+                    raise build.BuildError(f"The animation {a.name!r} already exists (in {taken[a.id]}). Names must be unique.",
                                            file=_rel(a.file, root), line=a.line, kind="DuplicateName")
                 taken[a.id] = rel
                 data = finalize(a)
@@ -430,10 +433,10 @@ def ensure(root, name):
     e = find(root, name)
     if e is None:  # Eine Datei mit Fehler verliert ihre Eintraege, die Meldung nennt den Fehler
         names = [x["name"] for x in res["index"]["animations"]]
-        msg = f"Keine Animation {name!r}."
+        msg = f"No animation {name!r}."
         if res["errors"]:
-            msg += " Fehler: " + "; ".join(f"{x['file']}{':' + str(x['line']) if x.get('line') else ''}: {x['message']}" for x in res["errors"])
-        msg += f" Vorhanden: {', '.join(repr(n) for n in names)}." if names else f" In {ANIM_DIR}/ liegt noch keine fehlerfreie Animation."
+            msg += " Errors: " + "; ".join(f"{x['file']}{':' + str(x['line']) if x.get('line') else ''}: {x['message']}" for x in res["errors"])
+        msg += f" Available: {', '.join(repr(n) for n in names)}." if names else f" There is no animation without errors in {ANIM_DIR}/ yet."
         raise AnimError(msg)
     return e
 
@@ -464,13 +467,13 @@ def _merge(run):
         v0, v1, lo, hi = first["v0"], run[-1]["v1"], min(vals), max(vals)
         text = f"{first['label']}: {_g(v0)} -> {_g(v1)} {first['unit']}"
         if lo < min(v0, v1) - 1e-6 or hi > max(v0, v1) + 1e-6:
-            text += f", dazwischen {_g(lo)} bis {_g(hi)} {first['unit']}"
+            text += f", in between {_g(lo)} to {_g(hi)} {first['unit']}"
     elif first["key"] == "camera" and all("orbit" in x for x in run):
         orbit, tilt = sum(x["orbit"] for x in run), sum(x["tilt"] for x in run)
-        text = f"Kamera: Umlauf {_g(orbit)} Grad" + (f", Neigung {_g(tilt)} Grad" if abs(tilt) > 1e-9 else "")
+        text = f"Camera: orbit {_g(orbit)} deg" + (f", tilt {_g(tilt)} deg" if abs(tilt) > 1e-9 else "")
     else:
-        text = first["text"].split(":")[0] + ": Bewegung"
-    s["text"] = f"{text} ({n} Schritte)"
+        text = first["text"].split(":")[0] + ": movement"
+    s["text"] = f"{text} ({n} steps)"
     return s
 
 
@@ -508,24 +511,24 @@ def _compact_steps(steps):
 
 def info_text(root, entry):
     m = read_meta(root, entry)
-    lines = [f"Animation \"{m['name']}\" ({m['file']} Zeile {m['line']}), Dauer {_t(m['duration'])} s",
-             f"Bewegte Bauteile: {', '.join(m['parts']) or 'keine'}",
-             "Kamera: " + ("keine eigene (Standardansicht iso, alles im Bild)" if m["cameraAuto"] else "eigene Einstellungen und Fahrten"),
-             "", "Ablauf:"]
+    lines = [f"Animation \"{m['name']}\" ({m['file']} line {m['line']}), duration {_t(m['duration'])} s",
+             f"Moving parts: {', '.join(m['parts']) or 'none'}",
+             "Camera: " + ("none of its own (default view iso, everything in the picture)" if m["cameraAuto"] else "own settings and moves"),
+             "", "Sequence:"]
     for s in _compact_steps(m["steps"]):
         span = f"{_t(s['start'])}-{_t(s['end'])} s" if s["end"] > s["start"] else f"{_t(s['start'])} s"
         lines.append(f"  {span:<16} {s['text']}")
     if m["captions"]:
-        lines += ["", "Untertitel:"] + [f"  {_t(c['start'])}-{_t(c['end'])} s  \"{c['text']}\"" for c in m["captions"]]
+        lines += ["", "Captions:"] + [f"  {_t(c['start'])}-{_t(c['end'])} s  \"{c['text']}\"" for c in m["captions"]]
     if m["labels"]:
-        lines += ["", "Beschriftungen:"] + [
-            f"  {_t(lb['start'])}-{_t(lb['end'])} s  \"{lb['text']}\"" + (f" an {lb['part']}" if lb["part"] else "")
-            + " bei ({:.1f}, {:.1f}, {:.1f})".format(*lb["at"]) for lb in m["labels"]]
+        lines += ["", "Labels:"] + [
+            f"  {_t(lb['start'])}-{_t(lb['end'])} s  \"{lb['text']}\"" + (f" on {lb['part']}" if lb["part"] else "")
+            + " at ({:.1f}, {:.1f}, {:.1f})".format(*lb["at"]) for lb in m["labels"]]
     chk = read_check(root, entry)
     if chk:
         lines += ["", check_text(chk)]
     else:
-        lines += ["", "Kollisionen: nicht geprueft (soma anim check \"" + m["name"] + "\")"]
+        lines += ["", "Collisions: not checked (soma anim check \"" + m["name"] + "\")"]
     return "\n".join(lines)
 
 
@@ -588,7 +591,7 @@ def _check(root, name, step, gap):
     parts, results = load(root, root / entry["file"])
     a = next((x for _f, res in results if not isinstance(res, build.BuildError) for x in res if x.id == entry["id"]), None)
     if a is None:
-        raise AnimError(f"Die Animation {name!r} liess sich nicht neu laden.")
+        raise AnimError(f"The animation {name!r} could not be loaded again.")
     tol = build.auto_tolerance([p["shape"] for p in parts])
     pen = round(max(0.01, 2 * tol), 4)
     raw = {p["name"]: mesher.mesh_shape(p["shape"], tol, 0.3) for p in parts}
@@ -687,26 +690,26 @@ def _check(root, name, step, gap):
         depth, dist = r
         hit = dict(distance=round(dist, 4), depth=round(depth, 4))
         if depth > pen:
-            return "Kollision", hit
+            return COLLISION, hit
         if dist <= pen and not wanted:
             # Beruehrung oder flaches Eindringen, keine Ecke liegt tief im anderen Teil: die B-Rep-Koerper entscheiden
             vol, thick = overlap(m, o, ma, mb)
             if math.isnan(vol) or (vol > VOL_MIN and thick > pen):
                 hit["volume"] = None if math.isnan(vol) else round(vol, 4)
                 hit["depth"] = round(max(depth, 0.0 if math.isnan(thick) else thick), 4)
-                return "Kollision", hit
+                return COLLISION, hit
         # Wie bei soma analyze: Werte innerhalb der Genauigkeit um den Grenzwert gelten als genau auf dem Grenzwert
         if gap > 0 and dist < gap - pen and dist < rest - pen:
-            return "zu nah", hit
+            return TOO_CLOSE, hit
         return None, hit
 
     # Lage im Modell: Beruehrung und Spiel dort sind so konstruiert, eine Kollision dort meldet die Pruefung als schon vorhanden
     rest, at_rest = {}, {}
     for m, o in pairs:
         kind, hit = judge(m, o, eye, eye, eye, math.inf)
-        at_rest[(m, o)] = kind if kind == "Kollision" else None
-        rest[(m, o)] = math.inf if hit is None or kind == "Kollision" else hit["distance"]
-    progress = Progress("soma anim check", len(times), "Zeitpunkten")
+        at_rest[(m, o)] = kind if kind == COLLISION else None
+        rest[(m, o)] = math.inf if hit is None or kind == COLLISION else hit["distance"]
+    progress = Progress("soma anim check", len(times), "time steps")
     found = {}
     for t in times:
         poses = a.poses(t)
@@ -746,33 +749,38 @@ def read_check(root, entry):
     try:
         if p.stat().st_mtime < (Path(root) / entry["glb"]).stat().st_mtime:
             return None  # gehoert zu einem aelteren Stand der Animation
-        return json.loads(p.read_text(encoding="utf-8"))
+        res = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+    # Pruefungen von vor E73 nennen die Arten deutsch
+    for pair in res.get("pairs", []) if isinstance(res, dict) else []:
+        for r in pair.get("ranges", []):
+            r["kind"] = _OLD_KINDS.get(r.get("kind"), r.get("kind"))
+    return res
 
 
 def check_text(res):
     tol = res.get("tolerance")
-    head = (f"Kollisionen (Schritt {res['step']:g} s, {res['samples']} Zeitpunkte" + (f", Mindestabstand {res['gap']:g} mm" if res["gap"] else "")
-            + (f", genau auf {tol:g} mm" if tol else "") + "):")
-    lines = [head + ("" if res["pairs"] else " keine")]
+    head = (f"Collisions (step {res['step']:g} s, {res['samples']} time steps" + (f", minimum distance {res['gap']:g} mm" if res["gap"] else "")
+            + (f", accurate to {tol:g} mm" if tol else "") + "):")
+    lines = [head + ("" if res["pairs"] else " none")]
     for p in res["pairs"]:
-        note = " (auch in der Lage im Modell)" if p["atRest"] else ""
+        note = " (also in the assembled position)" if p["atRest"] else ""
         for r in p["ranges"]:
             span = f"{_t(r['start'])}-{_t(r['end'])} s" if r["end"] > r["start"] else f"{_t(r['start'])} s"
-            if r["kind"] != "Kollision":
-                val = f"Abstand bis {r['distance']:.3f} mm"
+            if r["kind"] != COLLISION:
+                val = f"distance down to {r['distance']:.3f} mm"
             elif r.get("depth"):
-                val = f"bis {r['depth']:.2f} mm tief" + (f", Ueberschneidung {r['volume']:.3f} mm3" if r.get("volume") else "")
+                val = f"up to {r['depth']:.2f} mm deep" + (f", overlap {r['volume']:.3f} mm3" if r.get("volume") else "")
             else:
-                val = f"Ueberschneidung bis {r['volume']:.3f} mm3" if r.get("volume") else "Oberflaechen schneiden sich"
+                val = f"overlap up to {r['volume']:.3f} mm3" if r.get("volume") else "surfaces intersect"
             lines.append(f"  {span:<16} {p['a']} / {p['b']}: {r['kind']}, {val}{note}")
     contacts = res.get("contacts") or []
     if contacts:
-        names = ", ".join(f"{m} / {o}" for m, o in contacts[:6]) + (f" und {len(contacts) - 6} weitere" if len(contacts) > 6 else "")
-        lines.append(f"Beruehren sich schon im Modell (gewollt, gemeldet wird nur tieferes Eindringen): {names}")
+        names = ", ".join(f"{m} / {o}" for m, o in contacts[:6]) + (f" and {len(contacts) - 6} more" if len(contacts) > 6 else "")
+        lines.append(f"Already touching in the model (intended, only deeper penetration is reported): {names}")
     near = res.get("clearances") or []
     if near:
-        names = ", ".join(f"{m} / {o} {d:.2f} mm" for m, o, d in near[:6]) + (f" und {len(near) - 6} weitere" if len(near) > 6 else "")
-        lines.append(f"Schon im Modell naeher als {res['gap']:g} mm (gemeldet nur, wenn es enger wird): {names}")
+        names = ", ".join(f"{m} / {o} {d:.2f} mm" for m, o, d in near[:6]) + (f" and {len(near) - 6} more" if len(near) > 6 else "")
+        lines.append(f"Already closer than {res['gap']:g} mm in the model (reported only if it gets tighter): {names}")
     return "\n".join(lines)

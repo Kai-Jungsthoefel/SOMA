@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "soma"
 # Versionsnummer von SOMA (E68), eine fuer App und soma: steht in soma/__init__.py und gleichlautend in app/package.json
 dynamic = ["version"]
-description = "Hilfsbibliothek und Kommandozeile von SOMA"
+description = "Helper library and command line of SOMA"
 # Lizenz von SOMA (E71), Text in LICENSE im Hauptordner des Repos
 license = "GPL-3.0-or-later"
 requires-python = ">=3.11"

@@ -1,19 +1,19 @@
-"""Animationen (E58): Bewegungen, Kamerafahrten und Texte, beschrieben in animations/*.py.
+"""Animations: movements, camera moves and texts, described in animations/*.py.
 
-Der Agent beschreibt eine Animation in Python, aehnlich wie in manim (`play`, `wait`, `run_time`) und mit Drehachsen wie
-in CadQuery (`rotate(p1, p2, winkel)`). `soma anim build` fuehrt die Datei aus, tastet die Bewegung ab und schreibt eine
-glTF-Animation nach .soma/anim/. Viewer, Video und Bilder entstehen daraus, die Animation selbst ist kein Video.
+An animation is described in Python, similar to manim (`play`, `wait`, `run_time`) and with rotation axes as in
+CadQuery (`rotate(p1, p2, angle)`). `soma anim build` runs the file, samples the movement and writes a glTF animation
+to .soma/anim/. The viewer, videos and pictures are made from it, the animation itself is not a video.
 
     from soma.anim import Animation
 
-    a = Animation("Deckel oeffnen")
-    lid = a.hinge("Deckel", (0, 20, 25), (1, 20, 25))     # Drehachse durch zwei Punkte, wie cq rotate()
+    a = Animation("Open lid")
+    lid = a.hinge("Lid", (0, 20, 25), (1, 20, 25))     # rotation axis through two points, like cq rotate()
     a.camera.set(view="iso")
-    a.caption("Der Deckel oeffnet bis 110 Grad")
+    a.caption("The lid opens to 110 degrees")
     a.play(lid.to(110), run_time=2)
     a.play(a.camera.orbit(90), run_time=3)
 
-Laengen in mm, Winkel in Grad, Zeiten in Sekunden. Bauteile heissen wie in add_part(), Gruppen wie in group=.
+Lengths in mm, angles in degrees, times in seconds. Parts are named as in add_part(), groups as in group=.
 """
 import inspect
 import math
@@ -51,7 +51,7 @@ def _ease(ease):
     if callable(ease):
         return ease
     if ease not in EASES:
-        raise ValueError(f"ease={ease!r} gibt es nicht. Moeglich: {', '.join(EASES)} oder eine Funktion f(s) fuer s von 0 bis 1")
+        raise ValueError(f"ease={ease!r} does not exist. Possible: {', '.join(EASES)} or a function f(s) for s from 0 to 1")
     return EASES[ease]
 
 
@@ -61,9 +61,9 @@ def _vec(v, what):
     try:
         a = np.asarray([float(x) for x in v], dtype=float)
     except (TypeError, ValueError):
-        raise ValueError(f"{what} muss drei Zahlen haben, z. B. (0, 0, 10), nicht {v!r}") from None
+        raise ValueError(f"{what} needs three numbers, e.g. (0, 0, 10), not {v!r}") from None
     if a.shape != (3,) or not np.all(np.isfinite(a)):
-        raise ValueError(f"{what} muss drei Zahlen haben, z. B. (0, 0, 10), nicht {v!r}")
+        raise ValueError(f"{what} needs three numbers, e.g. (0, 0, 10), not {v!r}")
     return a
 
 
@@ -71,7 +71,7 @@ def _unit(v, what):
     v = _vec(v, what)
     n = np.linalg.norm(v)
     if n < 1e-12:
-        raise ValueError(f"{what} darf nicht die Laenge 0 haben")
+        raise ValueError(f"{what} must not have length 0")
     return v / n
 
 
@@ -156,19 +156,19 @@ def _placement(loc):
     a = np.asarray(loc, dtype=float) if not isinstance(loc, str) else None
     if a is not None and a.shape == (4, 4):
         return a.copy()
-    return _translation(_vec(loc, "Die Lage"))
+    return _translation(_vec(loc, "The location"))
 
 
 # ---- Bauteile ---------------------------------------------------------------------------------------------------
 
 def _parts():
     if _PARTS is None:
-        raise RuntimeError("Animationen laufen ueber `soma anim build` (dort kennt soma die Bauteile des Modells), "
-                           "nicht direkt mit python.")
+        raise RuntimeError("Animations run through `soma anim build` (there soma knows the parts of the model), "
+                           "not directly with python.")
     return _PARTS
 
 
-def _resolve(spec, what="Bauteil"):
+def _resolve(spec, what="Part"):
     """Bauteilname, Gruppe ("Gehaeuse" oder "Gehaeuse/Schrauben") oder eine Liste davon -> Liste von Bauteilnamen."""
     parts = _parts()
     if isinstance(spec, (list, tuple, set)):
@@ -178,10 +178,10 @@ def _resolve(spec, what="Bauteil"):
                 if n not in out:
                     out.append(n)
         if not out:
-            raise ValueError(f"{what}: leere Liste")
+            raise ValueError(f"{what}: empty list")
         return out
     if not isinstance(spec, str) or not spec.strip():
-        raise ValueError(f"{what} muss ein Bauteilname oder eine Gruppe sein, nicht {spec!r}")
+        raise ValueError(f"{what} must be a part name or a group, not {spec!r}")
     if any(p["name"] == spec for p in parts):
         return [spec]
     path = spec.strip("/")
@@ -190,8 +190,8 @@ def _resolve(spec, what="Bauteil"):
         return hit
     names = ", ".join(repr(p["name"]) for p in parts[:30]) + (" ..." if len(parts) > 30 else "")
     groups = sorted({"/".join(p["group"][:i + 1]) for p in parts for i in range(len(p["group"]))})
-    extra = f" Gruppen: {', '.join(repr(g) for g in groups)}." if groups else ""
-    raise ValueError(f"{what} {spec!r} gibt es im Modell nicht. Bauteile: {names}.{extra}")
+    extra = f" Groups: {', '.join(repr(g) for g in groups)}." if groups else ""
+    raise ValueError(f"{what} {spec!r} does not exist in the model. Parts: {names}.{extra}")
 
 
 def _where():
@@ -202,10 +202,10 @@ def _where():
 
 def _text(text, what):
     if not isinstance(text, str):
-        raise ValueError(f"{what} muss ein Text sein, nicht {type(text).__name__}")
+        raise ValueError(f"{what} must be a text, not {type(text).__name__}")
     t = " ".join(text.split())
     if len(t) > MAX_TEXT:
-        raise ValueError(f"{what} ist laenger als {MAX_TEXT} Zeichen")
+        raise ValueError(f"{what} is longer than {MAX_TEXT} characters")
     return t
 
 
@@ -213,9 +213,9 @@ def _num(v, what, lo=None):
     try:
         f = float(v)
     except (TypeError, ValueError):
-        raise ValueError(f"{what} muss eine Zahl sein, nicht {v!r}") from None
+        raise ValueError(f"{what} must be a number, not {v!r}") from None
     if not math.isfinite(f) or (lo is not None and f < lo):
-        raise ValueError(f"{what} muss eine Zahl{'' if lo is None else f' ab {lo}'} sein, nicht {v!r}")
+        raise ValueError(f"{what} must be a number{'' if lo is None else f' of at least {lo}'}, not {v!r}")
     return f
 
 
@@ -229,7 +229,7 @@ class _Action:
 
 
 class Joint:
-    """Bauteile, die sich gemeinsam bewegen. Entsteht ueber Animation.hinge(), slider() oder part()."""
+    """Parts that move together. Created by Animation.hinge(), slider() or part()."""
 
     unit = None  # Einheit des Gelenkwerts (Grad, mm), None bei frei bewegten Teilen
 
@@ -255,13 +255,13 @@ class Joint:
         return v
 
     def matrix(self, t):
-        """Lage aller Bauteile dieses Gelenks zur Zeit t (mit den Gelenken darueber)."""
+        """Position of all parts of this joint at time t (including the joints above it), as a 4x4 matrix."""
         m = self._own(self.value_at(t))
         return self.parent.matrix(t) @ m if self.parent else m
 
 
 class _Hinge(Joint):
-    unit = "Grad"
+    unit = "deg"
 
     def __init__(self, anim, parts, p1, axis, parent, angle):
         super().__init__(anim, "hinge", parts, parent, angle)
@@ -271,14 +271,14 @@ class _Hinge(Joint):
         return _axis_rotation(self.p1, self.axis, value)
 
     def to(self, angle):
-        """Auf diesen Winkel drehen (Grad, 0 = Lage im Modell)."""
-        a1 = _num(angle, "Der Winkel")
-        return _Action(self, lambda a0: (lambda s: a0 + (a1 - a0) * s, a1), lambda a0: f"{self.label}: {a0:g} -> {a1:g} Grad")
+        """Rotate to this angle (degrees, 0 = position in the model)."""
+        a1 = _num(angle, "The angle")
+        return _Action(self, lambda a0: (lambda s: a0 + (a1 - a0) * s, a1), lambda a0: f"{self.label}: {a0:g} -> {a1:g} deg")
 
     def by(self, delta):
-        """Um diesen Winkel weiterdrehen (Grad)."""
-        d = _num(delta, "Der Winkel")
-        return _Action(self, lambda a0: (lambda s: a0 + d * s, a0 + d), lambda a0: f"{self.label}: {a0:g} -> {a0 + d:g} Grad")
+        """Rotate further by this angle (degrees)."""
+        d = _num(delta, "The angle")
+        return _Action(self, lambda a0: (lambda s: a0 + d * s, a0 + d), lambda a0: f"{self.label}: {a0:g} -> {a0 + d:g} deg")
 
 
 class _Slider(Joint):
@@ -292,13 +292,13 @@ class _Slider(Joint):
         return _translation(self.direction * value)
 
     def to(self, distance):
-        """An diese Stelle schieben (mm entlang der Richtung, 0 = Lage im Modell)."""
-        d1 = _num(distance, "Der Weg")
+        """Slide to this position (mm along the direction, 0 = position in the model)."""
+        d1 = _num(distance, "The distance")
         return _Action(self, lambda d0: (lambda s: d0 + (d1 - d0) * s, d1), lambda d0: f"{self.label}: {d0:g} -> {d1:g} mm")
 
     def by(self, delta):
-        """Um diesen Weg weiterschieben (mm)."""
-        d = _num(delta, "Der Weg")
+        """Slide further by this distance (mm)."""
+        d = _num(delta, "The distance")
         return _Action(self, lambda d0: (lambda s: d0 + d * s, d0 + d), lambda d0: f"{self.label}: {d0:g} -> {d0 + d:g} mm")
 
 
@@ -310,30 +310,30 @@ class _Free(Joint):
         return value
 
     def to(self, location):
-        """In diese Lage bewegen (cq.Location oder (x, y, z), bezogen auf die Lage im Modell). Ohne Drehachse geht der
-        Ursprung geradlinig: Fuer Drehungen um eine Achse hinge() oder rotate() nehmen."""
+        """Move to this location (cq.Location or (x, y, z), relative to the position in the model). Without a rotation
+        axis the origin moves in a straight line: for rotations about an axis use hinge() or rotate()."""
         m1 = _placement(location)
-        return _Action(self, lambda m0: (lambda s: _blend(m0, m1, s), m1), lambda m0: f"{self.label}: in neue Lage")
+        return _Action(self, lambda m0: (lambda s: _blend(m0, m1, s), m1), lambda m0: f"{self.label}: to new location")
 
     def translate(self, vector):
-        """Um diesen Vektor verschieben (mm)."""
-        v = _vec(vector, "Die Verschiebung")
+        """Move by this vector (mm)."""
+        v = _vec(vector, "The translation")
         return _Action(self, lambda m0: (lambda s: _translation(v * s) @ m0, _translation(v) @ m0),
-                       lambda m0: f"{self.label}: verschieben um ({v[0]:g}, {v[1]:g}, {v[2]:g}) mm")
+                       lambda m0: f"{self.label}: move by ({v[0]:g}, {v[1]:g}, {v[2]:g}) mm")
 
     def rotate(self, p1, p2, angle):
-        """Um die Achse durch p1 und p2 drehen (Grad), wie cq rotate(). Die Achse liegt im Modell, nicht im Teil."""
-        a, b = _vec(p1, "Der erste Achspunkt"), _vec(p2, "Der zweite Achspunkt")
-        axis = _unit(b - a, "Die Drehachse (p2 - p1)")
-        deg = _num(angle, "Der Winkel")
+        """Rotate about the axis through p1 and p2 (degrees), like cq rotate(). The axis is in the model, not in the part."""
+        a, b = _vec(p1, "The first axis point"), _vec(p2, "The second axis point")
+        axis = _unit(b - a, "The rotation axis (p2 - p1)")
+        deg = _num(angle, "The angle")
         return _Action(self, lambda m0: (lambda s: _axis_rotation(a, axis, deg * s) @ m0, _axis_rotation(a, axis, deg) @ m0),
-                       lambda m0: f"{self.label}: drehen um {deg:g} Grad")
+                       lambda m0: f"{self.label}: rotate by {deg:g} deg")
 
 
 # ---- Kamera -----------------------------------------------------------------------------------------------------
 
 class Camera:
-    """Kamera einer Animation. set() springt, move(), orbit() und zoom() sind Bewegungen fuer play()."""
+    """Camera of an animation. set() jumps, move(), orbit() and zoom() are movements for play()."""
 
     def __init__(self, anim):
         self.anim = anim
@@ -344,11 +344,11 @@ class Camera:
         if view is not None:
             if isinstance(view, str):
                 if view not in VIEWS:
-                    raise ValueError(f"view={view!r} gibt es nicht. Moeglich: {', '.join(VIEWS)} oder eine Richtung (x, y, z)")
-                spec["dir"] = _unit(VIEWS[view], "Die Blickrichtung")
+                    raise ValueError(f"view={view!r} does not exist. Possible: {', '.join(VIEWS)} or a direction (x, y, z)")
+                spec["dir"] = _unit(VIEWS[view], "The view direction")
             else:
-                spec["dir"] = _unit(view, "Die Blickrichtung (von der Mitte zur Kamera)")
-            spec["view"] = view if isinstance(view, str) else "Richtung"
+                spec["dir"] = _unit(view, "The view direction (from the center to the camera)")
+            spec["view"] = view if isinstance(view, str) else "direction"
         if fit is not None:
             spec["fit"] = None if fit == "all" else _resolve(fit, "fit")
         if zoom is not None:
@@ -360,63 +360,63 @@ class Camera:
         return spec
 
     def set(self, view=None, fit=None, zoom=None, target=None, distance=None):
-        """Kamera sofort setzen. view: "iso", "front", "back", "left", "right", "top", "bottom" oder eine Richtung von der
-        Mitte zur Kamera. fit: Bauteile oder Gruppen, die ganz ins Bild sollen (ueber die ganze Bewegung), Standard alle.
-        zoom: groesser als 1 naeher heran. target und distance setzen Mitte und Abstand (mm) direkt."""
+        """Set the camera at once. view: "iso", "front", "back", "left", "right", "top", "bottom" or a direction from the
+        center to the camera. fit: parts or groups that should be fully in the picture (over the whole movement), default
+        all. zoom: greater than 1 is closer. target and distance set the center and the distance (mm) directly."""
         spec = self._spec(view, fit, zoom, target, distance)
         if "fit" not in spec and "target" not in spec and "distance" not in spec:
             spec["fit"] = None  # ohne Angabe: alles einpassen
         t = self.anim.time
         self.ops.append(dict(t0=t, t1=t, kind="set", spec=spec, ease=EASES["linear"]))
-        self.anim._step(t, t, "Kamera: " + _describe_camera(spec))
+        self.anim._step(t, t, "Camera: " + _describe_camera(spec))
 
     def move(self, view=None, fit=None, zoom=None, target=None, distance=None):
-        """Kamerafahrt zu einer neuen Ansicht (fuer play). Was nicht angegeben ist, bleibt: Ohne fit, target und distance
-        bleiben Mitte und Abstand, und die Kamera schwenkt nur."""
+        """Camera move to a new view (for play). What is not given stays: without fit, target and distance the center
+        and the distance stay, and the camera only swings around."""
         spec = self._spec(view, fit, zoom, target, distance)
-        return _Action(self, ("move", spec), lambda _v: "Kamera: Fahrt " + _describe_camera(spec))
+        return _Action(self, ("move", spec), lambda _v: "Camera: move " + _describe_camera(spec))
 
     def orbit(self, degrees, tilt=0.0):
-        """Um die Mitte kreisen (Grad um die Hochachse Z, positiv gegen den Uhrzeigersinn von oben). tilt hebt oder
-        senkt die Kamera (Grad)."""
-        spec = dict(orbit=_num(degrees, "Der Winkel"), tilt=_num(tilt, "tilt"))
-        return _Action(self, ("orbit", spec), lambda _v: f"Kamera: Umlauf {spec['orbit']:g} Grad" + (f", Neigung {spec['tilt']:g} Grad" if spec["tilt"] else ""))
+        """Circle around the center (degrees about the vertical axis Z, positive is counterclockwise seen from above).
+        tilt raises or lowers the camera (degrees)."""
+        spec = dict(orbit=_num(degrees, "The angle"), tilt=_num(tilt, "tilt"))
+        return _Action(self, ("orbit", spec), lambda _v: f"Camera: orbit {spec['orbit']:g} deg" + (f", tilt {spec['tilt']:g} deg" if spec["tilt"] else ""))
 
     def zoom(self, factor):
-        """Naeher heran (factor groesser als 1) oder weiter weg (kleiner als 1)."""
-        f = _num(factor, "Der Faktor", 0.01)
-        return _Action(self, ("zoom", dict(zoom=f)), lambda _v: f"Kamera: Zoom x{f:g}")
+        """Closer (factor greater than 1) or farther away (less than 1)."""
+        f = _num(factor, "The factor", 0.01)
+        return _Action(self, ("zoom", dict(zoom=f)), lambda _v: f"Camera: zoom x{f:g}")
 
 
 def _describe_camera(spec):
     bits = []
     if "view" in spec:
-        bits.append(f"Ansicht {spec['view']}")
+        bits.append(f"view {spec['view']}")
     if "fit" in spec:
-        bits.append("alles im Bild" if spec["fit"] is None else f"im Bild: {', '.join(spec['fit'][:4])}")
+        bits.append("everything in the picture" if spec["fit"] is None else f"in the picture: {', '.join(spec['fit'][:4])}")
     if "zoom" in spec:
-        bits.append(f"Zoom x{spec['zoom']:g}")
+        bits.append(f"zoom x{spec['zoom']:g}")
     if "target" in spec:
-        bits.append("Mitte ({:g}, {:g}, {:g})".format(*spec["target"]))
+        bits.append("center ({:g}, {:g}, {:g})".format(*spec["target"]))
     if "distance" in spec:
-        bits.append(f"Abstand {spec['distance']:g} mm")
-    return ", ".join(bits) or "unveraendert"
+        bits.append(f"distance {spec['distance']:g} mm")
+    return ", ".join(bits) or "unchanged"
 
 
 # ---- Animation --------------------------------------------------------------------------------------------------
 
 class Animation:
-    """Eine Animation mit Namen. Mehrere je Datei sind erlaubt, Namen muessen im Projekt eindeutig sein.
+    """An animation with a name. Several per file are allowed, names must be unique in the project.
 
-    Zeitleiste wie in manim: play() bewegt (alle uebergebenen Bewegungen gleichzeitig) und rueckt die Zeit um run_time
-    weiter, wait() wartet, title() zeigt eine Titelkarte und rueckt weiter. caption(), label(), highlight(), hide(),
-    show() und ghost() gelten ab der aktuellen Zeit und ruecken nicht weiter.
+    Timeline as in manim: play() moves (all given movements at the same time) and advances the time by run_time,
+    wait() waits, title() shows a title card and advances. caption(), label(), highlight(), hide(), show() and ghost()
+    apply from the current time and do not advance it.
     """
 
     def __init__(self, name):
-        self.name = _text(name, "Der Name der Animation")
+        self.name = _text(name, "The name of the animation")
         if not self.name:
-            raise ValueError("Die Animation braucht einen Namen, z. B. Animation(\"Deckel oeffnen\")")
+            raise ValueError("The animation needs a name, e.g. Animation(\"Open lid\")")
         self.id = registry.ascii_name(self.name).lower().replace("_", "-")
         self.file, self.line = _where()
         self.time = 0.0
@@ -431,26 +431,26 @@ class Animation:
         for j in self.joints:
             twice = set(j.parts) & set(joint.parts)
             if twice:
-                raise ValueError(f"{sorted(twice)[0]!r} haengt schon an einem Gelenk dieser Animation. Ein Bauteil hat "
-                                 "ein Gelenk, Bewegungen darueber kommen mit parent=.")
+                raise ValueError(f"{sorted(twice)[0]!r} is already on a joint of this animation. A part has one joint, "
+                                 "movements on top of it come with parent=.")
         if joint.parent is not None and not isinstance(joint.parent, Joint):
-            raise ValueError("parent muss ein Gelenk dieser Animation sein (Rueckgabe von hinge(), slider() oder part())")
+            raise ValueError("parent must be a joint of this animation (returned by hinge(), slider() or part())")
         self.joints.append(joint)
         return joint
 
     def hinge(self, parts, p1, p2, parent=None, angle=0.0):
-        """Drehgelenk: Bauteile (Name, Gruppe oder Liste) drehen um die Achse durch p1 und p2, wie cq rotate(p1, p2, w).
-        Positive Winkel drehen rechtsherum um die Richtung p2 - p1. angle ist der Winkel am Anfang (Grad, 0 = wie im
-        Modell). parent: Gelenk, auf dem dieses sitzt (die Achse liegt dann in der Modelllage)."""
-        a, b = _vec(p1, "Der erste Achspunkt"), _vec(p2, "Der zweite Achspunkt")
-        return self._joint(_Hinge(self, _resolve(parts), a, _unit(b - a, "Die Drehachse (p2 - p1)"), parent, _num(angle, "angle")))
+        """Revolute joint: parts (name, group or list) rotate about the axis through p1 and p2, like cq rotate(p1, p2, a).
+        Positive angles turn right-handed about the direction p2 - p1. angle is the angle at the start (degrees, 0 = as in
+        the model). parent: joint this one sits on (the axis is then given in the model position)."""
+        a, b = _vec(p1, "The first axis point"), _vec(p2, "The second axis point")
+        return self._joint(_Hinge(self, _resolve(parts), a, _unit(b - a, "The rotation axis (p2 - p1)"), parent, _num(angle, "angle")))
 
     def slider(self, parts, direction, parent=None, position=0.0):
-        """Schubgelenk: Bauteile verschieben sich entlang direction. position ist der Weg am Anfang (mm)."""
-        return self._joint(_Slider(self, _resolve(parts), _unit(direction, "Die Richtung"), parent, _num(position, "position")))
+        """Prismatic joint: parts slide along direction. position is the distance at the start (mm)."""
+        return self._joint(_Slider(self, _resolve(parts), _unit(direction, "The direction"), parent, _num(position, "position")))
 
     def part(self, parts, parent=None):
-        """Frei bewegte Bauteile: to(lage), translate((x, y, z)), rotate(p1, p2, winkel)."""
+        """Freely moving parts: to(location), translate((x, y, z)), rotate(p1, p2, angle)."""
         return self._joint(_Free(self, _resolve(parts), parent))
 
     # -- Zeitleiste --
@@ -461,19 +461,19 @@ class Animation:
         self.steps.append(dict(start=round(t0, 4), end=round(t1, 4), text=text, **move))
 
     def play(self, *actions, run_time=1.0, ease="smooth"):
-        """Bewegungen gleichzeitig ablaufen lassen, dann geht die Zeit um run_time (Sekunden) weiter.
-        ease: "smooth" (Standard, sanft an und aus), "linear", "in", "out" oder eine Funktion f(s)."""
+        """Run movements at the same time, then the time advances by run_time (seconds).
+        ease: "smooth" (default, gentle start and stop), "linear", "in", "out" or a function f(s)."""
         rt = _num(run_time, "run_time", 0.0)
         f = _ease(ease)
         if not actions:
-            raise ValueError("play() braucht mindestens eine Bewegung, z. B. play(deckel.to(90)). Zum Warten: wait()")
+            raise ValueError("play() needs at least one movement, e.g. play(lid.to(90)). To wait: wait()")
         seen = set()
         t0, t1 = self.time, self.time + rt
         for act in actions:
             if not isinstance(act, _Action):
-                raise ValueError(f"play() erwartet Bewegungen wie gelenk.to(90) oder a.camera.orbit(90), nicht {act!r}")
+                raise ValueError(f"play() expects movements like joint.to(90) or a.camera.orbit(90), not {act!r}")
             if id(act.target) in seen:
-                raise ValueError("Ein Gelenk (oder die Kamera) kommt zweimal im selben play() vor")
+                raise ValueError("A joint (or the camera) appears twice in the same play()")
             seen.add(id(act.target))
             if isinstance(act.target, Camera):
                 kind, spec = act.make
@@ -483,7 +483,7 @@ class Animation:
                 continue
             j = act.target
             if j.anim is not self:
-                raise ValueError("Diese Bewegung gehoert zu einer anderen Animation")
+                raise ValueError("This movement belongs to another animation")
             func, end = act.make(j.value)
             j.segments.append((t0, t1, func, f))
             move = dict(key=f"joint{self.joints.index(j)}", label=j.label)
@@ -494,46 +494,46 @@ class Animation:
         self.time = t1
 
     def wait(self, seconds=1.0):
-        """Nichts bewegt sich, die Zeit geht weiter."""
-        s = _num(seconds, "Die Wartezeit", 0.0)
+        """Nothing moves, the time advances."""
+        s = _num(seconds, "The waiting time", 0.0)
         self._step(self.time, self.time + s, "Pause")
         self.time += s
 
     # -- Texte und Hervorhebungen --
 
     def title(self, text, subtitle=None, duration=2.0):
-        """Titelkarte in der Bildmitte. Die Zeit geht um duration weiter (wie wait)."""
+        """Title card in the middle of the picture. The time advances by duration (like wait)."""
         d = _num(duration, "duration", 0.0)
-        t = dict(start=self.time, end=self.time + d, text=_text(text, "Der Titel"))
+        t = dict(start=self.time, end=self.time + d, text=_text(text, "The title"))
         if subtitle:
-            t["subtitle"] = _text(subtitle, "Der Untertitel")
+            t["subtitle"] = _text(subtitle, "The subtitle")
         self.titles.append(t)
-        self._step(self.time, self.time + d, f"Titel: {t['text']}")
+        self._step(self.time, self.time + d, f"Title: {t['text']}")
         self.time += d
 
     def caption(self, text, duration=None):
-        """Untertitel unten im Bild, ab jetzt bis zum naechsten Untertitel (oder duration Sekunden). caption(None) blendet aus."""
+        """Caption at the bottom of the picture, from now until the next caption (or duration seconds). caption(None) hides it."""
         if text is None or text == "":
             self.captions.append(dict(start=self.time, end=None, text=""))
             return
         d = None if duration is None else _num(duration, "duration", 0.0)
-        c = dict(start=self.time, end=None if d is None else self.time + d, text=_text(text, "Der Untertitel"))
+        c = dict(start=self.time, end=None if d is None else self.time + d, text=_text(text, "The caption"))
         self.captions.append(c)
-        self._step(self.time, self.time if d is None else self.time + d, f"Untertitel: {c['text']}")
+        self._step(self.time, self.time if d is None else self.time + d, f"Caption: {c['text']}")
 
     def label(self, text, part=None, at=None, duration=None):
-        """Beschriftung an einer Stelle im Modell, ab jetzt (bis zum Ende oder duration Sekunden). part: Das Schild wandert
-        mit diesem Bauteil. at: Punkt (mm, in der Lage im Modell), ohne at die Mitte des Bauteils."""
+        """Label at a spot in the model, from now on (until the end or duration seconds). part: the label moves with this
+        part. at: point (mm, in the position in the model), without at the center of the part."""
         if part is None and at is None:
-            raise ValueError("label() braucht part= oder at=")
+            raise ValueError("label() needs part= or at=")
         names = _resolve(part, "part") if part is not None else []
         if len(names) > 1:
-            raise ValueError(f"label(part=...) braucht ein einzelnes Bauteil, {part!r} sind {len(names)}")
+            raise ValueError(f"label(part=...) needs a single part, {part!r} are {len(names)}")
         d = None if duration is None else _num(duration, "duration", 0.0)
-        lb = dict(start=self.time, end=None if d is None else self.time + d, text=_text(text, "Die Beschriftung"),
+        lb = dict(start=self.time, end=None if d is None else self.time + d, text=_text(text, "The label"),
                   part=names[0] if names else None, at=None if at is None else [float(x) for x in _vec(at, "at")])
         self.labels.append(lb)
-        self._step(self.time, self.time, f"Beschriftung: {lb['text']}")
+        self._step(self.time, self.time, f"Label: {lb['text']}")
 
     def _event(self, kind, parts, what):
         names = _resolve(parts)
@@ -541,25 +541,27 @@ class Animation:
         self._step(self.time, self.time, f"{what}: {', '.join(names[:4])}{' ...' if len(names) > 4 else ''}")
 
     def highlight(self, parts, duration=None):
-        """Bauteile hervorheben (orange), ab jetzt bis unhighlight() oder duration Sekunden."""
-        self._event("highlight", parts, "Hervorheben")
+        """Highlight parts (orange), from now until unhighlight() or duration seconds."""
+        self._event("highlight", parts, "Highlight")
         if duration is not None:
             d = _num(duration, "duration", 0.0)
             self.events.append(dict(t=self.time + d, kind="unhighlight", parts=_resolve(parts)))
 
     def unhighlight(self, parts):
-        self._event("unhighlight", parts, "Hervorhebung aus")
+        """End the highlight of parts."""
+        self._event("unhighlight", parts, "Highlight off")
 
     def hide(self, parts):
-        """Bauteile ausblenden (bis show())."""
-        self._event("hide", parts, "Ausblenden")
+        """Hide parts (until show())."""
+        self._event("hide", parts, "Hide")
 
     def show(self, parts):
-        self._event("show", parts, "Einblenden")
+        """Show hidden parts again."""
+        self._event("show", parts, "Show")
 
     def ghost(self, parts, on=True):
-        """Bauteile durchsichtig zeigen (on=False: wieder deckend). So sieht man, was dahinter liegt."""
-        self._event("ghost" if on else "solid", parts, "Durchsichtig" if on else "Wieder deckend")
+        """Show parts transparent (on=False: opaque again). So you can see what is behind them."""
+        self._event("ghost" if on else "solid", parts, "Transparent" if on else "Opaque again")
 
     # -- Auswertung (fuer animrun.py) --
 

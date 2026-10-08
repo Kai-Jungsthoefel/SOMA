@@ -19,12 +19,12 @@ from . import build, gltf, mesher
 OUT_DIR = Path(".soma") / "results"
 
 KINDS = {
-    "overhang": dict(title="Überhang", quantity="Überhangwinkel", unit="°", bad="high", threshold=45.0,
-                     help="Winkel zur Senkrechten fuer nach unten zeigende Flaechen, kritisch ueber dem Grenzwert"),
-    "thickness": dict(title="Wandstärke", quantity="Wandstärke", unit="mm", bad="low", threshold=1.2,
-                      help="Abstand zur Gegenseite des Materials, kritisch unter dem Grenzwert"),
-    "clearance": dict(title="Abstand", quantity="Abstand zu anderen Bauteilen", unit="mm", bad="low", threshold=0.5,
-                      help="kleinster Abstand zu einem anderen Bauteil, negativ bei Ueberschneidung, kritisch unter dem Grenzwert"),
+    "overhang": dict(title="Overhang", quantity="Overhang angle", unit="°", bad="high", threshold=45.0,
+                     help="angle from vertical for downward-facing faces, critical above the limit"),
+    "thickness": dict(title="Wall thickness", quantity="Wall thickness", unit="mm", bad="low", threshold=1.2,
+                      help="distance to the opposite side of the material, critical below the limit"),
+    "clearance": dict(title="Clearance", quantity="Clearance to other parts", unit="mm", bad="low", threshold=0.5,
+                      help="smallest distance to another part, negative where they overlap, critical below the limit"),
 }
 
 
@@ -187,13 +187,13 @@ def _pick(parts, spec, default_roles):
         group = [p for p in parts if _group_path(p) == path or _group_path(p).startswith(path + "/")]
         part = [p for p in parts if p["name"] == s]
         if part and group:
-            notes.append(f"{s!r} ist Bauteil und Gruppe: ausgewertet ist das Bauteil, die Gruppe mit --parts \"{path}/\"")
+            notes.append(f"{s!r} is a part and a group: the part was analysed, for the group use --parts \"{path}/\"")
         hit = part or group
         if not hit:
             names = ", ".join(repr(p["name"]) for p in parts[:30])
             groups = sorted({_group_path(p) for p in parts if p.get("group")})
-            raise AnalysisError(f"Bauteil oder Gruppe {s!r} gibt es nicht. Bauteile: {names}"
-                                + (f". Gruppen: {', '.join(repr(g) for g in groups)}" if groups else ""))
+            raise AnalysisError(f"There is no part or group {s!r}. Parts: {names}"
+                                + (f". Groups: {', '.join(repr(g) for g in groups)}" if groups else ""))
         out += [p for p in hit if p not in out]
     return out, notes
 
@@ -270,7 +270,7 @@ def run(root, kind, parts_spec=None, threshold=None, up="z", name=None):
     """Fuehrt eine Auswertung aus, schreibt .soma/results/<name>.glb und gibt die Metadaten zurueck."""
     from .progress import Progress
     if kind not in KINDS:
-        raise AnalysisError(f"Unbekannte Auswertung {kind!r}. Moeglich: {', '.join(KINDS)}")
+        raise AnalysisError(f"Unknown analysis {kind!r}. Available: {', '.join(KINDS)}")
     spec = KINDS[kind]
     high = spec["bad"] == "high"
     thr = spec["threshold"] if threshold is None else float(threshold)
@@ -278,12 +278,12 @@ def run(root, kind, parts_spec=None, threshold=None, up="z", name=None):
     try:
         parts = build.run_model(root)
     except build.BuildError as e:
-        raise AnalysisError(f"Das Modell laesst sich nicht bauen: {e.message}" + (f" ({e.file}:{e.line})" if e.file and e.line else "")) from None
+        raise AnalysisError(f"The model does not build: {e.message}" + (f" ({e.file}:{e.line})" if e.file and e.line else "")) from None
     chosen, notes = _pick(parts, parts_spec, ("part",))
     if not chosen:
-        raise AnalysisError("Keine Bauteile zum Auswerten (ohne --parts zaehlen nur eigene Teile, keine Referenzen und Zukaufteile).")
+        raise AnalysisError("No parts to analyse (without --parts only your own parts count, not reference or purchased parts).")
     if up not in AXES:
-        raise AnalysisError(f"--up {up!r} gibt es nicht. Moeglich: {', '.join(AXES)}")
+        raise AnalysisError(f"There is no --up {up!r}. Available: {', '.join(AXES)}")
     upv = np.asarray(AXES[up], dtype=float)
     tol = build.auto_tolerance([p["shape"] for p in parts])
     meshes = {p["name"]: mesher.mesh_shape(p["shape"], tol, 0.3) for p in parts}
@@ -297,7 +297,7 @@ def run(root, kind, parts_spec=None, threshold=None, up="z", name=None):
     # mit genau 45 Grad oder genau 0,2 mm Spiel lag durch Rundung sonst knapp darueber.
     band = 0.5 if kind == "overhang" else round(max(0.005, tol), 4)
     if kind == "clearance" and len(parts) < 2:
-        raise AnalysisError("Der Abstand braucht mindestens zwei Bauteile.")
+        raise AnalysisError("Clearance needs at least two parts.")
     g = gltf.Glb()
     edge_mat = g.material(name="edge", pbrMetallicRoughness=dict(baseColorFactor=[0.05, 0.05, 0.05, 1.0], metallicFactor=0, roughnessFactor=1))
     face_mat = g.material(name="result", doubleSided=True, pbrMetallicRoughness=dict(baseColorFactor=[1, 1, 1, 1], metallicFactor=0, roughnessFactor=0.7))
@@ -310,7 +310,7 @@ def run(root, kind, parts_spec=None, threshold=None, up="z", name=None):
             continue
         pos, nrm, idx = m["positions"].astype(float), m["normals"].astype(float), m["indices"].astype(np.int64)
         work.append((i, p, m, pos, idx, _subdivide(pos, nrm, idx, h, 150000)))
-    progress = Progress(f"soma analyze {kind}", sum(len(w[5][2]) for w in work), "Messstellen")
+    progress = Progress(f"soma analyze {kind}", sum(len(w[5][2]) for w in work), "sample points")
     for i, p, m, pos, idx, (pos2, nrm2, idx2) in work:
         tri = pos2[idx2]
         fn = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
@@ -415,48 +415,48 @@ def _mm2(a):
 def _region_line(r, unit):
     size = f"{r['size'][0]:.1f} x {r['size'][1]:.1f} mm"
     if r.get("count", 1) > 1:
-        return f"{r['count']} gleichartige Stellen je {_mm2(r['area'])} in {size}, bis {_fmt(r['worst'], unit)}, z. B. bei {_where(r['at'])}"
-    return f"{_mm2(r['area'])} in {size}, bis {_fmt(r['worst'], unit)} bei {_where(r['at'])}"
+        return f"{r['count']} similar spots of {_mm2(r['area'])} each in {size}, up to {_fmt(r['worst'], unit)}, e.g. at {_where(r['at'])}"
+    return f"{_mm2(r['area'])} in {size}, up to {_fmt(r['worst'], unit)} at {_where(r['at'])}"
 
 
 def summary_text(meta):
     unit, thr = meta["unit"], meta["threshold"]
-    worse = "über" if meta["bad"] == "high" else "unter"
-    head = f"{meta['title']} (Grenzwert {_fmt(thr, unit)}, kritisch {worse} dem Grenzwert"
+    worse = "above" if meta["bad"] == "high" else "below"
+    head = f"{meta['title']} (limit {_fmt(thr, unit)}, critical {worse} the limit"
     if meta.get("tolerance"):
-        head += f", auf ±{meta['tolerance']:g}{'°' if unit == '°' else ' ' + unit} genau"
+        head += f", accurate to ±{meta['tolerance']:g}{'°' if unit == '°' else ' ' + unit}"
     head += ")"
     if meta["kind"] == "overhang":
-        head += f", Druckrichtung +{meta['up'].lstrip('-')}" if not (meta["up"] or "").startswith("-") else f", Druckrichtung {meta['up']}"
+        head += f", print direction +{meta['up'].lstrip('-')}" if not (meta["up"] or "").startswith("-") else f", print direction {meta['up']}"
     lines = [head + ":"]
     for st in meta["parts"]:
         if "min" not in st:
-            lines.append(f"  {st['name']}: keine Werte")
+            lines.append(f"  {st['name']}: no values")
             continue
-        rng = f"{_fmt(st['min'], unit)} bis {_fmt(st['max'], unit)}"
-        crit = f"{st['critical'] / 100:.2f} cm² {worse} {_fmt(thr, unit)}" if st["critical"] > 0 else f"nichts {worse} {_fmt(thr, unit)}"
+        rng = f"{_fmt(st['min'], unit)} to {_fmt(st['max'], unit)}"
+        crit = f"{st['critical'] / 100:.2f} cm² {worse} {_fmt(thr, unit)}" if st["critical"] > 0 else f"nothing {worse} {_fmt(thr, unit)}"
         w = st["worst"]
         extra = ""
         if st.get("limit"):
-            extra += f", {st['limit'] / 100:.2f} cm² genau am Grenzwert"
+            extra += f", {st['limit'] / 100:.2f} cm² exactly at the limit"
         if st.get("overlap"):
-            extra += f", davon {st['overlap'] / 100:.2f} cm² Ueberschneidung"
+            extra += f", of which {st['overlap'] / 100:.2f} cm² overlap"
         if st.get("contact"):
-            extra += f", {st['contact'] / 100:.2f} cm² Beruehrung (nicht kritisch)"
+            extra += f", {st['contact'] / 100:.2f} cm² contact (not critical)"
         if st.get("open"):
-            extra += f", {st['open']} Stellen ohne Gegenseite (offene Flaeche?)"
+            extra += f", {st['open']} spots without an opposite side (open face?)"
         if st.get("betterUp"):
             b = st["betterUp"]
-            extra += f", mit --up {b['up']} nur {b['critical'] / 100:.2f} cm²"
-        worst = f", {'groesster' if meta['bad'] == 'high' else 'kleinster'} Wert {_fmt(w['value'], unit)} bei {_where(w['at'])}" if st["critical"] > 0 else ""
+            extra += f", with --up {b['up']} only {b['critical'] / 100:.2f} cm²"
+        worst = f", {'largest' if meta['bad'] == 'high' else 'smallest'} value {_fmt(w['value'], unit)} at {_where(w['at'])}" if st["critical"] > 0 else ""
         lines.append(f"  {st['name']}: {rng}, {crit}{extra}{worst}")
         for r in st.get("regions", []):
             lines.append(f"    {_region_line(r, unit)}")
         if st.get("regionsMore"):
             mo = st["regionsMore"]
-            lines.append(f"    und {mo['count']} weitere Stelle{'n' if mo['count'] > 1 else ''}, zusammen {_mm2(mo['area'])}")
+            lines.append(f"    and {mo['count']} more spot{'s' if mo['count'] > 1 else ''}, {_mm2(mo['area'])} in total")
     for n in meta.get("notes") or []:
-        lines.append(f"Hinweis: {n}")
+        lines.append(f"Note: {n}")
     return "\n".join(lines)
 
 

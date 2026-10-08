@@ -15,7 +15,7 @@ def _dur(s):
 
 
 class Progress:
-    def __init__(self, what, total, unit="Schritte", after=5.0, every=15.0):
+    def __init__(self, what, total, unit="steps", after=5.0, every=15.0):
         self.what, self.total, self.unit = what, max(1, int(total)), unit
         self.after, self.every = after, every
         self.done = 0
@@ -30,11 +30,11 @@ class Progress:
             return
         self.last = now
         rest = elapsed / max(self.done, 1) * (self.total - self.done)
-        self._say(f"{self.what}: {self.done} von {self.total} {self.unit}, noch etwa {_dur(rest)}")
+        self._say(f"{self.what}: {self.done} of {self.total} {self.unit}, about {_dur(rest)} left")
 
     def finish(self):
         if self.last is not None:
-            self._say(f"{self.what}: fertig nach {_dur(time.perf_counter() - self.start)}")
+            self._say(f"{self.what}: done after {_dur(time.perf_counter() - self.start)}")
 
     @staticmethod
     def _say(text):

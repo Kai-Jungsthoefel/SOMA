@@ -21,6 +21,7 @@ DEFAULT_ENTRY = "model.py"
 # nur, wenn build.json diese Nummer traegt (app/src/main/build.ts, OUTPUT_FORMAT). Erhoehen, sobald sich daran etwas aendert,
 # das der Viewer braucht: dann baut die App jedes Projekt beim naechsten Oeffnen einmal neu.
 OUTPUT_FORMAT = 1
+REFERENCE_GROUP = "Reference"  # Baugruppe der Referenzteile in output/model.step
 
 
 class BuildError(Exception):
@@ -86,7 +87,7 @@ def run_model(root, entry=None):
     script = (root / entry)
     if not script.is_file():
         raise BuildError(
-            f"Einstiegspunkt {entry!r} nicht gefunden. Lege {DEFAULT_ENTRY} an oder setze \"entry\" in .soma/project.json.",
+            f"Entry point {entry!r} not found. Create {DEFAULT_ENTRY} or set \"entry\" in .soma/project.json.",
             kind="EntryMissing")
     global LAST_RUN
     registry.REGISTRY.clear()
@@ -100,7 +101,7 @@ def run_model(root, entry=None):
         raise
     except SystemExit as e:
         if e.code not in (None, 0):
-            raise BuildError(f"model.py hat sich mit Code {e.code} beendet", file=entry, kind="SystemExit")
+            raise BuildError(f"{entry} exited with code {e.code}", file=entry, kind="SystemExit")
     except BaseException as e:  # auch KeyboardInterrupt/Fehler im Nutzercode sauber melden
         raise _error_from_exception(e, root)
     finally:
@@ -109,7 +110,7 @@ def run_model(root, entry=None):
             sys.path.pop(0)
     if not registry.REGISTRY:
         raise BuildError(
-            "Kein Bauteil registriert. Rufe add_part(name, objekt) fuer jedes Bauteil auf "
+            "No part registered. Call add_part(name, obj) for every part "
             "(from soma import add_part).", file=entry, kind="NoParts")
     return list(registry.REGISTRY)
 
@@ -149,14 +150,14 @@ def write_outputs(root, parts, project_name):
     timings = {}
 
     t = time.perf_counter()
-    # Gruppen werden Unterbaugruppen der STEP-Datei, Referenzen stehen unter "Referenz" (E34)
-    taken = {p["step_name"] for p in parts} | {"Referenz"}
+    # Gruppen werden Unterbaugruppen der STEP-Datei, Referenzen stehen unter "Reference" (E34, vor E73 "Referenz")
+    taken = {p["step_name"] for p in parts} | {REFERENCE_GROUP}
     root_name = registry.ascii_name(project_name)
     taken.add(root_name)
     asm = _assembly(root_name, [(p.get("group", ()), p) for p in parts if p["role"] != "reference"], taken)
     refs = [p for p in parts if p["role"] == "reference"]
     if refs:
-        asm.add(_assembly("Referenz", [(p.get("group", ()), p) for p in refs], taken), name="Referenz")
+        asm.add(_assembly(REFERENCE_GROUP, [(p.get("group", ()), p) for p in refs], taken), name=REFERENCE_GROUP)
     (root / "output").mkdir(exist_ok=True)
     asm.export(str(root / "output" / "model.step"))
     timings["step"] = time.perf_counter() - t
@@ -210,7 +211,7 @@ def run_build(project_dir):
             from . import env
             w = env.record_requirements(root)
         except Exception as e:  # noqa: BLE001
-            w = f"requirements.txt konnte nicht aktualisiert werden: {type(e).__name__}: {e}"
+            w = f"requirements.txt could not be updated: {type(e).__name__}: {e}"
         if w:
             result["warnings"].append(w)
     except BuildError as e:
@@ -224,5 +225,5 @@ def run_build(project_dir):
         (root / ".soma").mkdir(exist_ok=True)
         (root / ".soma" / "build.json").write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
-        result["warnings"].append(f"build.json konnte nicht geschrieben werden: {e}")
+        result["warnings"].append(f"build.json could not be written: {e}")
     return result

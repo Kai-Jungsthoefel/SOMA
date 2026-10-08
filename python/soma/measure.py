@@ -52,11 +52,11 @@ class Model:
         try:
             self.map = json.loads((folder / "model.map.json").read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
-            raise MeasureError(f"model.map.json fehlt oder ist unlesbar: {e}")
+            raise MeasureError(f"model.map.json is missing or unreadable: {e}")
         self.build = self.map.get("build")
         brep = folder / "geometry" / f"{self.build}.brep"
         if not self.build or not brep.is_file():
-            raise MeasureError("Zu diesem Stand gibt es keine Geometrie zum Messen. Einmal neu bauen hilft.")
+            raise MeasureError("There is no geometry to measure for this version. Building it once more helps.")
         comp = cq.Shape.importBrep(str(brep))
         it = TopoDS_Iterator(comp.wrapped)
         self.shapes = []
@@ -66,28 +66,28 @@ class Model:
         self.parts = {p["id"]: i for i, p in enumerate(self.map.get("parts", []))}
         self.names = {p["id"]: p.get("name", p["id"]) for p in self.map.get("parts", [])}
         if len(self.shapes) != len(self.parts):
-            raise MeasureError("Geometrie und Bauteilliste passen nicht zusammen. Einmal neu bauen hilft.")
+            raise MeasureError("Geometry and part list do not match. Building it once more helps.")
         self._cache = {"face": {}, "edge": {}, "vertex": {}}
 
     def shape(self, part):
         if part not in self.parts:
-            raise MeasureError(f"Unbekanntes Bauteil {part!r}.", stale=True)
+            raise MeasureError(f"Unknown part {part!r}.", stale=True)
         return self.shapes[self.parts[part]]
 
     def sub(self, ent):
         """Flaeche, Kante oder Eckpunkt eines Bauteils. Prueft Flaecheninhalt, Laenge bzw. Lage gegen den Viewer."""
         part, kind, i = ent["part"], ent["kind"], int(ent["id"])
         if kind not in self._cache:
-            raise MeasureError(f"Unbekannte Art {kind!r}.")
+            raise MeasureError(f"Unknown kind {kind!r}.")
         cache = self._cache[kind]
         if part not in cache:
             s = self.shape(part)
             cache[part] = s.Faces() if kind == "face" else s.Edges() if kind == "edge" else s.Vertices()
         items = cache[part]
         if not 0 <= i < len(items):
-            raise MeasureError("Diese Stelle gibt es im aktuellen Stand nicht mehr.", stale=True)
+            raise MeasureError("This spot no longer exists in the current version.", stale=True)
         sub = items[i]
-        stale = MeasureError("Die Geometrie passt nicht zum angezeigten Stand. Bitte neu anklicken.", stale=True)
+        stale = MeasureError("The geometry does not match the version shown. Please click again.", stale=True)
         if kind == "vertex":
             pt = ent.get("point")
             if pt is not None and math.dist(sub.toTuple(), [float(x) for x in pt]) > 1e-3:
@@ -135,7 +135,7 @@ def _dist(a, b):
     """Kuerzester Abstand zweier Formen mit den beiden naechsten Punkten."""
     d = BRepExtrema_DistShapeShape(a, b)
     if not d.IsDone() or d.NbSolution() < 1:
-        raise MeasureError("Der Abstand liess sich nicht bestimmen.")
+        raise MeasureError("The distance could not be determined.")
     return d.Value(), _xyz(d.PointOnShape1(1)), _xyz(d.PointOnShape2(1))
 
 
@@ -296,7 +296,7 @@ def serve(stdin=sys.stdin, stdout=sys.stdout):
             folder = str(req["folder"])
             current = json.loads((Path(folder) / "model.map.json").read_text(encoding="utf-8")).get("build")
             if req.get("build") and req["build"] != current:
-                raise MeasureError("Das Modell wurde inzwischen neu gebaut. Bitte neu anklicken.", stale=True)
+                raise MeasureError("The model has been rebuilt in the meantime. Please click again.", stale=True)
             m = models.get(folder)
             if m is None or m.build != current:
                 m = models[folder] = Model(folder)

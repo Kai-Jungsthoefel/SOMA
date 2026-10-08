@@ -108,8 +108,8 @@ def read_json(path):
     with open(path, "rb") as f:
         magic, _version, _total = struct.unpack("<III", f.read(12))
         if magic != 0x46546C67:
-            raise ValueError(f"{path} ist keine GLB-Datei")
+            raise ValueError(f"{path} is not a GLB file")
         length, kind = struct.unpack("<II", f.read(8))
         if kind != 0x4E4F534A:
-            raise ValueError(f"{path}: JSON-Teil fehlt")
+            raise ValueError(f"{path}: the JSON chunk is missing")
         return json.loads(f.read(length).decode("utf-8"))

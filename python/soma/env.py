@@ -73,7 +73,7 @@ def ensure(project):
     App): Die alten Pakete laufen dort nicht, die Umgebung wird geleert und die App installiert requirements.txt neu."""
     env = env_dir(project)
     if _inside(sys.prefix, env):
-        return dict(ok=False, error="soma env muss mit dem Python der Basisumgebung laufen, nicht aus der Projektumgebung.")
+        return dict(ok=False, error="soma env must run with the Python of the base environment, not from the project environment.")
     version = f"{sys.version_info[0]}.{sys.version_info[1]}"
     old = {}
     try:
@@ -87,7 +87,7 @@ def ensure(project):
         try:
             venv.EnvBuilder(with_pip=False, clear=cleared, upgrade=exists and not cleared, symlinks=os.name != "nt").create(str(env))
         except Exception as e:  # noqa: BLE001  (Rechte, volle Platte, fehlende venv-Dateien: melden)
-            return dict(ok=False, error=f"Die Projektumgebung liess sich nicht anlegen: {type(e).__name__}: {e}")
+            return dict(ok=False, error=f"The project environment could not be created: {type(e).__name__}: {e}")
 
     sp = env_site(env)
     bases = _base_sites()
@@ -110,10 +110,10 @@ def ensure(project):
                     base_mtimes=[_mtime_ms(p) for p in bases], site=os.path.relpath(sp, env))
         (env / INFO).write_text(json.dumps(info, indent=1), encoding="utf-8", newline="\n")
     except OSError as e:
-        return dict(ok=False, error=f"Die Projektumgebung liess sich nicht einrichten: {e}")
+        return dict(ok=False, error=f"The project environment could not be set up: {e}")
     res = dict(ok=True, env=str(env), site=str(sp), created=not exists, cleared=cleared)
     if cleared:
-        res["note"] = f"Die Projektumgebung war fuer Python {old.get('version')} und wurde fuer Python {version} neu angelegt."
+        res["note"] = f"The project environment was for Python {old.get('version')} and was created again for Python {version}."
     return res
 
 
@@ -183,7 +183,7 @@ def record_requirements(project):
     try:
         old = req.read_text(encoding="utf-8") if req.is_file() else None
     except (OSError, UnicodeDecodeError) as e:
-        return f"{REQUIREMENTS} ist nicht lesbar ({e}) und wurde nicht aktualisiert."
+        return f"{REQUIREMENTS} is not readable ({e}) and was not updated."
     lines = {n: installed[n] for n in used}
     for name, line in _parse_requirements(old or ""):
         if name is None or name not in installed:
@@ -195,5 +195,5 @@ def record_requirements(project):
         try:
             req.write_text(text, encoding="utf-8", newline="\n")
         except OSError as e:
-            return f"{REQUIREMENTS} konnte nicht geschrieben werden: {e}"
+            return f"{REQUIREMENTS} could not be written: {e}"
     return None

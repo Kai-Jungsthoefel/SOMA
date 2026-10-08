@@ -25,7 +25,7 @@ def step_to_glb(step_path, out_dir):
     """Schreibt <out_dir>/model.glb und model.map.json. Liefert die Bauteilliste."""
     step_path, out = Path(step_path), Path(out_dir)
     if not step_path.is_file():
-        raise FileNotFoundError(f"STEP-Datei nicht gefunden: {step_path}")
+        raise FileNotFoundError(f"STEP file not found: {step_path}")
     out.mkdir(parents=True, exist_ok=True)
     assy = cq.Assembly.importStep(str(step_path))
     items = []
@@ -35,13 +35,13 @@ def step_to_glb(step_path, out_dir):
         items.append((name, shape, color.toTuple() if color is not None else (0.62, 0.66, 0.72, 1.0)))
         groups.append("/".join(grp) or None)
     if not items:
-        raise ValueError("Die STEP-Datei enthaelt keine Geometrie")
+        raise ValueError("The STEP file contains no geometry")
     tol = build.auto_tolerance([s for _, s, _ in items])
     build_id = uuid.uuid4().hex
     measure.write_geometry(out, [s for _, s, _ in items], build_id)  # damit sich auch alte Staende vermessen lassen
     glb_parts, map_parts = [], []
     for i, (name, shape, rgba) in enumerate(items):
-        name = name or f"Teil {i + 1}"
+        name = name or f"Part {i + 1}"
         pid = f"{i}:{name}"
         bb = shape.BoundingBox()
         map_parts.append(dict(id=pid, name=name, role="basic", group=groups[i],

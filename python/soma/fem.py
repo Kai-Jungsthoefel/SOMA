@@ -1,18 +1,18 @@
-"""`soma analyze fem <studie.py>`: Festigkeit mit der Finite-Elemente-Methode (E58, E65).
+"""`soma analyze fem <study.py>`: strength with the finite element method (E58, E65).
 
-Der Agent beschreibt den Lastfall in einer Python-Datei (analyses/<name>.py) mit `Study`: welche Bauteile, aus welchem
-Werkstoff, wo sie gehalten werden und welche Lasten wo angreifen. Flaechen waehlt er mit CadQuery-Selektoren (">X") oder
-einem Punkt in der Naehe. Gerechnet wird linear-elastisch:
+The agent describes the load case in a Python file (analyses/<name>.py) with `Study`: which parts, of which material,
+where they are held and which loads act where. Faces are chosen with CadQuery selectors (">X") or a point nearby.
+The calculation is linear elastic:
 
-- Netz: gmsh aus den BREP-Formen des Builds, quadratische Tetraeder (10 Knoten) auf der echten Geometrie. Mehrere Teile
-  werden zu einem durchgehenden Netz verschmolzen (fest verbunden, wo sie sich berühren).
-- Steifigkeit selbst in numpy (vier Gausspunkte je Element), geloest mit pyamg (CG mit algebraischem Mehrgitter) oder
-  bei kleinen Netzen direkt.
-- Ergebnis wie bei den anderen Auswertungen: .soma/results/<name>.glb mit dem Sicherheitsfaktor als _VALUE, dazu die
-  Vergleichsspannung (_STRESS) und die Verschiebung (_DISP) je Ecke und der Lastfall als Markierungen.
+- Mesh: gmsh from the BREP shapes of the build, quadratic tetrahedra (10 nodes) on the real geometry. Several parts
+  are fused into one continuous mesh (rigidly joined where they touch).
+- Stiffness in numpy (four Gauss points per element), solved with pyamg (CG with algebraic multigrid) or directly for
+  small meshes.
+- Result as with the other analyses: .soma/results/<name>.glb with the safety factor as _VALUE, plus the von Mises
+  stress (_STRESS) and the displacement (_DISP) per vertex, and the load case as markers.
 
-Melden statt glauben: Die Rechnung prueft, ob jedes Teil gehalten ist, nennt die Lagerkräfte, rechnet ein zweites Mal mit
-gröberem Netz und sagt, wenn die Höchstspannung davon abhaengt (scharfe Innenkante, Rand einer Einspannung).
+Report instead of trust: the calculation checks that every part is held, gives the reaction forces, calculates a second
+time with a coarser mesh and says when the peak stress depends on it (sharp inner edge, edge of a fixed support).
 """
 import math
 import runpy
@@ -42,8 +42,8 @@ MATERIALS = {
     "ASA": dict(E=2000, nu=0.35, strength=30, across=15, density=1.07),
     "PA": dict(E=1500, nu=0.39, strength=50, density=1.14),
     "POM": dict(E=3000, nu=0.35, strength=60, density=1.41),
-    "PMMA": dict(E=3200, nu=0.37, strength=60, density=1.19, note="spröde"),
-    "Plywood": dict(E=8000, nu=0.3, strength=40, density=0.70, note="Holz ist richtungsabhängig, gerechnet wie ein gleichmäßiger Werkstoff"),
+    "PMMA": dict(E=3200, nu=0.37, strength=60, density=1.19, note="brittle"),
+    "Plywood": dict(E=8000, nu=0.3, strength=40, density=0.70, note="wood depends on the grain direction, calculated as a uniform material"),
     "Aluminium 6082": dict(E=70000, nu=0.33, strength=250, density=2.70),
     "Steel S235": dict(E=210000, nu=0.3, strength=235, density=7.85),
     "Stainless 1.4301": dict(E=200000, nu=0.3, strength=210, density=7.90),
@@ -54,27 +54,27 @@ ALIASES = {"nylon": "PA", "acrylic": "PMMA", "acryl": "PMMA", "sperrholz": "Plyw
 
 
 def material(spec, across_layers=True):
-    """Werkstoff aus Name oder dict(E=, nu=, strength=, density=). Liefert ein dict mit name, E, nu, strength, density, note."""
+    """Material from a name or dict(E=, nu=, strength=, density=). Returns a dict with name, E, nu, strength, density, note."""
     if isinstance(spec, dict):
         missing = [k for k in ("E", "strength") if k not in spec]
         if missing:
-            raise FemError(f"Eigener Werkstoff braucht {', '.join(missing)} (MPa), z. B. dict(E=2500, nu=0.35, strength=40, density=1.2)")
-        m = dict(name=str(spec.get("name", "eigener Werkstoff")), E=float(spec["E"]), nu=float(spec.get("nu", 0.33)),
+            raise FemError(f"A custom material needs {', '.join(missing)} (MPa), e.g. dict(E=2500, nu=0.35, strength=40, density=1.2)")
+        m = dict(name=str(spec.get("name", "custom material")), E=float(spec["E"]), nu=float(spec.get("nu", 0.33)),
                  strength=float(spec["strength"]), density=float(spec.get("density", 1.0)), note=spec.get("note"))
     else:
         key = str(spec).strip()
         found = next((k for k in MATERIALS if k.lower() == key.lower()), None) or ALIASES.get(key.lower())
         if not found:
-            raise FemError(f"Werkstoff {spec!r} kenne ich nicht. Bekannt: {', '.join(MATERIALS)}. "
-                           "Oder eigener: material=dict(E=..., nu=..., strength=..., density=...) in MPa und g/cm³")
+            raise FemError(f"Unknown material {spec!r}. Known: {', '.join(MATERIALS)}. "
+                           "Or a custom one: material=dict(E=..., nu=..., strength=..., density=...) in MPa and g/cm³")
         d = MATERIALS[found]
         strength, note = d["strength"], d.get("note")
         if "across" in d and across_layers:
             strength = d["across"]
-            note = f"gedruckt: Festigkeit quer zu den Schichten ({d['across']} statt {d['strength']} MPa)"
+            note = f"printed: strength across the layers ({d['across']} instead of {d['strength']} MPa)"
         m = dict(name=found, E=float(d["E"]), nu=float(d["nu"]), strength=float(strength), density=float(d["density"]), note=note)
     if not (m["E"] > 0 and m["strength"] > 0 and 0 <= m["nu"] < 0.5):
-        raise FemError(f"Werkstoff {m['name']}: E und Festigkeit müssen positiv sein, nu zwischen 0 und 0.5")
+        raise FemError(f"Material {m['name']}: E and strength must be positive, nu between 0 and 0.5")
     return m
 
 
@@ -85,11 +85,11 @@ AXIS_NAMES = {"x": 0, "y": 1, "z": 2}
 
 
 class Study:
-    """Ein Lastfall. Einheiten: mm, N, MPa. Beispiel:
+    """A load case. Units: mm, N, MPa. Example:
 
-        study = Study("Halter unter Last", material="PETG", safety=2)
-        study.fix("Halter", faces="<X")
-        study.force("Halter", faces=">X", N=(0, 0, -50))
+        study = Study("Bracket under load", material="PETG", safety=2)
+        study.fix("Bracket", faces="<X")
+        study.force("Bracket", faces=">X", N=(0, 0, -50))
     """
 
     def __init__(self, title, material="PLA", safety=2.0, mesh=None, across_layers=True, parts=None, check_mesh=True):
@@ -107,36 +107,36 @@ class Study:
         _STUDIES.append(self)
 
     def set_material(self, part, material):
-        """Anderer Werkstoff fuer ein Bauteil (Standard: der der Studie)."""
+        """Another material for one part (default: the material of the study)."""
         self.materials[str(part)] = material
         return self
 
     def fix(self, part, faces=None, near=None, axes="xyz"):
-        """Flächen festhalten. axes="z": nur in Z gehalten, quer frei (Auflage, Gleitlager)."""
+        """Hold faces fixed. axes="z": held only in Z, free across (a support, a sliding bearing)."""
         axes = str(axes).lower()
         if not axes or any(a not in AXIS_NAMES for a in axes):
-            raise FemError(f"fix(axes={axes!r}): nur x, y, z, z. B. axes=\"xyz\" oder axes=\"z\"")
+            raise FemError(f"fix(axes={axes!r}): only x, y, z, e.g. axes=\"xyz\" or axes=\"z\"")
         self.bcs.append(dict(kind="fix", part=str(part), faces=faces, near=near, axes=axes, where=_caller()))
         return self
 
     def force(self, part, N, faces=None, near=None):
-        """Gesamtkraft in N als (Fx, Fy, Fz), gleichmaessig auf die gewaehlten Flaechen verteilt."""
+        """Total force in N as (Fx, Fy, Fz), spread evenly over the chosen faces."""
         v = _vec(N, "force(N=...)")
         self.bcs.append(dict(kind="force", part=str(part), faces=faces, near=near, vector=v, where=_caller()))
         return self
 
     def pressure(self, part, MPa, faces=None, near=None):
-        """Druck in MPa (= N/mm²) senkrecht auf die Flaechen, positiv drueckt ins Material."""
+        """Pressure in MPa (= N/mm²) normal to the faces, positive presses into the material."""
         self.bcs.append(dict(kind="pressure", part=str(part), faces=faces, near=near, value=float(MPa), where=_caller()))
         return self
 
     def gravity(self, g=9.81, direction="-z"):
-        """Eigengewicht aus der Dichte, g in m/s²."""
+        """Self-weight from the density, g in m/s²."""
         d = str(direction).lower()
         sign = -1.0 if d.startswith("-") else 1.0
         ax = d.lstrip("+-")
         if ax not in AXIS_NAMES:
-            raise FemError(f"gravity(direction={direction!r}): x, y, z mit Vorzeichen, z. B. \"-z\"")
+            raise FemError(f"gravity(direction={direction!r}): x, y, z with a sign, e.g. \"-z\"")
         v = [0.0, 0.0, 0.0]
         v[AXIS_NAMES[ax]] = sign * float(g)
         self.gravity_vec = v
@@ -147,9 +147,9 @@ def _vec(v, what):
     try:
         out = [float(x) for x in v]
     except TypeError:
-        raise FemError(f"{what}: drei Zahlen (x, y, z) erwartet, nicht {v!r}") from None
+        raise FemError(f"{what}: expected three numbers (x, y, z), not {v!r}") from None
     if len(out) != 3 or not all(math.isfinite(x) for x in out):
-        raise FemError(f"{what}: drei Zahlen (x, y, z) erwartet, nicht {v!r}")
+        raise FemError(f"{what}: expected three numbers (x, y, z), not {v!r}")
     return out
 
 
@@ -164,7 +164,7 @@ def load_study(root, rel):
     """Fuehrt die Studiendatei aus und liefert die (letzte) Study darin."""
     path = (Path(root) / rel).resolve()
     if not path.is_file():
-        raise FemError(f"Studie {rel!r} nicht gefunden. Lege sie an, z. B. analyses/halter.py (siehe Skill FEM).")
+        raise FemError(f"Study {rel!r} not found. Create it, e.g. analyses/bracket.py (see the skill \"Strength with FEM\").")
     _STUDIES.clear()
     old = Path.cwd()
     sys.path.insert(0, str(root))
@@ -176,19 +176,19 @@ def load_study(root, rel):
         raise FemError(f"{rel}: {e}") from None
     except Exception as e:  # Fehler im Code des Agenten: Zeile nennen
         tb = [f for f in traceback.extract_tb(e.__traceback__) if Path(f.filename).resolve() == path]
-        at = f" (Zeile {tb[-1].lineno})" if tb else ""
+        at = f" (line {tb[-1].lineno})" if tb else ""
         raise FemError(f"{rel}{at}: {type(e).__name__}: {e}") from None
     finally:
         os.chdir(old)
         if sys.path and sys.path[0] == str(root):
             sys.path.pop(0)
     if not _STUDIES:
-        raise FemError(f"{rel} legt keine Studie an. Erwartet: from soma.fem import Study; study = Study(\"Titel\", material=\"PLA\")")
+        raise FemError(f"{rel} creates no study. Expected: from soma.fem import Study; study = Study(\"Title\", material=\"PLA\")")
     st = _STUDIES[-1]
     if not any(b["kind"] == "fix" for b in st.bcs):
-        raise FemError(f"{rel}: Die Studie hält nichts fest. Mindestens ein study.fix(...) ist nötig.")
+        raise FemError(f"{rel}: The study holds nothing fixed. At least one study.fix(...) is needed.")
     if not any(b["kind"] != "fix" for b in st.bcs) and st.gravity_vec is None:
-        raise FemError(f"{rel}: Die Studie hat keine Last. study.force(...), study.pressure(...) oder study.gravity().")
+        raise FemError(f"{rel}: The study has no load. study.force(...), study.pressure(...) or study.gravity().")
     return st
 
 
@@ -199,8 +199,8 @@ def _describe(bc):
     if bc.get("faces") is not None:
         sel.append(", ".join(bc["faces"]) if isinstance(bc["faces"], (list, tuple)) else str(bc["faces"]))
     if bc.get("near") is not None:
-        sel.append("nahe ({:g}, {:g}, {:g})".format(*bc["near"]))
-    return f"{bc['part']} {' '.join(sel) if sel else 'alle Flächen'}"
+        sel.append("near ({:g}, {:g}, {:g})".format(*bc["near"]))
+    return f"{bc['part']} {' '.join(sel) if sel else 'all faces'}"
 
 
 def _select(shape, bc):
@@ -217,9 +217,9 @@ def _select(shape, bc):
                 # Bei Tippfehlern liefert pyparsing die ganze Grammatik: nur die Stelle nennen
                 msg = str(e).splitlines()[0]
                 if "Expected" in msg and "found" in msg:
-                    msg = "kein gültiger CadQuery-Selektor" + (f" ({msg[msg.rfind('found'):]})" if len(msg) > 200 else f" ({msg})")
-                raise FemError(f"Selektor {s!r} für {bc['part']!r} geht nicht: {msg[:300]}. Beispiele: \">Z\", \"<X\", "
-                               "\"%CYLINDER\", \">Z[-2]\", oder near=(x, y, z)") from None
+                    msg = "not a valid CadQuery selector" + (f" ({msg[msg.rfind('found'):]})" if len(msg) > 200 else f" ({msg})")
+                raise FemError(f"Selector {s!r} for {bc['part']!r} does not work: {msg[:300]}. Examples: \">Z\", \"<X\", "
+                               "\"%CYLINDER\", \">Z[-2]\", or near=(x, y, z)") from None
             chosen += [f for f in got if not any(f.isSame(c) for c in chosen)]
         faces = chosen
     near = bc.get("near")
@@ -231,11 +231,11 @@ def _select(shape, bc):
         best = min(dist)
         bb = shape.BoundingBox()
         if best > 0.05 * max(bb.DiagonalLength, 1.0):
-            raise FemError(f"Keine Fläche von {bc['part']!r} nahe {tuple(near)}: die nächste ist {best:.1f} mm entfernt")
+            raise FemError(f"No face of {bc['part']!r} near {tuple(near)}: the nearest is {best:.1f} mm away")
         faces = [f for f, d in zip(faces, dist) if d <= best + 1e-6]
     if not faces:
-        raise FemError(f"{_describe(bc)}: keine Fläche gefunden. Der Selektor wählt am Teil {bc['part']!r}, "
-                       f"in dessen Lage im Modell (z. B. \">Z\" oberste Fläche, \"<X\" in -X).")
+        raise FemError(f"{_describe(bc)}: no face found. The selector picks on the part {bc['part']!r}, "
+                       f"in its position in the model (e.g. \">Z\" the top face, \"<X\" in -X).")
     return faces
 
 
@@ -262,7 +262,7 @@ def _mesh(parts, bcs, h, progress=None):
             p["shape"].exportBrep(str(f))
             dt = [d for d in gmsh.model.occ.importShapes(str(f)) if d[0] == 3]
             if not dt:
-                raise FemError(f"{p['name']!r} ist kein Volumenkörper (nur Flächen oder Linien), so lässt es sich nicht rechnen.")
+                raise FemError(f"{p['name']!r} is not a solid (only faces or lines), so it cannot be calculated.")
             vols.append(dt)
         owner = {}
         if len(parts) > 1:
@@ -299,7 +299,7 @@ def _mesh(parts, bcs, h, progress=None):
                 tets.append(t)
                 epart.append(np.full(len(t), owner.get(vt, 0)))
         if not tets:
-            raise FemError("gmsh hat kein Volumennetz erzeugt (Form defekt oder zu klein?)")
+            raise FemError("gmsh created no volume mesh (broken or too small shape?)")
         tets, epart = np.concatenate(tets), np.concatenate(epart)
         # Je Randbedingung die gmsh-Flaechen, die auf den gewaehlten CadQuery-Flaechen liegen
         import cadquery as cq
@@ -361,7 +361,7 @@ def _check_edges(nodes, tets):
         size = np.linalg.norm(x[:, a] - x[:, b], axis=1)
         ok = np.linalg.norm(x[:, 4 + k] - mid, axis=1) < 0.25 * size + 1e-9
         if ok.mean() < 0.9:
-            raise FemError("Unerwartete Knotenreihenfolge im Netz von gmsh (Kante %d). Bitte melden." % k)
+            raise FemError("Unexpected node order in the gmsh mesh (edge %d). Please report this." % k)
 
 
 # ---- Elemente -----------------------------------------------------------------------------------------------------
@@ -530,7 +530,7 @@ def _faces_area(nodes, tri6):
 
 # ---- Loesen -------------------------------------------------------------------------------------------------------
 
-MODE_NAMES = ["Verschiebung in X", "Verschiebung in Y", "Verschiebung in Z", "Drehung um X", "Drehung um Y", "Drehung um Z"]
+MODE_NAMES = ["moving in X", "moving in Y", "moving in Z", "turning about X", "turning about Y", "turning about Z"]
 
 
 def _rigid_modes(x):
@@ -565,7 +565,7 @@ def _check_held(nodes, tets, fixed, part_names, epart):
         dofs = (3 * nd[:, None] + np.arange(3)).reshape(-1)
         mask = fixed[dofs]
         if not mask.any():
-            problems.append(f"{', '.join(names)}: nicht gehalten (kein fix() an diesem Körper; berühren sich die Teile wirklich?)")
+            problems.append(f"{', '.join(names)}: not held (no fix() on this body; do the parts really touch?)")
             continue
         _u, sv, vt = np.linalg.svd(R[mask], full_matrices=True)
         rank = int((sv > sv[0] * 1e-6).sum())
@@ -573,10 +573,10 @@ def _check_held(nodes, tets, fixed, part_names, epart):
             free = []
             for v in vt[rank:]:
                 free.append(MODE_NAMES[int(np.argmax(np.abs(v)))])
-            problems.append(f"{', '.join(names)}: noch frei beweglich ({', '.join(dict.fromkeys(free))})")
+            problems.append(f"{', '.join(names)}: still free ({', '.join(dict.fromkeys(free))})")
     if problems:
-        raise FemError("Lagerung reicht nicht, die Teile können sich als Ganzes bewegen: " + "; ".join(problems)
-                       + ". Mehr Flächen festhalten oder axes=\"xyz\" verwenden.")
+        raise FemError("The supports are not enough, the parts can move as a whole: " + "; ".join(problems)
+                       + ". Fix more faces or use axes=\"xyz\".")
 
 
 def _solve(K, f, fixed, nodes):
@@ -585,7 +585,7 @@ def _solve(K, f, fixed, nodes):
     Kff = K[free][:, free].tocsr()
     ff = f[free]
     u = np.zeros(len(f))
-    method = "direkt"
+    method = "direct"
     if len(free) <= 12000:  # SuperLU wird bei 3D-Netzen schnell langsam (36000 Unbekannte: 21 s), pyamg braucht dort 1 s
         uf = spsolve(Kff.tocsc(), ff, permc_spec="MMD_AT_PLUS_A")
     else:
@@ -595,12 +595,12 @@ def _solve(K, f, fixed, nodes):
         res = []
         uf = ml.solve(ff, tol=1e-8, accel="cg", maxiter=800, residuals=res)
         rel = res[-1] / max(res[0], 1e-30) if res else 1.0
-        method = f"pyamg, {len(res) - 1} Schritte"
+        method = f"pyamg, {len(res) - 1} iterations"
         if not rel < 1e-6:
-            raise FemError(f"Der Löser kam nicht ans Ziel (Rest {rel:.1e}). Netz gröber (Study(mesh=...)) oder Lagerung prüfen.")
+            raise FemError(f"The solver did not converge (residual {rel:.1e}). Use a coarser mesh (Study(mesh=...)) or check the supports.")
     u[free] = uf
     if not np.isfinite(u).all():
-        raise FemError("Die Rechnung lieferte keine Zahlen (Lagerung unzureichend?)")
+        raise FemError("The calculation gave no numbers (supports insufficient?)")
     return u, method
 
 
@@ -645,7 +645,7 @@ def _analyse(parts, study, mats, h, progress=None):
         progress.total += len(tets)  # Fortschritt nach Elementen, sobald ihre Zahl bekannt ist
     K, bad = _assemble(nodes, tets, D, progress)
     if bad:
-        raise FemError(f"{bad} verzerrte Elemente im Netz (sehr kleine oder spitze Stellen). Netz feiner wählen: Study(mesh=...)")
+        raise FemError(f"{bad} distorted elements in the mesh (very small or sharp spots). Choose a finer mesh: Study(mesh=...)")
     el, k = _boundary(tets)
     tri6 = _tri6(nodes, tets, el, k)
     key = np.sort(tri6[:, :3], axis=1)
@@ -662,7 +662,7 @@ def _analyse(parts, study, mats, h, progress=None):
         pos = np.clip(pos, 0, len(order) - 1)
         hit = order[pos][code[order][pos] == c]
         if not len(hit):
-            raise FemError(f"{_describe(bc)}: die Flächen liegen nicht außen am Netz (innen an einem anderen Teil?)")
+            raise FemError(f"{_describe(bc)}: the faces are not on the outside of the mesh (inside, against another part?)")
         t6 = tri6[hit]
         out = dict(kind=bc["kind"], part=bc["part"], label=_describe(bc), tri=t6, el=el[hit])
         if bc["kind"] == "fix":
@@ -716,12 +716,12 @@ def run(root, study_rel, name=None, threshold=None):
     try:
         all_parts = build.run_model(root)
     except build.BuildError as e:
-        raise FemError(f"Das Modell lässt sich nicht bauen: {e.message}" + (f" ({e.file}:{e.line})" if e.file and e.line else "")) from None
+        raise FemError(f"The model does not build: {e.message}" + (f" ({e.file}:{e.line})" if e.file and e.line else "")) from None
     rel = Path(study_rel).as_posix()
     study = load_study(root, rel)
     safety = float(threshold) if threshold is not None else study.safety
     if not safety > 0:
-        raise FemError("Der Sicherheitsfaktor muss größer als 0 sein")
+        raise FemError("The safety factor must be greater than 0")
     by_name = {}
     for p in all_parts:
         by_name.setdefault(p["name"], p)
@@ -729,7 +729,7 @@ def run(root, study_rel, name=None, threshold=None):
     missing = [w for w in wanted if w not in by_name]
     if missing:
         names = ", ".join(repr(p["name"]) for p in all_parts[:30])
-        raise FemError(f"Bauteil {missing[0]!r} gibt es nicht. Bauteile: {names}")
+        raise FemError(f"There is no part {missing[0]!r}. Parts: {names}")
     parts = [by_name[w] for w in wanted]
     index = {p["name"]: i for i, p in enumerate(parts)}
     mats = [material(study.materials.get(p["name"], study.material_spec), study.across_layers) for p in parts]
@@ -741,7 +741,7 @@ def run(root, study_rel, name=None, threshold=None):
     diag = float(np.linalg.norm(hi - lo))
     h = study.mesh or round(max(diag / 30, 0.3), 3)
     t_start = time.perf_counter()
-    progress = Progress("soma analyze fem", 1, "Elemente")
+    progress = Progress("soma analyze fem", 1, "elements")
     fine = _analyse(parts, study, mats, h, progress)
     coarse = None
     if study.check_mesh:
@@ -805,9 +805,9 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
                 st["coarse"] = dict(stress=round(c_max, 3), change=round(change, 4))
         flags = []
         if len(fixed_nodes) and np.min(np.linalg.norm(nodes[fixed_nodes] - nodes[w_s], axis=1)) < 1.5 * h:
-            flags.append("am Rand einer Einspannung")
+            flags.append("at the edge of a fixed support")
         if len(load_nodes) and np.min(np.linalg.norm(nodes[load_nodes] - nodes[w_s], axis=1)) < 1.5 * h:
-            flags.append("an einer Lastfläche")
+            flags.append("at a loaded face")
         st["peakAt"] = flags
         stats.append(st)
         # Netz fuers Bild: die geschlossene Huelle des Teils. Wo es ein anderes Teil beruehrt, liegt die Flaeche im Ganzen innen und
@@ -850,7 +850,7 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
         entry = dict(kind=b["kind"], part=b["part"], label=b["label"], area=round(float(b["area"]), 2), at=[round(float(x), 2) for x in c])
         hit, sel = b["match"]
         if sel > 0 and abs(hit - sel) > 0.02 * sel:
-            notes.append(f"{b['label']}: im Netz {hit:.1f} von {sel:.1f} mm² gefunden. Prüfe die Markierung im Bild.")
+            notes.append(f"{b['label']}: found {hit:.1f} of {sel:.1f} mm² in the mesh. Check the marking in the picture.")
         if b["kind"] == "fix":
             entry["axes"] = b["axes"]
             entry["reaction"] = [round(float(x), 3) + 0.0 for x in b["reaction"]]
@@ -861,18 +861,18 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
         bcs_meta.append(entry)
     max_disp = float(disp.max())
     if max_disp > 0.05 * diag:  # ab etwa 5 % der Modellgröße aendert die Verformung die Lastwege merklich
-        notes.append(f"Die Verformung ist groß ({max_disp:.2f} mm, {100 * max_disp / diag:.1f} % der Modellgröße). Die lineare "
-                     "Rechnung gilt dann nur grob, echte Spannungen und Wege weichen ab.")
+        notes.append(f"The deformation is large ({max_disp:.2f} mm, {100 * max_disp / diag:.1f} % of the model size). The linear "
+                     "calculation is then only a rough guide, real stresses and displacements differ.")
     for st in stats:
         ch = st.get("coarse", {}).get("change")
-        where = " und ".join(st["peakAt"])
+        where = " and ".join(st["peakAt"])
         if ch is not None and abs(ch) > 0.15:
-            notes.append(f"{st['name']}: Die Höchstspannung haengt vom Netz ab ({st['coarse']['stress']:.1f} MPa grob, {st['stress']['value']:.1f} MPa fein)"
-                         + (f", sie liegt {where}" if where else ", vermutlich an einer scharfen Innenkante")
-                         + ". Dort ist der Wert nicht verlässlich: Radius vorsehen oder die Stelle mit etwas Abstand beurteilen.")
+            notes.append(f"{st['name']}: The peak stress depends on the mesh ({st['coarse']['stress']:.1f} MPa coarse, {st['stress']['value']:.1f} MPa fine)"
+                         + (f", it is {where}" if where else ", probably at a sharp inner edge")
+                         + ". The value is not reliable there: add a radius or judge the spot from a little distance.")
         elif where:
-            notes.append(f"{st['name']}: Die Höchstspannung liegt {where}. Eine starre Einspannung oder eine Last auf kleiner Fläche "
-                         "erzeugt dort oft eine zu hohe Spitze: Werte mit etwas Abstand davon beurteilen.")
+            notes.append(f"{st['name']}: The peak stress is {where}. A rigid fixed support or a load on a small face "
+                         "often gives too high a peak there: judge values a little away from it.")
         if st["material"]["note"]:
             notes.append(f"{st['name']} ({st['material']['name']}): {st['material']['note']}")
     rid = name or Path(rel).stem
@@ -883,7 +883,7 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
     applied = fine["applied"]
     reaction = fine["reaction"]
     balance = float(np.linalg.norm(applied + reaction) / max(np.linalg.norm(applied), 1e-12))
-    meta = dict(version=1, id=rid, kind="fem", title=study.title, quantity="Sicherheit", unit="", bad="low", threshold=safety,
+    meta = dict(version=1, id=rid, kind="fem", title=study.title, quantity="Safety factor", unit="", bad="low", threshold=safety,
                 tolerance=None, range=rng, up=None, parts=stats, notes=list(dict.fromkeys(notes)), created=time.time(), neutral=None,
                 seconds=round(seconds, 2),
                 command=["analyze", "fem", rel] + ([f"--threshold={safety:g}"] if safety != study.safety else []) + ([f"--name={name}"] if name else []),
@@ -910,36 +910,36 @@ def _v(v, unit="N"):
 def summary_text(meta):
     fe = meta["fem"]
     safety = meta["threshold"]
-    lines = [f"FEM \"{meta['title']}\" ({fe['study']}, linear-elastisch, Sicherheit {safety:g} gefordert, kritisch darunter):"]
+    lines = [f"FEM \"{meta['title']}\" ({fe['study']}, linear elastic, safety factor {safety:g} required, critical below):"]
     for b in fe["bcs"]:
         if b["kind"] == "fix":
-            ax = "" if b["axes"] == "xyz" else f" nur in {', '.join(b['axes'].upper())}"
-            lines.append(f"  fest{ax}: {b['label']} ({b['area']:.1f} mm²), Lagerkraft {_v(b['reaction'])}")
+            ax = "" if b["axes"] == "xyz" else f" only in {', '.join(b['axes'].upper())}"
+            lines.append(f"  fixed{ax}: {b['label']} ({b['area']:.1f} mm²), reaction force {_v(b['reaction'])}")
         elif b["kind"] == "force":
-            lines.append(f"  Kraft: {b['label']} ({b['area']:.1f} mm²), {_v(b['total'])}")
+            lines.append(f"  force: {b['label']} ({b['area']:.1f} mm²), {_v(b['total'])}")
         else:
-            lines.append(f"  Druck: {b['label']} ({b['area']:.1f} mm²), {b['value']:g} MPa, zusammen {_v(b['total'])}")
+            lines.append(f"  pressure: {b['label']} ({b['area']:.1f} mm²), {b['value']:g} MPa, in total {_v(b['total'])}")
     if fe.get("gravity"):
-        lines.append(f"  Eigengewicht: {_v(fe['gravity'], 'm/s²')}")
+        lines.append(f"  self-weight: {_v(fe['gravity'], 'm/s²')}")
     for st in meta["parts"]:
         mat = st["material"]
         s, d, w = st["stress"], st["displacement"], st["worst"]
-        crit = f"{st['critical'] / 100:.2f} cm² unter {safety:g}" if st["critical"] > 0 else f"nichts unter {safety:g}"
-        lines.append(f"  {st['name']} ({mat['name']}, E {mat['E']:g} MPa, Festigkeit {mat['strength']:g} MPa): höchste Vergleichsspannung "
-                     f"{s['value']:.1f} MPa bei {analysis._where(s['at'])}, kleinste Sicherheit {w['value']:.2f}, {crit}, "
-                     f"größte Verschiebung {d['value']:.3f} mm bei {analysis._where(d['at'])}")
+        crit = f"{st['critical'] / 100:.2f} cm² below {safety:g}" if st["critical"] > 0 else f"nothing below {safety:g}"
+        lines.append(f"  {st['name']} ({mat['name']}, E {mat['E']:g} MPa, strength {mat['strength']:g} MPa): highest von Mises stress "
+                     f"{s['value']:.1f} MPa at {analysis._where(s['at'])}, lowest safety factor {w['value']:.2f}, {crit}, "
+                     f"largest displacement {d['value']:.3f} mm at {analysis._where(d['at'])}")
         for r in st.get("regions", []):
             lines.append(f"    {analysis._region_line(r, '')}")
         if st.get("regionsMore"):
             mo = st["regionsMore"]
-            lines.append(f"    und {mo['count']} weitere Stelle{'n' if mo['count'] > 1 else ''}, zusammen {analysis._mm2(mo['area'])}")
+            lines.append(f"    and {mo['count']} more spot{'s' if mo['count'] > 1 else ''}, {analysis._mm2(mo['area'])} in total")
     m = fe["mesh"]
-    check = f"Netz {m['elements']} Tetraeder (10 Knoten, Kantenlänge bis {m['size']:g} mm), {m['dofs']} Unbekannte, {m['solver']}"
+    check = f"Mesh {m['elements']} tetrahedra (10 nodes, edge length up to {m['size']:g} mm), {m['dofs']} unknowns, {m['solver']}"
     for st in meta["parts"]:
         if st.get("coarse"):
-            check += f"; {st['name']} mit gröberem Netz {st['coarse']['stress']:.1f} MPa ({round(100 * st['coarse']['change']) + 0:+d} % zum feinen)"
-    lines.append(f"Kontrolle: Lagerkräfte zusammen {_v(fe['reaction'])}, Lasten {_v(fe['applied'])}"
-                 f"{' (im Gleichgewicht)' if fe['balance'] < 1e-3 else f' (Abweichung {100 * fe['balance']:.2f} %)'}. {check}.")
+            check += f"; {st['name']} with a coarser mesh {st['coarse']['stress']:.1f} MPa (fine mesh {round(100 * st['coarse']['change']) + 0:+d} %)"
+    lines.append(f"Check: reaction forces in total {_v(fe['reaction'])}, loads {_v(fe['applied'])}"
+                 f"{' (in equilibrium)' if fe['balance'] < 1e-3 else f' (deviation {100 * fe['balance']:.2f} %)'}. {check}.")
     for n in meta.get("notes") or []:
-        lines.append(f"Hinweis: {n}")
+        lines.append(f"Note: {n}")
     return "\n".join(lines)

@@ -1,4 +1,4 @@
-"""Bauteil-Registrierung: add_part merkt sich Objekt, Rolle, Farbe sowie Datei und Zeilenbereich des Aufrufs."""
+"""Part registry: add_part records the object, role and color plus the file and line range of the call."""
 import inspect
 import math
 import unicodedata
@@ -30,11 +30,11 @@ def to_shape(obj):
     if isinstance(obj, cq.Workplane):
         vals = obj.vals()
         if not vals:
-            raise ValueError("Die Workplane ist leer (keine Geometrie). Pruefe die Operationen davor.")
+            raise ValueError("The Workplane is empty (no geometry). Check the operations before it.")
         return vals[0] if len(vals) == 1 else cq.Compound.makeCompound(vals)
     if isinstance(obj, cq.Shape):
         return obj
-    raise TypeError(f"add_part erwartet cq.Workplane, cq.Shape oder ein Normteil aus soma.fasteners, nicht {type(obj).__name__}")
+    raise TypeError(f"add_part expects a cq.Workplane, a cq.Shape or a standard part from soma.fasteners, not {type(obj).__name__}")
 
 
 def _group_path(group):
@@ -42,7 +42,7 @@ def _group_path(group):
     if group is None:
         return ()
     if not isinstance(group, str):
-        raise ValueError("group muss ein Text sein, z. B. \"Gehaeuse\" oder \"Gehaeuse/Schrauben\"")
+        raise ValueError("group must be a text, e.g. \"Housing\" or \"Housing/Screws\"")
     return tuple(s.strip() for s in group.split("/") if s.strip())
 
 
@@ -67,17 +67,17 @@ def _unique(name, taken):
 
 
 def add_part(name, obj, role=None, color=None, group=None):
-    """Registriert ein Bauteil. Pflicht fuer jedes Bauteil, sonst kennen Viewer und Export es nicht.
+    """Registers a part. Required for every part, otherwise the viewer and the export do not know it.
 
-    name   eindeutiger Name (Umlaute erlaubt, in der STEP-Datei wird er als ASCII geschrieben)
-    obj    cq.Workplane oder cq.Shape, ein Normteil aus soma.fasteners (Screw, Nut ...) oder eine Baugruppe aus
-           import_assembly(): Dann wird jeder Koerper ein eigenes Bauteil mit seinem Namen und seiner Farbe, die
-           Unterbaugruppen werden Gruppen unter `name`
-    role   "part" (eigenes Teil, Standard), "reference" (mitgebrachtes Teil: halbtransparent, eigener Ast, nicht im
-           Export) oder "hardware" (Zukaufteil wie Schrauben: deckend, in der STEP bei seiner Gruppe, nicht in
-           export --all). Normteile aus soma.fasteners sind ohne Angabe "hardware"
-    color  optional (r, g, b) mit Werten 0..1 (bei einer Baugruppe fuer alle Teile). Normteile haben eine eigene
-    group  optional, Gruppe im Bauteilbaum und in der STEP-Datei, verschachtelt mit "/", z. B. "Gehaeuse/Schrauben"
+    name   unique name (any characters, in the STEP file it is written as ASCII)
+    obj    cq.Workplane or cq.Shape, a standard part from soma.fasteners (Screw, Nut ...) or an assembly from
+           import_assembly(): then every body becomes a part of its own with its name and color, the
+           sub-assemblies become groups under `name`
+    role   "part" (own part, default), "reference" (part brought along: semi-transparent, own branch, not in the
+           export) or "hardware" (purchased part like screws: opaque, in the STEP file with its group, not in
+           export --all). Standard parts from soma.fasteners are "hardware" if not given
+    color  optional (r, g, b) with values 0..1 (for an assembly for all parts). Standard parts have their own
+    group  optional, group in the part tree and in the STEP file, nested with "/", e.g. "Housing/Screws"
     """
     if IGNORE_ADD:
         return
@@ -87,9 +87,9 @@ def add_part(name, obj, role=None, color=None, group=None):
     if color is None and standard_part:
         color = getattr(obj, "color", None)
     if role not in ROLES:
-        raise ValueError(f"role muss einer von {ROLES} sein, nicht {role!r}")
+        raise ValueError(f"role must be one of {ROLES}, not {role!r}")
     if not isinstance(name, str) or not name.strip():
-        raise ValueError("Der Bauteilname muss ein nichtleerer Text sein")
+        raise ValueError("The part name must be a non-empty text")
     groups = _group_path(group)
     frame = inspect.currentframe().f_back
     pos = inspect.getframeinfo(frame, context=0).positions  # Startzeile und Endzeile des Aufrufs
@@ -97,7 +97,7 @@ def add_part(name, obj, role=None, color=None, group=None):
     if isinstance(obj, cq.Assembly):
         leaves = list(_leaves(obj, cq.Location(), (), None))
         if not leaves:
-            raise ValueError(f"Die Baugruppe fuer {name!r} enthaelt keine Geometrie")
+            raise ValueError(f"The assembly for {name!r} contains no geometry")
         if len(leaves) == 1:  # nur ein Koerper: ein Bauteil unter dem angegebenen Namen, ohne eigene Gruppe
             _, _, o, c, loc = leaves[0]
             _register(name, to_shape(o).moved(loc), role, color or (c.toTuple()[:3] if c else None), groups, where)
@@ -106,12 +106,12 @@ def add_part(name, obj, role=None, color=None, group=None):
         for sub_groups, leaf_name, o, c, loc in leaves:
             # Die oberste Baugruppe traegt den Namen aus add_part, darunter die Namen aus der Datei
             path = groups + (name,) + sub_groups[1:]
-            nm = _unique(leaf_name or "Teil", taken)
+            nm = _unique(leaf_name or "Part", taken)
             taken.add(nm)
             _register(nm, to_shape(o).moved(loc), role, color or (c.toTuple()[:3] if c else None), path, where, unique_step=True)
         return
     if any(p["name"] == name for p in REGISTRY):
-        raise ValueError(f"Bauteilname {name!r} ist schon vergeben (Namen muessen eindeutig sein)")
+        raise ValueError(f"Part name {name!r} is already taken (names must be unique)")
     _register(name, to_shape(obj), role, color, groups, where, axis=_axis(obj))
 
 
@@ -134,7 +134,7 @@ def _register(name, shape, role, color, groups, where, unique_step=False, axis=N
     step_name = ascii_name(name)
     if any(p["step_name"] == step_name for p in REGISTRY):
         if not unique_step:
-            raise ValueError(f"Bauteilname {name!r} ergibt den STEP-Namen {step_name!r}, der schon vergeben ist")
+            raise ValueError(f"Part name {name!r} gives the STEP name {step_name!r}, which is already taken")
         i = 2
         while any(p["step_name"] == f"{step_name}_{i}" for p in REGISTRY):
             i += 1
@@ -147,12 +147,12 @@ def _register(name, shape, role, color, groups, where, unique_step=False, axis=N
 
 
 def import_step(path):
-    """Importiert eine mitgebrachte STEP-Datei (z. B. aus inputs/) als eine Form. Teile und Gruppen der Datei gehen
-    dabei in einem Koerper auf. Sollen sie erhalten bleiben: import_assembly()."""
+    """Imports a STEP file brought along (e.g. from inputs/) as one shape. The parts and groups of the file merge into
+    one body. To keep them: import_assembly()."""
     return cq.importers.importStep(str(path)).val()
 
 
 def import_assembly(path):
-    """Importiert eine STEP-Datei mit ihrer Struktur: Teile mit Namen und Farben, Unterbaugruppen als Gruppen.
-    Verschieben als Ganzes mit `asm.loc = cq.Location((x, y, z))`, registrieren mit add_part("Name", asm)."""
+    """Imports a STEP file with its structure: parts with names and colors, sub-assemblies as groups.
+    Move it as a whole with `asm.loc = cq.Location((x, y, z))`, register it with add_part("Name", asm)."""
     return cq.Assembly.importStep(str(path))
