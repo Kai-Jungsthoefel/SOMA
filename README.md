@@ -36,6 +36,7 @@ Any CLI agent that can read files and run commands works: Claude Code, OpenCode,
 - Builds on every change, errors point to file and line
 - Named parts, groups and sub-assemblies, STEP import of single parts and whole assemblies
 - Standard parts (ISO/DIN screws, nuts, washers, heat-set inserts) with matching holes and nut traps
+- Parameters: the agent marks the values you may change (`param()`), you change them in a panel and can always reset them to the agent's value
 - Extra Python packages: the agent runs `pip install`, SOMA records them in `requirements.txt` and reinstalls them on another machine
 
 **Looking at the result**
@@ -74,9 +75,10 @@ Overhang analysis of a 3D printed part. The agent ran `soma analyze` in the term
 
 ```python
 import cadquery as cq
-from soma import add_part
+from soma import add_part, param
 
-LENGTH, WIDTH, HEIGHT, WALL = 60.0, 40.0, 25.0, 2.0
+LENGTH = param(60.0, "Length", min=30, max=200, unit="mm")  # adjustable in the app
+WIDTH, HEIGHT, WALL = 40.0, 25.0, 2.0
 
 body = (
     cq.Workplane("XY")
@@ -87,7 +89,7 @@ body = (
 add_part("Body", body, color=(0.25, 0.45, 0.75))
 ```
 
-`soma build` runs the file and writes `output/model.step` with every part named, plus the data for the viewer.
+`soma build` runs the file and writes `output/model.step` with every part named, plus the data for the viewer. `param()` puts a value into the Parameters panel of the app.
 
 ## Status
 

@@ -11,6 +11,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 - Die App beginnt auf der Startseite. Ein neues Modell, das noch der Vorlage entspricht und nie gespeichert wurde, verschwindet beim Verlassen wieder. Andere Modelle lassen sich auf der Startseite entfernen, der Arbeitsordner kommt in den Papierkorb (E69).
 - README auf Englisch mit Bildern für die Startseite des Repos, dazu dieser Changelog (E70).
 - Lizenz: GPL-3.0 oder später, Text in `LICENSE` (E71). Die Modelle der Nutzer sind davon frei (`MODEL-EXCEPTION.md`, E72).
+- Parameter: Der Agent gibt mit `param()` einzelne Werte frei, etwa Maße, Anzahlen, Optionen oder einen Winkel. Im neuen Panel „Parameters“ ändert man sie selbst, das Modell baut neu. Die eigenen Werte stehen in `parameters.json`, der Wert des Agenten bleibt im Code, und jedes Feld lässt sich auf ihn zurücksetzen. Werte außerhalb des Bereichs werden gemeldet und trotzdem gebaut. Die Vorlage für neue Modelle hat vier Parameter (E74).
 
 ### Geändert
 
