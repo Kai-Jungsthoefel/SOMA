@@ -1,5 +1,6 @@
 import { affectsBuild } from '../shared/editable';
 import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ResultEntry, SaveState } from '../shared/types';
+import { SOMA_VERSION } from '../shared/version';
 import { CodePanel, codeRows, isPdf, type Mark } from './code';
 import { AnimTool } from './animtool';
 import { Busy } from './busy';
@@ -915,6 +916,9 @@ $('btn-reveal').addEventListener('click', () => void api.project.reveal());
 $('btn-reveal-menu').addEventListener('click', () => void api.project.reveal());
 $('btn-start').addEventListener('click', () => showStart(true));
 $('btn-home').addEventListener('click', () => showStart(true));
+// Versionsnummer (E68): neben dem Namen auf der Startseite und im Hinweis des Logos
+$('start-version').textContent = SOMA_VERSION;
+$('btn-home').title = `Startseite · SOMA ${SOMA_VERSION}`;
 $('problems').addEventListener('click', () => menus.toggle($('menu-problems'), $('problems')));
 
 // Build

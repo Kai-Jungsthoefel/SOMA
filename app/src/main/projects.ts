@@ -23,7 +23,7 @@ import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
   backupWorkspace, createProject, extractProject, getAppState, inspectProject, isProjectId, patchAppState, projectDir,
-  getSkillDefaults, readProjectJson, readSkillModes, renameProject, setLastProject, setSkillDefault, updateProjectSkills,
+  getSkillDefaults, readProjectJson, readSkillModes, renameProject, setLastProject, setSkillDefault, stampAppVersion, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
 
@@ -274,6 +274,7 @@ export class ProjectController {
       await s.builds.whenIdle();
       if (s.builds.status.state === 'error') warnings.push('Der letzte Build ist fehlgeschlagen. Die ZIP enthält den letzten erfolgreichen Stand von output/model.step.');
 
+      stampAppVersion(s.id); // mit welcher Version zuletzt gespeichert (E68), steht so auch im Snapshot
       let snapshot: string | null = null;
       if (await s.git.isRepo()) {
         try { snapshot = await s.git.snapshot('Automatischer Snapshot beim Speichern'); }

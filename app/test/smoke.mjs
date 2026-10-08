@@ -29,6 +29,10 @@ try {
   check('Projekt liegt unter <App-Daten>/workspaces/<uuid>', proj.dir.startsWith(path.join(ud, 'workspaces')) && /[0-9a-f-]{36}$/.test(proj.dir), proj.dir.slice(-45));
   check('Vorlagen-Dateien vorhanden (AGENTS.md, CLAUDE.md, NOTES.md, model.py …)',
     ['AGENTS.md', 'CLAUDE.md', 'NOTES.md', 'model.py', '.gitignore', '.soma/project.json', '.git/HEAD'].every((f) => fs.existsSync(path.join(proj.dir, f))));
+  const appVersion = JSON.parse(fs.readFileSync(path.join(APP, 'package.json'), 'utf8')).version;
+  const versionUi = await ev(() => ({ start: document.getElementById('start-version').textContent, logo: document.getElementById('btn-home').title }));
+  check('Version (E68): in project.json, auf der Startseite und am Logo', JSON.parse(fs.readFileSync(path.join(proj.dir, '.soma', 'project.json'), 'utf8')).app_version === appVersion
+    && versionUi.start === appVersion && versionUi.logo === `Startseite · SOMA ${appVersion}`, `${appVersion} ${JSON.stringify(versionUi)}`);
   check('Erster Build automatisch, 2 Bauteile in der Bauteilkarte', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
   check('Nach dem Build kein Fehlerhinweis', (await status()).viewerMsg === '', (await status()).text);
   const okStatus = await status();

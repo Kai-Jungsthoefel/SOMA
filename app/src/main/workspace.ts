@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ProjectListEntry, SkillMode } from '../shared/types';
+import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, projectStateDir, skillBackupsDir, skillsDir, templateDir, workspacesDir } from './paths';
@@ -18,6 +19,8 @@ export interface ProjectJson {
   entry: string;
   main_output: string;
   created: string;
+  /** Version von SOMA, die das Modell zuletzt gespeichert hat (E68). Fehlt bei Modellen von vor 0.1.0. */
+  app_version?: string;
   /** Skills auf „Immer“ (E17, E55), ihre Kopien liegen in .soma/skills/. Vor E55 hießen sie „aktiv“. */
   skills?: string[];
   /** Skills auf „Bei Bedarf“ (E55), ebenfalls mit Kopie. Was in keiner der beiden Listen steht, ist aus. */
@@ -57,7 +60,7 @@ export async function createProject(name = 'Neues Modell'): Promise<{ id: string
   fs.cpSync(templateDir(), dir, { recursive: true });
   // Skills für neue Modelle (E46) vor dem ersten Build und dem Startcommit: Der erste Stand enthält sie schon
   const skills = applyDefaultSkills(dir, skillsDir(), skillBackupsDir(id), getSkillDefaults());
-  const pj: ProjectJson = { id, name, api_version: API_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString(),
+  const pj: ProjectJson = { id, name, api_version: API_VERSION, app_version: SOMA_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString(),
     ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) };
   writeJson(path.join(dir, '.soma', 'project.json'), pj);
   writeJson(stateFile(id), { ...pj, app: {} } satisfies ProjectState);
@@ -93,6 +96,19 @@ export function renameProject(id: string, name: string): void {
   writeJson(file, { ...pj, name });
   const cur = readJson<ProjectState>(stateFile(id));
   if (cur) writeJson(stateFile(id), { ...cur, name });
+}
+
+/**
+ * Beim Speichern: Version dieser App in project.json und die App-Kopie (E68), falls sie dort anders steht. Die Änderung
+ * landet im Snapshot. Eine unlesbare project.json bleibt, wie sie ist (der Projekt-Check meldet sie).
+ */
+export function stampAppVersion(id: string): void {
+  const file = path.join(projectDir(id), '.soma', 'project.json');
+  const pj = readJson<ProjectJson>(file);
+  if (!pj || pj.app_version === SOMA_VERSION) return;
+  writeJson(file, { ...pj, app_version: SOMA_VERSION });
+  const cur = readJson<ProjectState>(stateFile(id));
+  if (cur) writeJson(stateFile(id), { ...cur, app_version: SOMA_VERSION });
 }
 
 /** Stufen der Skills laut project.json (E55), null wenn sie unlesbar ist. Fehlt eine Liste, ist sie leer. */
@@ -140,6 +156,8 @@ export function inspectProject(id: string): { name: string; problems: string[] }
     problems.push('Die ID in .soma/project.json passt nicht zum Arbeitsordner.');
   } else if (pj.api_version > API_VERSION) {
     problems.push(`Das Projekt nutzt api_version ${pj.api_version}, diese App kennt nur ${API_VERSION}.`);
+  } else if (isNewerVersion(pj.app_version)) {
+    problems.push(`Das Modell wurde zuletzt mit SOMA ${pj.app_version} gespeichert, diese App ist ${SOMA_VERSION}. Neuere Funktionen fehlen hier vielleicht.`);
   }
   const entry = pj?.entry ?? 'model.py';
   if (!fs.existsSync(path.join(dir, entry))) problems.push(`Einstiegspunkt ${entry} fehlt.`);

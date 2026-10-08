@@ -322,6 +322,21 @@ try {
   put2('.soma/model.glb', glb.subarray(0, 16));
   check('Abgeschnittene GLB (Build schreibt gerade): keine Vorschau', !(await storeBuildAsPreview(bd, target2, last, () => true)) && !fs.existsSync(target2));
   check('Keine halben Ordner übrig', fs.readdirSync(path.join(tmp, 'previews', 'p')).join(',') === 'c1');
+
+  // Versionsnummer (E68): Major.minor.bugfix, eine für App und soma
+  const appVersion = JSON.parse(fs.readFileSync(path.join(APP, 'package.json'), 'utf8')).version;
+  const pyInit = fs.readFileSync(path.join(APP, '..', 'python', 'soma', '__init__.py'), 'utf8');
+  const pyproject = fs.readFileSync(path.join(APP, '..', 'python', 'pyproject.toml'), 'utf8');
+  check('Version in package.json hat die Form Major.minor.bugfix', /^\d+\.\d+\.\d+$/.test(appVersion), appVersion);
+  check('soma trägt dieselbe Version (__init__.py, pyproject liest sie dort)', new RegExp(`^__version__ = "${appVersion.replace(/\./g, '\\.')}"`, 'm').test(pyInit)
+    && /dynamic = \["version"\]/.test(pyproject) && /version = \{ attr = "soma.__version__" \}/.test(pyproject));
+  const vout = path.join(tmp, 'version.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'shared', 'version.ts')], outfile: vout, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
+    define: { __SOMA_VERSION__: JSON.stringify('0.4.2') } });
+  const { SOMA_VERSION, isNewerVersion, parseVersion } = await import(pathToFileURL(vout).href);
+  check('Beim Bauen eingesetzt (define), Vergleich zahlenweise (0.10.0 neuer als 0.9.9)', SOMA_VERSION === '0.4.2' && isNewerVersion('0.4.3') && isNewerVersion('1.0.0')
+    && !isNewerVersion('0.4.2') && !isNewerVersion('0.3.9') && isNewerVersion('0.10.0', '0.9.9'));
+  check('Unlesbare Nummern gelten nicht als neuer', !isNewerVersion('9.x') && !isNewerVersion(undefined) && !isNewerVersion(42) && parseVersion(' 1.2.3 ')?.join() === '1,2,3');
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

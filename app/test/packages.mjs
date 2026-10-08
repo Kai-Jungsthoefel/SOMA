@@ -6,6 +6,7 @@
 // Aufruf: node test/run-all.mjs packages (nach npm run build).
 import { exec } from 'dugite';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import yauzl from 'yauzl';
@@ -109,11 +110,17 @@ try {
     && !(await g('ls-files')).includes('.soma/env'));
 
   // ---- 4) Speichern: requirements.txt in der ZIP, Umgebung nicht ----
+  // Dazu Version (E68): Ein Modell aus einer älteren App bekommt beim Speichern die Version dieser App
+  const appVersion = JSON.parse(fs.readFileSync(path.join(APP, 'package.json'), 'utf8')).version;
+  const pjFile = path.join(dir, '.soma', 'project.json');
+  fs.writeFileSync(pjFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(pjFile, 'utf8')), app_version: '0.0.1' }, null, 2));
   await app.answers([zipPath]);
   await domClick('btn-save');
-  await waitFor('gespeichert', () => window.__t.saveState() && !window.__t.saveState().unsaved && window.__t.saveState().zipPath, 60000);
+  await waitFor('gespeichert', () => window.__t.saveState() && !window.__t.saveState().unsaved && window.__t.saveState().zipPath && window.__t.saveState().dirtyFiles === 0, 60000);
   const names = await listZip(zipPath);
   check('ZIP enthält requirements.txt, aber nichts aus .soma/env', names.includes('requirements.txt') && !names.some((n) => n.startsWith('.soma/env')), `${names.length} Einträge`);
+  check('Speichern trägt die Version dieser App in project.json ein, auch im Snapshot', JSON.parse(fs.readFileSync(pjFile, 'utf8')).app_version === appVersion
+    && JSON.parse(await g('show', 'HEAD:.soma/project.json')).app_version === appVersion, appVersion);
 
   // ---- 5) Alter Stand: seine eigene Liste, kein Paket zu viel ----
   const first = await g('rev-list', '--max-parents=0', 'HEAD');
@@ -129,7 +136,13 @@ try {
   app = null;
 
   // ---- 6) Anderer Rechner: frische App-Daten, ZIP öffnen ----
-  app = await startApp({ name: 'packages2' });
+  // Eigener Port: Die eben beendete App hält ihren Debug-Port unter Last noch eine Weile fest
+  const port = await new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => { const p = srv.address().port; srv.close(() => resolve(p)); });
+  });
+  app = await startApp({ name: 'packages2', port });
   ({ ev, waitFor, domClick } = app);
   await waitFor('Startprojekt', () => !!window.__t && !!window.__t.project() && window.__t.status().state === 'ok', 90000);
   await app.answers([zipPath]);

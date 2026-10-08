@@ -3,7 +3,9 @@ import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const common = { bundle: true, sourcemap: true, logLevel: 'info', target: 'es2022' };
+// Versionsnummer von SOMA (E68) aus package.json, für alle Teile gleich (src/shared/version.ts)
+const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const common = { bundle: true, sourcemap: true, logLevel: 'info', target: 'es2022', define: { __SOMA_VERSION__: JSON.stringify(version) } };
 await Promise.all([
   build({ ...common, entryPoints: ['src/main/main.ts'], outfile: 'dist/main/main.js', platform: 'node', format: 'cjs',
           external: ['electron', 'node-pty', 'dugite'] }),
