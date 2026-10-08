@@ -4,11 +4,11 @@
 /** Grund, warum eine Datei (Pfad relativ zum Projekt) nur lesbar ist, sonst null. */
 export function readOnlyReason(rel: string): string | null {
   const p = rel.replace(/\\/g, '/').replace(/^\.\//, '');
-  if (/^(AGENTS|CLAUDE)\.md$/i.test(p)) return 'Wird von der App verwaltet und bei Updates ersetzt. Eigene Wünsche und Regeln gehören in NOTES.md.';
-  if (/^\.gitignore$/i.test(p)) return 'Wird von der App verwaltet.';
-  if (/^(output|exports)\//i.test(p)) return 'Wird beim Bauen oder Exportieren neu erzeugt.';
-  if (/^\.soma\/skills\//i.test(p)) return 'Kopie eines Skills. Umstellen links unter „Skills“.';
-  if (/^\.(soma|git)(\/|$)/i.test(p)) return 'Interne Daten der App und von Git.';
+  if (/^(AGENTS|CLAUDE)\.md$/i.test(p)) return 'Managed by the app and replaced on updates. Your own wishes and rules belong in NOTES.md.';
+  if (/^\.gitignore$/i.test(p)) return 'Managed by the app.';
+  if (/^(output|exports)\//i.test(p)) return 'Recreated on every build or export.';
+  if (/^\.soma\/skills\//i.test(p)) return 'Copy of a skill. Change it on the left under “Skills”.';
+  if (/^\.(soma|git)(\/|$)/i.test(p)) return 'Internal data of the app and of Git.';
   return null;
 }
 
@@ -19,15 +19,15 @@ export function readOnlyReason(rel: string): string | null {
  */
 export function fileOpBlockReason(rel: string, op: 'create' | 'rename' | 'delete'): string | null {
   const p = rel.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
-  if (!p) return op === 'create' ? null : 'Der Projektordner selbst lässt sich hier nicht ändern.';
-  if (/^(AGENTS|CLAUDE)\.md$/i.test(p) || /^\.gitignore$/i.test(p)) return 'Wird von der App verwaltet.';
-  if (/^output(\/|$)/i.test(p)) return 'Wird beim Bauen neu erzeugt.';
+  if (!p) return op === 'create' ? null : 'The project folder itself cannot be changed here.';
+  if (/^(AGENTS|CLAUDE)\.md$/i.test(p) || /^\.gitignore$/i.test(p)) return 'Managed by the app.';
+  if (/^output(\/|$)/i.test(p)) return 'Recreated on every build.';
   // Markierungen (E16) gehören dem Nutzer: aufräumen und umbenennen ja. Neues legt dort nur „An Agent geben“ ab, das
   // sperrt die Prüfung des Ordners selbst (.soma/feedback fällt unter die nächste Regel).
   if (/^\.soma\/feedback\/[^/]+$/i.test(p)) return null;
-  if (/^\.(soma|git)(\/|$)/i.test(p)) return 'Interne Daten der App und von Git.';
-  if (op !== 'create' && /^model\.py$/i.test(p)) return 'model.py ist der feste Einstiegspunkt des Modells.';
-  if (op === 'rename' && /^(inputs|parts)$/i.test(p)) return 'Der Agent sucht diesen Ordner unter seinem Namen.';
+  if (/^\.(soma|git)(\/|$)/i.test(p)) return 'Internal data of the app and of Git.';
+  if (op !== 'create' && /^model\.py$/i.test(p)) return 'model.py is the fixed entry point of the model.';
+  if (op === 'rename' && /^(inputs|parts)$/i.test(p)) return 'The agent looks for this folder by its name.';
   return null;
 }
 

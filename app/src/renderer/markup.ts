@@ -194,7 +194,7 @@ export class Markup {
     this.draw(false);
     const blob = await new Promise<Blob | null>((r) => this.ui.canvas.toBlob(r, 'image/png'));
     this.draw();
-    if (!blob) throw new Error('Das Bild ließ sich nicht erzeugen.');
+    if (!blob) throw new Error('Could not create the image.');
     return new Uint8Array(await blob.arrayBuffer());
   }
 
@@ -254,7 +254,7 @@ export class Markup {
     if (this.selected != null) { this.selected = null; this.changed(); return; }
     if (!this.shapes.length || Date.now() < this.escUntil) { this.close(); return; }
     this.escUntil = Date.now() + 3000;
-    toast('Noch einmal Escape verwirft die Zeichnung.', 'info');
+    toast('Press Escape again to discard the drawing.', 'info');
   }
 
   // ---- Geometrie ------------------------------------------------------------------------------------------------
@@ -638,10 +638,10 @@ export class Markup {
     u.blank.setAttribute('aria-pressed', String(this.blankBg));
     u.grid.setAttribute('aria-pressed', String(this.grid));
     u.canvas.style.cursor = this.tool === 'select' ? 'default' : this.tool === 'text' ? 'text' : 'crosshair';
-    const what = this.blankBg ? 'Leere Fläche. Das Bild landet in '
-      : this.sourceFile ? `Bild ${this.sourceFile}. Die Markierung landet als neue Datei in ` : `Bild des Viewers von ${fmtWhen(this.takenAt)}. Es landet in `;
+    const what = this.blankBg ? 'Blank canvas. The image is saved in '
+      : this.sourceFile ? `Image ${this.sourceFile}. The markup is saved as a new file in ` : `Viewer image from ${fmtWhen(this.takenAt)}. It is saved in `;
     u.hint.replaceChildren(what,
-      el('code', { textContent: '.soma/feedback/' }), ', der Pfad in der Eingabe des Agenten.');
+      el('code', { textContent: '.soma/feedback/' }), ', and its path goes into the agent’s input.');
   }
 
   // ---- Prüfhilfen (nur für Tests) -------------------------------------------------------------------------------

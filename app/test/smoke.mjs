@@ -32,11 +32,11 @@ try {
   const appVersion = JSON.parse(fs.readFileSync(path.join(APP, 'package.json'), 'utf8')).version;
   const versionUi = await ev(() => ({ start: document.getElementById('start-version').textContent, logo: document.getElementById('btn-home').title }));
   check('Version (E68): in project.json, auf der Startseite und am Logo', JSON.parse(fs.readFileSync(path.join(proj.dir, '.soma', 'project.json'), 'utf8')).app_version === appVersion
-    && versionUi.start === appVersion && versionUi.logo === `Startseite · SOMA ${appVersion}`, `${appVersion} ${JSON.stringify(versionUi)}`);
+    && versionUi.start === appVersion && versionUi.logo === `Start page · SOMA ${appVersion}`, `${appVersion} ${JSON.stringify(versionUi)}`);
   check('Erster Build automatisch, 2 Bauteile in der Bauteilkarte', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
   check('Nach dem Build kein Fehlerhinweis', (await status()).viewerMsg === '', (await status()).text);
   const okStatus = await status();
-  check('Build-Anzeige oben: „Gebaut · 2 Bauteile"', okStatus.text === 'Gebaut' && okStatus.detail.startsWith('2 Bauteile'), `${okStatus.text} ${okStatus.detail}`);
+  check('Build-Anzeige oben: „Built · 2 parts"', okStatus.text === 'Built' && okStatus.detail.startsWith('2 parts'), `${okStatus.text} ${okStatus.detail}`);
 
   // 2) Klick im Viewer -> Bauteil, Fläche, Code
   const lidFace = await ev(() => {
@@ -48,10 +48,10 @@ try {
   await waitFor('Info nach Klick', () => window.__t.info().includes('Lid'));
   const info = await ev(() => window.__t.info());
   const hl = await ev(() => window.__t.codeHighlight());
-  check('Klick auf Deckel-Oberseite: Auswahlkarte mit Bauteil, Fläche, Codezeile', info.startsWith('Lid') && info.includes('Fläche · eben') && /model\.py\s*Zeile \d+/.test(info), info.replace(/\s+/g, ' ').slice(0, 60));
+  check('Klick auf Deckel-Oberseite: Auswahlkarte mit Bauteil, Fläche, Codezeile', info.startsWith('Lid') && info.includes('Face · plane') && /model\.py\s*Line \d+/.test(info), info.replace(/\s+/g, ' ').slice(0, 60));
   check('Codeausschnitt: add_part("Lid") ist markiert', hl.some((l) => l.includes('add_part("Lid"')), String(hl[0]).trim().slice(0, 40));
   const selText = await ev(() => window.__t.selectionText());
-  check('Text für den Agenten nennt Bauteil, Datei, Zeile und Fläche', /^\[Auswahl: Bauteil "Lid", model\.py Zeile \d+.*angeklickte Fläche: eben/.test(selText), selText.slice(0, 70));
+  check('Text für den Agenten nennt Bauteil, Datei, Zeile und Fläche', /^\[Selection: part "Lid", model\.py line \d+.*clicked face: plane/.test(selText), selText.slice(0, 70));
 
   await shot('1-arbeitsbereich');
 
@@ -67,7 +67,7 @@ try {
   await ev(() => window.__t.showPanel('files'));
   await waitFor('Dateiliste', () => window.__t.fileRows().includes('model.py'), 10000).catch(() => {});
   const rows = await ev(() => window.__t.fileRows());
-  check('Dateien: model.py sichtbar, AGENTS.md eingeklappt unter „Vom Programm verwaltet"', rows.includes('model.py') && rows.includes('Vom Programm verwaltet') && !rows.includes('AGENTS.md'), rows.slice(0, 6).join(','));
+  check('Dateien: model.py sichtbar, AGENTS.md eingeklappt unter „Managed by the app"', rows.includes('model.py') && rows.includes('Managed by the app') && !rows.includes('AGENTS.md'), rows.slice(0, 6).join(','));
   check('Dateien und Code gleichzeitig offen, die offene Datei ist im Baum hervorgehoben', await ev(() => !document.getElementById('editor').hidden && !document.getElementById('panel-files').hidden
     && document.querySelector('#tab-files .frow.sel')?.dataset.path === 'model.py'));
   await shot('3-dateien');
@@ -87,16 +87,16 @@ try {
   await app.answers([path.join(expDir, 'Deckel.step')]);
   const one = await ev(() => window.__t.exportAs('step', 'sel'));
   const deckel = path.join(expDir, 'Deckel.step');
-  check('„Exportieren" in der Auswahlkarte: Menü mit „Nur Lid“, STEP am gewählten Ort, nichts in exports/', expMenu.open && expMenu.sel === 'Nur Lid' && one.ok
+  check('„Export" in der Auswahlkarte: Menü mit „Only Lid“, STEP am gewählten Ort, nichts in exports/', expMenu.open && expMenu.sel === 'Only Lid' && one.ok
     && fs.existsSync(deckel) && fs.readFileSync(deckel, 'utf8').startsWith('ISO-10303-21') && !fs.existsSync(path.join(proj.dir, 'exports')), JSON.stringify(one).slice(0, 120));
   fs.writeFileSync(path.join(expDir, 'Body.stl'), 'alt');
   await app.answers([expDir, 1]);
   const keptExp = await ev(() => window.__t.exportAs('stl', 'all'));
-  check('Alle Bauteile in einen Ordner: vorhandene Datei nur nach Rückfrage, „Abbrechen“ schreibt nichts', keptExp.cancelled && fs.readFileSync(path.join(expDir, 'Body.stl'), 'utf8') === 'alt'
+  check('Alle Bauteile in einen Ordner: vorhandene Datei nur nach Rückfrage, „Cancel“ schreibt nichts', keptExp.cancelled && fs.readFileSync(path.join(expDir, 'Body.stl'), 'utf8') === 'alt'
     && !fs.existsSync(path.join(expDir, 'Lid.stl')), JSON.stringify(keptExp).slice(0, 100));
   await app.answers([expDir, 0]);
   const all = await ev(() => window.__t.exportAs('stl', 'all'));
-  check('„Ersetzen“: beide Bauteile als STL im Ordner, Meldung nennt den Ordner', all.ok && all.files.length === 2 && fs.statSync(path.join(expDir, 'Body.stl')).size > 200
+  check('„Replace“: beide Bauteile als STL im Ordner, Meldung nennt den Ordner', all.ok && all.files.length === 2 && fs.statSync(path.join(expDir, 'Body.stl')).size > 200
     && fs.existsSync(path.join(expDir, 'Lid.stl')) && (await ev(() => window.__t.toast())).text.includes(expDir), JSON.stringify(all).slice(0, 120));
   await app.answers([null]);
   const none = await ev(() => window.__t.exportAs('step', 'all'));
@@ -114,10 +114,10 @@ try {
   check('Terminal startet im Projektordner', (await ev((id) => window.__t.termText(id), tid)).includes('workspaces'));
   // Übergabe an den Agenten: Text landet in der Eingabezeile, abgeschickt wird nicht (E11)
   await ev((t) => window.__t.insert(t), selText);
-  await waitFor('eingefügter Text', (id) => window.__t.termText(id).includes('[Auswahl: Bauteil "Lid"'), 10000, tid).catch(() => {});
+  await waitFor('eingefügter Text', (id) => window.__t.termText(id).includes('[Selection: part "Lid"'), 10000, tid).catch(() => {});
   const afterInsert = await ev((id) => window.__t.termText(id), tid);
-  check('„An Agent geben" fügt den Text in die Eingabezeile ein, ohne abzuschicken', afterInsert.includes('[Auswahl: Bauteil "Lid"') && !/Auswahl:.*\n.*(nicht erkannt|not recognized)/.test(afterInsert));
-  check('Bestätigung „In die Eingabe von Terminal eingefügt"', (await ev(() => window.__t.toast())).text.includes('In die Eingabe von Terminal eingefügt'));
+  check('„Send to agent" fügt den Text in die Eingabezeile ein, ohne abzuschicken', afterInsert.includes('[Selection: part "Lid"') && !/Selection:.*\n.*(nicht erkannt|not recognized)/.test(afterInsert));
+  check('Bestätigung „Added to the input of Terminal"', (await ev(() => window.__t.toast())).text.includes('Added to the input of Terminal'));
   await ev((id) => window.soma.term.write(id, '\x03'), tid); // Zeile verwerfen
 
   // Markierung (E16): Viewer-Bild einfrieren, zeichnen, als PNG nach .soma/feedback/, Pfad in die Eingabe
@@ -127,7 +127,7 @@ try {
   await waitFor('Zeichenfläche offen', () => window.__t.markup().active, 5000).catch(() => {});
   const hiddenUi = await ev(() => ['vtop', 'cube', 'cards'].every((id) => getComputedStyle(document.getElementById(id)).display === 'none'));
   const mk0 = await ev(() => window.__t.markup());
-  check('„Markieren": Zeichenfläche offen, Werkzeuge, Würfel und Karten treten zurück', mk0.active && !mk0.blank && hiddenUi && mk0.pixels[0] > 0, `${mk0.pixels.join('x')} px`);
+  check('„Mark up": Zeichenfläche offen, Werkzeuge, Würfel und Karten treten zurück', mk0.active && !mk0.blank && hiddenUi && mk0.pixels[0] > 0, `${mk0.pixels.join('x')} px`);
   const [bgPx, lidPx] = await ev((p) => [window.__t.markPixel(3, 3), window.__t.markPixel(p[0], p[1])], lidPos);
   // Die angeklickte Fläche leuchtet im Viewer orange. Im Bild fehlt die Auswahl, sonst verschluckt sie die orange Markierung.
   check('Das eingefrorene Bild zeigt das Modell ohne Auswahlfarbe', bgPx[3] === 255 && lidPx.slice(0, 3).reduce((s, v, i) => s + Math.abs(v - bgPx[i]), 0) > 40
@@ -159,7 +159,7 @@ try {
   await domClick('btn-mark-blank');
   const blankPx = await ev((p) => window.__t.markPixel(p[0] + 30, p[1] + 30), lidPos);
   await shot('7c-markieren-leer');
-  check('„Leere Fläche": Hintergrund ohne Modell, Zeichnung bleibt', (await ev(() => window.__t.markup())).blank && blankPx.slice(0, 3).join() === '27,30,35'
+  check('„Blank canvas": Hintergrund ohne Modell, Zeichnung bleibt', (await ev(() => window.__t.markup())).blank && blankPx.slice(0, 3).join() === '27,30,35'
     && (await ev(() => window.__t.markup())).shapes.length === 4, blankPx.slice(0, 3).join(','));
   await domClick('btn-mark-blank');
 
@@ -192,12 +192,12 @@ try {
   await shot('7d-markieren-auswahl');
   await key('Delete');
   st = await mk();
-  check('Entf löscht die ausgewählte Form', JSON.stringify(st.shapes) === '["pen","arrow","text"]' && st.selected === -1, st.shapes.join(','));
+  check('Del löscht die ausgewählte Form', JSON.stringify(st.shapes) === '["pen","arrow","text"]' && st.selected === -1, st.shapes.join(','));
   await domClick('btn-mark-undo');
   st = await mk();
   check('Rückgängig holt sie zurück, mit Drehung, Größe und Farbe', st.shapes.length === 4 && st.items[2].color === '#5ea8ff' && Math.abs(st.items[2].rot - Math.PI / 2) < 0.01 && st.items[2].sx > 1.2);
   await key('y', { ctrlKey: true });
-  check('Strg+Y wiederholt das Löschen', (await mk()).shapes.length === 3);
+  check('Ctrl+Y wiederholt das Löschen', (await mk()).shapes.length === 3);
   await domClick('btn-mark-undo');
   const tx = (await mk()).items[3];
   await drag([[tx.x, tx.y]]); await drag([[tx.x, tx.y]]);
@@ -224,7 +224,7 @@ try {
   check('Raster wieder aus: Bild ohne Raster', !(await mk()).grid && (await ev(() => window.__t.markPixel(600, 10))).slice(0, 3).join() === gridOff.slice(0, 3).join());
 
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
-  check('Escape mit Zeichnung verwirft nicht sofort (erst beim zweiten Mal)', (await ev(() => window.__t.markup())).active && (await ev(() => window.__t.toast())).text.includes('Noch einmal Escape'));
+  check('Escape mit Zeichnung verwirft nicht sofort (erst beim zweiten Mal)', (await ev(() => window.__t.markup())).active && (await ev(() => window.__t.toast())).text.includes('Press Escape again'));
   const px = (await ev(() => window.__t.markup())).pixels;
   await domClick('btn-mark-send');
   await waitFor('Markierung gespeichert', () => !window.__t.markup().active, 10000).catch(() => {});
@@ -232,12 +232,12 @@ try {
   const fbFiles = fs.existsSync(fbDir) ? fs.readdirSync(fbDir) : [];
   const png = fbFiles.length === 1 ? fs.readFileSync(path.join(fbDir, fbFiles[0])) : Buffer.alloc(0);
   if (process.env.SMOKE_SHOTS && png.length) fs.writeFileSync(path.join(APP, 'test', 'shots', '7b-markierung-bild.png'), png); // so sieht der Agent es
-  check('„An Agent geben": PNG in .soma/feedback/, so groß wie der Viewer in Gerätepixeln', /^markierung-\d{8}-\d{4}\.png$/.test(fbFiles[0] ?? '') && png.length > 2000
+  check('„Send to agent": PNG in .soma/feedback/, so groß wie der Viewer in Gerätepixeln', /^markup-\d{8}-\d{4}\.png$/.test(fbFiles[0] ?? '') && png.length > 2000
     && png.readUInt32BE(16) === px[0] && png.readUInt32BE(20) === px[1], `${fbFiles.join(',')} ${png.length > 24 ? `${png.readUInt32BE(16)}x${png.readUInt32BE(20)}` : ''}`);
-  await waitFor('Pfad im Terminal', (id) => window.__t.termText(id).includes('[Markierung: .soma/feedback/markierung-'), 10000, tid).catch(() => {});
-  check('Pfad steht in der Eingabe des Terminals, nicht abgeschickt', (await ev((id) => window.__t.termText(id), tid)).includes(`[Markierung: .soma/feedback/${fbFiles[0]}]`));
+  await waitFor('Pfad im Terminal', (id) => window.__t.termText(id).includes('[Markup: .soma/feedback/markup-'), 10000, tid).catch(() => {});
+  check('Pfad steht in der Eingabe des Terminals, nicht abgeschickt', (await ev((id) => window.__t.termText(id), tid)).includes(`[Markup: .soma/feedback/${fbFiles[0]}]`));
   const tst = await ev(() => window.__t.toast());
-  check('Meldung nennt Datei und Ziel, die Werkzeuge sind zurück', tst.text.includes(`Markierung gespeichert: .soma/feedback/${fbFiles[0]}`) && tst.text.includes('In die Eingabe von Terminal eingefügt')
+  check('Meldung nennt Datei und Ziel, die Werkzeuge sind zurück', tst.text.includes(`Markup saved: .soma/feedback/${fbFiles[0]}`) && tst.text.includes('Added to the input of Terminal')
     && await ev(() => getComputedStyle(document.getElementById('vtop')).display !== 'none'), tst.text.replace(/\s+/g, ' ').slice(0, 70));
   await ev((id) => window.soma.term.write(id, '\x03'), tid);
   check('Markierung zählt nicht als ungespeicherte Änderung (nicht in Git, E11)', (await ev(() => window.soma.project.saveState())).dirtyFiles === dirtyBefore);
@@ -257,32 +257,32 @@ try {
     pane.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
     return over;
   });
-  await waitFor('Verweis im Terminal', (id) => window.__t.termText(id).includes('[Auswahl: Bauteil "Body"'), 10000, tid).catch(() => {});
+  await waitFor('Verweis im Terminal', (id) => window.__t.termText(id).includes('[Selection: part "Body"'), 10000, tid).catch(() => {});
   check('Bauteil ins Terminal gezogen: Hinweis beim Darüberziehen, Verweis in der Eingabe, keine Übergabeleiste mehr', dropOver && !(await ev(() => document.getElementById('handoff')))
-    && (await ev((id) => window.__t.termText(id), tid)).includes('[Auswahl: Bauteil "Body"'));
+    && (await ev((id) => window.__t.termText(id), tid)).includes('[Selection: part "Body"'));
   await ev((id) => window.soma.term.write(id, '\x03'), tid);
 
   // Dateibaum: Markierungen sichtbar, anlegen, umbenennen, löschen über Menü und Tasten
   await ev(() => window.__t.showPanel('files'));
   await waitFor('Markierungen im Dateibaum', (f) => window.__t.fileRows().includes(f), 10000, fbFiles[0]).catch(() => {});
   const rows2 = await ev(() => window.__t.fileRows());
-  check('Dateibaum: Gruppe „Markierungen“ mit dem Bild aus .soma/feedback/, sonst nichts aus .soma', rows2.includes('Markierungen') && rows2.includes(fbFiles[0]) && !rows2.includes('project.json'), rows2.slice(-6).join(','));
+  check('Dateibaum: Gruppe „Markups“ mit dem Bild aus .soma/feedback/, sonst nichts aus .soma', rows2.includes('Markups') && rows2.includes(fbFiles[0]) && !rows2.includes('project.json'), rows2.slice(-6).join(','));
   const ctx = (rel) => ev((rel) => {
     const row = document.querySelector(`#tab-files .frow[data-path="${CSS.escape(rel)}"]`);
     if (!row) return null;
     const r = row.getBoundingClientRect();
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 5 }));
-    return [...document.querySelectorAll('#menu-ctx .mi')].map((b) => (b.disabled ? '-' : '') + b.textContent.replace(/(F2|Entf)$/, ''));
+    return [...document.querySelectorAll('#menu-ctx .mi')].map((b) => (b.disabled ? '-' : '') + b.textContent.replace(/(F2|Del)$/, ''));
   }, rel);
   const menuItemClick = (label) => ev((l) => [...document.querySelectorAll('#menu-ctx .mi')].find((b) => b.textContent.startsWith(l))?.click(), label);
   const typeName = (name) => ev((n) => { const t = document.querySelector('#tab-files .fedit'); if (!t) return false; t.value = n; t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true; }, name);
   const fbRel = `.soma/feedback/${fbFiles[0]}`;
   const imgMenu = await ctx(fbRel);
-  await menuItemClick('Markieren');
+  await menuItemClick('Mark up');
   await waitFor('Bild als Zeichenfläche', () => window.__t.markup().active, 5000).catch(() => {});
   const mkImg = await ev(() => ({ ...window.__t.markup(), hint: document.getElementById('mark-hint').textContent }));
   await shot('7g-markieren-bild');
-  check('Bild im Dateibaum: „Markieren“ öffnet es als Hintergrund der Zeichenfläche', imgMenu?.includes('Markieren') && mkImg.active && mkImg.source === fbRel && !mkImg.blank
+  check('Bild im Dateibaum: „Mark up“ öffnet es als Hintergrund der Zeichenfläche', imgMenu?.includes('Mark up') && mkImg.active && mkImg.source === fbRel && !mkImg.blank
     && mkImg.hint.includes(fbRel) && mkImg.pixels[0] >= px[0], `${imgMenu?.join(',')} ${mkImg.source} ${mkImg.pixels}`);
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   check('Escape ohne Zeichnung schließt das Bild wieder, keine neue Datei', !(await ev(() => window.__t.markup().active)) && fs.readdirSync(fbDir).length === 1);
@@ -308,26 +308,26 @@ try {
   await clickRow(fbRel);
   await waitFor('Wechsel nach Verwerfen', (r) => window.__t.markup().source === r, 5000, fbRel).catch(() => {});
   const swapped = await ev(() => window.__t.markup());
-  check('Mit Zeichnung: Rückfrage, „Abbrechen“ behält sie, „Verwerfen und wechseln“ öffnet das andere Bild', kept.source === 'skizze-b.png' && kept.shapes.length === 1
+  check('Mit Zeichnung: Rückfrage, „Cancel“ behält sie, „Discard and switch“ öffnet das andere Bild', kept.source === 'skizze-b.png' && kept.shapes.length === 1
     && swapped.source === fbRel && swapped.shapes.length === 0, `${kept.source}/${kept.shapes.length} → ${swapped.source}/${swapped.shapes.length}`);
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   fs.rmSync(imgB);
   const modelMenu = await ctx('model.py');
-  check('Menü auf model.py: kein „Markieren“ (kein Bild)', !modelMenu?.includes('Markieren'));
-  check('Menü auf model.py: Öffnen, Explorer, Pfad, Anlegen; Umbenennen und Löschen gesperrt', ['Öffnen', 'Im Explorer zeigen', 'Pfad an Agent geben', 'Pfad kopieren', 'Neue Datei', '-Umbenennen', '-Löschen'].every((x) => modelMenu?.includes(x)), modelMenu?.join(','));
+  check('Menü auf model.py: kein „Mark up“ (kein Bild)', !modelMenu?.includes('Mark up'));
+  check('Menü auf model.py: Öffnen, Explorer, Pfad, Anlegen; Umbenennen und Löschen gesperrt', ['Open', 'Show in Explorer', 'Send path to agent', 'Copy path', 'New file', '-Rename', '-Delete'].every((x) => modelMenu?.includes(x)), modelMenu?.join(','));
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await domClick('btn-file-new');
   await sleep(50);
   const typed = await typeName('notiz.txt');
   const notiz = path.join(proj.dir, 'notiz.txt');
   await waitFor('Datei angelegt und offen', () => window.__t.editor.state().file === 'notiz.txt', 5000).catch(() => {});
-  check('„Neue Datei“: Namensfeld im Baum, Enter legt sie an und öffnet sie im Editor', typed && fs.existsSync(notiz) && (await ev(() => window.__t.editor.state())).file === 'notiz.txt');
+  check('„New file“: Namensfeld im Baum, Enter legt sie an und öffnet sie im Editor', typed && fs.existsSync(notiz) && (await ev(() => window.__t.editor.state())).file === 'notiz.txt');
   await ev(() => window.__t.showPanel('files'));
   await waitFor('notiz.txt im Baum', () => window.__t.fileRows().includes('notiz.txt'), 5000).catch(() => {});
-  await ctx('notiz.txt'); await menuItemClick('Umbenennen'); await sleep(50);
+  await ctx('notiz.txt'); await menuItemClick('Rename'); await sleep(50);
   await typeName('model.py'); await sleep(300);
   const dupErr = await ev(() => ({ toast: window.__t.toast().text, open: !!document.querySelector('#tab-files .fedit') }));
-  check('Umbenennen auf vorhandenen Namen: Meldung, Feld bleibt offen, nichts überschrieben', dupErr.open && dupErr.toast.includes('gibt es dort schon') && fs.existsSync(notiz)
+  check('Umbenennen auf vorhandenen Namen: Meldung, Feld bleibt offen, nichts überschrieben', dupErr.open && dupErr.toast.includes('already exists there') && fs.existsSync(notiz)
     && fs.readFileSync(path.join(proj.dir, 'model.py'), 'utf8').includes('add_part'), dupErr.toast.slice(0, 60));
   await typeName('skizze.txt');
   const skizze = path.join(proj.dir, 'skizze.txt');
@@ -339,11 +339,11 @@ try {
   await ev(() => { const r = document.querySelector('#tab-files .frow[data-path="skizze.txt"]'); r.focus(); r.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true })); });
   await waitFor('gelöscht', () => !window.__t.fileRows().includes('skizze.txt'), 5000).catch(() => {});
   const bin = path.join(ud, 'test-papierkorb');
-  check('Entf mit Rückfrage: in den Papierkorb, Reiter zu', !fs.existsSync(skizze) && fs.existsSync(bin) && fs.readdirSync(bin).some((f) => f.endsWith('skizze.txt'))
+  check('Del mit Rückfrage: in den Papierkorb, Reiter zu', !fs.existsSync(skizze) && fs.existsSync(bin) && fs.readdirSync(bin).some((f) => f.endsWith('skizze.txt'))
     && !(await ev(() => window.__t.editor.state())).files.includes('skizze.txt'), fs.existsSync(bin) ? fs.readdirSync(bin).join(',') : 'kein Papierkorb');
-  await ctx(`.soma/feedback/${fbFiles[0]}`); await menuItemClick('Pfad an Agent geben');
-  await waitFor('Pfad der Markierung im Terminal', (f) => window.__t.termText(f[0]).includes(`[Datei: .soma/feedback/${f[1]}]`), 5000, [tid, fbFiles[0]]).catch(() => {});
-  check('Markierung: Rechtsklick „Pfad an Agent geben“ fügt den Pfad ein', (await ev((id) => window.__t.termText(id), tid)).includes(`[Datei: .soma/feedback/${fbFiles[0]}]`));
+  await ctx(`.soma/feedback/${fbFiles[0]}`); await menuItemClick('Send path to agent');
+  await waitFor('Pfad der Markierung im Terminal', (f) => window.__t.termText(f[0]).includes(`[File: .soma/feedback/${f[1]}]`), 5000, [tid, fbFiles[0]]).catch(() => {});
+  check('Markierung: Rechtsklick „Send path to agent“ fügt den Pfad ein', (await ev((id) => window.__t.termText(id), tid)).includes(`[File: .soma/feedback/${fbFiles[0]}]`));
   await ev((id) => window.soma.term.write(id, '\x03'), tid);
   await shot('3b-dateien-menue');
   await ev(() => window.__t.showPanel(null));
@@ -360,10 +360,10 @@ try {
   fs.writeFileSync(modelPy, original + third + 'def kaputt(:\n');
   await waitFor('Fehlerstatus', () => window.__t.status().state === 'error');
   const err = await status();
-  check('Syntaxfehler: Anzeige oben „Build fehlgeschlagen" mit Datei und Zeile', err.text === 'Build fehlgeschlagen' && /model\.py, Zeile \d+/.test(err.detail), err.detail.slice(0, 70));
-  check('Fehlerkarte im Viewer, letzter guter Stand (3 Bauteile) bleibt', err.viewerMsg.includes('Build fehlgeschlagen') && await ev(() => window.__t.partCount()) === 3);
+  check('Syntaxfehler: Anzeige oben „Build failed" mit Datei und Zeile', err.text === 'Build failed' && /model\.py, line \d+/.test(err.detail), err.detail.slice(0, 70));
+  check('Fehlerkarte im Viewer, letzter guter Stand (3 Bauteile) bleibt', err.viewerMsg.includes('Build failed') && await ev(() => window.__t.partCount()) === 3);
   const errText = await ev(() => window.__t.errorText());
-  check('Fehlertext für den Agenten nennt Datei und Zeile', /^\[Build-Fehler: model\.py Zeile \d+: /.test(errText), errText.slice(0, 60));
+  check('Fehlertext für den Agenten nennt Datei und Zeile', /^\[Build error: model\.py line \d+: /.test(errText), errText.slice(0, 60));
   await shot('4-fehler');
   await sleep(300);
   check('App reagiert weiter (Terminal aktiv, kein Absturz)', await ev(() => window.__t.terminals.count) === 1);
@@ -380,10 +380,10 @@ try {
   check('Auto-Build aus: keine Änderung im Viewer nach 3,5 s', await ev(() => window.__t.partCount()) === 2);
   await domClick('btn-build');
   await waitFor('Knopf-Build', () => window.__t.partCount() === 3 && window.__t.status().state === 'ok');
-  check('Knopf „Bauen" baut trotzdem (3 Bauteile)', true);
+  check('Knopf „Build now" baut trotzdem (3 Bauteile)', true);
   fs.writeFileSync(modelPy, original);
-  await waitFor('veraltet gemeldet', () => window.__t.status().text === 'Code geändert', 10000).catch(() => {});
-  check('Auto-Build aus: Anzeige meldet „Code geändert"', (await status()).text === 'Code geändert', (await status()).text);
+  await waitFor('veraltet gemeldet', () => window.__t.status().text === 'Code changed', 10000).catch(() => {});
+  check('Auto-Build aus: Anzeige meldet „Code changed"', (await status()).text === 'Code changed', (await status()).text);
   await domClick('chk-auto');
   await waitFor('Auto an baut nach', () => window.__t.partCount() === 2 && window.__t.status().state === 'ok', 60000).catch(() => {});
   check('Auto-Build wieder an: veralteter Stand wird gleich gebaut', await ev(() => window.__t.partCount()) === 2);
@@ -399,7 +399,7 @@ try {
   await page.click(...Object.values(await ev(() => window.__t.viewer.cubeScreen([0, -1, 0]))));
   await settle();
   let v1 = await vs();
-  check('Würfel „Vorne" anklicken: Ansicht von vorne, Drehpunkt und Abstand bleiben', near(v1.dir, [0, -1, 0]) && near(v1.target, v0.target) && Math.abs(v1.dist - v0.dist) < 1e-6, v1.dir.map((x) => x.toFixed(3)).join(','));
+  check('Würfel „FRONT" anklicken: Ansicht von vorne, Drehpunkt und Abstand bleiben', near(v1.dir, [0, -1, 0]) && near(v1.target, v0.target) && Math.abs(v1.dist - v0.dist) < 1e-6, v1.dir.map((x) => x.toFixed(3)).join(','));
   await page.click(...Object.values(await ev(() => window.__t.viewer.cubeScreen([0.85, -1, 0.85]))));
   await settle();
   v1 = await vs();
@@ -424,7 +424,7 @@ try {
     `${v3.target.map((x) => x.toFixed(2)).join(',')} statt ${corner.c.join(',')}`);
   check('Zoom zur Mausposition an, vordere Schnittebene folgt dem Abstand', v3.zoomToCursor && Math.abs(v3.near - v3.dist / 200) < 1e-9 && v3.far > v3.dist, `near ${v3.near.toFixed(3)}, Abstand ${v3.dist.toFixed(1)}`);
   await ev(() => document.querySelector('#menu-display [data-view="back"]').click());
-  check('Ansicht „Hinten" im Menü Darstellung', near((await vs()).dir, [0, 1, 0]));
+  check('Ansicht „Back" im Menü Display', near((await vs()).dir, [0, 1, 0]));
   await domClick(await ev(() => { const b = document.querySelector('.vbtns [data-view="iso"]'); b.id ||= 'btn-view-iso'; return b.id; }));
   check('Standardansicht setzt den Drehpunkt zurück in die Mitte des Modells', near((await vs()).target, v0.target, 1e-6));
   // Zum Ansehen: Zeiger über der Ecke oben vorne rechts (Felder in Orange)
@@ -445,14 +445,14 @@ try {
   await sleep(2500);
   await ev(() => window.__t.insert('[Test nach Wechsel] '));
   const afterSwitch = await ev(() => window.__t.toast());
-  check('Nach dem Wechsel: Einfügen ins neue Terminal geht', !afterSwitch.error && afterSwitch.text.includes('In die Eingabe von Terminal eingefügt'), afterSwitch.text.slice(0, 60));
+  check('Nach dem Wechsel: Einfügen ins neue Terminal geht', !afterSwitch.error && afterSwitch.text.includes('Added to the input of Terminal'), afterSwitch.text.slice(0, 60));
   await ev(() => window.soma.term.write(window.__t.terminals.activeId, '\x03'));
   // Aktives Terminal beendet, ein anderes läuft noch: Der Text geht dorthin, und dieses kommt nach vorn
   const firstTid = await ev(() => window.__t.terminals.activeId);
   const secondTid = await ev(() => window.__t.terminals.add({ title: 'Zweites' }));
   await sleep(1500);
   await ev((id) => window.soma.term.write(id, 'exit\r'), secondTid);
-  await waitFor('zweites Terminal beendet', (id) => window.__t.termText(id).includes('Prozess beendet'), 10000, secondTid).catch(() => {});
+  await waitFor('zweites Terminal beendet', (id) => window.__t.termText(id).includes('Process ended'), 10000, secondTid).catch(() => {});
   await ev(() => window.__t.insert('[Test Ersatzterminal] '));
   const fallback = await ev(() => window.__t.toast());
   await waitFor('Text im ersten Terminal', (id) => window.__t.termText(id).includes('[Test Ersatzterminal]'), 5000, firstTid).catch(() => {});

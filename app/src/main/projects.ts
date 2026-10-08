@@ -48,7 +48,7 @@ interface Session {
 }
 
 const POLL_MS = 2000;
-const safeFileName = (n: string) => n.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'Modell';
+const safeFileName = (n: string) => n.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'Model';
 
 /**
  * Das offene Projekt und alles, was mit Speichern, Öffnen und Verlauf zu tun hat.
@@ -64,7 +64,7 @@ export class ProjectController {
   constructor(private readonly getWin: () => BrowserWindow | null, private readonly wc: WebContents) {}
 
   private send(channel: string, ...args: unknown[]) { if (!this.wc.isDestroyed()) this.wc.send(channel, ...args); }
-  need(): Session { if (!this.session) throw new Error('Kein Projekt geöffnet'); return this.session; }
+  need(): Session { if (!this.session) throw new Error('No project open'); return this.session; }
 
   // ---- Sitzung ----------------------------------------------------------------------------------------------------
 
@@ -100,7 +100,7 @@ export class ProjectController {
     const shells = untouched ? s.terminals.killAllAndWait() : null;
     this.close();
     if (shells) await shells;
-    if (untouched && !(await discardWorkspace(s.id))) console.error(`[soma] Unverändertes Modell ${s.id} ließ sich nicht verwerfen (Ordner in Benutzung), es bleibt.`);
+    if (untouched && !(await discardWorkspace(s.id))) console.error(`[soma] Could not discard the unchanged model ${s.id} (folder in use), it stays.`);
   }
 
   async open(id: string): Promise<ProjectInfo> {
@@ -129,7 +129,7 @@ export class ProjectController {
     // erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
     const last = currentBuild(dir);
     // Fehlen Pakete aus requirements.txt (ZIP von einem anderen Rechner), erst installieren, dann bauen
-    if (!this.installPackages(session, !last) && !last) builds.start('Projekt geöffnet');
+    if (!this.installPackages(session, !last) && !last) builds.start('project opened');
     const info = this.info();
     this.send('project:changed', info);
     // Erst nach project:changed: Das Fenster räumt beim Projektwechsel den Viewer leer und lädt danach das Modell
@@ -220,12 +220,12 @@ export class ProjectController {
    */
   async exportModel(format: string, part: string | null): Promise<ExportResult> {
     const s = this.need();
-    if (!/^[a-z0-9]{2,5}$/.test(format)) return { ok: false, files: [], error: `Unbekanntes Format: ${format}` };
+    if (!/^[a-z0-9]{2,5}$/.test(format)) return { ok: false, files: [], error: `Unknown format: ${format}` };
     const last = getAppState(s.id).exportDir;
     const startDir = last && fs.existsSync(last) ? last : documentsDir();
     const target = await chooseExportTarget(this.getWin(), part
-      ? { kind: 'file', title: `„${part}“ exportieren`, defaultPath: path.join(startDir, `${safeFileName(part)}.${format}`), ext: format }
-      : { kind: 'dir', title: 'Ordner für den Export wählen', defaultPath: startDir });
+      ? { kind: 'file', title: `Export “${part}”`, defaultPath: path.join(startDir, `${safeFileName(part)}.${format}`), ext: format }
+      : { kind: 'dir', title: 'Choose a folder for the export', defaultPath: startDir });
     if (!target) return { ok: false, files: [], cancelled: true };
     let tmp: string | null = null;
     try {
@@ -235,12 +235,12 @@ export class ProjectController {
       const r = await runSoma(args, s.dir, 5 * 60 * 1000);
       if (!r.ok) {
         const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
-        return { ok: false, files: [], error: msg || 'Export fehlgeschlagen' };
+        return { ok: false, files: [], error: msg || 'Export failed' };
       }
       // Alles aus dem Ordner übernehmen, nicht nur die gemeldeten Dateien (glTF kann eine .bin daneben schreiben)
       const dir = tmp;
       const made = fs.readdirSync(dir).filter((n) => fs.statSync(path.join(dir, n)).isFile());
-      if (!made.length) return { ok: false, files: [], error: 'soma hat keine Datei geschrieben.' };
+      if (!made.length) return { ok: false, files: [], error: 'soma did not write a file.' };
       const plan: [string, string][] = [];
       if (part) {
         const main = made.find((n) => n.toLowerCase().endsWith(`.${format}`)) ?? made[0];
@@ -252,8 +252,8 @@ export class ProjectController {
       const exists = plan.filter(([, d], i) => !(part && i === 0) && fs.existsSync(d)).map(([, d]) => path.basename(d));
       if (exists.length) {
         const c = await choose(this.getWin(), {
-          title: 'Exportieren', message: exists.length === 1 ? 'Diese Datei gibt es im Ordner schon:' : `Diese ${exists.length} Dateien gibt es im Ordner schon:`,
-          detail: `${exists.slice(0, 10).join('\n')}${exists.length > 10 ? `\n… und ${exists.length - 10} weitere` : ''}`, buttons: ['Ersetzen', 'Abbrechen'],
+          title: 'Export', message: exists.length === 1 ? 'This file already exists in the folder:' : `These ${exists.length} files already exist in the folder:`,
+          detail: `${exists.slice(0, 10).join('\n')}${exists.length > 10 ? `\n… and ${exists.length - 10} more` : ''}`, buttons: ['Replace', 'Cancel'],
         });
         if (c !== 0) return { ok: false, files: [], cancelled: true };
       }
@@ -265,7 +265,7 @@ export class ProjectController {
       patchAppState(s.id, { exportDir: part ? path.dirname(dest) : target });
       return { ok: true, files: plan.map(([, d]) => d), target: dest };
     } catch (e) {
-      return { ok: false, files: [], error: `Export fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}` };
+      return { ok: false, files: [], error: `Export failed: ${e instanceof Error ? e.message : String(e)}` };
     } finally {
       if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -279,7 +279,7 @@ export class ProjectController {
     if (zipPath && !fs.existsSync(path.dirname(zipPath))) zipPath = undefined; // Zielordner weg (z. B. USB-Stick ab): neu fragen
     if (!zipPath) {
       const pj = readProjectJson(s.id);
-      const chosen = await choosePath(this.getWin(), 'save', `${safeFileName(pj?.name ?? 'Modell')}.zip`);
+      const chosen = await choosePath(this.getWin(), 'save', `${safeFileName(pj?.name ?? 'Model')}.zip`);
       if (!chosen) return { cancelled: true };
       zipPath = /\.zip$/i.test(chosen) ? chosen : `${chosen}.zip`;
       renameProject(s.id, path.basename(zipPath).replace(/\.zip$/i, '')); // der Modellname folgt dem Dateinamen
@@ -287,16 +287,16 @@ export class ProjectController {
     const warnings: string[] = [];
     try {
       // Die ZIP soll das aktuelle Ergebnis enthalten: laufenden Build abwarten, veralteten vorher nachholen.
-      if (!s.builds.busy && buildIsStale(s.dir)) s.builds.start('vor dem Speichern');
+      if (!s.builds.busy && buildIsStale(s.dir)) s.builds.start('before saving');
       await s.builds.whenIdle();
-      if (s.builds.status.state === 'error') warnings.push('Der letzte Build ist fehlgeschlagen. Die ZIP enthält den letzten erfolgreichen Stand von output/model.step.');
+      if (s.builds.status.state === 'error') warnings.push('The last build failed. The ZIP contains the last successful version of output/model.step.');
 
       stampAppVersion(s.id); // mit welcher Version zuletzt gespeichert (E68), steht so auch im Snapshot
       let snapshot: string | null = null;
       if (await s.git.isRepo()) {
-        try { snapshot = await s.git.snapshot('Automatischer Snapshot beim Speichern'); }
-        catch (e) { warnings.push(`Snapshot im Verlauf nicht möglich: ${e instanceof Error ? e.message : String(e)}`); }
-      } else warnings.push('Kein Git-Verlauf vorhanden: Es wurde kein Snapshot angelegt.');
+        try { snapshot = await s.git.snapshot('Automatic snapshot on save'); }
+        catch (e) { warnings.push(`Could not add a snapshot to the history: ${e instanceof Error ? e.message : String(e)}`); }
+      } else warnings.push('No Git history: no snapshot was created.');
 
       const head = await s.git.head();
       const pj = readProjectJson(s.id);
@@ -307,7 +307,7 @@ export class ProjectController {
       this.send('versions:changed');
       return { cancelled: false, zipPath, snapshot, files: r.files, bytes: r.bytes, warnings };
     } catch (e) {
-      return { cancelled: false, error: `Speichern fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}` };
+      return { cancelled: false, error: `Saving failed: ${e instanceof Error ? e.message : String(e)}` };
     }
   }
 
@@ -326,20 +326,20 @@ export class ProjectController {
   async openZipFile(zipPath: string): Promise<OpenResult> {
     let texts: Record<string, string | null>;
     try { texts = await readZipTexts(zipPath, ['.soma/project.json', ZIP_INFO_PATH]); }
-    catch (e) { return { cancelled: false, error: `Die ZIP lässt sich nicht lesen: ${e instanceof Error ? e.message : String(e)}` }; }
+    catch (e) { return { cancelled: false, error: `Cannot read the ZIP: ${e instanceof Error ? e.message : String(e)}` }; }
     let id: string;
     let info: ZipInfo | null = null;
     try {
       id = (JSON.parse(texts['.soma/project.json'] ?? '') as { id?: string }).id ?? '';
       if (texts[ZIP_INFO_PATH]) info = JSON.parse(texts[ZIP_INFO_PATH]!) as ZipInfo;
     } catch { id = ''; }
-    if (!isProjectId(id)) return { cancelled: false, error: 'Das ist keine SOMA-Datei (.soma/project.json fehlt oder ist ungültig).' };
+    if (!isProjectId(id)) return { cancelled: false, error: 'This is not a SOMA file (.soma/project.json is missing or invalid).' };
 
     const dir = projectDir(id);
     const remember = () => patchAppState(id, { zipPath, savedHead: info?.head ?? null, savedAt: Date.now() });
 
     if (!fs.existsSync(dir)) {
-      try { await extractProject(zipPath, id); } catch (e) { return { cancelled: false, error: `Entpacken fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}` }; }
+      try { await extractProject(zipPath, id); } catch (e) { return { cancelled: false, error: `Unpacking failed: ${e instanceof Error ? e.message : String(e)}` }; }
       remember();
       await this.open(id);
       return { cancelled: false, opened: true };
@@ -355,16 +355,16 @@ export class ProjectController {
       return { cancelled: false, opened: true };
     }
     let why: string;
-    if (st.dirty) why = 'Der Arbeitsordner enthält ungespeicherte Änderungen.';
-    else if (info?.head && wsHead && (await git.isAncestor(info.head, wsHead))) why = 'Der Arbeitsordner ist neuer als die ZIP.';
-    else if (info?.head && wsHead && (await git.isAncestor(wsHead, info.head))) why = 'Die ZIP ist neuer als der Arbeitsordner.';
-    else why = 'Arbeitsordner und ZIP haben verschiedene Stände.';
+    if (st.dirty) why = 'The working folder has unsaved changes.';
+    else if (info?.head && wsHead && (await git.isAncestor(info.head, wsHead))) why = 'The working folder is newer than the ZIP.';
+    else if (info?.head && wsHead && (await git.isAncestor(wsHead, info.head))) why = 'The ZIP is newer than the working folder.';
+    else why = 'The working folder and the ZIP have different versions.';
     const choice = await choose(this.getWin(), {
-      title: 'Arbeitsordner und ZIP weichen ab',
-      message: `${why} Was soll geöffnet werden?`,
-      detail: 'Arbeitsstand behalten: Das Modell wird so geöffnet, wie es auf diesem Rechner liegt.\n' +
-        'ZIP laden: Der Stand aus der ZIP wird geöffnet. Der bisherige Arbeitsordner wird gesichert, nichts wird gelöscht.',
-      buttons: ['Arbeitsstand behalten', 'ZIP laden', 'Abbrechen'],
+      title: 'Working folder and ZIP differ',
+      message: `${why} What do you want to open?`,
+      detail: 'Keep current work: the model opens as it is on this computer.\n' +
+        'Load ZIP: the version from the ZIP opens. The previous working folder is backed up, nothing is deleted.',
+      buttons: ['Keep current work', 'Load ZIP', 'Cancel'],
     });
     if (choice === 0) { patchAppState(id, { zipPath }); await this.open(id); return { cancelled: false, opened: true }; }
     if (choice !== 1) return { cancelled: true };
@@ -372,7 +372,7 @@ export class ProjectController {
       if (this.session?.id === id) this.close(); // offene Handles würden das Umbenennen blockieren
       await backupWorkspace(id);
       await extractProject(zipPath, id);
-    } catch (e) { return { cancelled: false, error: `ZIP laden fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}` }; }
+    } catch (e) { return { cancelled: false, error: `Loading the ZIP failed: ${e instanceof Error ? e.message : String(e)}` }; }
     remember();
     await this.open(id);
     return { cancelled: false, opened: true };
@@ -393,7 +393,7 @@ export class ProjectController {
   async preview(hash: string): Promise<PreviewResult> {
     const s = this.need();
     const empty = { commit: null, glb: new ArrayBuffer(0), map: { version: 0, parts: [] } as ModelMap };
-    if (!/^[0-9a-f]{7,40}$/.test(hash)) return { ...empty, error: 'Ungültiger Stand' };
+    if (!/^[0-9a-f]{7,40}$/.test(hash)) return { ...empty, error: 'Invalid version' };
     const commit = (await s.git.log()).find((c) => c.hash === hash) ?? null;
     const dir = path.join(previewsDir(), s.id, hash);
     try {
@@ -402,7 +402,7 @@ export class ProjectController {
         const step = path.join(dir, 'model.step');
         await s.git.exportFile(hash, 'output/model.step', step);
         const r = await runSoma(['glb', step, '--out', dir], s.dir);
-        if (!r.ok) throw new Error((r.err || r.out).trim().split('\n').pop() || 'Umwandlung fehlgeschlagen');
+        if (!r.ok) throw new Error((r.err || r.out).trim().split('\n').pop() || 'Conversion failed');
       }
       const glb = fs.readFileSync(path.join(dir, 'model.glb'));
       const map = JSON.parse(fs.readFileSync(path.join(dir, 'model.map.json'), 'utf8')) as ModelMap;
@@ -411,7 +411,7 @@ export class ProjectController {
       fs.rmSync(dir, { recursive: true, force: true });
       const msg = e instanceof Error ? e.message : String(e);
       return { ...empty, commit, error: /exists on disk, but not in|does not exist|Path .* does not exist|invalid object/i.test(msg)
-        ? 'Dieser Stand enthält kein output/model.step (noch nicht gebaut).' : `Vorschau nicht möglich: ${msg}` };
+        ? 'This version contains no output/model.step (not built yet).' : `Preview not possible: ${msg}` };
     }
   }
 
@@ -422,7 +422,7 @@ export class ProjectController {
   async measure(source: unknown, req: unknown): Promise<MeasureResponse> {
     const s = this.need();
     const folder = this.measureFolder(s, source);
-    if (!folder) return { ok: false, error: 'Unbekannte Quelle für die Messung.' };
+    if (!folder) return { ok: false, error: 'Unknown source for the measurement.' };
     const r = req as { build?: unknown; a?: unknown; b?: unknown } | null;
     const ent = (v: unknown): MeasureEntity | null => {
       const e = v as { part?: unknown; kind?: unknown; id?: unknown; point?: unknown; check?: unknown } | null;
@@ -431,7 +431,7 @@ export class ProjectController {
       return { part: e.part, kind: e.kind, id: e.id as number, point: pt, check: Number.isFinite(e.check) ? (e.check as number) : undefined };
     };
     const a = ent(r?.a), b = r?.b == null ? undefined : ent(r.b);
-    if (!a || b === null || typeof r?.build !== 'string') return { ok: false, error: 'Ungültige Messanfrage.' };
+    if (!a || b === null || typeof r?.build !== 'string') return { ok: false, error: 'Invalid measurement request.' };
     const clean: MeasureRequest = { build: r.build, a, ...(b ? { b } : {}) };
     return s.measure.request(folder, clean);
   }
@@ -453,31 +453,31 @@ export class ProjectController {
   async measurePrepare(source: unknown, build: unknown): Promise<MeasurePrepared> {
     const s = this.need();
     const folder = this.measureFolder(s, source);
-    if (!folder || typeof build !== 'string') return { ok: false, error: 'Ungültige Messanfrage.' };
+    if (!folder || typeof build !== 'string') return { ok: false, error: 'Invalid measurement request.' };
     return s.measure.prepare(folder, build);
   }
 
   async restore(hash: string): Promise<RestoreResult> {
     const s = this.need();
     const commit = (await s.git.log()).find((c) => c.hash === hash);
-    if (!commit) return { cancelled: false, error: 'Dieser Stand existiert im Verlauf nicht mehr.' };
+    if (!commit) return { cancelled: false, error: 'This version no longer exists in the history.' };
     const c = await choose(this.getWin(), {
-      title: 'Stand wiederherstellen',
-      message: `„${commit.subject}“ (${commit.short}) wiederherstellen?`,
-      detail: 'Die Dateien dieses Standes werden in den Arbeitsordner kopiert und als neuer Stand im Verlauf abgelegt. ' +
-        'Ungesicherte Änderungen werden vorher als eigener Stand gesichert. Der Verlauf bleibt vollständig.',
-      buttons: ['Wiederherstellen', 'Abbrechen'],
+      title: 'Restore version',
+      message: `Restore “${commit.subject}” (${commit.short})?`,
+      detail: 'The files of this version are copied into the working folder and added to the history as a new version. ' +
+        'Unsaved changes are first kept as a version of their own. The history stays complete.',
+      buttons: ['Restore', 'Cancel'],
     });
     if (c !== 0) return { cancelled: true };
     try {
       const r = await s.git.restore(hash);
       // Ein alter Stand kann andere Zusatzpakete brauchen (E67)
-      if (!this.installPackages(s, true)) s.builds.start('Stand wiederhergestellt');
+      if (!this.installPackages(s, true)) s.builds.start('version restored');
       this.send('versions:changed');
       this.send('save:state', await this.saveState());
       return { cancelled: false, ...r };
     } catch (e) {
-      return { cancelled: false, error: `Wiederherstellen fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}` };
+      return { cancelled: false, error: `Restoring failed: ${e instanceof Error ? e.message : String(e)}` };
     }
   }
 
@@ -492,7 +492,7 @@ export class ProjectController {
   animBuild(file: unknown): Promise<AnimBuildResult> {
     const s = this.need();
     const f = file == null ? null : String(file).replace(/\\/g, '/');
-    if (f !== null && !affectsAnimation(f)) return Promise.resolve({ ...readAnimList(s.dir), ok: false, error: 'Keine Animationsdatei (animations/*.py).' });
+    if (f !== null && !affectsAnimation(f)) return Promise.resolve({ ...readAnimList(s.dir), ok: false, error: 'Not an animation file (animations/*.py).' });
     return s.anims.request(f);
   }
 
@@ -520,8 +520,8 @@ export class ProjectController {
     const s = this.need();
     await s.builds.whenIdle();
     const warnings: string[] = [];
-    if (s.builds.status.state === 'error') warnings.push('Der letzte Build ist fehlgeschlagen. Zu sehen ist der letzte erfolgreiche Stand.');
-    else if (s.builds.status.stale) warnings.push('Der Code ist neuer als der letzte Build (Auto-Build ist aus). Zu sehen ist der letzte Build.');
+    if (s.builds.status.state === 'error') warnings.push('The last build failed. The last successful version is shown.');
+    else if (s.builds.status.stale) warnings.push('The code is newer than the last build (auto build is off). The last build is shown.');
     const r = await this.renders.run(s.dir, req, (f) => this.send('render:progress', f));
     const res = { ...r, warnings: [...warnings, ...r.warnings] };
     this.send('render:notice', { ...res, kind: req.kind, byAgent });
@@ -532,10 +532,10 @@ export class ProjectController {
   /** Auftrag von `soma render` aus einem Terminal der App (über bridge.ts). */
   async renderForAgent(body: unknown): Promise<{ status: number; body: unknown }> {
     const s = this.session;
-    if (!s) return { status: 409, body: { ok: false, error: 'In der App ist kein Modell offen.' } };
+    if (!s) return { status: 409, body: { ok: false, error: 'No model is open in the app.' } };
     const project = String((body as { project?: unknown } | null)?.project ?? '');
     if (!project || !samePath(project, s.dir)) {
-      return { status: 409, body: { ok: false, error: 'Dieser Ordner ist nicht das Modell, das in der App offen ist. soma render läuft nur im offenen Modell.' } };
+      return { status: 409, body: { ok: false, error: 'This folder is not the model that is open in the app. soma render only works in the open model.' } };
     }
     const req = checkRequest(s.dir, body);
     if (typeof req === 'string') return { status: 400, body: { ok: false, error: req } };
@@ -547,12 +547,12 @@ export class ProjectController {
   async renderVideo(animId: unknown): Promise<RenderResult> {
     const s = this.need();
     let entry = readAnimList(s.dir).animations.find((a) => a.id === animId);
-    if (!entry) return { ok: false, files: [], warnings: [], error: 'Diese Animation gibt es nicht (mehr).' };
+    if (!entry) return { ok: false, files: [], warnings: [], error: 'This animation does not exist (any more).' };
     if (entry.stale) {
       const file = entry.file;
       const b = await s.anims.request(file);
       entry = b.animations.find((a) => a.id === animId);
-      if (!entry) return { ok: false, files: [], warnings: [], error: b.errors.find((e) => e.file === file)?.message ?? b.error ?? 'Die Animation ließ sich nicht neu bauen.' };
+      if (!entry) return { ok: false, files: [], warnings: [], error: b.errors.find((e) => e.file === file)?.message ?? b.error ?? 'The animation could not be rebuilt.' };
     }
     return this.render({ kind: 'video', size: [1280, 720], view: null, at: 0, grid: [3, 3], fps: 30, anim: entry.glb, result: null, out: `renders/${entry.id}.mp4` }, false);
   }
@@ -575,8 +575,8 @@ export class ProjectController {
     this.need();
     const list = () => this.skills();
     const b = isSkillId(skill) ? bundledSkill(skillsDir(), skill) : undefined;
-    if (!b) return { ok: false, error: 'Diesen Skill bringt die App nicht mit. Neue Modelle können ihn nicht bekommen.', skills: list() };
-    if (!isSkillMode(mode)) return { ok: false, error: `Unbekannte Stufe „${String(mode)}“.`, skills: list() };
+    if (!b) return { ok: false, error: 'The app does not include this skill. New models cannot get it.', skills: list() };
+    if (!isSkillMode(mode)) return { ok: false, error: `Unknown level “${String(mode)}”.`, skills: list() };
     try {
       setSkillDefault(b.id, mode, b.defaultMode);
       return { ok: true, skills: list() };
@@ -600,9 +600,9 @@ export class ProjectController {
     const s = this.need();
     const modes = readSkillModes(s.id);
     const list = () => this.skills();
-    if (!isSkillId(skill)) return { ok: false, error: 'Unbekannter Skill.', skills: list() };
-    if (!isSkillMode(mode)) return { ok: false, error: `Unbekannte Stufe „${String(mode)}“.`, skills: list() };
-    if (!modes) return { ok: false, error: '.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill umstellen.', skills: list() };
+    if (!isSkillId(skill)) return { ok: false, error: 'Unknown skill.', skills: list() };
+    if (!isSkillMode(mode)) return { ok: false, error: `Unknown level “${String(mode)}”.`, skills: list() };
+    if (!modes) return { ok: false, error: '.soma/project.json is missing or unreadable. Without it no skill can be switched.', skills: list() };
     try {
       const values = this.skillValues(s.id, skill);
       const was = modeOf(modes, skill);
@@ -627,15 +627,15 @@ export class ProjectController {
     const s = this.need();
     const list = () => this.skills();
     const b = isSkillId(skill) ? bundledSkill(skillsDir(), skill) : undefined;
-    if (!isSkillId(skill) || !b) return { ok: false, error: 'Diesen Skill bringt die App nicht mit, er lässt sich nicht einstellen.', skills: list() };
+    if (!isSkillId(skill) || !b) return { ok: false, error: 'The app does not include this skill, it cannot be configured.', skills: list() };
     const pj = readProjectJson(s.id);
-    if (!pj) return { ok: false, error: '.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich nichts einstellen.', skills: list() };
-    if (!values || typeof values !== 'object') return { ok: false, error: 'Keine Werte.', skills: list() };
+    if (!pj) return { ok: false, error: '.soma/project.json is missing or unreadable. Without it nothing can be configured.', skills: list() };
+    if (!values || typeof values !== 'object') return { ok: false, error: 'No values.', skills: list() };
     const prev = this.skillValues(s.id, skill);
     const next: SkillValues = { ...prev };
     for (const [name, raw] of Object.entries(values as Record<string, unknown>)) {
       const v = b.vars.find((x) => x.name === name);
-      if (!v) return { ok: false, error: `Der Skill hat keine Einstellung „${name}“.`, skills: list() };
+      if (!v) return { ok: false, error: `The skill has no setting “${name}”.`, skills: list() };
       if (raw === null) { delete next[name]; continue; }
       const r = checkValue(v, raw);
       if ('error' in r) return { ok: false, error: r.error, skills: list() };
@@ -658,12 +658,12 @@ export class ProjectController {
     if (!editor.dirty.length && (await isUntouched(this.session.id))) return true;
     const st = await this.saveState();
     if (!st.unsaved && !editor.dirty.length) return true;
-    const inEditor = editor.dirty.length ? `Im Editor noch nicht gespeichert: ${editor.dirty.join(', ')}. ` : '';
+    const inEditor = editor.dirty.length ? `Not yet saved in the editor: ${editor.dirty.join(', ')}. ` : '';
     const c = await choose(this.getWin(), {
-      title: 'SOMA beenden',
-      message: 'Das Modell hat ungespeicherte Änderungen.',
-      detail: `${inEditor}Der Arbeitsstand bleibt auf diesem Rechner erhalten, die Startseite zeigt ihn unter den zuletzt geöffneten Modellen. Die ZIP-Datei wird nur beim Speichern aktualisiert.`,
-      buttons: ['Speichern', 'Nicht speichern', 'Abbrechen'],
+      title: 'Quit SOMA',
+      message: 'The model has unsaved changes.',
+      detail: `${inEditor}Your current work stays on this computer, the start page shows it among the recent models. The ZIP file is only updated when you save.`,
+      buttons: ['Save', 'Don’t save', 'Cancel'],
     });
     if (c === 2) return false;
     if (c === 0) {
@@ -681,8 +681,8 @@ export class ProjectController {
    * Modell geht ohne Rückfrage. Das gerade geöffnete Modell nicht (erst ein anderes öffnen).
    */
   async remove(id: string): Promise<RemoveResult> {
-    if (!isProjectId(id) || !fs.existsSync(projectDir(id))) return { removed: false, error: 'Dieses Modell gibt es auf diesem Rechner nicht mehr.' };
-    if (this.session?.id === id) return { removed: false, error: 'Das geöffnete Modell lässt sich nicht entfernen. Öffne zuerst ein anderes.' };
+    if (!isProjectId(id) || !fs.existsSync(projectDir(id))) return { removed: false, error: 'This model no longer exists on this computer.' };
+    if (this.session?.id === id) return { removed: false, error: 'The open model cannot be removed. Open another one first.' };
     const dir = projectDir(id);
     if (!(await isUntouched(id))) {
       const name = readProjectJson(id)?.name ?? id.slice(0, 8);
@@ -691,21 +691,21 @@ export class ProjectController {
       const st = (await git.isRepo()) ? await git.status() : null;
       const zip = app.zipPath && fs.existsSync(app.zipPath) ? app.zipPath : null;
       const inZip = !!zip && !!st && !st.dirty && st.head === (app.savedHead ?? null);
-      const where = 'Der Arbeitsordner auf diesem Rechner kommt in den Papierkorb, dort lässt er sich wiederherstellen.';
+      const where = 'The working folder on this computer goes to the Recycle Bin, where it can be restored.';
       const c = await choose(this.getWin(), {
-        title: 'Modell entfernen',
-        message: inZip ? `„${name}“ von diesem Rechner entfernen?` : zip ? `„${name}“ hat Änderungen, die nicht in der ZIP-Datei stehen.` : `„${name}“ wurde nie gespeichert.`,
-        detail: inZip ? `${where} Die ZIP-Datei bleibt (${zip}), Öffnen holt das Modell zurück.`
-          : zip ? `${where} Die ZIP-Datei (${zip}) bleibt, ihr fehlen die Änderungen seit dem letzten Speichern.`
-            : `${where} Wird er dort gelöscht, ist das Modell verloren.`,
-        buttons: ['Entfernen', 'Abbrechen'],
+        title: 'Remove model',
+        message: inZip ? `Remove “${name}” from this computer?` : zip ? `“${name}” has changes that are not in the ZIP file.` : `“${name}” was never saved.`,
+        detail: inZip ? `${where} The ZIP file stays (${zip}), opening it brings the model back.`
+          : zip ? `${where} The ZIP file (${zip}) stays, but it lacks the changes since the last save.`
+            : `${where} If it is deleted there, the model is lost.`,
+        buttons: ['Remove', 'Cancel'],
       });
       if (c !== 0) return { removed: false, cancelled: true };
     }
     // Ein eben verlassenes Modell hält seine beendete Shell unter Windows noch einige Sekunden fest: mehrere Versuche
     for (let attempt = 0; ; attempt++) {
       try { await trashItem(dir); break; } catch (e) {
-        if (attempt >= 20) return { removed: false, error: `Der Arbeitsordner ließ sich nicht in den Papierkorb verschieben (noch in Benutzung?), es wurde nichts entfernt: ${e instanceof Error ? e.message : String(e)}` };
+        if (attempt >= 20) return { removed: false, error: `Could not move the working folder to the Recycle Bin (still in use?), nothing was removed: ${e instanceof Error ? e.message : String(e)}` };
         await new Promise((r) => setTimeout(r, 500));
       }
     }

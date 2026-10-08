@@ -50,13 +50,13 @@ async function readText(rel: string): Promise<string> {
   return t;
 }
 
-const num = (v: number, digits = 1) => v.toLocaleString('de-DE', { maximumFractionDigits: digits });
+const num = (v: number, digits = 1) => v.toLocaleString('en-US', { maximumFractionDigits: digits });
 const SURFACE: Record<string, string> = {
-  PLANE: 'eben', CYLINDER: 'Zylinder', CONE: 'Kegel', SPHERE: 'Kugel', TORUS: 'Torus', BSPLINE: 'Freiform', BEZIER: 'Freiform',
-  REVOLUTION: 'Drehfläche', EXTRUSION: 'Extrusionsfläche', OFFSET: 'Versatzfläche', OTHER: 'sonstige',
+  PLANE: 'plane', CYLINDER: 'cylinder', CONE: 'cone', SPHERE: 'sphere', TORUS: 'torus', BSPLINE: 'freeform', BEZIER: 'freeform',
+  REVOLUTION: 'surface of revolution', EXTRUSION: 'extruded surface', OFFSET: 'offset surface', OTHER: 'other',
 };
-const surfaceName = (s: string | null) => (s ? SURFACE[s] ?? s.toLowerCase() : 'Fläche');
-const ERROR_KIND: Record<string, string> = { Timeout: 'Zeitlimit überschritten', PythonStart: 'Python ließ sich nicht starten', NoResult: 'Build ohne Ergebnis' };
+const surfaceName = (s: string | null) => (s ? SURFACE[s] ?? s.toLowerCase() : 'face');
+const ERROR_KIND: Record<string, string> = { Timeout: 'Time limit exceeded', PythonStart: 'Python could not be started', NoResult: 'Build without result' };
 
 // ---- Seitenleiste (Bauteile, Dateien, Skills) und Code-Spalte (Entwurf 2) -----------------------------------------
 
@@ -119,9 +119,9 @@ const code = new CodePanel(
     quote: (file, pages, text) => {
       // Eine Zeile mit Datei und Seite, wie Auswahl und Markierung. Sehr lange Zitate werden gekürzt, das steht in der Meldung.
       const cut = text.length > MAX_QUOTE;
-      insertToAgent(`[Zitat: ${file} S. ${pages}: "${cut ? `${text.slice(0, MAX_QUOTE)} …` : text}"] `, cut ? `Zitat auf ${MAX_QUOTE} Zeichen gekürzt.` : undefined);
+      insertToAgent(`[Quote: ${file} p. ${pages}: "${cut ? `${text.slice(0, MAX_QUOTE)} …` : text}"] `, cut ? `Quote shortened to ${MAX_QUOTE} characters.` : undefined);
     },
-    markPage: (file, page, canvas) => void markSource(`${file} S. ${page}`, canvas, canvas.width, canvas.height),
+    markPage: (file, page, canvas) => void markSource(`${file} p. ${page}`, canvas, canvas.width, canvas.height),
   },
 );
 
@@ -134,10 +134,10 @@ async function imageUrl(rel: string): Promise<string> {
 /** Link aus einer Markdown-Ansicht: Web-Adressen im Browser, Dateien im Projekt wie ein Klick im Dateibaum. */
 function openLink(href: string): void {
   if (/^(https?:|mailto:)/i.test(href)) {
-    void api.openUrl(href).then((r) => { if (!r.ok) toast(r.error ?? `${href} ließ sich nicht öffnen.`, 'error'); });
+    void api.openUrl(href).then((r) => { if (!r.ok) toast(r.error ?? `${href} could not be opened.`, 'error'); });
     return;
   }
-  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) { toast(`Dieser Link wird aus Sicherheitsgründen nicht geöffnet: ${href.slice(0, 100)}`, 'error'); return; }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) { toast(`For security reasons, this link is not opened: ${href.slice(0, 100)}`, 'error'); return; }
   if (TEXT_EXT.test(href.split('/').pop() ?? '') || isPdf(href)) void openCode(href);
   else void openExternal(href);
 }
@@ -164,21 +164,21 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
     // Bilder (etwa Markierungen und Skizzen) öffnen auf der Zeichenfläche (E52), das Bildprogramm gibt es per Rechtsklick
     else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
     else if (VIDEO_EXT.test(n.name)) void videoView.open(n.path);
-    else if (/\.(step|stp)$/i.test(n.name)) toast('Fremde STEP-Dateien im Viewer ansehen kommt in einem späteren Schritt. Der Agent kann sie schon jetzt im Skript einbinden.', 'info');
-    else toast('Für diesen Dateityp gibt es keine Ansicht in der App. Rechtsklick: „Mit Standardprogramm öffnen“.', 'info');
+    else if (/\.(step|stp)$/i.test(n.name)) toast('Viewing other STEP files in the viewer is coming in a later version. The agent can already use them in the script.', 'info');
+    else toast('The app has no view for this file type. Right-click: “Open with default app”.', 'info');
   },
   create: async (parent, name, dir) => {
     const r = await api.fs.create(parent, name, dir);
-    if (!r.ok || !r.path) { toast(r.error ?? `${name} ließ sich nicht anlegen.`, 'error'); return false; }
+    if (!r.ok || !r.path) { toast(r.error ?? `${name} could not be created.`, 'error'); return false; }
     await refreshFiles();
     if (!dir && TEXT_EXT.test(name)) void openCode(r.path);
     return true;
   },
   rename: async (rel, name) => {
-    if (!fileOpAllowed(rel, 'umbenennen')) return true;
+    if (!fileOpAllowed(rel, 'rename')) return true;
     const wasOpen = code.openUnder(rel);
     const r = await api.fs.rename(rel, name);
-    if (!r.ok || !r.path) { toast(r.error ?? `${rel} ließ sich nicht umbenennen.`, 'error'); return false; }
+    if (!r.ok || !r.path) { toast(r.error ?? `${rel} could not be renamed.`, 'error'); return false; }
     // Reiter wandern mit: der alte zu, die Datei unter neuem Namen wieder auf (ohne das Panel zu wechseln)
     code.forget(rel);
     for (const f of wasOpen) void code.open(r.path + f.slice(rel.length), undefined, false);
@@ -186,33 +186,33 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
     return true;
   },
   trash: (rel) => void (async () => {
-    if (!fileOpAllowed(rel, 'löschen')) return;
+    if (!fileOpAllowed(rel, 'delete')) return;
     const r = await api.fs.trash(rel);
     if (r.canceled) return;
-    if (!r.ok) { toast(r.error ?? `${rel} ließ sich nicht löschen.`, 'error'); return; }
+    if (!r.ok) { toast(r.error ?? `${rel} could not be deleted.`, 'error'); return; }
     code.forget(rel);
     await refreshFiles();
-    toast(`${rel} liegt im Papierkorb.`);
+    toast(`${rel} is in the Recycle Bin.`);
   })(),
-  reveal: (rel) => void api.fs.reveal(rel).then((r) => { if (!r.ok) toast(r.error ?? 'Der Explorer ließ sich nicht öffnen.', 'error'); }),
+  reveal: (rel) => void api.fs.reveal(rel).then((r) => { if (!r.ok) toast(r.error ?? 'Explorer could not be opened.', 'error'); }),
   openExternal: (rel) => void openExternal(rel),
   mark: (rel) => void markImage(rel),
-  toAgent: (rel) => insertToAgent(`[Datei: ${rel}] `),
-  copyPath: (rel) => void navigator.clipboard.writeText(rel).then(() => toast(`Pfad kopiert: ${rel}`), (e) => toast(`Der Pfad ließ sich nicht kopieren: ${e instanceof Error ? e.message : String(e)}`, 'error')),
+  toAgent: (rel) => insertToAgent(`[File: ${rel}] `),
+  copyPath: (rel) => void navigator.clipboard.writeText(rel).then(() => toast(`Path copied: ${rel}`), (e) => toast(`The path could not be copied: ${e instanceof Error ? e.message : String(e)}`, 'error')),
 });
 fileTree = files;
 files.setActive(code.activeFile);
 
 async function openExternal(rel: string): Promise<void> {
   const r = await api.fs.openExternal(rel);
-  if (!r.ok) toast(r.error ?? `${rel} ließ sich nicht öffnen.`, 'error');
+  if (!r.ok) toast(r.error ?? `${rel} could not be opened.`, 'error');
 }
 
 /** Umbenennen und Löschen nur ohne ungespeicherte Eingaben im Editor, sonst gingen sie unter dem alten Namen verloren. */
-function fileOpAllowed(rel: string, what: string): boolean {
+function fileOpAllowed(rel: string, what: 'rename' | 'delete'): boolean {
   const open = code.unsaved().filter((f) => f === rel || f.startsWith(`${rel}/`));
   if (!open.length) return true;
-  toast(`Zum ${what === 'löschen' ? 'Löschen' : 'Umbenennen'} erst speichern oder die Änderungen verwerfen: ${open.join(', ')}`, 'error');
+  toast(`To ${what}, first save or discard the changes: ${open.join(', ')}`, 'error');
   return false;
 }
 
@@ -251,7 +251,7 @@ document.addEventListener('drop', (e) => {
   if (isInternal(e)) {
     if (!overTerminal(e)) return;
     const partId = e.dataTransfer?.getData(DRAG_PART), rel = e.dataTransfer?.getData(DRAG_FILE);
-    if (partId) { selectPart(partId, null); insertToAgent(selectionText()); } else if (rel) insertToAgent(`[Datei: ${rel}] `);
+    if (partId) { selectPart(partId, null); insertToAgent(selectionText()); } else if (rel) insertToAgent(`[File: ${rel}] `);
     return;
   }
   const list = [...(e.dataTransfer?.files ?? [])];
@@ -262,11 +262,11 @@ async function importFiles(list: File[]): Promise<void> {
   const r = await api.fs.importFiles(list);
   showPanel('files');
   const lines: string[] = [];
-  if (r.files.length) lines.push(`In inputs/ abgelegt: ${r.files.map((f) => f.replace(/^inputs\//, '')).join(', ')}`, 'Der Agent kann sie jetzt im Skript einbinden.');
+  if (r.files.length) lines.push(`Added to inputs/: ${r.files.map((f) => f.replace(/^inputs\//, '')).join(', ')}`, 'The agent can now use them in the script.');
   // Ein Ordner voller Verknüpfungen soll die Meldung nicht über den Bildschirm ziehen
   const shown = r.errors.slice(0, 8);
-  if (r.errors.length > shown.length) shown.push(`… und ${r.errors.length - shown.length} weitere`);
-  if (r.errors.length) lines.push(`Nicht übernommen:\n${shown.join('\n')}`);
+  if (r.errors.length > shown.length) shown.push(`… and ${r.errors.length - shown.length} more`);
+  if (r.errors.length) lines.push(`Not added:\n${shown.join('\n')}`);
   if (lines.length) toast(lines.join('\n'), r.errors.length ? 'error' : 'ok');
 }
 
@@ -307,12 +307,12 @@ async function renderSelection(): Promise<void> {
   const e = partEntry(partId);
   const name = e?.name ?? p?.name ?? partId;
   // Zukaufteile (Normteile aus soma.fasteners, E48) sehen aus wie eigene Teile, der Zusatz unterscheidet sie
-  $('sel-name').textContent = name + (p?.role === 'reference' ? ' (Referenz)' : p?.role === 'hardware' ? ' (Zukaufteil)' : '');
-  $('sel-name').title = p?.group ? `Gruppe ${p.group}` : '';
+  $('sel-name').textContent = name + (p?.role === 'reference' ? ' (reference)' : p?.role === 'hardware' ? ' (purchased part)' : '');
+  $('sel-name').title = p?.group ? `Group ${p.group}` : '';
   $('sel-swatch').style.background = p?.color ?? '';
   const bits = pick?.faceId != null
-    ? ['Fläche', surfaceName(pick.surface), ...(pick.area != null ? [`${num(pick.area)} mm²`] : [])]
-    : pick?.cut ? ['Schnittfläche', 'ganzes Bauteil'] : ['ganzes Bauteil'];
+    ? ['Face', surfaceName(pick.surface), ...(pick.area != null ? [`${num(pick.area)} mm²`] : [])]
+    : pick?.cut ? ['Cut face', 'whole part'] : ['whole part'];
   $('info').textContent = bits.join(' · ');
   const peek = $('code');
   const hasCode = !!(e?.file && e.line);
@@ -321,13 +321,13 @@ async function renderSelection(): Promise<void> {
   if (!hasCode) { peek.replaceChildren(); return; }
   const { from, to } = lineRange(e!);
   const last = Math.min(to, from + 3);
-  const head = el('div', { className: 'ph' }, el('span', { textContent: e!.file! }), el('span', { textContent: `Zeile ${from}${to !== from ? '–' + to : ''}` }));
+  const head = el('div', { className: 'ph' }, el('span', { textContent: e!.file! }), el('span', { textContent: `${to !== from ? 'Lines' : 'Line'} ${from}${to !== from ? '–' + to : ''}` }));
   try {
     const src = (await readText(e!.file!)).split(/\r?\n/);
     if (selection?.partId !== partId) return; // inzwischen etwas anderes gewählt
     peek.replaceChildren(head, ...codeRows(src.slice(from - 1, last), from, { from, to, kind: 'hl' }));
-    if (to > last) peek.append(el('div', { className: 'ph', textContent: `… bis Zeile ${to}` }));
-  } catch { peek.replaceChildren(head, el('div', { className: 'ph', textContent: `${e!.file} nicht lesbar` })); }
+    if (to > last) peek.append(el('div', { className: 'ph', textContent: `… to line ${to}` }));
+  } catch { peek.replaceChildren(head, el('div', { className: 'ph', textContent: `${e!.file} not readable` })); }
   if (codeOpen) void code.follow(e!.file!, { from, to, label: name, color: p?.color });
 }
 
@@ -336,31 +336,31 @@ function selectionText(): string | null {
   if (!selection) return null;
   const e = partEntry(selection.partId);
   const group = partInfo(selection.partId)?.group;
-  const bits = [`Bauteil "${e?.name ?? partInfo(selection.partId)?.name ?? selection.partId}"${group ? ` in Gruppe "${group}"` : ''}`];
-  if (e?.file && e.line) { const { from, to } = lineRange(e); bits.push(`${e.file} Zeile ${from}${to !== from ? '-' + to : ''}`); }
+  const bits = [`part "${e?.name ?? partInfo(selection.partId)?.name ?? selection.partId}"${group ? ` in group "${group}"` : ''}`];
+  if (e?.file && e.line) { const { from, to } = lineRange(e); bits.push(`${e.file} ${to !== from ? 'lines' : 'line'} ${from}${to !== from ? '-' + to : ''}`); }
   const pk = selection.pick;
   if (pk?.faceId != null) {
-    bits.push(`angeklickte Fläche: ${surfaceName(pk.surface)}${pk.area != null ? `, ${pk.area.toFixed(1)} mm²` : ''}, Punkt (${pk.point.map((v) => v.toFixed(1)).join(', ')}) mm`);
+    bits.push(`clicked face: ${surfaceName(pk.surface)}${pk.area != null ? `, ${pk.area.toFixed(1)} mm²` : ''}, point (${pk.point.map((v) => v.toFixed(1)).join(', ')}) mm`);
   }
-  return `[Auswahl: ${bits.join(', ')}] `;
+  return `[Selection: ${bits.join(', ')}] `;
 }
 
 function errorText(): string | null {
   const e = buildStatus.state === 'error' ? buildStatus.result?.error : undefined;
   if (!e) return null;
-  const where = e.file ? `${e.file}${e.line ? ` Zeile ${e.line}` : ''}: ` : '';
-  return `[Build-Fehler: ${where}${e.message.replace(/\s+/g, ' ').trim().slice(0, 400)}] `;
+  const where = e.file ? `${e.file}${e.line ? ` line ${e.line}` : ''}: ` : '';
+  return `[Build error: ${where}${e.message.replace(/\s+/g, ' ').trim().slice(0, 400)}] `;
 }
 
 /** Fügt Text in die Eingabezeile des aktiven Terminals ein. Abschicken macht der Nutzer selbst (E11). `done` steht vor der Meldung. */
 function insertToAgent(text: string | null, done?: string): void {
   if (!text) return;
   const pre = done ? `${done}\n` : '';
-  if (!terminals.count) { toast(`${pre}Kein Terminal offen. Starte über + einen Agenten oder ein Terminal.`, 'error'); return; }
+  if (!terminals.count) { toast(`${pre}No terminal is open. Start an agent or a terminal with +.`, 'error'); return; }
   setAgentCollapsed(false);
   const title = terminals.insert(text);
-  if (title) toast(`${pre}In die Eingabe von ${title} eingefügt. Enter schickt ab.`);
-  else toast(`${pre}Alle Terminals sind beendet. Öffne über + ein neues.`, 'error');
+  if (title) toast(`${pre}Added to the input of ${title}. Enter sends it.`);
+  else toast(`${pre}All terminals have ended. Open a new one with +.`, 'error');
 }
 
 // ---- Messen (E9) ------------------------------------------------------------------------------------------------
@@ -431,13 +431,13 @@ const MARK_MAX_PX = 8192;
 async function markImage(rel: string): Promise<void> {
   if (!project || !(await mayReplaceMarkup(rel))) return;
   let img: HTMLImageElement, url: string;
-  try { url = await imageUrl(rel); } catch (e) { toast(`${rel} lässt sich nicht lesen: ${e instanceof Error ? e.message : String(e)}`, 'error'); return; }
+  try { url = await imageUrl(rel); } catch (e) { toast(`${rel} cannot be read: ${e instanceof Error ? e.message : String(e)}`, 'error'); return; }
   try {
     img = new Image();
     img.src = url;
     await img.decode();
   } catch {
-    toast(`${rel} ließ sich nicht als Bild laden. Rechtsklick: „Mit Standardprogramm öffnen“.`, 'error');
+    toast(`${rel} could not be loaded as an image. Right-click: “Open with default app”.`, 'error');
     return;
   } finally { URL.revokeObjectURL(url); }
   // SVG ohne Größenangabe meldet 0: dann einfach in Viewergröße
@@ -451,7 +451,7 @@ async function mayReplaceMarkup(source: string): Promise<boolean> {
   if (!markup.active) return true;
   if (markup.source === source) return false;
   if (!markup.drawn) return true;
-  const c = await api.dialog.choose({ title: 'Markierung', message: 'Die offene Markierung ist noch nicht an den Agenten gegeben.', detail: `Verwerfen und ${source} öffnen?`, buttons: ['Verwerfen und wechseln', 'Abbrechen'] });
+  const c = await api.dialog.choose({ title: 'Markup', message: 'The open markup has not been sent to the agent yet.', detail: `Discard it and open ${source}?`, buttons: ['Discard and switch', 'Cancel'] });
   return c === 0;
 }
 
@@ -481,7 +481,7 @@ async function sendMarkup(): Promise<void> {
   try {
     const r = await api.fs.saveFeedback(await markup.image());
     // Ging das Speichern schief, bleibt die Zeichnung offen: Nichts geht verloren, der Nutzer kann es noch einmal versuchen
-    if (!r.ok || !r.path) { toast(`Die Markierung ließ sich nicht speichern: ${r.error ?? 'unbekannter Fehler'}`, 'error'); return; }
+    if (!r.ok || !r.path) { toast(`The markup could not be saved: ${r.error ?? 'unknown error'}`, 'error'); return; }
     const old = versions.previewed, source = markup.source;
     markup.close();
     void refreshFiles(); // die neue Markierung steht gleich im Dateibaum
@@ -489,11 +489,11 @@ async function sendMarkup(): Promise<void> {
     // aktuellen Code, hält die Schnittfläche für eine echte Fläche oder die auseinandergezogenen Teile für ihre Lage)
     // Auf einem Bild aus dem Projekt gezeichnet: Der Agent soll das Original kennen, Stand und Schnitt spielen dann keine Rolle
     const cut = [sectionTool.agentText(), explodeTool.agentText(), animTool.agentText(), resultTool.agentText()].filter(Boolean).join(', ');
-    const note = source ? `, gezeichnet auf ${source}`
-      : (old ? `, zeigt den älteren Stand ${old.short} "${old.subject.slice(0, 80)}"` : '') + (cut ? `, ${cut}` : '');
-    insertToAgent(`[Markierung: ${r.path}${note}] `, `Markierung gespeichert: ${r.path}`);
+    const note = source ? `, drawn on ${source}`
+      : (old ? `, shows the older version ${old.short} "${old.subject.slice(0, 80)}"` : '') + (cut ? `, ${cut}` : '');
+    insertToAgent(`[Markup: ${r.path}${note}] `, `Markup saved: ${r.path}`);
   } catch (e) {
-    toast(`Die Markierung ließ sich nicht speichern: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    toast(`The markup could not be saved: ${e instanceof Error ? e.message : String(e)}`, 'error');
   } finally { btn.disabled = false; }
 }
 
@@ -554,15 +554,15 @@ function openPartMenu(id: string, x: number, y: number): void {
   const m = $('menu-ctx');
   const items: (HTMLElement | null)[] = [
     el('div', { className: 'mh', textContent: e?.name ?? partInfo(id)?.name ?? id }),
-    menuItem('Isolieren', { icon: 'target', onClick: () => { viewer.isolate(id); refreshPartsCard(); } }),
-    viewer.hiddenCount ? menuItem('Alle einblenden', { icon: 'eye', onClick: () => { viewer.showAll(); refreshPartsCard(); } }) : null,
-    menuItem(visible ? 'Ausblenden' : 'Einblenden', { icon: visible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(id, !visible); refreshPartsCard(); } }),
-    menuItem(ghost ? 'Nicht mehr transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(id, !ghost); refreshPartsCard(); } }),
-    menuItem('Kamera auf Bauteil', { icon: 'fit', onClick: () => viewer.focusPart(id) }),
+    menuItem('Isolate', { icon: 'target', onClick: () => { viewer.isolate(id); refreshPartsCard(); } }),
+    viewer.hiddenCount ? menuItem('Show all', { icon: 'eye', onClick: () => { viewer.showAll(); refreshPartsCard(); } }) : null,
+    menuItem(visible ? 'Hide' : 'Show', { icon: visible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(id, !visible); refreshPartsCard(); } }),
+    menuItem(ghost ? 'Not transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(id, !ghost); refreshPartsCard(); } }),
+    menuItem('Zoom to part', { icon: 'fit', onClick: () => viewer.focusPart(id) }),
     el('div', { className: 'msep' }),
-    menuItem('Code zeigen', { icon: 'code', disabled: !e?.file, onClick: () => { selectPart(id, null); if (e?.file && e.line) void openCode(e.file, { ...lineRange(e), label: e.name, color: partInfo(id)?.color }); } }),
-    menuItem('An Agent geben', { icon: 'send', onClick: () => { selectPart(id, null); insertToAgent(selectionText()); } }),
-    menuItem('Exportieren …', { icon: 'export', onClick: () => { selectPart(id, null); exportScope = 'sel'; openExportMenu(); } }),
+    menuItem('Show code', { icon: 'code', disabled: !e?.file, onClick: () => { selectPart(id, null); if (e?.file && e.line) void openCode(e.file, { ...lineRange(e), label: e.name, color: partInfo(id)?.color }); } }),
+    menuItem('Send to agent', { icon: 'send', onClick: () => { selectPart(id, null); insertToAgent(selectionText()); } }),
+    menuItem('Export …', { icon: 'export', onClick: () => { selectPart(id, null); exportScope = 'sel'; openExportMenu(); } }),
   ];
   m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
   menus.at(m, x, y);
@@ -574,12 +574,12 @@ function openGroupMenu(ids: string[], name: string, x: number, y: number): void 
   const allGhost = ids.every((id) => viewer.isGhosted(id));
   const m = $('menu-ctx');
   const items: (HTMLElement | null)[] = [
-    el('div', { className: 'mh', textContent: `${name} · ${ids.length} Teil${ids.length === 1 ? '' : 'e'}` }),
-    menuItem('Isolieren', { icon: 'target', onClick: () => { viewer.isolate(ids); refreshPartsCard(); } }),
-    viewer.hiddenCount ? menuItem('Alle einblenden', { icon: 'eye', onClick: () => { viewer.showAll(); refreshPartsCard(); } }) : null,
-    menuItem(anyVisible ? 'Ausblenden' : 'Einblenden', { icon: anyVisible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(ids, !anyVisible); refreshPartsCard(); } }),
-    menuItem(allGhost ? 'Nicht mehr transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(ids, !allGhost); refreshPartsCard(); } }),
-    menuItem('Kamera auf Gruppe', { icon: 'fit', onClick: () => viewer.setView('fit', ids) }),
+    el('div', { className: 'mh', textContent: `${name} · ${ids.length} part${ids.length === 1 ? '' : 's'}` }),
+    menuItem('Isolate', { icon: 'target', onClick: () => { viewer.isolate(ids); refreshPartsCard(); } }),
+    viewer.hiddenCount ? menuItem('Show all', { icon: 'eye', onClick: () => { viewer.showAll(); refreshPartsCard(); } }) : null,
+    menuItem(anyVisible ? 'Hide' : 'Show', { icon: anyVisible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(ids, !anyVisible); refreshPartsCard(); } }),
+    menuItem(allGhost ? 'Not transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(ids, !allGhost); refreshPartsCard(); } }),
+    menuItem('Zoom to group', { icon: 'fit', onClick: () => viewer.setView('fit', ids) }),
   ];
   m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
   menus.at(m, x, y);
@@ -608,27 +608,27 @@ function renderBuild(s: BuildStatus): void {
   if (s.installing) {
     dot.className = 'spin';
     dot.append(icon('spin', 14, 2.4));
-    main.textContent = 'Installiert Pakete …';
+    main.textContent = 'Installing packages …';
     detail.textContent = s.installing.join(', ');
   } else if (s.state === 'building') {
     dot.className = 'spin';
     dot.append(icon('spin', 14, 2.4));
-    main.textContent = 'Baut …';
-    detail.textContent = s.queued ? 'weiterer Build vorgemerkt' : '';
+    main.textContent = 'Building …';
+    detail.textContent = s.queued ? 'another build queued' : '';
   } else if (s.stale) {
-    main.textContent = 'Code geändert';
-    detail.textContent = 'Auto-Build ist aus';
+    main.textContent = 'Code changed';
+    detail.textContent = 'Auto build is off';
   } else if (s.state === 'ok') {
     dot.style.background = 'var(--ok)';
-    main.textContent = 'Gebaut';
-    detail.textContent = `${count} Bauteil${count === 1 ? '' : 'e'} · ${num(secs)} s`;
+    main.textContent = 'Built';
+    detail.textContent = `${count} part${count === 1 ? '' : 's'} · ${num(secs)} s`;
   } else if (s.state === 'error') {
     const e = s.result?.error;
     dot.style.background = 'var(--err)';
-    main.textContent = 'Build fehlgeschlagen';
-    detail.textContent = e?.file ? `${e.file}${e.line ? `, Zeile ${e.line}` : ''}` : ERROR_KIND[e?.kind ?? ''] ?? '';
+    main.textContent = 'Build failed';
+    detail.textContent = e?.file ? `${e.file}${e.line ? `, line ${e.line}` : ''}` : ERROR_KIND[e?.kind ?? ''] ?? '';
   } else {
-    main.textContent = 'Bereit';
+    main.textContent = 'Ready';
     detail.textContent = '';
   }
   void renderErrorCard();
@@ -640,10 +640,10 @@ async function renderErrorCard(): Promise<void> {
   const hasModel = viewer.partList().length > 0;
   $('viewer').classList.toggle('dim', !!e && hasModel);
   $('lastgood').hidden = !(e && hasModel && lastOkAt);
-  if (lastOkAt) $('lastgood').textContent = `Letzter guter Stand · ${fmtWhen(lastOkAt)}`;
+  if (lastOkAt) $('lastgood').textContent = `Last good version · ${fmtWhen(lastOkAt)}`;
   const card = $('errcard');
   if (!e) { card.hidden = true; return; }
-  $('err-where').textContent = `${e.file ? `${e.file}${e.line ? `, Zeile ${e.line}` : ''}` : ERROR_KIND[e.kind] ?? e.kind} · ${fmtWhen(errorAt)}`;
+  $('err-where').textContent = `${e.file ? `${e.file}${e.line ? `, line ${e.line}` : ''}` : ERROR_KIND[e.kind] ?? e.kind} · ${fmtWhen(errorAt)}`;
   $('err-msg').textContent = e.message;
   $('err-trace').textContent = e.traceback;
   $<HTMLButtonElement>('btn-err-details').disabled = !e.traceback;
@@ -685,7 +685,7 @@ async function loadModel(): Promise<void> {
     scheduleThumb();
   } catch (e) {
     msg.className = 'error';
-    msg.textContent = `Das Modell konnte nicht geladen werden: ${e instanceof Error ? e.message : String(e)}`;
+    msg.textContent = `The model could not be loaded: ${e instanceof Error ? e.message : String(e)}`;
   }
 }
 
@@ -721,11 +721,11 @@ const versions = new VersionsBar({
       refreshPartsCard();
       selectPart(null, null);
       void renderErrorCard();
-    } catch (e) { toast(`Vorschau nicht darstellbar: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
+    } catch (e) { toast(`The preview cannot be shown: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
     renderViewSwitch();
   },
   toast,
-  beforeRestore: () => leaveEditor('Stand wiederherstellen'), // Wiederherstellen ersetzt Dateien
+  beforeRestore: () => leaveEditor('Restore version'), // Wiederherstellen ersetzt Dateien
 });
 
 // ---- Projekt ----------------------------------------------------------------------------------------------------
@@ -753,7 +753,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   resetViewLists();
   selection = null;
   void renderSelection();
-  partsCard.message('Modell wird gebaut …');
+  partsCard.message('Building the model …');
   $('doc-name').textContent = p.name;
   document.title = `SOMA – ${p.name}`;
   $<HTMLInputElement>('chk-auto').checked = p.autoBuild;
@@ -773,7 +773,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
 function showProblems(problems: string[]): void {
   const b = $('problems');
   b.hidden = problems.length === 0;
-  b.replaceChildren(icon('alert', 14, 2), `${problems.length} Hinweis${problems.length === 1 ? '' : 'e'}`);
+  b.replaceChildren(icon('alert', 14, 2), `${problems.length} issue${problems.length === 1 ? '' : 's'}`);
   b.title = problems.join('\n');
   $('problem-list').replaceChildren(...problems.map((p) => el('div', { className: 'problem' }, el('span', { className: 'pi' }, icon('alert', 16)), el('span', { textContent: p }))));
 }
@@ -790,12 +790,12 @@ function renderSaveState(st: SaveState): void {
   let text: string;
   // Ungespeichertes im Editor zählt mit, auch wenn die Dateien auf der Platte dem gespeicherten Stand entsprechen
   const unsaved = st.unsaved || code.unsaved().length > 0;
-  if (!st.zipPath) { dot.style.background = 'var(--warn)'; text = 'Noch nicht gespeichert'; }
-  else if (unsaved) { dot.style.background = 'var(--warn)'; text = `Nicht gespeichert${st.savedAt ? ` · zuletzt ${fmtWhen(st.savedAt)}` : ''}`; }
-  else { dot.style.background = 'var(--ok)'; text = `Gespeichert${st.savedAt ? ` · ${fmtWhen(st.savedAt)}` : ''}`; }
+  if (!st.zipPath) { dot.style.background = 'var(--warn)'; text = 'Not saved yet'; }
+  else if (unsaved) { dot.style.background = 'var(--warn)'; text = `Not saved${st.savedAt ? ` · last ${fmtWhen(st.savedAt)}` : ''}`; }
+  else { dot.style.background = 'var(--ok)'; text = `Saved${st.savedAt ? ` · ${fmtWhen(st.savedAt)}` : ''}`; }
   const b = $('save-badge');
   b.replaceChildren(dot, text);
-  b.title = st.zipPath ? `ZIP: ${st.zipPath}` : 'Noch nicht als ZIP gespeichert. Strg+S speichert.';
+  b.title = st.zipPath ? `ZIP: ${st.zipPath}` : 'Not saved as a ZIP yet. Ctrl+S saves.';
   versions.setSaved(st.zipPath ? st.savedHead : null);
   document.title = `SOMA – ${project?.name ?? ''}${unsaved ? ' ●' : ''}`;
 }
@@ -810,7 +810,7 @@ async function refreshSaveState(): Promise<void> {
  */
 async function saveCode(): Promise<void> {
   const r = await code.saveAll();
-  if (!r.ok) { toast('Nicht alles ließ sich speichern (siehe Hinweis im Code). Gebaut wird erst danach.', 'error'); return; }
+  if (!r.ok) { toast('Not everything could be saved (see the note in the code). The build waits until then.', 'error'); return; }
   if (r.saved.some(affectsBuild)) await api.build.run();
 }
 
@@ -819,12 +819,12 @@ async function leaveEditor(title: string): Promise<boolean> {
   const files = code.unsaved();
   if (!files.length) return true;
   const c = await api.dialog.choose({
-    title, message: `Im Editor gibt es ungespeicherte Änderungen: ${files.join(', ')}.`,
-    detail: 'Verwerfen legt deine Fassung als Sicherung in den App-Daten ab.', buttons: ['Speichern', 'Verwerfen', 'Abbrechen'],
+    title, message: `The editor has unsaved changes: ${files.join(', ')}.`,
+    detail: 'Discard keeps your version as a backup in the app data.', buttons: ['Save', 'Discard', 'Cancel'],
   });
   if (c === 0) {
     const r = await code.saveAll();
-    if (!r.ok) toast('Nicht alles ließ sich speichern (siehe Hinweis im Code-Panel).', 'error');
+    if (!r.ok) toast('Not everything could be saved (see the note in the code panel).', 'error');
     return r.ok;
   }
   return c === 1 ? code.discardAll() : false;
@@ -842,17 +842,17 @@ async function doSave(saveAs = false): Promise<void> {
   const label = btn.innerHTML;
   btn.disabled = true;
   btn.classList.add('busy');
-  btn.replaceChildren(el('span', { className: 'spin' }, icon('spin', 14, 2.4)), 'Speichert …');
+  btn.replaceChildren(el('span', { className: 'spin' }, icon('spin', 14, 2.4)), 'Saving …');
   try {
     // Erst die Eingaben im Editor, sonst fehlten sie in Snapshot und ZIP. Das Speichern baut danach, falls nötig.
     const c = await code.saveAll();
-    if (!c.ok) { toast('Nicht alles im Editor ließ sich speichern (siehe Hinweis im Code). Das Modell ist deshalb nicht gespeichert.', 'error'); return; }
+    if (!c.ok) { toast('Not everything in the editor could be saved (see the note in the code). So the model is not saved.', 'error'); return; }
     const r = await api.project.save(saveAs);
     if (r.cancelled) return;
     if (r.error) { toast(r.error, 'error'); return; }
     const kb = Math.round((r.bytes ?? 0) / 1024);
-    const lines = [`Gespeichert: ${r.zipPath}`, `${r.files} Dateien, ${kb} KB${r.snapshot ? ' · Snapshot im Verlauf angelegt' : ''}`];
-    if (r.warnings?.length) lines.push(`Hinweis: ${r.warnings.join(' ')}`);
+    const lines = [`Saved: ${r.zipPath}`, `${r.files} file${r.files === 1 ? '' : 's'}, ${kb} KB${r.snapshot ? ' · snapshot added to the history' : ''}`];
+    if (r.warnings?.length) lines.push(`Note: ${r.warnings.join(' ')}`);
     toast(lines.join('\n'), r.warnings?.length ? 'error' : 'ok');
     project = await api.project.current(); // der Modellname folgt dem Dateinamen
     $('doc-name').textContent = project.name;
@@ -866,20 +866,20 @@ async function doSave(saveAs = false): Promise<void> {
 }
 
 async function doOpen(): Promise<boolean> {
-  if (!(await leaveEditor('Modell öffnen'))) return false;
+  if (!(await leaveEditor('Open model'))) return false;
   const r = await api.project.openZip();
   if (r.error) toast(r.error, 'error');
   return !!r.opened;
 }
 
-const doNew = async () => { if (await leaveEditor('Neues Modell')) await api.project.create(); };
+const doNew = async () => { if (await leaveEditor('New model')) await api.project.create(); };
 /** „Jetzt bauen“: baut immer. Vorher werden die Eingaben im Editor gespeichert, sonst sähe der Build sie nicht. */
 async function doBuild(): Promise<void> {
   const r = await code.saveAll();
-  if (!r.ok) { toast('Nicht alles ließ sich speichern (siehe Hinweis im Code-Panel). Gebaut wird erst danach.', 'error'); return; }
+  if (!r.ok) { toast('Not everything could be saved (see the note in the code panel). The build waits until then.', 'error'); return; }
   await api.build.run();
 }
-const openProject = async (id: string) => { if (await leaveEditor('Modell öffnen')) await api.project.open(id); };
+const openProject = async (id: string) => { if (await leaveEditor('Open model')) await api.project.open(id); };
 
 // Kurzbefehle gelten nicht im Terminal: dort gehören Strg+S/Strg+O den Programmen (Claude Code nutzt Strg+O selbst)
 window.addEventListener('keydown', (e) => {
@@ -920,14 +920,14 @@ $('btn-start').addEventListener('click', () => showStart(true));
 $('btn-home').addEventListener('click', () => showStart(true));
 // Versionsnummer (E68): neben dem Namen auf der Startseite und im Hinweis des Logos
 $('start-version').textContent = SOMA_VERSION;
-$('btn-home').title = `Startseite · SOMA ${SOMA_VERSION}`;
+$('btn-home').title = `Start page · SOMA ${SOMA_VERSION}`;
 $('problems').addEventListener('click', () => menus.toggle($('menu-problems'), $('problems')));
 
 // Build
 function renderAuto(): void {
   const on = $<HTMLInputElement>('chk-auto').checked;
-  $('auto-label').textContent = on ? 'Auto an' : 'Auto aus';
-  $('btn-auto').title = on ? 'Baut automatisch, wenn sich der Code ändert. Klick schaltet aus.' : 'Auto-Build ist aus. Klick schaltet ein.';
+  $('auto-label').textContent = on ? 'Auto on' : 'Auto off';
+  $('btn-auto').title = on ? 'Builds automatically when the code changes. Click to turn off.' : 'Auto build is off. Click to turn on.';
 }
 $<HTMLInputElement>('chk-auto').addEventListener('change', (e) => { renderAuto(); void api.build.setAuto((e.target as HTMLInputElement).checked); });
 $('btn-auto').addEventListener('click', () => { const c = $<HTMLInputElement>('chk-auto'); c.checked = !c.checked; c.dispatchEvent(new Event('change')); });
@@ -939,8 +939,8 @@ $('btn-buildinfo').addEventListener('click', () => {
   const count = s.result?.parts?.length ?? 0;
   const secs = s.seconds ?? 0;
   const warn = s.result?.warnings ?? [];
-  $('bm-title').textContent = s.state === 'error' ? 'Letzter Build fehlgeschlagen' : s.state === 'building' ? 'Build läuft' : lastOkAt ? `Zuletzt gebaut ${fmtWhen(lastOkAt)}` : 'Noch nicht gebaut';
-  $('bm-sub').textContent = s.state === 'ok' ? `${num(secs)} s · ${count} Bauteil${count === 1 ? '' : 'e'} · ${warn.length ? `${warn.length} Warnung${warn.length === 1 ? '' : 'en'}` : 'keine Warnungen'}` : '';
+  $('bm-title').textContent = s.state === 'error' ? 'Last build failed' : s.state === 'building' ? 'Build running' : lastOkAt ? `Last built ${fmtWhen(lastOkAt)}` : 'Not built yet';
+  $('bm-sub').textContent = s.state === 'ok' ? `${num(secs)} s · ${count} part${count === 1 ? '' : 's'} · ${warn.length ? `${warn.length} warning${warn.length === 1 ? '' : 's'}` : 'no warnings'}` : '';
   $('bm-warn').hidden = !warn.length;
   $('bm-warn').textContent = warn.join('\n');
   menus.toggle($('menu-build'), $('btn-buildinfo'));
@@ -963,7 +963,7 @@ function renderExportScope(): void {
   const name = e?.name ?? (selection ? partInfo(selection.partId)?.name : undefined);
   const sel = $<HTMLButtonElement>('exp-sel');
   sel.disabled = !name;
-  sel.textContent = name ? `Nur ${name}` : 'Nur Auswahl';
+  sel.textContent = name ? `Only ${name}` : 'Selection only';
   if (!name) exportScope = 'all';
   $('exp-all').classList.toggle('on', exportScope === 'all');
   sel.classList.toggle('on', exportScope === 'sel');
@@ -997,9 +997,9 @@ async function doExport(fmt: string, label: string): Promise<ExportResult> {
   const r = await api.build.export(fmt, part);
   if (r.cancelled) return r;
   const name = (f: string) => f.split(/[\\/]/).pop() ?? f;
-  if (r.ok && part) toast(`„${part}“ als ${label} exportiert:\n${r.target ?? r.files[0] ?? ''}`);
-  else if (r.ok) toast(`${r.files.length} Datei${r.files.length === 1 ? '' : 'en'} als ${label} exportiert nach ${r.target ?? ''}:\n${r.files.map(name).join(', ') || '(keine Datei)'}`);
-  else toast(`Export fehlgeschlagen: ${r.error}`, 'error');
+  if (r.ok && part) toast(`“${part}” exported as ${label}:\n${r.target ?? r.files[0] ?? ''}`);
+  else if (r.ok) toast(`${r.files.length} file${r.files.length === 1 ? '' : 's'} exported as ${label} to ${r.target ?? ''}:\n${r.files.map(name).join(', ') || '(no file)'}`);
+  else toast(`Export failed: ${r.error}`, 'error');
   return r;
 }
 
@@ -1050,17 +1050,17 @@ const scheduleViewLists = () => { clearTimeout(viewTimer); viewTimer = setTimeou
 
 function renderViewSwitch(): void {
   const prev = versions.previewed;
-  let ico = 'cube', name = 'Modell', sub = '', closable = false;
+  let ico = 'cube', name = 'Model', sub = '', closable = false;
   const n = viewer.partList().length;
-  if (prev) { ico = 'history'; name = `Stand ${prev.short}`; sub = 'nur ansehen'; closable = true; }
+  if (prev) { ico = 'history'; name = `Version ${prev.short}`; sub = 'view only'; closable = true; }
   // Bei Analyse und Animation sagt das Symbol, was es ist: Der Platz gehört dem Namen
-  else if (resultTool.isActive) { ico = 'gauge'; name = resultTool.currentTitle ?? 'Analyse'; closable = true; }
+  else if (resultTool.isActive) { ico = 'gauge'; name = resultTool.currentTitle ?? 'Analysis'; closable = true; }
   else if (animTool.isActive) { ico = 'anim'; name = animTool.currentName ?? 'Animation'; closable = true; }
-  else sub = n ? `${n} Bauteil${n === 1 ? '' : 'e'}` : '';
+  else sub = n ? `${n} part${n === 1 ? '' : 's'}` : '';
   $('view-ico').replaceChildren(icon(ico, 16));
   $('view-name').textContent = name;
   $('view-sub').textContent = sub;
-  $('btn-view').title = resultTool.isActive && !prev ? `Analyse: ${name}` : animTool.isActive && !prev ? `Animation: ${name}` : 'Was der Viewer zeigt: das Modell, eine Analyse, eine Animation oder ein Video';
+  $('btn-view').title = resultTool.isActive && !prev ? `Analysis: ${name}` : animTool.isActive && !prev ? `Animation: ${name}` : 'What the viewer shows: the model, an analysis, an animation or a video';
   $('view-switch').classList.toggle('vio', !!prev);
   $('view-switch').classList.toggle('result', !prev && (resultTool.isActive || animTool.isActive));
   $('btn-view-close').hidden = !closable;
@@ -1069,8 +1069,8 @@ function renderViewSwitch(): void {
   const badge = $('view-new');
   badge.hidden = !unseen;
   badge.dataset.n = String(unseen);
-  badge.textContent = `${unseen} neu`;
-  badge.title = 'Neue Ergebnisse des Agenten. Klick zeigt die Liste.';
+  badge.textContent = `${unseen} new`;
+  badge.title = 'New results from the agent. Click to show the list.';
 }
 
 /** Eintrag im Menü des Umschalters. `dot`: Statusfarbe (Fundstellen), `isNew`: noch nicht gesehen. */
@@ -1078,7 +1078,7 @@ function viewItem(ico: string, label: string, opts: { sub?: string; on?: boolean
   const d = opts.dot ? el('span', { className: 'dot' }) : null;
   if (d) d.style.background = opts.dot!;
   const b = el('button', { className: 'mi' + (opts.on ? ' cur' : ''), title: opts.title ?? '' },
-    icon(ico, 15), el('span', { className: 'vl', textContent: label }), opts.isNew ? el('span', { className: 'tag acc', textContent: 'neu' }) : null,
+    icon(ico, 15), el('span', { className: 'vl', textContent: label }), opts.isNew ? el('span', { className: 'tag acc', textContent: 'new' }) : null,
     el('span', { className: 'k' }, d, opts.sub ?? '', el('span', { className: 'chk' }, icon('check', 14, 2.2))));
   b.setAttribute('role', 'menuitemradio');
   b.setAttribute('aria-checked', String(!!opts.on));
@@ -1091,23 +1091,23 @@ async function openViewMenu(): Promise<void> {
   if (menus.isOpen(m)) { menus.close(); return; }
   await refreshViewLists();
   const n = viewer.partList().length;
-  const items: HTMLElement[] = [viewItem('cube', 'Modell', { sub: `${n} Bauteil${n === 1 ? '' : 'e'}`, on: !resultTool.isActive && !animTool.isActive, onClick: () => showModelView() })];
+  const items: HTMLElement[] = [viewItem('cube', 'Model', { sub: `${n} part${n === 1 ? '' : 's'}`, on: !resultTool.isActive && !animTool.isActive, onClick: () => showModelView() })];
   const { results, anims, videos } = viewLists;
   const head = (t: string, src: string) => el('div', { className: 'mh' }, t, el('span', { className: 'src', textContent: src }));
   if (results.length) {
-    items.push(el('div', { className: 'msep' }), head('ANALYSEN', '.soma/results/'));
+    items.push(el('div', { className: 'msep' }), head('ANALYSES', '.soma/results/'));
     for (const r of results) {
       const bad = r.parts.filter((x) => x.critical > 0).length;
       items.push(viewItem('gauge', r.id === r.kind ? r.title : `${r.title} (${r.id})`, {
-        sub: r.stale ? 'veraltet' : bad ? `${bad} Bauteil${bad === 1 ? '' : 'e'} kritisch` : 'in Ordnung', dot: r.stale ? 'var(--tx3)' : bad ? 'var(--err)' : 'var(--ok)',
+        sub: r.stale ? 'outdated' : bad ? `${bad} part${bad === 1 ? '' : 's'} critical` : 'OK', dot: r.stale ? 'var(--tx3)' : bad ? 'var(--err)' : 'var(--ok)',
         on: resultTool.isActive && resultTool.currentId === r.id, isNew: !seen.has(resultKey(r)), onClick: () => resultTool.show(r.id),
       }));
     }
   }
   if (anims.length) {
-    items.push(el('div', { className: 'msep' }), head('ANIMATIONEN', 'animations/'));
+    items.push(el('div', { className: 'msep' }), head('ANIMATIONS', 'animations/'));
     for (const a of anims) {
-      items.push(viewItem('anim', a.name, { sub: `${a.duration.toFixed(1).replace('.', ',')} s`, on: animTool.isActive && animTool.currentId === a.id, isNew: !seen.has(animKey(a)), title: a.file, onClick: () => animTool.show(a.id) }));
+      items.push(viewItem('anim', a.name, { sub: `${a.duration.toFixed(1)} s`, on: animTool.isActive && animTool.currentId === a.id, isNew: !seen.has(animKey(a)), title: a.file, onClick: () => animTool.show(a.id) }));
     }
   }
   if (videos.length) {
@@ -1116,7 +1116,7 @@ async function openViewMenu(): Promise<void> {
   }
   if (!results.length && !anims.length && !videos.length) {
     items.push(el('div', { className: 'msep' }), el('div', {
-      className: 'mnote', textContent: 'Noch keine Ergebnisse. Der Agent legt sie an: Analysen mit soma analyze, Animationen in animations/, Videos mit soma render (Skills „Analyse“ und „Animation und Video“).',
+      className: 'mnote', textContent: 'No results yet. The agent creates them: analyses with soma analyze, animations in animations/, videos with soma render (skills “Analysis” and “Animation and video”).',
     }));
   }
   m.replaceChildren(...items);
@@ -1147,7 +1147,7 @@ $('btn-sel-agent').addEventListener('click', () => insertToAgent(selectionText()
 $('btn-err-agent').addEventListener('click', () => insertToAgent(errorText()));
 $('btn-err-code').addEventListener('click', () => {
   const e = buildStatus.result?.error;
-  if (e?.file) void openCode(e.file, e.line ? { from: e.line, to: e.line, label: 'Build-Fehler', kind: 'er' } : undefined);
+  if (e?.file) void openCode(e.file, e.line ? { from: e.line, to: e.line, label: 'Build error', kind: 'er' } : undefined);
 });
 $('btn-err-details').addEventListener('click', () => {
   const t = $('err-trace');
@@ -1157,7 +1157,7 @@ $('btn-err-details').addEventListener('click', () => {
 $('btn-err-fold').addEventListener('click', () => {
   const folded = $('errcard').classList.toggle('folded');
   $('btn-err-fold').setAttribute('aria-expanded', String(!folded));
-  $('btn-err-fold').setAttribute('aria-label', folded ? 'Meldung ausklappen' : 'Meldung einklappen');
+  $('btn-err-fold').setAttribute('aria-label', folded ? 'Expand message' : 'Collapse message');
 });
 
 // ---- Seitenleiste -----------------------------------------------------------------------------------------------
@@ -1191,13 +1191,13 @@ function renderAgentMenu(): void {
     const d = el('span', { className: 'dot' });
     d.style.background = a.found ? 'var(--ok)' : 'transparent';
     if (!a.found) d.style.boxShadow = 'inset 0 0 0 1.5px var(--tx3)';
-    const b = el('button', { className: 'mi', disabled: !a.found, title: a.found ? `${a.command} in einem neuen Tab starten` : `${a.command} wurde im PATH nicht gefunden. Installiere den Agenten selbst, dann erscheint er hier.` },
-      el('span', { className: 'noico' }, d), el('span', { textContent: a.label }), a.found ? null : el('span', { className: 'k', textContent: 'nicht installiert' }));
+    const b = el('button', { className: 'mi', disabled: !a.found, title: a.found ? `Start ${a.command} in a new tab` : `${a.command} was not found in the PATH. Install the agent yourself, then it appears here.` },
+      el('span', { className: 'noico' }, d), el('span', { textContent: a.label }), a.found ? null : el('span', { className: 'k', textContent: 'not installed' }));
     b.setAttribute('role', 'menuitem');
     b.addEventListener('click', () => { setAgentCollapsed(false); void terminals.add({ command: a.command, title: a.label }); });
     return b;
   }));
-  if (!agents.length) $('agent-list').append(el('div', { className: 'mnote', textContent: 'Suche nach Agenten …' }));
+  if (!agents.length) $('agent-list').append(el('div', { className: 'mnote', textContent: 'Looking for agents …' }));
 }
 $('btn-term-add').addEventListener('click', () => { renderAgentMenu(); menus.toggle($('menu-agents'), $('btn-term-add')); });
 $('btn-term-plain').addEventListener('click', () => void terminals.add({ title: 'Terminal' }));
@@ -1237,25 +1237,25 @@ async function showStart(on: boolean): Promise<void> {
     void api.project.thumb(p.id).then((url) => { if (url) th.replaceChildren(el('img', { src: url, alt: '' })); });
     const cur = p.id === project?.id;
     // Viele heißen „Neues Modell“: Ob es je gespeichert wurde, hilft beim Wiederfinden und beim Aufräumen
-    const when = cur ? 'geöffnet' : `geändert ${fmtWhen(p.modified, true)}`;
-    const card = el('button', { className: 'recent' + (cur ? ' cur' : ''), title: cur ? 'Gerade geöffnet' : `${p.name} öffnen` },
-      th, el('div', { className: 'meta' }, el('b', { textContent: p.name }), el('span', { textContent: when }), !p.saved && el('span', { textContent: 'nie gespeichert' })));
+    const when = cur ? 'open' : `changed ${fmtWhen(p.modified, true)}`;
+    const card = el('button', { className: 'recent' + (cur ? ' cur' : ''), title: cur ? 'Currently open' : `Open ${p.name}` },
+      th, el('div', { className: 'meta' }, el('b', { textContent: p.name }), el('span', { textContent: when }), !p.saved && el('span', { textContent: 'never saved' })));
     card.addEventListener('click', () => { if (!cur) void openProject(p.id); showStart(false); });
     if (cur) return el('div', { className: 'recent-item' }, card);
     // Entfernen (E69): Arbeitsordner in den Papierkorb, die Rückfrage im Hauptprozess sagt, was dabei verloren geht
-    const rm = el('button', { className: 'recent-rm', title: `„${p.name}“ von diesem Rechner entfernen`, ariaLabel: `${p.name} entfernen` }, icon('trash', 15));
+    const rm = el('button', { className: 'recent-rm', title: `Remove “${p.name}” from this computer`, ariaLabel: `Remove ${p.name}` }, icon('trash', 15));
     rm.addEventListener('click', () => void (async () => {
       const r = await api.project.remove(p.id).catch((e: unknown) => ({ removed: false, error: e instanceof Error ? e.message : String(e) }));
       if (r.error) toast(r.error, 'error');
-      if (r.removed) { toast(`„${p.name}“ entfernt. Der Arbeitsordner liegt im Papierkorb.`, 'ok'); void showStart(true); }
+      if (r.removed) { toast(`“${p.name}” removed. The working folder is in the Recycle Bin.`, 'ok'); void showStart(true); }
     })());
     return el('div', { className: 'recent-item' }, card, rm);
   }));
-  if (!list.length) $('start-recent').append(el('div', { className: 'c3', textContent: 'Noch keine Modelle auf diesem Rechner.' }));
+  if (!list.length) $('start-recent').append(el('div', { className: 'c3', textContent: 'No models on this computer yet.' }));
   if (!agents.length) await refreshAgents();
   $('start-agents').replaceChildren(...agents.map((a) => el('div', { className: 'agrow' },
     el('span', { className: a.found ? 'ok' : 'no' }, icon(a.found ? 'check' : 'x', 16, 2.2)),
-    el('div', {}, el('b', { textContent: a.label }), el('span', { textContent: a.found ? `gefunden (${a.command})` : 'nicht installiert' })))));
+    el('div', {}, el('b', { textContent: a.label }), el('span', { textContent: a.found ? `found (${a.command})` : 'not installed' })))));
 }
 $('btn-start-close').addEventListener('click', () => showStart(false));
 $('start-new').addEventListener('click', () => { void doNew(); showStart(false); });
@@ -1285,7 +1285,7 @@ api.render.onProgress((f) => animTool.progress(f));
 // Bilder und Videos, die der Agent erzeugt hat: kurz Bescheid geben, ein Klick im Dateibaum öffnet sie
 api.render.onNotice((n) => {
   if (!n.byAgent) return;
-  if (n.ok) toast(`Der Agent hat ${n.files.join(', ')} erzeugt.`, 'info');
+  if (n.ok) toast(`The agent created ${n.files.join(', ')}.`, 'info');
   void refreshFiles();
   scheduleViewLists();
 });

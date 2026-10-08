@@ -1,12 +1,12 @@
 ---
-title: Animation und Video
+title: Animation and video
 name: Animation and video
-summary: Bewegungen, Kamerafahrten und Texte in animations/*.py, auf Kollisionen prüfen, als Standbilder ansehen, als MP4 ausgeben.
+summary: Motions, camera moves and texts in animations/*.py, checked for collisions, viewed as stills, exported as MP4.
 order: 31
-category: Prüfen und Zeigen
+category: Check and present
 default: on-demand
 when: the user wants to see parts move, an assembly sequence, a camera flight, a video or a presentation of the model
-topics: Datei und Aufbau; Gelenke und Zeitleiste; Kamera; Texte; Bauen, prüfen, ansehen; Rückmeldung
+topics: File and structure; Joints and timeline; Camera; Texts; Build, check, view; Feedback
 ---
 # Skill: Animation and video
 
@@ -67,6 +67,6 @@ Captions: one short sentence in the language the user speaks, about what moves a
 
 ## Feedback from the user
 
-`[Animation: "Name" (animations/x.py) bei 1.50 s]` and `[Video: renders/x.mp4 bei 00:03.20]` point to a moment. A
-marking may say `gezeichnet auf renders/x.mp4 bei 00:03.20` or `Animation „Name“ bei 1.50 s`: the picture shows that
+`[Animation: "Name" (animations/x.py) at 1.50 s]` and `[Video: renders/x.mp4 at 00:03.20]` point to a moment. A
+markup may say `drawn on renders/x.mp4 at 00:03.20` or `animation "Name" at 1.50 s`: the picture shows that
 moment. Render it yourself (`soma render --anim "Name" --at 1.5`) before you change something.

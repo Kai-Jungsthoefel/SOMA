@@ -43,9 +43,9 @@ export class AnimData {
   static async parse(glb: ArrayBuffer): Promise<AnimData> {
     const gltf = await new GLTFLoader().parseAsync(glb, '');
     const meta = (gltf.parser.json as { extras?: { soma_animation?: AnimMeta } }).extras?.soma_animation;
-    if (!meta || meta.version !== 1) throw new Error('Keine Animation von soma (extras.soma_animation fehlt)');
+    if (!meta || meta.version !== 1) throw new Error('Not an animation from soma (extras.soma_animation is missing)');
     const clip = gltf.animations[0];
-    if (!clip) throw new Error('Die Datei enthält keine Bewegung');
+    if (!clip) throw new Error('The file contains no motion');
     // three.js benennt Knoten um (ohne Punkte, Doppelpunkte, Leerzeichen): Die Spuren heißen wie der Knoten, der echte
     // Bauteilname steht in seinen extras
     const byNode = new Map<string, { part?: string; camera?: boolean; target?: boolean }>();
@@ -78,7 +78,7 @@ export class AnimData {
       }
     }
     for (const [name, e] of pending) if (e.pos && e.rot) tracks.set(name, { pos: e.pos, rot: e.rot });
-    if (!cam.pos || !cam.target) throw new Error('Die Animation hat keine Kamera');
+    if (!cam.pos || !cam.target) throw new Error('The animation has no camera');
     return new AnimData(meta, tracks, { pos: cam.pos, target: cam.target });
   }
 

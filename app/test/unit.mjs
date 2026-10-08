@@ -70,9 +70,9 @@ try {
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
   const when = new Date(2026, 8, 30, 14, 5);
   const f1 = saveFeedbackImage(proj, png, when), f2 = saveFeedbackImage(proj, png, when);
-  check('Markierung landet als markierung-JJJJMMTT-HHMM.png in .soma/feedback/', f1.ok && f1.path === '.soma/feedback/markierung-20260930-1405.png'
+  check('Markierung landet als markup-JJJJMMTT-HHMM.png in .soma/feedback/', f1.ok && f1.path === '.soma/feedback/markup-20260930-1405.png'
     && fs.readFileSync(path.join(proj, f1.path)).equals(Buffer.from(png)), f1.path ?? f1.error);
-  check('Zweite Markierung in derselben Minute: neuer Name mit -2, erste bleibt', f2.ok && f2.path === '.soma/feedback/markierung-20260930-1405-2.png'
+  check('Zweite Markierung in derselben Minute: neuer Name mit -2, erste bleibt', f2.ok && f2.path === '.soma/feedback/markup-20260930-1405-2.png'
     && fs.existsSync(path.join(proj, f1.path)), f2.path ?? f2.error);
   const bad = saveFeedbackImage(proj, new TextEncoder().encode('kein Bild'), when);
   check('Kein PNG: abgelehnt, nichts geschrieben', !bad.ok && fs.readdirSync(path.join(proj, '.soma', 'feedback')).length === 2, bad.error);
@@ -99,7 +99,7 @@ try {
     && o2.ok && fs.statSync(path.join(ops, 'skizzen')).isDirectory(), `${o.path} ${o2.path}`);
   fs.writeFileSync(path.join(ops, 'parts', 'deckel.py'), 'INHALT');
   o = createEntry(ops, 'parts', 'deckel.py', false);
-  check('Neue Datei mit vorhandenem Namen: abgelehnt, Inhalt bleibt', !o.ok && /schon/.test(o.error) && fs.readFileSync(path.join(ops, 'parts', 'deckel.py'), 'utf8') === 'INHALT', o.error);
+  check('Neue Datei mit vorhandenem Namen: abgelehnt, Inhalt bleibt', !o.ok && /already exists/.test(o.error) && fs.readFileSync(path.join(ops, 'parts', 'deckel.py'), 'utf8') === 'INHALT', o.error);
   const badNames = ['', ' x', 'a/b', 'a:b', 'con', 'NUL.txt', 'x.', '..'].map((n) => createEntry(ops, '', n, false));
   check('Ungültige Namen (leer, Leerzeichen, / : , reservierte Namen, Punkt am Ende) abgelehnt', badNames.every((x) => !x.ok), badNames.map((x) => x.error).join(' | ').slice(0, 90));
   const blockedCreate = [createEntry(ops, 'output', 'x.step', false), createEntry(ops, '.soma', 'x', false), createEntry(ops, '.soma/feedback', 'x.png', false), createEntry(ops, '', 'AGENTS.md', false), createEntry(ops, '../draussen', 'x', false)];
@@ -125,7 +125,7 @@ try {
   check('Löschen geht in den Papierkorb, model.py, App-Dateien und .soma gesperrt', o.ok && !fs.existsSync(path.join(ops, 'skizzen')) && JSON.stringify(binned) === '["skizzen"]'
     && !o3.ok && !o4.ok && !o5.ok && fs.existsSync(path.join(ops, 'model.py')), binned.join(','));
   o = await trashEntry(ops, 'parts/body.py', async () => { throw new Error('Papierkorb nicht erreichbar'); });
-  check('Papierkorb klappt nicht: nichts gelöscht, Meldung', !o.ok && fs.existsSync(path.join(ops, 'parts', 'body.py')) && /nichts gelöscht/.test(o.error), o.error?.slice(0, 80));
+  check('Papierkorb klappt nicht: nichts gelöscht, Meldung', !o.ok && fs.existsSync(path.join(ops, 'parts', 'body.py')) && /nothing was deleted/.test(o.error), o.error?.slice(0, 80));
 
   fs.writeFileSync(path.join(ops, 'start.bat'), '@echo off');
   fs.writeFileSync(path.join(ops, 'parts', 'foto.png'), 'P');
@@ -180,14 +180,14 @@ try {
   check('Eingesetzt: Text mit Werten, Kopf mit Werten statt Standard, Unbekanntes bleibt', rs.includes('Up to 50° in PETG, {{unknown}} stays.') && rs.includes('var angle: 50 | °') && rs.includes('var mat: PETG |'), rs);
   check('Ohne Einstellungen: die Standardwerte', renderSkill(SRC, {}).includes('Up to 45° in PLA'));
   const cv = [checkValue(ps.vars[0], '52,5'), checkValue(ps.vars[0], 95), checkValue(ps.vars[0], 'abc'), checkValue(ps.vars[1], 'ABS')];
-  check('Werte geprüft: Komma geht, außerhalb des Bereichs, keine Zahl und fremde Auswahl abgelehnt', cv[0].value === 52.5 && cv[1].error?.includes('10 bis 80°') && cv[2].error && cv[3].error, JSON.stringify(cv));
+  check('Werte geprüft: Komma geht, außerhalb des Bereichs, keine Zahl und fremde Auswahl abgelehnt', cv[0].value === 52.5 && cv[1].error?.includes('must be between 10 and 80°') && cv[2].error && cv[3].error, JSON.stringify(cv));
   check('Gespeicherte Werte bereinigt: Ungültiges und Standard fallen weg', JSON.stringify(cleanValues(ps.vars, { angle: 45, mat: 'XYZ', other: 1 })) === '{}'
     && JSON.stringify(cleanValues(ps.vars, { angle: '60' })) === '{"angle":60}');
   const shipped = [...bundledSkills(path.join(APP, 'resources', 'skills')).values()];
   const leftover = shipped.map((s) => renderSkill(s.text, {})).filter((x) => /\{\{/.test(x));
   // Einstellungen sind freiwillig (etwa „Normteile“ hat keine), der Kopf aber nicht
   check('Mitgelieferte Skills: Kopf vollständig, jeder Platzhalter hat eine Variable, Standardwerte gültig', shipped.length >= 12
-    && shipped.every((s) => s.title !== s.id && s.name !== s.title && s.summary && s.topics.length && s.order < 100 && s.when && !s.when.endsWith('.'))
+    && shipped.every((s) => s.title !== s.id && s.name && s.summary && s.topics.length && s.order < 100 && s.when && !s.when.endsWith('.'))
     && shipped.every((s) => s.vars.every((v) => 'value' in checkValue(v, v.default))) && !leftover.length, shipped.map((s) => `${s.id}:${s.vars.length}`).join(','));
   // Kategorien und Stufe für neue Modelle (E46, E55)
   const kp = parseSkill('k', '---\ntitle: K\ncategory: Arbeitsweise\ndefault: always\nwhen: the user asks.\n---\n# K\n');
@@ -236,10 +236,10 @@ try {
     put('model.py', 'x = 1\n');
     put('.gitignore', '__pycache__/\n'); // Stand vor E58
     const repo = new GitRepo(old);
-    await repo.init('Neues Modell angelegt');
+    await repo.init('New model created');
     // So hat es der Agent in älteren Projekten mit `git add -A` committet
     put('.soma/results/thickness.glb', 'GROSS');
-    put('renders/ansicht-iso.png', 'PNG');
+    put('renders/view-iso.png', 'PNG');
     await repo.run(['add', '-A'], true);
     await repo.run(['commit', '-q', '-m', 'Agent'], true);
     await repo.ensureIgnored();
@@ -252,15 +252,15 @@ try {
     put('.soma/anim/deckel.glb', 'ANIM');
     check('Neues Ergebnis zählt nicht als ungespeicherte Änderung', !(await repo.status()).dirty);
     put('model.py', 'x = 2\n');
-    await repo.snapshot('Automatischer Snapshot beim Speichern');
+    await repo.snapshot('Automatic snapshot on save');
     const tracked = (await repo.run(['ls-files'])).out;
     check('Snapshot nimmt Ergebnis und Bilder aus dem Verlauf, die Dateien bleiben', tracked.includes('model.py') && !tracked.includes('.soma/results')
       && !tracked.includes('renders/') && fs.existsSync(path.join(old, '.soma', 'results', 'thickness.glb')), tracked);
     const zip = path.join(tmp, 'altprojekt.zip');
     await saveProjectZip(old, zip, { savedAt: '', head: null, id: 'x', name: 'x' });
-    const inZip = await readZipTexts(zip, ['model.py', '.soma/results/thickness.glb', '.soma/anim/deckel.glb', 'renders/ansicht-iso.png']);
+    const inZip = await readZipTexts(zip, ['model.py', '.soma/results/thickness.glb', '.soma/anim/deckel.glb', 'renders/view-iso.png']);
     check('ZIP: ohne .soma/results und .soma/anim, mit Bildern und Modell', inZip['model.py'] === 'x = 2\n' && inZip['.soma/results/thickness.glb'] === null
-      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/ansicht-iso.png'] === 'PNG', JSON.stringify(inZip));
+      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/view-iso.png'] === 'PNG', JSON.stringify(inZip));
   } finally {
     fs.rmSync(gz, { force: true });
   }

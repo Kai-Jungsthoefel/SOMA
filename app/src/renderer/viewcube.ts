@@ -12,12 +12,12 @@ export interface CubeHost {
 
 /** Seiten des Würfels. CAD-Konvention der App: Z oben, vorne ist -Y (so zeigt auch „Vorne“ im Viewer). */
 const FACES: { n: [number, number, number]; up: [number, number, number]; text: string; bg: string }[] = [
-  { n: [0, 0, 1], up: [0, 1, 0], text: 'OBEN', bg: '#2b3139' },
-  { n: [0, 0, -1], up: [0, -1, 0], text: 'UNTEN', bg: '#2b3139' },
-  { n: [0, -1, 0], up: [0, 0, 1], text: 'VORNE', bg: '#262b33' },
-  { n: [0, 1, 0], up: [0, 0, 1], text: 'HINTEN', bg: '#262b33' },
-  { n: [1, 0, 0], up: [0, 0, 1], text: 'RECHTS', bg: '#20252c' },
-  { n: [-1, 0, 0], up: [0, 0, 1], text: 'LINKS', bg: '#20252c' },
+  { n: [0, 0, 1], up: [0, 1, 0], text: 'TOP', bg: '#2b3139' },
+  { n: [0, 0, -1], up: [0, -1, 0], text: 'BOTTOM', bg: '#2b3139' },
+  { n: [0, -1, 0], up: [0, 0, 1], text: 'FRONT', bg: '#262b33' },
+  { n: [0, 1, 0], up: [0, 0, 1], text: 'BACK', bg: '#262b33' },
+  { n: [1, 0, 0], up: [0, 0, 1], text: 'RIGHT', bg: '#20252c' },
+  { n: [-1, 0, 0], up: [0, 0, 1], text: 'LEFT', bg: '#20252c' },
 ];
 /** Grenze zwischen Mitte und Rand einer Seite. Der Würfel reicht von -1 bis 1, außen liegen Kanten und Ecken. */
 const EDGE = 0.62;
@@ -29,7 +29,7 @@ const AXES: { dir: [number, number, number]; color: string; label: string }[] = 
 
 /** Richtung in Worten, für den Hinweis beim Überfahren: „Oben vorne rechts“. */
 function dirName(s: number[]): string {
-  const parts = [s[2] > 0 ? 'oben' : s[2] < 0 ? 'unten' : '', s[1] < 0 ? 'vorne' : s[1] > 0 ? 'hinten' : '', s[0] > 0 ? 'rechts' : s[0] < 0 ? 'links' : ''].filter(Boolean);
+  const parts = [s[2] > 0 ? 'top' : s[2] < 0 ? 'bottom' : '', s[1] < 0 ? 'front' : s[1] > 0 ? 'back' : '', s[0] > 0 ? 'right' : s[0] < 0 ? 'left' : ''].filter(Boolean);
   const t = parts.join(' ');
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
@@ -171,7 +171,7 @@ export class ViewCube {
     if (key === this.hoverKey) return;
     this.hoverKey = key;
     for (const o of [...this.hl.children]) { this.hl.remove(o); (o as THREE.Mesh).geometry.dispose(); ((o as THREE.Mesh).material as THREE.Material).dispose(); }
-    this.el.title = s ? `${dirName(s)}: Ansicht von dort (Klick). Ziehen dreht.` : 'Seite, Kante oder Ecke anklicken: Ansicht von dort. Ziehen dreht die Ansicht.';
+    this.el.title = s ? `${dirName(s)}: view from there (click). Drag to rotate.` : 'Click a face, edge or corner to view from there. Drag to rotate the view.';
     if (s) {
       const range = (v: number): [number, number] => (v < 0 ? [-1, -EDGE] : v > 0 ? [EDGE, 1] : [-EDGE, EDGE]);
       for (let a = 0; a < 3; a++) {

@@ -22,15 +22,15 @@ export function toast(text: string, kind: 'ok' | 'info' | 'error' = 'ok'): void 
   toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'error' ? 12000 : 6000);
 }
 
-/** Uhrzeit, bei älteren Tagen mit Datum: „14:02“, „gestern 14:02“, „24.09. 14:02“. */
+/** Uhrzeit, bei älteren Tagen mit Datum: „14:02“, „yesterday 14:02“, „24 Sept 14:02“. */
 export function fmtWhen(t: number | string, withToday = false): string {
   const d = new Date(t);
   const now = new Date();
-  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  if (d.toDateString() === now.toDateString()) return withToday ? `heute ${time}` : time;
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return withToday ? `today ${time}` : time;
   const y = new Date(now); y.setDate(now.getDate() - 1);
-  if (d.toDateString() === y.toDateString()) return `gestern ${time}`;
-  return `${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} ${time}`;
+  if (d.toDateString() === y.toDateString()) return `yesterday ${time}`;
+  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${time}`;
 }
 
 interface OpenMenu { menu: HTMLElement; anchor: HTMLElement | null; onClose?: () => void }

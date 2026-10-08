@@ -109,7 +109,7 @@ export class AnimTool {
     try { this.list = await this.d.list(); } catch { return; }
     if (seq !== this.loading || !this.active) return;
     const anims = this.list.animations;
-    this.ui.select.replaceChildren(...anims.map((a) => el('option', { value: a.id, textContent: `${a.name} (${a.duration.toFixed(1).replace('.', ',')} s)` })));
+    this.ui.select.replaceChildren(...anims.map((a) => el('option', { value: a.id, textContent: `${a.name} (${a.duration.toFixed(1)} s)` })));
     this.ui.select.disabled = anims.length < 2;
     const want = anims.find((a) => a.id === (this.want ?? this.current?.entry.id)) ?? anims[0];
     this.want = null;
@@ -158,7 +158,7 @@ export class AnimTool {
       this.d.changed();
     } catch (e) {
       this.current = null;
-      this.d.toast(`Die Animation ließ sich nicht laden: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      this.d.toast(`Could not load the animation: ${e instanceof Error ? e.message : String(e)}`, 'error');
     }
   }
 
@@ -195,7 +195,7 @@ export class AnimTool {
     if (this.follow) this.d.viewer.setCamera(f.camera.position, f.camera.target);
     this.paintTexts(f);
     this.ui.range.value = String(this.t);
-    this.ui.time.textContent = `${this.t.toFixed(2).replace('.', ',')} / ${c.data.duration.toFixed(2).replace('.', ',')} s`;
+    this.ui.time.textContent = `${this.t.toFixed(2)} / ${c.data.duration.toFixed(2)} s`;
   }
 
   /** Titel, Untertitel und Beschriftungen über das Bild, ausgeschaltet gar nichts (auch nicht im Bild für die Markierung). */
@@ -239,8 +239,8 @@ export class AnimTool {
 
   private renderPlay(): void {
     this.ui.play.replaceChildren(icon(this.playing ? 'pause' : 'play', 16, 2));
-    this.ui.play.setAttribute('aria-label', this.playing ? 'Anhalten' : 'Abspielen');
-    this.ui.play.title = this.playing ? 'Anhalten (Leertaste)' : 'Abspielen (Leertaste)';
+    this.ui.play.setAttribute('aria-label', this.playing ? 'Pause' : 'Play');
+    this.ui.play.title = this.playing ? 'Pause (Space)' : 'Play (Space)';
   }
 
   private render(): void {
@@ -252,11 +252,11 @@ export class AnimTool {
     this.ui.video.disabled = !has || this.rendering;
     hint.classList.toggle('warn', !!err || !!c?.entry.stale);
     if (this.rendering) return;
-    if (err) hint.textContent = `${err.file}${err.line ? `, Zeile ${err.line}` : ''}: ${err.message}`;
-    else if (this.list.building) hint.textContent = 'Animation wird gebaut …';
-    else if (c?.entry.stale) hint.textContent = 'Älter als der Code, wird neu gebaut …';
-    else if (c) hint.textContent = `${c.entry.file}, Zeile ${c.entry.line ?? 1} · ${c.entry.parts} bewegte${c.entry.parts === 1 ? 's' : ''} Bauteil${c.entry.parts === 1 ? '' : 'e'}`;
-    else hint.textContent = 'Noch keine Animation. Der Agent legt sie in animations/ an (Skill „Animation und Video“).';
+    if (err) hint.textContent = `${err.file}${err.line ? `, line ${err.line}` : ''}: ${err.message}`;
+    else if (this.list.building) hint.textContent = 'Building the animation …';
+    else if (c?.entry.stale) hint.textContent = 'Older than the code, rebuilding …';
+    else if (c) hint.textContent = `${c.entry.file}, line ${c.entry.line ?? 1} · ${c.entry.parts} moving part${c.entry.parts === 1 ? '' : 's'}`;
+    else hint.textContent = 'No animation yet. The agent creates them in animations/ (skill “Animation and video”).';
     if (!has) this.ui.time.textContent = '';
   }
 
@@ -264,7 +264,7 @@ export class AnimTool {
   progress(f: number): void {
     if (!this.rendering) return;
     this.ui.hint.classList.remove('warn');
-    this.ui.hint.textContent = `Video wird erzeugt … ${Math.round(f * 100)} %`;
+    this.ui.hint.textContent = `Making the video … ${Math.round(f * 100)} %`;
   }
 
   private async makeVideo(): Promise<void> {
@@ -276,9 +276,9 @@ export class AnimTool {
     this.progress(0);
     try {
       const r = await this.d.renderVideo(c.entry.id);
-      if (!r.ok) { this.d.toast(`Das Video ließ sich nicht erzeugen: ${r.error ?? 'unbekannter Fehler'}`, 'error'); return; }
+      if (!r.ok) { this.d.toast(`Could not make the video: ${r.error ?? 'unknown error'}`, 'error'); return; }
       const mp4 = r.files.find((f) => f.endsWith('.mp4'));
-      this.d.toast(`Video erzeugt: ${mp4}${r.warnings.length ? `\n${r.warnings.join('\n')}` : ''}`, r.warnings.length ? 'info' : 'ok');
+      this.d.toast(`Video created: ${mp4}${r.warnings.length ? `\n${r.warnings.join('\n')}` : ''}`, r.warnings.length ? 'info' : 'ok');
       if (mp4) this.d.showVideo(mp4);
     } finally {
       this.rendering = false;
@@ -290,12 +290,12 @@ export class AnimTool {
   agentText(): string | null {
     if (!this.active || !this.current) return null;
     // Ausgeblendete Texte fehlen auch im Bild: Sonst sucht der Agent einen Untertitel, den er selbst angelegt hat, vergeblich
-    return `Animation „${this.current.entry.name}“ bei ${this.t.toFixed(2)} s${this.texts ? '' : ' (ohne Titel, Untertitel und Beschriftungen)'}`;
+    return `animation "${this.current.entry.name}" at ${this.t.toFixed(2)} s${this.texts ? '' : ' (without titles, captions and labels)'}`;
   }
 
   private agentNote(): string | null {
     const c = this.current;
-    return c ? `[Animation: "${c.entry.name}" (${c.entry.file}) bei ${this.t.toFixed(2)} s] ` : null;
+    return c ? `[Animation: "${c.entry.name}" (${c.entry.file}) at ${this.t.toFixed(2)} s] ` : null;
   }
 
   /** Prüfhilfe: Zustand der Karte. */

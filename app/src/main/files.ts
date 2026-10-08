@@ -22,12 +22,12 @@ export function importInputs(root: string, sources: string[]): ImportResult {
     const base = path.basename(src);
     try {
       const st = fs.lstatSync(src);
-      if (st.isSymbolicLink()) { res.errors.push(`${base}: Verknüpfungen werden nicht übernommen.`); continue; }
-      if (!st.isFile() && !st.isDirectory()) { res.errors.push(`${base}: weder Datei noch Ordner, nicht übernommen.`); continue; }
+      if (st.isSymbolicLink()) { res.errors.push(`${base}: links are not copied.`); continue; }
+      if (!st.isFile() && !st.isDirectory()) { res.errors.push(`${base}: neither a file nor a folder, not copied.`); continue; }
       const dest = resolveInside(root, 'inputs');
       fs.mkdirSync(dest, { recursive: true });
       if (st.isFile()) {
-        if (st.size > MAX_IMPORT_BYTES) { res.errors.push(`${base}: größer als 500 MB, nicht übernommen.`); continue; }
+        if (st.size > MAX_IMPORT_BYTES) { res.errors.push(`${base}: larger than 500 MB, not copied.`); continue; }
         const ext = path.extname(base), stem = base.slice(0, base.length - ext.length);
         let name = base;
         for (let i = 2; fs.existsSync(path.join(dest, name)); i++) name = `${stem} (${i})${ext}`;
@@ -37,7 +37,7 @@ export function importInputs(root: string, sources: string[]): ImportResult {
       } else {
         // Erst ganz durchsehen, dann kopieren: Ist der Ordner zu groß, landet gar nichts statt einer halben Kopie
         const scan = scanFolder(src);
-        if (scan.tooBig) { res.errors.push(`${base}: ${scan.tooBig}, nicht übernommen.`); continue; }
+        if (scan.tooBig) { res.errors.push(`${base}: ${scan.tooBig}, not copied.`); continue; }
         let name = base;
         for (let i = 2; fs.existsSync(path.join(dest, name)); i++) name = `${base} (${i})`;
         const target = resolveInside(root, `inputs/${name}`);
@@ -74,15 +74,15 @@ function scanFolder(src: string): FolderScan {
       if (scan.tooBig) return;
       const childRel = rel ? path.join(rel, e.name) : e.name;
       const shown = childRel.split(path.sep).join('/');
-      if (e.isSymbolicLink()) scan.skipped.push(`${shown}: Verknüpfung, nicht übernommen.`);
-      else if (e.isDirectory() && e.name === '.git') scan.skipped.push(`${shown}: eigener Git-Verlauf, nicht übernommen.`);
+      if (e.isSymbolicLink()) scan.skipped.push(`${shown}: link, not copied.`);
+      else if (e.isDirectory() && e.name === '.git') scan.skipped.push(`${shown}: its own Git history, not copied.`);
       else if (e.isDirectory()) { scan.dirs.push(childRel); walk(childRel); }
       else if (e.isFile()) {
         scan.files.push(childRel);
         bytes += fs.statSync(path.join(src, childRel)).size;
-        if (bytes > MAX_IMPORT_BYTES) scan.tooBig = 'zusammen größer als 500 MB';
-        else if (scan.files.length > MAX_IMPORT_FILES) scan.tooBig = `mehr als ${MAX_IMPORT_FILES} Dateien`;
-      } else scan.skipped.push(`${shown}: weder Datei noch Ordner, nicht übernommen.`);
+        if (bytes > MAX_IMPORT_BYTES) scan.tooBig = 'larger than 500 MB in total';
+        else if (scan.files.length > MAX_IMPORT_FILES) scan.tooBig = `more than ${MAX_IMPORT_FILES} files`;
+      } else scan.skipped.push(`${shown}: neither a file nor a folder, not copied.`);
     }
   };
   walk('');
@@ -103,13 +103,13 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Fehler im Namen einer neuen oder umbenannten Datei, sonst null. Nur ein Name, kein Pfad. */
 export function nameError(name: string): string | null {
-  if (!name.trim()) return 'Der Name ist leer.';
-  if (name !== name.trim()) return 'Der Name beginnt oder endet mit einem Leerzeichen.';
-  if (/[\\/:*?"<>|\x00-\x1f]/.test(name)) return 'Diese Zeichen gehen in Namen nicht: \\ / : * ? " < > |';
-  if (name === '.' || name === '..') return 'Dieser Name geht nicht.';
-  if (/\.$/.test(name)) return 'Der Name darf nicht mit einem Punkt enden.';
-  if (RESERVED.test(name)) return `„${name}“ ist unter Windows ein reservierter Name.`;
-  if (name.length > 200) return 'Der Name ist zu lang.';
+  if (!name.trim()) return 'The name is empty.';
+  if (name !== name.trim()) return 'The name starts or ends with a space.';
+  if (/[\\/:*?"<>|\x00-\x1f]/.test(name)) return 'These characters are not allowed in names: \\ / : * ? " < > |';
+  if (name === '.' || name === '..') return 'This name is not allowed.';
+  if (/\.$/.test(name)) return 'The name must not end with a dot.';
+  if (RESERVED.test(name)) return `“${name}” is a reserved name on Windows.`;
+  if (name.length > 200) return 'The name is too long.';
   return null;
 }
 
@@ -118,7 +118,7 @@ function cleanRel(rel: string): string {
   // normalize nimmt „./“ vorne schon weg. Nur „.“ allein ist der Projektordner, „.soma“ bleibt „.soma“.
   const p = path.posix.normalize(String(rel).replace(/\\/g, '/')).replace(/\/$/, '');
   if (p === '.' || p === '') return '';
-  if (p === '..' || p.startsWith('../') || path.posix.isAbsolute(p) || /^[a-z]:/i.test(p)) throw new Error(`Pfad liegt ausserhalb des Projekts: ${rel}`);
+  if (p === '..' || p.startsWith('../') || path.posix.isAbsolute(p) || /^[a-z]:/i.test(p)) throw new Error(`Path is outside the project: ${rel}`);
   return p;
 }
 
@@ -132,15 +132,15 @@ export function createEntry(root: string, parent: string, name: string, dir: boo
     if (bad) return { ok: false, error: bad };
     const rel = joinRel(base, name);
     const block = fileOpBlockReason(base, 'create') ?? fileOpBlockReason(rel, 'create');
-    if (block) return { ok: false, error: `Hier lässt sich nichts anlegen. ${block}` };
+    if (block) return { ok: false, error: `Nothing can be created here. ${block}` };
     const parentAbs = resolveInside(root, base || '.');
-    if (!fs.statSync(parentAbs).isDirectory()) return { ok: false, error: `${base} ist kein Ordner.` };
+    if (!fs.statSync(parentAbs).isDirectory()) return { ok: false, error: `${base} is not a folder.` };
     const abs = resolveInside(root, rel);
     // Ohne recursive bzw. mit „wx“: Entsteht der Name gleichzeitig, schlägt das fehl statt zu überschreiben
     if (dir) fs.mkdirSync(abs); else fs.writeFileSync(abs, '', { flag: 'wx' });
     return { ok: true, path: rel };
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return { ok: false, error: `„${name}“ gibt es dort schon.` };
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return { ok: false, error: `“${name}” already exists there.` };
     return { ok: false, error: errMsg(e) };
   }
 }
@@ -150,20 +150,20 @@ export function renameEntry(root: string, rel: string, name: string): FileOpResu
   try {
     const from = cleanRel(rel);
     const block = fileOpBlockReason(from, 'rename');
-    if (block) return { ok: false, error: `${from} lässt sich nicht umbenennen. ${block}` };
+    if (block) return { ok: false, error: `${from} cannot be renamed. ${block}` };
     const bad = nameError(name);
     if (bad) return { ok: false, error: bad };
     const old = path.posix.basename(from);
     const to = joinRel(path.posix.dirname(from) === '.' ? '' : path.posix.dirname(from), name);
     if (name === old) return { ok: true, path: from };
     const blockTo = fileOpBlockReason(to, 'create');
-    if (blockTo) return { ok: false, error: `Dieser Name geht hier nicht. ${blockTo}` };
+    if (blockTo) return { ok: false, error: `This name is not allowed here. ${blockTo}` };
     const abs = resolveInside(root, from);
-    if (fs.lstatSync(abs).isSymbolicLink()) return { ok: false, error: 'Verknüpfungen lassen sich hier nicht umbenennen.' };
+    if (fs.lstatSync(abs).isSymbolicLink()) return { ok: false, error: 'Links cannot be renamed here.' };
     const target = resolveInside(root, to);
     // Windows und macOS unterscheiden Groß und klein nicht: „Teil.py“ → „teil.py“ findet sich selbst als vorhanden
     const caseOnly = name.toLowerCase() === old.toLowerCase();
-    if (!caseOnly && exists(target)) return { ok: false, error: `„${name}“ gibt es dort schon.` };
+    if (!caseOnly && exists(target)) return { ok: false, error: `“${name}” already exists there.` };
     fs.renameSync(abs, target);
     return { ok: true, path: to };
   } catch (e) { return { ok: false, error: errMsg(e) }; }
@@ -177,10 +177,10 @@ export async function trashEntry(root: string, rel: string, trash: (abs: string)
   try {
     const p = cleanRel(rel);
     const block = fileOpBlockReason(p, 'delete');
-    if (block) return { ok: false, error: `${p} lässt sich nicht löschen. ${block}` };
+    if (block) return { ok: false, error: `${p} cannot be deleted. ${block}` };
     const abs = resolveInside(root, p);
     fs.lstatSync(abs);
-    try { await trash(abs); } catch (e) { return { ok: false, error: `${p} ließ sich nicht in den Papierkorb verschieben, es wurde nichts gelöscht: ${errMsg(e)}` }; }
+    try { await trash(abs); } catch (e) { return { ok: false, error: `Could not move ${p} to the Recycle Bin, nothing was deleted: ${errMsg(e)}` }; }
     return { ok: true, path: p };
   } catch (e) { return { ok: false, error: errMsg(e) }; }
 }
@@ -191,7 +191,7 @@ export function entryPath(root: string, rel: string, forOpen: boolean): { abs?: 
     const p = cleanRel(rel);
     const abs = resolveInside(root, p || '.');
     const st = fs.statSync(abs);
-    if (forOpen && st.isFile() && RUNNABLE.test(p)) return { error: `${path.posix.basename(p)} könnte beim Öffnen ein Programm starten. SOMA öffnet solche Dateien nicht, „Im Explorer zeigen“ geht.` };
+    if (forOpen && st.isFile() && RUNNABLE.test(p)) return { error: `${path.posix.basename(p)} could start a program when opened. SOMA does not open such files, “Show in Explorer” works.` };
     return { abs };
   } catch (e) { return { error: errMsg(e) }; }
 }
@@ -202,10 +202,10 @@ export function entryPath(root: string, rel: string, forOpen: boolean): { abs?: 
  */
 export function saveFeedbackImage(root: string, png: unknown, when = new Date()): FeedbackResult {
   const bytes = png instanceof Uint8Array ? png : png instanceof ArrayBuffer ? new Uint8Array(png) : null;
-  if (!bytes || bytes.length < PNG_SIGNATURE.length || !PNG_SIGNATURE.equals(bytes.subarray(0, PNG_SIGNATURE.length))) return { ok: false, error: 'Das ist kein PNG-Bild.' };
-  if (bytes.length > MAX_FEEDBACK_BYTES) return { ok: false, error: 'Das Bild ist größer als 64 MB.' };
+  if (!bytes || bytes.length < PNG_SIGNATURE.length || !PNG_SIGNATURE.equals(bytes.subarray(0, PNG_SIGNATURE.length))) return { ok: false, error: 'This is not a PNG image.' };
+  if (bytes.length > MAX_FEEDBACK_BYTES) return { ok: false, error: 'The image is larger than 64 MB.' };
   const two = (n: number) => String(n).padStart(2, '0');
-  const stem = `markierung-${when.getFullYear()}${two(when.getMonth() + 1)}${two(when.getDate())}-${two(when.getHours())}${two(when.getMinutes())}`;
+  const stem = `markup-${when.getFullYear()}${two(when.getMonth() + 1)}${two(when.getDate())}-${two(when.getHours())}${two(when.getMinutes())}`;
   try {
     fs.mkdirSync(resolveInside(root, '.soma/feedback'), { recursive: true });
     for (let i = 1; ; i++) {
@@ -229,7 +229,7 @@ export function writeProjectText(root: string, rel: string, text: string, base: 
     const abs = resolveInside(root, rel);
     const clean = path.relative(fs.realpathSync(root), path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs)));
     const locked = readOnlyReason(clean);
-    if (locked) return { ok: false, error: `${rel} lässt sich hier nicht bearbeiten. ${locked}` };
+    if (locked) return { ok: false, error: `${rel} cannot be edited here. ${locked}` };
     let disk: string | null = null;
     try { disk = fs.readFileSync(abs, 'utf8'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
     if (disk !== base && !force) return { ok: false, conflict: true, disk };
@@ -271,7 +271,7 @@ const exists = (p: string) => { try { fs.lstatSync(p); return true; } catch { re
 export function resolveInside(root: string, rel: string): string {
   const abs = path.resolve(root, rel);
   const inside = (p: string, r: string) => p === r || p.startsWith(r + path.sep);
-  const outside = () => new Error(`Pfad liegt ausserhalb des Projekts: ${rel}`);
+  const outside = () => new Error(`Path is outside the project: ${rel}`);
   if (!inside(abs, path.resolve(root))) throw outside();
   // Gibt es das Ziel noch nicht, zählt der nächste vorhandene Ordner darüber. Sonst könnte ein Verweis weiter oben
   // (etwa .soma als Verknüpfung nach außen) neue Dateien außerhalb des Projekts landen lassen.

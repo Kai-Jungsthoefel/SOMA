@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:">
@@ -10,62 +10,62 @@
 <body>
 <div id="app">
   <header id="topbar" class="top">
-    <button id="btn-home" class="logo" title="Startseite" aria-label="Startseite"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></button>
-    <button id="btn-doc" class="docname" title="Neu, Öffnen, Zuletzt geöffnet, Speichern unter" aria-haspopup="menu" aria-expanded="false"><b id="doc-name">SOMA</b><i data-icon="down" data-size="14" data-stroke="2"></i></button>
+    <button id="btn-home" class="logo" title="Start page" aria-label="Start page"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></button>
+    <button id="btn-doc" class="docname" title="New, Open, Recent, Save as" aria-haspopup="menu" aria-expanded="false"><b id="doc-name">SOMA</b><i data-icon="down" data-size="14" data-stroke="2"></i></button>
     <span id="save-badge" class="savestate"></span>
     <button id="problems" class="warnbadge" hidden aria-haspopup="dialog" aria-expanded="false"></button>
     <span class="grow"></span>
     <div id="build-pill" class="pill">
-      <button id="btn-buildinfo" class="main" title="Build-Details" aria-haspopup="menu" aria-expanded="false">
-        <span id="build-dot" class="dot"></span><span id="status" class="strong">Bereit</span><span id="status-detail" class="c2"></span>
+      <button id="btn-buildinfo" class="main" title="Build details" aria-haspopup="menu" aria-expanded="false">
+        <span id="build-dot" class="dot"></span><span id="status" class="strong">Ready</span><span id="status-detail" class="c2"></span>
       </button>
-      <button id="btn-cancel" class="inner" hidden>Abbrechen</button>
-      <button id="btn-buildnow" class="inner acc" hidden>Jetzt bauen</button>
+      <button id="btn-cancel" class="inner" hidden>Cancel</button>
+      <button id="btn-buildnow" class="inner acc" hidden>Build now</button>
       <span class="sep"></span>
-      <button id="btn-auto" class="auto" title="Automatisch bauen, wenn sich der Code ändert"><i data-icon="refresh" data-size="14" data-stroke="2"></i><span id="auto-label">Auto an</span></button>
+      <button id="btn-auto" class="auto" title="Build automatically when the code changes"><i data-icon="refresh" data-size="14" data-stroke="2"></i><span id="auto-label">Auto on</span></button>
     </div>
     <span class="grow"></span>
-    <div id="layout" class="layout" role="group" aria-label="Spalten">
-      <button id="btn-lay-side" aria-pressed="true" title="Seitenleiste ein- und ausblenden (Strg 1)" aria-label="Seitenleiste"><i data-icon="sidel" data-size="17" data-stroke="1.7"></i></button>
-      <button id="btn-lay-code" aria-pressed="false" title="Code ein- und ausblenden (Strg 2)" aria-label="Code"><i data-icon="code" data-size="16" data-stroke="1.9"></i></button>
-      <button id="btn-lay-agent" aria-pressed="true" title="Agent ein- und ausklappen (Strg 3). Eingeklappt läuft er weiter." aria-label="Agent"><i data-icon="panel" data-size="17" data-stroke="1.7"></i></button>
+    <div id="layout" class="layout" role="group" aria-label="Columns">
+      <button id="btn-lay-side" aria-pressed="true" title="Show or hide the sidebar (Ctrl 1)" aria-label="Sidebar"><i data-icon="sidel" data-size="17" data-stroke="1.7"></i></button>
+      <button id="btn-lay-code" aria-pressed="false" title="Show or hide the code (Ctrl 2)" aria-label="Code"><i data-icon="code" data-size="16" data-stroke="1.9"></i></button>
+      <button id="btn-lay-agent" aria-pressed="true" title="Expand or collapse the agent (Ctrl 3). Collapsed, it keeps running." aria-label="Agent"><i data-icon="panel" data-size="17" data-stroke="1.7"></i></button>
     </div>
-    <button id="btn-export" class="btn" aria-haspopup="menu" aria-expanded="false"><i data-icon="export" data-size="15"></i>Exportieren<i data-icon="down" data-size="13" data-stroke="2"></i></button>
-    <button id="btn-save" class="btn primary" title="Snapshot im Verlauf anlegen und die ZIP schreiben">Speichern <span class="kbd">Strg S</span></button>
+    <button id="btn-export" class="btn" aria-haspopup="menu" aria-expanded="false"><i data-icon="export" data-size="15"></i>Export<i data-icon="down" data-size="13" data-stroke="2"></i></button>
+    <button id="btn-save" class="btn primary" title="Add a snapshot to the history and write the ZIP">Save <span class="kbd">Ctrl S</span></button>
   </header>
 
   <div id="body">
-    <nav id="rail" aria-label="Seitenleisten">
-      <button data-panel="parts" aria-pressed="false" title="Bauteile des Modells: auswählen, aus- und einblenden, transparent schalten"><i data-icon="cube" data-size="20" data-stroke="1.7"></i><span>Bauteile</span></button>
-      <button data-panel="files" aria-pressed="false" title="Dateien des Modells. Ein Klick auf eine Datei öffnet sie im Code daneben."><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Dateien</span></button>
-      <button data-panel="skills" aria-pressed="false" title="Skills: Regeln für den Agenten, je Modell einstellbar (3D-Druck, Toleranzen …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
+    <nav id="rail" aria-label="Sidebars">
+      <button data-panel="parts" aria-pressed="false" title="Parts of the model: select, hide and show, make transparent"><i data-icon="cube" data-size="20" data-stroke="1.7"></i><span>Parts</span></button>
+      <button data-panel="files" aria-pressed="false" title="Files of the model. Click a file to open it in the code next to it."><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Files</span></button>
+      <button data-panel="skills" aria-pressed="false" title="Skills: rules for the agent, set per model (3D printing, tolerances …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
       <span class="grow"></span>
-      <button disabled title="Hilfe kommt in einem späteren Schritt"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Hilfe</span></button>
-      <button disabled title="Optionen kommen in einem späteren Schritt"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Optionen</span></button>
+      <button disabled title="Help is coming in a later version"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Help</span></button>
+      <button disabled title="Options are coming in a later version"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Options</span></button>
     </nav>
 
     <aside id="side" hidden>
       <!-- Bauteile (Entwurf 2): fest in der Seitenleiste statt als Karte im Viewer -->
-      <section id="panel-parts" class="panel" aria-label="Bauteile" hidden>
-        <div class="side-hd"><b>Bauteile</b><span id="parts-count" class="c3 hd-count"></span><span class="grow"></span>
-          <button id="btn-parts-search" class="ibtn s" aria-label="Bauteile suchen" title="Bauteile suchen"><i data-icon="search" data-size="15" data-stroke="1.9"></i></button>
-          <button class="ibtn s side-close" aria-label="Seitenleiste schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
-        <input id="parts-filter" class="filter" type="search" placeholder="Bauteil suchen" aria-label="Bauteil suchen" hidden>
+      <section id="panel-parts" class="panel" aria-label="Parts" hidden>
+        <div class="side-hd"><b>Parts</b><span id="parts-count" class="c3 hd-count"></span><span class="grow"></span>
+          <button id="btn-parts-search" class="ibtn s" aria-label="Search parts" title="Search parts"><i data-icon="search" data-size="15" data-stroke="1.9"></i></button>
+          <button class="ibtn s side-close" aria-label="Close sidebar"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+        <input id="parts-filter" class="filter" type="search" placeholder="Search part" aria-label="Search part" hidden>
         <div id="tab-model" class="list ptree"></div>
       </section>
-      <section id="panel-files" class="panel" aria-label="Dateien" hidden>
-        <div class="side-hd"><b>Dateien</b><span class="grow"></span>
-          <button id="btn-file-new" class="ibtn s" title="Neue Datei (Rechtsklick im Baum: auch in einem Ordner)" aria-label="Neue Datei"><i data-icon="fileplus" data-size="15"></i></button>
-          <button id="btn-folder-new" class="ibtn s" title="Neuer Ordner" aria-label="Neuer Ordner"><i data-icon="folderplus" data-size="15"></i></button>
-          <button id="btn-reveal" class="ibtn s" title="Im Explorer zeigen" aria-label="Im Explorer zeigen"><i data-icon="openext" data-size="15"></i></button>
-          <button class="ibtn s side-close" aria-label="Dateien schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+      <section id="panel-files" class="panel" aria-label="Files" hidden>
+        <div class="side-hd"><b>Files</b><span class="grow"></span>
+          <button id="btn-file-new" class="ibtn s" title="New file (right-click in the tree: also inside a folder)" aria-label="New file"><i data-icon="fileplus" data-size="15"></i></button>
+          <button id="btn-folder-new" class="ibtn s" title="New folder" aria-label="New folder"><i data-icon="folderplus" data-size="15"></i></button>
+          <button id="btn-reveal" class="ibtn s" title="Show in Explorer" aria-label="Show in Explorer"><i data-icon="openext" data-size="15"></i></button>
+          <button class="ibtn s side-close" aria-label="Close files"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="tab-files" class="ftree"></div>
-        <div id="dropzone" class="dropzone" title="STEP-Dateien, Bilder und Skizzen landen in inputs/. Vorhandenes wird nicht überschrieben."><i data-icon="upload" data-size="16"></i><span><b>Hierher ziehen:</b> landet in <code>inputs/</code></span></div>
+        <div id="dropzone" class="dropzone" title="STEP files, images and sketches go to inputs/. Existing files are not overwritten."><i data-icon="upload" data-size="16"></i><span><b>Drop here:</b> goes to <code>inputs/</code></span></div>
       </section>
       <section id="panel-skills" class="panel" aria-label="Skills" hidden>
         <div class="side-hd"><b>Skills</b><span class="grow"></span>
-          <button id="btn-skills-info" class="ibtn s" aria-label="Was sind Skills?" title="Skills sind Regeln für den Agenten. Aus: Er sieht den Skill nicht. Bei Bedarf: Er liest ihn, wenn das Gespräch auf das Thema kommt. Immer: Er befolgt ihn bei jeder Änderung. Sie liegen in .soma/skills/, stehen in AGENTS.md und wandern mit der ZIP."><i data-icon="info" data-size="15" data-stroke="1.9"></i></button>
-          <button class="ibtn s side-close" aria-label="Seitenleiste schließen"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+          <button id="btn-skills-info" class="ibtn s" aria-label="What are skills?" title="Skills are rules for the agent. Off: the agent does not see the skill. On demand: it reads the skill when the conversation turns to the topic. Always: it follows the skill with every change. Skills live in .soma/skills/, are listed in AGENTS.md and travel with the ZIP."><i data-icon="info" data-size="15" data-stroke="1.9"></i></button>
+          <button class="ibtn s side-close" aria-label="Close sidebar"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="skills-sum" class="sk-sum"></div>
         <div id="skills-list" class="sk-list" role="list"></div>
       </section>
@@ -78,9 +78,9 @@
     <aside id="editor" aria-label="Code" hidden>
       <section id="panel-code" class="panel">
         <div class="side-hd code-hd"><div id="code-tabs" class="ctabs"></div><span class="grow"></span>
-          <div id="code-mode" class="cmode" role="radiogroup" aria-label="Markdown zeigen als" hidden><button data-mode="view" role="radio" aria-checked="true" aria-label="Ansicht" title="Ansicht: als Dokument zeigen. Doppelklick auf einen Absatz springt zum Bearbeiten an diese Stelle"><i data-icon="eye" data-size="14" data-stroke="1.9"></i></button><button data-mode="edit" role="radio" aria-checked="false" aria-label="Bearbeiten" title="Bearbeiten: Quelltext im Editor, speichern mit Strg+S"><i data-icon="pen" data-size="14" data-stroke="1.9"></i></button></div>
-          <button id="btn-codelink" class="ibtn s" aria-pressed="true" aria-label="Mit Auswahl verknüpft" title="Mit Auswahl verknüpft: Klick auf ein Bauteil springt zur Codestelle"><i data-icon="link" data-size="15" data-stroke="1.9"></i></button>
-          <button id="btn-code-close" class="ibtn s" aria-label="Code schließen" title="Code schließen (Strg 2)"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+          <div id="code-mode" class="cmode" role="radiogroup" aria-label="Show Markdown as" hidden><button data-mode="view" role="radio" aria-checked="true" aria-label="View" title="View: show as a document. Double-click a paragraph to edit at that spot"><i data-icon="eye" data-size="14" data-stroke="1.9"></i></button><button data-mode="edit" role="radio" aria-checked="false" aria-label="Edit" title="Edit: source text in the editor, save with Ctrl+S"><i data-icon="pen" data-size="14" data-stroke="1.9"></i></button></div>
+          <button id="btn-codelink" class="ibtn s" aria-pressed="true" aria-label="Linked to selection" title="Linked to selection: clicking a part jumps to its code location"><i data-icon="link" data-size="15" data-stroke="1.9"></i></button>
+          <button id="btn-code-close" class="ibtn s" aria-label="Close code" title="Close code (Ctrl 2)"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="code-info" class="code-info"></div>
         <div id="code-banner" class="code-banner" role="alert" hidden></div>
         <div id="code-view" class="codeview"></div>
@@ -89,7 +89,7 @@
     <div class="splitter" id="split-code" hidden></div>
 
     <main id="center">
-      <section id="viewer" aria-label="3D-Ansicht">
+      <section id="viewer" aria-label="3D view">
         <div id="viewer-msg"></div>
 
         <!-- Ladeanzeige (busy.ts): Die Explosion rechnet bei großen Baugruppen einige Sekunden -->
@@ -98,26 +98,26 @@
             <div class="vb-hd"><span class="spin"><i data-icon="spin" data-size="16" data-stroke="2.4"></i></span><b id="viewer-busy-title"></b><span class="grow"></span><span id="viewer-busy-time" class="c3 small"></span></div>
             <div id="viewer-busy-detail" class="vb-sub"></div>
             <div id="viewer-busy-bar" class="vb-bar indet"><div id="viewer-busy-fill"></div></div>
-            <div class="sc-actions"><button id="btn-busy-cancel" class="btn sm" title="Vorbereitung abbrechen und das Werkzeug beenden (Escape)">Abbrechen</button></div>
+            <div class="sc-actions"><button id="btn-busy-cancel" class="btn sm" title="Cancel the preparation and close the tool (Escape)">Cancel</button></div>
           </div>
         </div>
 
         <!-- Oben links: was der Viewer zeigt (Modell oder ein Ergebnis des Agenten). In der Mitte die Werkzeuge. -->
         <div id="vtop" class="vtop">
           <div id="view-switch" class="float switcher">
-            <button id="btn-view" class="sb" aria-haspopup="menu" aria-expanded="false" title="Was der Viewer zeigt: das Modell, eine Analyse, eine Animation oder ein Video">
-              <span id="view-ico" class="vico"><i data-icon="cube" data-size="16"></i></span><b id="view-name">Modell</b><span id="view-sub" class="c3"></span>
+            <button id="btn-view" class="sb" aria-haspopup="menu" aria-expanded="false" title="What the viewer shows: the model, an analysis, an animation or a video">
+              <span id="view-ico" class="vico"><i data-icon="cube" data-size="16"></i></span><b id="view-name">Model</b><span id="view-sub" class="c3"></span>
               <span id="view-new" class="newbadge" hidden></span><i data-icon="down" data-size="14" data-stroke="2"></i></button>
             <span id="view-sep" class="vs" hidden></span>
-            <button id="btn-view-close" class="ibtn s" aria-label="Zurück zum Modell" title="Zurück zum Modell" hidden><i data-icon="x" data-size="14" data-stroke="2"></i></button>
+            <button id="btn-view-close" class="ibtn s" aria-label="Back to the model" title="Back to the model" hidden><i data-icon="x" data-size="14" data-stroke="2"></i></button>
           </div>
           <span class="grow"></span>
-          <div id="dock" class="float dock" role="toolbar" aria-label="Werkzeuge">
-            <button id="btn-measure" aria-pressed="false" title="Messen: Fläche oder Kante anklicken, ein zweiter Klick misst Abstand und Winkel (exakte Werte)"><i data-icon="ruler"></i><span class="lbl">Messen</span></button>
-            <button id="btn-section" aria-pressed="false" title="Schnitt: das Modell an einer Ebene aufschneiden (senkrecht zu X, Y, Z oder parallel zu einer Fläche)"><i data-icon="section"></i><span class="lbl">Schnitt</span></button>
-            <button id="btn-explode" aria-pressed="false" title="Explosion: die Bauteile zur Darstellung auseinanderziehen, Normteile entlang ihrer Achse"><i data-icon="explode"></i><span class="lbl">Explosion</span></button>
+          <div id="dock" class="float dock" role="toolbar" aria-label="Tools">
+            <button id="btn-measure" aria-pressed="false" title="Measure: click a face or edge, a second click measures distance and angle (exact values)"><i data-icon="ruler"></i><span class="lbl">Measure</span></button>
+            <button id="btn-section" aria-pressed="false" title="Section: cut the model open at a plane (normal to X, Y, Z or parallel to a face)"><i data-icon="section"></i><span class="lbl">Section</span></button>
+            <button id="btn-explode" aria-pressed="false" title="Explode: pull the parts apart for display, standard parts along their axis"><i data-icon="explode"></i><span class="lbl">Explode</span></button>
             <span class="vsep"></span>
-            <button id="btn-mark" title="Viewer-Bild markieren und an den Agenten geben"><i data-icon="camera"></i><span class="lbl">Markieren</span></button>
+            <button id="btn-mark" title="Mark up the viewer image and send it to the agent"><i data-icon="camera"></i><span class="lbl">Mark up</span></button>
           </div>
           <span class="grow"></span>
           <span class="cubespace"></span>
@@ -125,11 +125,11 @@
 
         <div id="cube" class="cube">
           <!-- Ansichtswürfel (viewcube.ts): 3D, dreht sich mit der Kamera. Per Tastatur gehen die Ansichten über „Darstellung“. -->
-          <div id="cube-view" class="cube-view" role="img" aria-label="Ansichtswürfel" title="Seite, Kante oder Ecke anklicken: Ansicht von dort. Ziehen dreht die Ansicht."></div>
+          <div id="cube-view" class="cube-view" role="img" aria-label="View cube" title="Click a side, edge or corner: view from there. Drag to rotate the view."></div>
           <div class="vbtns">
-            <button data-view="fit" aria-label="Alles einpassen" title="Alles einpassen"><i data-icon="fit"></i></button>
-            <button data-view="iso" aria-label="Standardansicht" title="Standardansicht (isometrisch)"><i data-icon="home"></i></button>
-            <button id="btn-display" aria-haspopup="menu" aria-expanded="false" aria-label="Darstellung" title="Darstellung: Kanten, Drahtgitter, Transparent und Ansichten"><i data-icon="layers"></i></button>
+            <button data-view="fit" aria-label="Fit all" title="Fit all"><i data-icon="fit"></i></button>
+            <button data-view="iso" aria-label="Default view" title="Default view (isometric)"><i data-icon="home"></i></button>
+            <button id="btn-display" aria-haspopup="menu" aria-expanded="false" aria-label="Display" title="Display: edges, wireframe, transparent and views"><i data-icon="layers"></i></button>
           </div>
         </div>
 
@@ -137,128 +137,128 @@
         <div id="cards" class="cards">
         <div id="selcard" class="float selcard" hidden>
           <div class="sc-hd"><span id="sel-swatch" class="sw"></span><b id="sel-name"></b><span class="grow"></span>
-            <button id="btn-sel-close" class="ibtn s" aria-label="Auswahl aufheben"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+            <button id="btn-sel-close" class="ibtn s" aria-label="Clear selection"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
           <div id="info" class="sc-info c2"></div>
           <div id="code" class="peek code"></div>
           <div class="sc-actions">
-            <button id="btn-sel-code" class="btn sm" title="Die Codestelle des Bauteils im Code zeigen"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code</button>
-            <button id="btn-sel-export" class="btn sm" aria-haspopup="menu" aria-expanded="false" title="Dieses Bauteil als Datei exportieren: Format wählen, dann den Speicherort"><i data-icon="export" data-size="14" data-stroke="1.9"></i>Exportieren</button>
-            <button id="btn-sel-agent" class="btn sm acc" title="Bauteil, Datei und Zeilen in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+            <button id="btn-sel-code" class="btn sm" title="Show the part's code location in the code"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code</button>
+            <button id="btn-sel-export" class="btn sm" aria-haspopup="menu" aria-expanded="false" title="Export this part as a file: choose the format, then the location"><i data-icon="export" data-size="14" data-stroke="1.9"></i>Export</button>
+            <button id="btn-sel-agent" class="btn sm acc" title="Add part, file and lines to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
           </div>
         </div>
 
         <div id="measure-card" class="float mcard" hidden>
-          <div class="mc-hd"><span class="mc-ico"><i data-icon="ruler" data-size="16"></i></span><b>Messen</b><span class="grow"></span>
-            <button id="btn-measure-close" class="ibtn s" aria-label="Messen beenden" title="Messen beenden (Escape)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="ruler" data-size="16"></i></span><b>Measure</b><span class="grow"></span>
+            <button id="btn-measure-close" class="ibtn s" aria-label="Stop measuring" title="Stop measuring (Escape)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
           <div id="measure-body" class="mc-body"></div>
           <div class="sc-actions">
-            <button id="btn-measure-again" class="btn sm" disabled>Neu messen</button>
-            <button id="btn-measure-agent" class="btn sm acc" disabled title="Die Messung in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+            <button id="btn-measure-again" class="btn sm" disabled>Measure again</button>
+            <button id="btn-measure-agent" class="btn sm acc" disabled title="Add the measurement to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
           </div>
         </div>
 
         <!-- Explosionsansicht (explodetool.ts): Bauteile auseinanderziehen. Ändert nichts am Modell. -->
         <div id="explode-card" class="float excard" hidden>
-          <div class="mc-hd"><span class="mc-ico"><i data-icon="explode" data-size="16"></i></span><b>Explosion</b><span class="grow"></span>
-            <button id="btn-explode-close" class="ibtn s" aria-label="Explosion beenden" title="Explosion beenden (setzt das Modell wieder zusammen)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="explode" data-size="16"></i></span><b>Exploded view</b><span class="grow"></span>
+            <button id="btn-explode-close" class="ibtn s" aria-label="Close exploded view" title="Close exploded view (puts the model back together)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
           <div class="sx-pos">
-            <label for="explode-range">Abstand</label>
-            <input id="explode-range" type="range" min="0" max="100" step="1" aria-label="Abstand der Explosion in Prozent">
+            <label for="explode-range">Distance</label>
+            <input id="explode-range" type="range" min="0" max="100" step="1" aria-label="Explosion distance in percent">
             <span id="explode-value" class="ex-val"></span>
           </div>
           <!-- Abspielen in beide Richtungen: links zur Einbaulage (zurück, Zusammenbau), rechts zur Explosion (Auseinanderbau, weiter) -->
           <div class="ex-steps">
-            <button id="btn-explode-back" class="ibtn s" aria-label="Schritt zurück" title="Einen Schritt zurück (zusammenbauen)"><i data-icon="stepback" data-size="15"></i></button>
-            <button id="btn-explode-assemble" class="ibtn s ex-rev" aria-label="Zusammenbauen abspielen" title="Den Zusammenbau Schritt für Schritt abspielen"><i data-icon="play" data-size="15"></i></button>
-            <button id="btn-explode-play" class="ibtn s" aria-label="Auseinanderbauen abspielen" title="Den Auseinanderbau Schritt für Schritt abspielen"><i data-icon="play" data-size="15"></i></button>
-            <button id="btn-explode-next" class="ibtn s" aria-label="Schritt weiter" title="Einen Schritt weiter (auseinanderbauen)"><i data-icon="stepfwd" data-size="15"></i></button>
+            <button id="btn-explode-back" class="ibtn s" aria-label="Step back" title="One step back (assemble)"><i data-icon="stepback" data-size="15"></i></button>
+            <button id="btn-explode-assemble" class="ibtn s ex-rev" aria-label="Play assembly" title="Play the assembly step by step"><i data-icon="play" data-size="15"></i></button>
+            <button id="btn-explode-play" class="ibtn s" aria-label="Play disassembly" title="Play the disassembly step by step"><i data-icon="play" data-size="15"></i></button>
+            <button id="btn-explode-next" class="ibtn s" aria-label="Step forward" title="One step forward (disassemble)"><i data-icon="stepfwd" data-size="15"></i></button>
             <span id="explode-step" class="ex-step"></span>
-            <select id="explode-speed" class="ex-speed" aria-label="Tempo beim Abspielen" title="Tempo beim Abspielen"><option value="0.25">0,25×</option><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
-            <button id="btn-explode-agent" class="ibtn s" aria-label="Reihenfolge an den Agenten geben" title="Die Reihenfolge des Auseinanderbaus in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="15"></i></button>
+            <select id="explode-speed" class="ex-speed" aria-label="Playback speed" title="Playback speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+            <button id="btn-explode-agent" class="ibtn s" aria-label="Send the order to the agent" title="Add the disassembly order to the agent's input"><i data-icon="send" data-size="15"></i></button>
           </div>
           <div id="explode-names" class="ex-names" hidden></div>
           <div id="explode-hint" class="mc-hint" hidden></div>
           <div class="sc-actions">
-            <button id="btn-explode-trails" class="btn sm" aria-pressed="true" title="Gestrichelte Wege von der Einbaulage zur aktuellen Lage zeigen"><i data-icon="line" data-size="14" data-stroke="1.9"></i>Wege</button>
-            <button id="btn-explode-fit" class="btn sm" title="Das auseinandergezogene Modell ganz ins Bild holen"><i data-icon="fit" data-size="14" data-stroke="1.9"></i>Einpassen</button>
+            <button id="btn-explode-trails" class="btn sm" aria-pressed="true" title="Show dashed paths from the assembled position to the current position"><i data-icon="line" data-size="14" data-stroke="1.9"></i>Paths</button>
+            <button id="btn-explode-fit" class="btn sm" title="Fit the exploded model into the view"><i data-icon="fit" data-size="14" data-stroke="1.9"></i>Fit</button>
           </div>
         </div>
 
         <!-- Schnittansicht (sectiontool.ts): Ebene, Lage, Seite. Ändert nichts am Modell. -->
         <div id="section-card" class="float sectcard" hidden>
-          <div class="mc-hd"><span class="mc-ico"><i data-icon="section" data-size="16"></i></span><b>Schnitt</b><span class="grow"></span>
-            <button id="btn-section-close" class="ibtn s" aria-label="Schnitt aufheben" title="Schnitt aufheben"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
-          <div id="section-axes" class="seg" role="radiogroup" aria-label="Schnittebene">
-            <button data-axis="x" role="radio" aria-checked="true" title="Ebene senkrecht zur X-Achse">X</button>
-            <button data-axis="y" role="radio" aria-checked="false" title="Ebene senkrecht zur Y-Achse">Y</button>
-            <button data-axis="z" role="radio" aria-checked="false" title="Ebene senkrecht zur Z-Achse">Z</button>
-            <button data-axis="face" role="radio" aria-checked="false" title="Parallel zu einer ebenen Fläche: danach die Fläche im Modell anklicken"><i data-icon="target" data-size="13" data-stroke="2"></i>Fläche</button>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="section" data-size="16"></i></span><b>Section</b><span class="grow"></span>
+            <button id="btn-section-close" class="ibtn s" aria-label="Remove section" title="Remove section"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div id="section-axes" class="seg" role="radiogroup" aria-label="Section plane">
+            <button data-axis="x" role="radio" aria-checked="true" title="Plane normal to the X axis">X</button>
+            <button data-axis="y" role="radio" aria-checked="false" title="Plane normal to the Y axis">Y</button>
+            <button data-axis="z" role="radio" aria-checked="false" title="Plane normal to the Z axis">Z</button>
+            <button data-axis="face" role="radio" aria-checked="false" title="Parallel to a planar face: then click the face in the model"><i data-icon="target" data-size="13" data-stroke="2"></i>Face</button>
           </div>
           <div class="sx-pos">
             <label id="section-label" for="section-value">X =</label>
-            <input id="section-range" type="range" aria-label="Lage der Schnittebene">
-            <span class="sx-val"><input id="section-value" type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Lage der Schnittebene in mm" title="Wert eingeben und Enter. Pfeiltasten: 1 mm, mit Umschalt 10 mm, mit Alt 0,1 mm"><span class="c3">mm</span></span>
+            <input id="section-range" type="range" aria-label="Position of the section plane">
+            <span class="sx-val"><input id="section-value" type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Position of the section plane in mm" title="Enter a value and press Enter. Arrow keys: 1 mm, with Shift 10 mm, with Alt 0.1 mm"><span class="c3">mm</span></span>
           </div>
           <div id="section-hint" class="mc-hint"></div>
           <div class="sc-actions">
-            <button id="btn-section-flip" class="btn sm" title="Die andere Seite wegschneiden"><i data-icon="flip" data-size="14" data-stroke="1.9"></i>Seite wechseln</button>
-            <button id="btn-section-look" class="btn sm" title="Senkrecht auf die Schnittfläche blicken"><i data-icon="eye" data-size="14" data-stroke="1.9"></i>Blick auf den Schnitt</button>
+            <button id="btn-section-flip" class="btn sm" title="Cut away the other side"><i data-icon="flip" data-size="14" data-stroke="1.9"></i>Flip side</button>
+            <button id="btn-section-look" class="btn sm" title="Look straight at the cut face"><i data-icon="eye" data-size="14" data-stroke="1.9"></i>Look at section</button>
           </div>
         </div>
 
         <!-- Animation (E58, animtool.ts): Ablauf aus animations/*.py abspielen. Ändert nichts am Modell. -->
         <div id="anim-card" class="float ancard" hidden>
           <div class="mc-hd"><span class="mc-ico"><i data-icon="anim" data-size="16"></i></span><b>Animation</b>
-            <select id="anim-select" class="an-select" aria-label="Animation wählen"></select>
-            <button id="btn-anim-close" class="ibtn s" aria-label="Animation beenden" title="Animation beenden (das Modell steht wieder in Einbaulage)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+            <select id="anim-select" class="an-select" aria-label="Choose animation"></select>
+            <button id="btn-anim-close" class="ibtn s" aria-label="Close animation" title="Close animation (the model returns to its assembled position)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
           <div class="an-transport">
-            <button id="btn-anim-play" class="ibtn an-play" aria-label="Abspielen" title="Abspielen (Leertaste)"><i data-icon="play" data-size="16" data-stroke="2"></i></button>
-            <input id="anim-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Zeitpunkt in der Animation">
+            <button id="btn-anim-play" class="ibtn an-play" aria-label="Play" title="Play (Space)"><i data-icon="play" data-size="16" data-stroke="2"></i></button>
+            <input id="anim-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the animation">
             <span id="anim-time" class="an-time"></span>
           </div>
           <div class="an-opts">
-            <button id="btn-anim-follow" class="btn sm" aria-pressed="true" title="Kamera der Animation folgen. Aus: frei drehen, die Teile bewegen sich trotzdem"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Kamera</button>
-            <button id="btn-anim-loop" class="btn sm" aria-pressed="false" title="Am Ende von vorn"><i data-icon="loop" data-size="14" data-stroke="1.9"></i>Schleife</button>
-            <button id="btn-anim-texts" class="btn sm" aria-pressed="true" title="Titel, Untertitel und Beschriftungen der Animation zeigen. Aus: nur die Bewegung, das Video enthält sie trotzdem"><i data-icon="text" data-size="14" data-stroke="1.9"></i>Texte</button>
+            <button id="btn-anim-follow" class="btn sm" aria-pressed="true" title="Follow the animation's camera. Off: rotate freely, the parts still move"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Camera</button>
+            <button id="btn-anim-loop" class="btn sm" aria-pressed="false" title="Start over at the end"><i data-icon="loop" data-size="14" data-stroke="1.9"></i>Loop</button>
+            <button id="btn-anim-texts" class="btn sm" aria-pressed="true" title="Show titles, subtitles and labels of the animation. Off: only the motion, the video still contains them"><i data-icon="text" data-size="14" data-stroke="1.9"></i>Texts</button>
             <span class="grow"></span>
-            <select id="anim-speed" class="an-speed" aria-label="Tempo" title="Tempo"><option value="0.25">0,25×</option><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+            <select id="anim-speed" class="an-speed" aria-label="Speed" title="Speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
           </div>
           <div id="anim-hint" class="mc-hint"></div>
           <div class="sc-actions">
-            <button id="btn-anim-video" class="btn sm" title="Video (MP4) dieser Animation nach renders/ schreiben und abspielen"><i data-icon="f-video" data-size="14" data-stroke="1.9"></i>Video erzeugen</button>
-            <button id="btn-anim-agent" class="btn sm acc" title="Name der Animation und Zeitpunkt in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+            <button id="btn-anim-video" class="btn sm" title="Write a video (MP4) of this animation to renders/ and play it"><i data-icon="f-video" data-size="14" data-stroke="1.9"></i>Make video</button>
+            <button id="btn-anim-agent" class="btn sm acc" title="Add the animation's name and the time to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
           </div>
         </div>
 
         <!-- Analyse (E58, resulttool.ts): Ergebnisse von soma analyze farbig zeigen -->
         <div id="result-card" class="float rscard" hidden>
-          <div class="mc-hd"><span class="mc-ico"><i data-icon="gauge" data-size="16"></i></span><b>Analyse</b>
-            <select id="result-select" class="an-select" aria-label="Ergebnis wählen"></select>
-            <button id="btn-result-close" class="ibtn s" aria-label="Analyse beenden" title="Analyse beenden (zeigt wieder das Modell)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
+          <div class="mc-hd"><span class="mc-ico"><i data-icon="gauge" data-size="16"></i></span><b>Analysis</b>
+            <select id="result-select" class="an-select" aria-label="Choose result"></select>
+            <button id="btn-result-close" class="ibtn s" aria-label="Close analysis" title="Close analysis (shows the model again)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
           <div id="result-legend" class="rs-legend"></div>
           <!-- Farbskala: gezeigte Größe (nur FEM: Sicherheit oder Vergleichsspannung) und Spanne der Färbung -->
           <div id="result-scale" class="an-opts rs-fem rs-opts">
-            <select id="result-field" class="an-speed" aria-label="Größe" title="Gezeigte Größe: Sicherheitsfaktor oder Vergleichsspannung nach von Mises" hidden>
-              <option value="value">Sicherheit</option><option value="stress">Spannung</option></select>
-            <select id="result-range" class="an-speed" aria-label="Spanne der Farbskala" title="Spanne der Färbung: wie von der Auswertung vorgeschlagen, vom kleinsten bis zum größten Wert oder selbst gewählt">
-              <option value="auto">Skala automatisch</option><option value="minmax">Skala Min bis Max</option><option value="custom">Skala selbst wählen</option></select>
+            <select id="result-field" class="an-speed" aria-label="Quantity" title="Quantity shown: safety factor or von Mises stress" hidden>
+              <option value="value">Safety factor</option><option value="stress">Stress</option></select>
+            <select id="result-range" class="an-speed" aria-label="Range of the color scale" title="Range of the coloring: as suggested by the analysis, from the smallest to the largest value, or custom">
+              <option value="auto">Auto scale</option><option value="minmax">Scale min to max</option><option value="custom">Custom scale</option></select>
             <span id="result-custom" class="rs-custom" hidden>
-              <input id="result-lo" class="an-speed rs-num" type="number" step="any" aria-label="Skala von" title="Unteres Ende der Farbskala">
-              <span>bis</span>
-              <input id="result-hi" class="an-speed rs-num" type="number" step="any" aria-label="Skala bis" title="Oberes Ende der Farbskala"></span>
+              <input id="result-lo" class="an-speed rs-num" type="number" step="any" aria-label="Scale from" title="Lower end of the color scale">
+              <span>to</span>
+              <input id="result-hi" class="an-speed rs-num" type="number" step="any" aria-label="Scale to" title="Upper end of the color scale"></span>
           </div>
           <!-- Nur bei FEM (E65): Verformung überhöht zeigen, Lastfall ein- und ausblenden -->
           <div id="result-fem" class="an-opts rs-fem" hidden>
-            <select id="result-deform" class="an-speed" aria-label="Verformung" title="Verformung: unverformt, in echter Größe oder überhöht, damit man sie sieht"></select>
+            <select id="result-deform" class="an-speed" aria-label="Deformation" title="Deformation: undeformed, true scale or exaggerated so you can see it"></select>
             <span class="grow"></span>
-            <button id="btn-result-bcs" class="btn sm" aria-pressed="true" title="Lastfall zeigen: eingespannte Flächen und Lasten in Blau, Kräfte als Pfeile"><i data-icon="arrow" data-size="14" data-stroke="1.9"></i>Lastfall</button>
+            <button id="btn-result-bcs" class="btn sm" aria-pressed="true" title="Show the load case: fixed faces and loads in blue, forces as arrows"><i data-icon="arrow" data-size="14" data-stroke="1.9"></i>Load case</button>
           </div>
           <div id="result-summary" class="rs-summary"></div>
           <div id="result-probe" class="rs-probe"></div>
           <div id="result-hint" class="mc-hint"></div>
           <div class="sc-actions">
-            <button id="btn-result-rerun" class="btn sm" title="Dieselbe Auswertung am aktuellen Modell noch einmal rechnen"><i data-icon="refresh" data-size="14" data-stroke="1.9"></i>Neu berechnen</button>
-            <button id="btn-result-agent" class="btn sm acc" title="Ergebnis und die angeklickte Stelle in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button>
+            <button id="btn-result-rerun" class="btn sm" title="Run the same analysis again on the current model"><i data-icon="refresh" data-size="14" data-stroke="1.9"></i>Recalculate</button>
+            <button id="btn-result-agent" class="btn sm acc" title="Add the result and the clicked spot to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
           </div>
         </div>
 
@@ -266,16 +266,16 @@
 
         <div id="errcard" class="float errcard" hidden>
           <div class="ec-hd"><span class="err-ico"><i data-icon="alert" data-size="18"></i></span>
-            <div class="ec-title"><b>Build fehlgeschlagen</b><span id="err-where" class="c2"></span></div><span class="grow"></span>
-            <button id="btn-err-fold" class="ibtn s" aria-label="Meldung einklappen" aria-expanded="true"><i data-icon="up" data-size="15" data-stroke="2"></i></button></div>
+            <div class="ec-title"><b>Build failed</b><span id="err-where" class="c2"></span></div><span class="grow"></span>
+            <button id="btn-err-fold" class="ibtn s" aria-label="Collapse message" aria-expanded="true"><i data-icon="up" data-size="15" data-stroke="2"></i></button></div>
           <div id="err-body">
             <div id="err-msg" class="errmsg"></div>
             <div id="err-code" class="peek code" hidden></div>
             <pre id="err-trace" class="trace" hidden></pre>
             <div class="ec-actions"><span class="grow"></span>
               <button id="btn-err-details" class="btn sm" aria-expanded="false">Details</button>
-              <button id="btn-err-code" class="btn sm"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Code öffnen</button>
-              <button id="btn-err-agent" class="btn sm acc" title="Die Fehlermeldung in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>An Agent geben</button></div>
+              <button id="btn-err-code" class="btn sm"><i data-icon="code" data-size="14" data-stroke="1.9"></i>Open code</button>
+              <button id="btn-err-agent" class="btn sm acc" title="Add the error message to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button></div>
           </div>
         </div>
         <div id="lastgood" class="float lastgood" hidden></div>
@@ -283,13 +283,13 @@
         <div id="preview-banner" class="float banner" hidden>
           <span class="bn-ico"><i data-icon="history" data-size="18"></i></span>
           <div class="bn-text">
-            <div class="bn-line"><b id="bn-title"></b><span class="tag">nur ansehen</span></div>
+            <div class="bn-line"><b id="bn-title"></b><span class="tag">view only</span></div>
             <span id="bn-sub" class="c2"></span>
-            <span class="c3">Dein Arbeitsstand bleibt unverändert. Wiederherstellen legt einen neuen Stand an, nichts geht verloren.</span>
+            <span class="c3">Your current work stays unchanged. Restore adds a new version, nothing is lost.</span>
           </div>
           <span class="grow"></span>
-          <button id="btn-live" class="btn">Zurück zu Jetzt</button>
-          <button id="btn-restore" class="btn vio" title="Diesen Stand als neuen Stand übernehmen">Wiederherstellen</button>
+          <button id="btn-live" class="btn">Back to now</button>
+          <button id="btn-restore" class="btn vio" title="Restore this version as a new version">Restore</button>
         </div>
 
         <!-- Video (E58, videoview.ts): MP4 aus dem Projekt abspielen, Standbild markieren -->
@@ -297,50 +297,50 @@
           <video id="video-el" preload="auto" playsinline></video>
           <div class="float vv-bar" role="toolbar" aria-label="Video">
             <span class="vv-title"><i data-icon="f-video" data-size="15"></i><b id="video-title"></b></span><span class="vsep"></span>
-            <button id="btn-video-back" class="ibtn" aria-label="Ein Bild zurück" title="Ein Bild zurück (Pfeil links)"><i data-icon="stepback" data-size="15" data-stroke="1.9"></i></button>
-            <button id="btn-video-play" class="ibtn" aria-label="Abspielen" title="Abspielen oder anhalten (Leertaste)"><i data-icon="play" data-size="16" data-stroke="2"></i></button>
-            <button id="btn-video-fwd" class="ibtn" aria-label="Ein Bild vor" title="Ein Bild vor (Pfeil rechts)"><i data-icon="stepfwd" data-size="15" data-stroke="1.9"></i></button>
-            <input id="video-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Zeitpunkt im Video">
+            <button id="btn-video-back" class="ibtn" aria-label="One frame back" title="One frame back (Left arrow)"><i data-icon="stepback" data-size="15" data-stroke="1.9"></i></button>
+            <button id="btn-video-play" class="ibtn" aria-label="Play" title="Play or pause (Space)"><i data-icon="play" data-size="16" data-stroke="2"></i></button>
+            <button id="btn-video-fwd" class="ibtn" aria-label="One frame forward" title="One frame forward (Right arrow)"><i data-icon="stepfwd" data-size="15" data-stroke="1.9"></i></button>
+            <input id="video-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the video">
             <span id="video-time" class="an-time"></span><span class="vsep"></span>
-            <button id="btn-video-mark" class="btn sm" title="Dieses Standbild auf der Zeichenfläche markieren und mit Zeitstempel an den Agenten geben"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Markieren</button>
-            <button id="btn-video-agent" class="btn sm acc" title="Datei und Zeitstempel in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Zeit an Agent</button>
-            <button id="btn-video-close" class="ibtn" aria-label="Video schließen" title="Video schließen (Escape)"><i data-icon="x" data-size="15" data-stroke="2"></i></button>
+            <button id="btn-video-mark" class="btn sm" title="Mark up this frame on the canvas and send it to the agent with a timestamp"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Mark up</button>
+            <button id="btn-video-agent" class="btn sm acc" title="Add the file and timestamp to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Time to agent</button>
+            <button id="btn-video-close" class="ibtn" aria-label="Close video" title="Close video (Escape)"><i data-icon="x" data-size="15" data-stroke="2"></i></button>
           </div>
         </div>
 
         <!-- Markierung (E16): eingefrorenes Bild des Viewers oder leere Fläche zum Zeichnen -->
         <div id="markup" class="markup" hidden>
-          <canvas id="mark-canvas" aria-label="Zeichenfläche"></canvas>
+          <canvas id="mark-canvas" aria-label="Canvas"></canvas>
           <div class="mk-frame"></div>
-          <input id="mark-text" class="mk-text" type="text" spellcheck="false" autocomplete="off" aria-label="Text der Markierung" hidden>
-          <div id="mark-tools" class="float dock mk-tools" role="toolbar" aria-label="Markieren">
-            <span class="mk-title"><i data-icon="camera" data-size="15"></i><b>Markieren</b></span><span class="vsep"></span>
-            <button data-tool="select" aria-pressed="false" aria-label="Auswählen" title="Auswählen: Form anklicken und ziehen. Ecken skalieren (Umschalt: Seitenverhältnis), der Punkt oben dreht (Umschalt: 15°-Schritte), Entf löscht, Doppelklick bearbeitet Text"><i data-icon="pointer"></i></button>
-            <button data-tool="pen" aria-pressed="true" aria-label="Stift" title="Stift: frei zeichnen"><i data-icon="pen"></i></button>
-            <button data-tool="line" aria-pressed="false" aria-label="Linie" title="Linie: vom Anfang zum Ende ziehen (mit Umschalt: in 15°-Schritten)"><i data-icon="line"></i></button>
-            <button data-tool="arrow" aria-pressed="false" aria-label="Pfeil" title="Pfeil: vom Anfang zur Spitze ziehen (mit Umschalt: in 15°-Schritten)"><i data-icon="arrow"></i></button>
-            <button data-tool="rect" aria-pressed="false" aria-label="Rechteck" title="Rechteck (mit Umschalt: Quadrat)"><i data-icon="square"></i></button>
-            <button data-tool="ellipse" aria-pressed="false" aria-label="Kreis" title="Kreis oder Ellipse (mit Umschalt: Kreis)"><i data-icon="circle"></i></button>
-            <button data-tool="text" aria-pressed="false" aria-label="Text" title="Text: an die Stelle klicken, schreiben, Enter. Klick auf einen Text bearbeitet ihn"><i data-icon="text"></i></button>
+          <input id="mark-text" class="mk-text" type="text" spellcheck="false" autocomplete="off" aria-label="Markup text" hidden>
+          <div id="mark-tools" class="float dock mk-tools" role="toolbar" aria-label="Markup">
+            <span class="mk-title"><i data-icon="camera" data-size="15"></i><b>Markup</b></span><span class="vsep"></span>
+            <button data-tool="select" aria-pressed="false" aria-label="Select" title="Select: click a shape and drag it. Corners scale (Shift: keep aspect ratio), the dot on top rotates (Shift: 15° steps), Del deletes, double-click edits text"><i data-icon="pointer"></i></button>
+            <button data-tool="pen" aria-pressed="true" aria-label="Pen" title="Pen: draw freely"><i data-icon="pen"></i></button>
+            <button data-tool="line" aria-pressed="false" aria-label="Line" title="Line: drag from start to end (with Shift: in 15° steps)"><i data-icon="line"></i></button>
+            <button data-tool="arrow" aria-pressed="false" aria-label="Arrow" title="Arrow: drag from start to tip (with Shift: in 15° steps)"><i data-icon="arrow"></i></button>
+            <button data-tool="rect" aria-pressed="false" aria-label="Rectangle" title="Rectangle (with Shift: square)"><i data-icon="square"></i></button>
+            <button data-tool="ellipse" aria-pressed="false" aria-label="Circle" title="Circle or ellipse (with Shift: circle)"><i data-icon="circle"></i></button>
+            <button data-tool="text" aria-pressed="false" aria-label="Text" title="Text: click the spot, type, Enter. Click a text to edit it"><i data-icon="text"></i></button>
             <span class="vsep"></span>
-            <button id="btn-mark-color" class="mk-colorbtn" aria-haspopup="menu" aria-expanded="false" aria-label="Farbe" title="Farbe (gilt auch für die ausgewählte Form)"><span id="mark-color-sw" class="swatch"></span><i data-icon="down" data-size="12" data-stroke="2"></i></button>
+            <button id="btn-mark-color" class="mk-colorbtn" aria-haspopup="menu" aria-expanded="false" aria-label="Color" title="Color (also applies to the selected shape)"><span id="mark-color-sw" class="swatch"></span><i data-icon="down" data-size="12" data-stroke="2"></i></button>
             <span class="vsep"></span>
-            <button id="btn-mark-undo" aria-label="Rückgängig" title="Rückgängig (Strg Z), wiederholen mit Strg Y" disabled><i data-icon="undo"></i></button>
-            <button id="btn-mark-delete" aria-label="Löschen" title="Ausgewählte Form löschen (Entf)" disabled><i data-icon="trash"></i></button>
+            <button id="btn-mark-undo" aria-label="Undo" title="Undo (Ctrl Z), redo with Ctrl Y" disabled><i data-icon="undo"></i></button>
+            <button id="btn-mark-delete" aria-label="Delete" title="Delete the selected shape (Del)" disabled><i data-icon="trash"></i></button>
             <span class="vsep"></span>
-            <button id="btn-mark-grid" aria-pressed="false" title="Raster ein- und ausschalten. Es steht mit im Bild, Linien, Pfeile und Formen rasten ein (Alt beim Ziehen: frei)"><i data-icon="grid"></i><span class="lbl">Raster</span></button>
-            <button id="btn-mark-blank" aria-pressed="false" title="Auf leerer Fläche zeichnen statt auf dem Viewer-Bild"><i data-icon="image"></i><span class="lbl">Leere Fläche</span></button>
+            <button id="btn-mark-grid" aria-pressed="false" title="Turn the grid on and off. It is part of the image, lines, arrows and shapes snap to it (Alt while dragging: free)"><i data-icon="grid"></i><span class="lbl">Grid</span></button>
+            <button id="btn-mark-blank" aria-pressed="false" title="Draw on a blank canvas instead of the viewer image"><i data-icon="image"></i><span class="lbl">Blank canvas</span></button>
           </div>
           <div id="mark-hint" class="float mk-hint"></div>
           <div class="mk-actions">
-            <button id="btn-mark-cancel" class="btn" title="Zeichnung verwerfen (Escape)">Abbrechen</button>
-            <button id="btn-mark-send" class="btn primary" title="Als PNG in .soma/feedback/ speichern und den Pfad in die Eingabe des Agenten einfügen"><i data-icon="send" data-size="15" data-stroke="2"></i>An Agent geben</button>
+            <button id="btn-mark-cancel" class="btn" title="Discard the drawing (Escape)">Cancel</button>
+            <button id="btn-mark-send" class="btn primary" title="Save as PNG in .soma/feedback/ and add the path to the agent's input"><i data-icon="send" data-size="15" data-stroke="2"></i>Send to agent</button>
           </div>
         </div>
       </section>
 
       <div id="versions" class="tl">
-        <span class="lbl"><i data-icon="history" data-size="15"></i>Verlauf</span>
+        <span class="lbl"><i data-icon="history" data-size="15"></i>History</span>
         <div id="vtrack" class="track"><div class="line"></div><div id="vdots"></div></div>
         <span id="vproblem" class="vproblem" hidden></span>
         <span id="vinfo" class="c3"></span>
@@ -348,13 +348,13 @@
     </main>
 
     <div class="splitter" id="split-right"></div>
-    <aside id="terminals" class="agent" aria-label="Agent und Terminals">
+    <aside id="terminals" class="agent" aria-label="Agent and terminals">
       <div id="term-tabs" class="tabs">
-        <button id="btn-term-add" class="ibtn addtab" aria-haspopup="menu" aria-expanded="false" title="Neuer Tab: Agent oder Terminal" aria-label="Neuer Tab: Agent oder Terminal"><i data-icon="plus" data-size="15" data-stroke="2"></i><i data-icon="down" data-size="12" data-stroke="2"></i></button>
+        <button id="btn-term-add" class="ibtn addtab" aria-haspopup="menu" aria-expanded="false" title="New tab: agent or terminal" aria-label="New tab: agent or terminal"><i data-icon="plus" data-size="15" data-stroke="2"></i><i data-icon="down" data-size="12" data-stroke="2"></i></button>
       </div>
       <div id="term-panes"></div>
       <div id="agent-strip" class="strip" hidden>
-        <button id="btn-agent-expand" class="ibtn" title="Agent-Bereich ausklappen" aria-label="Agent-Bereich ausklappen"><i data-icon="panel"></i></button>
+        <button id="btn-agent-expand" class="ibtn" title="Expand the agent area" aria-label="Expand the agent area"><i data-icon="panel"></i></button>
         <div id="strip-tabs" class="strip-tabs"></div>
       </div>
     </aside>
@@ -362,115 +362,115 @@
 
   <!-- Menüs: fest im Dokument, damit Kurzbefehle und Tests die Einträge auch geschlossen finden -->
   <div id="menu-doc" class="menu" role="menu" hidden>
-    <button id="btn-new" class="mi" role="menuitem"><i data-icon="plus" data-size="15"></i><span>Neues Modell</span><span class="k">Strg N</span></button>
-    <button id="btn-open" class="mi" role="menuitem"><i data-icon="folder" data-size="15"></i><span>Öffnen …</span><span class="k">Strg O</span></button>
-    <div id="recent-wrap"><div class="msep"></div><div class="mh">ZULETZT GEÖFFNET</div><div id="recent-list"></div></div>
+    <button id="btn-new" class="mi" role="menuitem"><i data-icon="plus" data-size="15"></i><span>New model</span><span class="k">Ctrl N</span></button>
+    <button id="btn-open" class="mi" role="menuitem"><i data-icon="folder" data-size="15"></i><span>Open …</span><span class="k">Ctrl O</span></button>
+    <div id="recent-wrap"><div class="msep"></div><div class="mh">RECENT</div><div id="recent-list"></div></div>
     <div class="msep"></div>
-    <button id="btn-save-menu" class="mi" role="menuitem"><span class="noico"></span><span>Speichern</span><span class="k">Strg S</span></button>
-    <button id="btn-saveas" class="mi" role="menuitem"><span class="noico"></span><span>Speichern unter …</span><span class="k">Strg Umschalt S</span></button>
+    <button id="btn-save-menu" class="mi" role="menuitem"><span class="noico"></span><span>Save</span><span class="k">Ctrl S</span></button>
+    <button id="btn-saveas" class="mi" role="menuitem"><span class="noico"></span><span>Save as …</span><span class="k">Ctrl Shift S</span></button>
     <div class="msep"></div>
-    <button id="btn-reveal-menu" class="mi" role="menuitem"><i data-icon="openext" data-size="15"></i><span>Im Explorer zeigen</span></button>
-    <button id="btn-start" class="mi" role="menuitem"><i data-icon="home" data-size="15"></i><span>Startseite</span></button>
+    <button id="btn-reveal-menu" class="mi" role="menuitem"><i data-icon="openext" data-size="15"></i><span>Show in Explorer</span></button>
+    <button id="btn-start" class="mi" role="menuitem"><i data-icon="home" data-size="15"></i><span>Start page</span></button>
   </div>
 
   <div id="menu-build" class="menu" role="menu" hidden>
     <div class="mhead"><b id="bm-title"></b><span id="bm-sub" class="c3"></span></div>
     <div id="bm-warn" class="mnote warn" hidden></div>
     <div class="msep"></div>
-    <label class="mi keep switchrow"><i data-icon="refresh" data-size="15"></i><span>Automatisch bauen</span><input id="chk-auto" type="checkbox" class="switch" checked></label>
-    <div class="mnote indent">Bei großen Modellen ausschalten. Dann baut der Knopf oder der Agent.</div>
-    <button id="btn-build" class="mi" role="menuitem"><i data-icon="play" data-size="15"></i><span>Jetzt bauen</span><span class="k">Strg B</span></button>
+    <label class="mi keep switchrow"><i data-icon="refresh" data-size="15"></i><span>Build automatically</span><input id="chk-auto" type="checkbox" class="switch" checked></label>
+    <div class="mnote indent">Turn off for large models. Then the button or the agent builds.</div>
+    <button id="btn-build" class="mi" role="menuitem"><i data-icon="play" data-size="15"></i><span>Build now</span><span class="k">Ctrl B</span></button>
   </div>
 
-  <div id="menu-view" class="menu wide" role="menu" aria-label="Was der Viewer zeigt" hidden></div>
+  <div id="menu-view" class="menu wide" role="menu" aria-label="What the viewer shows" hidden></div>
 
   <div id="menu-display" class="menu" role="menu" hidden>
-    <div class="mh">DARSTELLUNG</div>
-    <button class="mi keep" role="menuitemcheckbox" data-display="edges" aria-checked="true"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Kanten</span></button>
-    <button class="mi keep" role="menuitemcheckbox" data-display="wire" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Drahtgitter</span></button>
+    <div class="mh">DISPLAY</div>
+    <button class="mi keep" role="menuitemcheckbox" data-display="edges" aria-checked="true"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Edges</span></button>
+    <button class="mi keep" role="menuitemcheckbox" data-display="wire" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Wireframe</span></button>
     <button class="mi keep" role="menuitemcheckbox" data-display="ghost" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Transparent</span></button>
     <div class="msep"></div>
-    <div class="mh">ANSICHT</div>
+    <div class="mh">VIEW</div>
     <div class="chips views">
-      <button class="chip" data-view="front">Vorne</button><button class="chip" data-view="back">Hinten</button><button class="chip" data-view="left">Links</button>
-      <button class="chip" data-view="right">Rechts</button><button class="chip" data-view="top">Oben</button><button class="chip" data-view="bottom">Unten</button>
+      <button class="chip" data-view="front">Front</button><button class="chip" data-view="back">Back</button><button class="chip" data-view="left">Left</button>
+      <button class="chip" data-view="right">Right</button><button class="chip" data-view="top">Top</button><button class="chip" data-view="bottom">Bottom</button>
     </div>
-    <div class="mnote">Doppelklick ins Modell setzt den Drehpunkt. Das Mausrad zoomt zur Mausposition, die rechte Maustaste verschiebt. „Einpassen“ neben dem Würfel setzt zurück.</div>
+    <div class="mnote">Double-click the model to set the pivot. The mouse wheel zooms to the mouse position, the right mouse button pans. “Fit” next to the cube resets.</div>
   </div>
 
   <div id="menu-export" class="menu wide" role="menu" hidden>
-    <div class="mh">UMFANG</div>
-    <div class="seg"><button id="exp-all" class="on" aria-pressed="true">Alle Bauteile</button><button id="exp-sel" aria-pressed="false" disabled>Nur Auswahl</button></div>
-    <div class="mh">3D-DRUCK</div>
+    <div class="mh">SCOPE</div>
+    <div class="seg"><button id="exp-all" class="on" aria-pressed="true">All parts</button><button id="exp-sel" aria-pressed="false" disabled>Selection only</button></div>
+    <div class="mh">3D PRINTING</div>
     <div class="chips"><button class="chip" data-fmt="stl">STL</button><button class="chip" data-fmt="3mf">3MF</button><button class="chip" data-fmt="amf">AMF</button></div>
-    <div class="mh">CAD-AUSTAUSCH</div>
+    <div class="mh">CAD EXCHANGE</div>
     <div class="chips"><button class="chip" data-fmt="step">STEP</button><button class="chip" data-fmt="iges">IGES</button><button class="chip" data-fmt="brep">BREP</button></div>
-    <div class="mh">GRAFIK UND WEB</div>
+    <div class="mh">GRAPHICS AND WEB</div>
     <div class="chips"><button class="chip" data-fmt="glb">GLB</button><button class="chip" data-fmt="gltf">GLTF</button><button class="chip" data-fmt="obj">OBJ</button><button class="chip" data-fmt="vrml">VRML</button></div>
     <div class="mh">2D</div>
-    <div class="chips"><button class="chip" data-fmt="dxf" title="Schnitt in Bauteilmitte">DXF · Schnitt</button><button class="chip" data-fmt="svg" title="Projektion">SVG · Ansicht</button></div>
+    <div class="chips"><button class="chip" data-fmt="dxf" title="Section through the middle of the part">DXF · Section</button><button class="chip" data-fmt="svg" title="Projection">SVG · View</button></div>
     <div class="msep"></div>
-    <div class="mnote">Ein Bauteil: Speicherort wählen. Alle Bauteile: Ordner wählen, jedes wird eine eigene Datei. Referenz- und Zukaufteile sind bei „Alle Bauteile“ nicht dabei.</div>
+    <div class="mnote">One part: choose the location. All parts: choose a folder, each part becomes its own file. Reference and purchased parts are not included in “All parts”.</div>
   </div>
 
   <div id="menu-agents" class="menu" role="menu" hidden>
-    <div class="mh">AGENT STARTEN</div>
+    <div class="mh">START AGENT</div>
     <div id="agent-list"></div>
     <div class="msep"></div>
-    <button id="btn-term-plain" class="mi" role="menuitem"><i data-icon="term" data-size="15" data-stroke="2"></i><span>Leeres Terminal</span></button>
+    <button id="btn-term-plain" class="mi" role="menuitem"><i data-icon="term" data-size="15" data-stroke="2"></i><span>Empty terminal</span></button>
   </div>
 
-  <div id="menu-problems" class="menu wide" role="dialog" aria-label="Hinweise zum Projekt" hidden>
+  <div id="menu-problems" class="menu wide" role="dialog" aria-label="Project issues" hidden>
     <div id="problem-list"></div>
-    <div class="mnote sepline">Die App meldet nur, sie repariert nichts selbst.</div>
+    <div class="mnote sepline">The app only reports, it does not repair anything by itself.</div>
   </div>
 
   <div id="menu-ctx" class="menu" role="menu" hidden></div>
 
-  <div id="menu-mark-color" class="menu" role="menu" aria-label="Farbe der Markierung" hidden>
-    <div class="mh">FARBE</div>
+  <div id="menu-mark-color" class="menu" role="menu" aria-label="Markup color" hidden>
+    <div class="mh">COLOR</div>
     <div class="mk-palette">
       <button data-color="orange" aria-pressed="true" aria-label="Orange" title="Orange" style="--c:var(--mk-orange)"></button>
-      <button data-color="red" aria-pressed="false" aria-label="Rot" title="Rot" style="--c:var(--mk-red)"></button>
+      <button data-color="red" aria-pressed="false" aria-label="Red" title="Red" style="--c:var(--mk-red)"></button>
       <button data-color="pink" aria-pressed="false" aria-label="Pink" title="Pink" style="--c:var(--mk-pink)"></button>
-      <button data-color="violet" aria-pressed="false" aria-label="Violett" title="Violett" style="--c:var(--mk-violet)"></button>
-      <button data-color="blue" aria-pressed="false" aria-label="Blau" title="Blau" style="--c:var(--mk-blue)"></button>
-      <button data-color="cyan" aria-pressed="false" aria-label="Türkis" title="Türkis" style="--c:var(--mk-cyan)"></button>
-      <button data-color="green" aria-pressed="false" aria-label="Grün" title="Grün" style="--c:var(--mk-green)"></button>
-      <button data-color="yellow" aria-pressed="false" aria-label="Gelb" title="Gelb" style="--c:var(--mk-yellow)"></button>
-      <button data-color="white" aria-pressed="false" aria-label="Weiß" title="Weiß" style="--c:var(--mk-white)"></button>
-      <button data-color="black" aria-pressed="false" aria-label="Schwarz" title="Schwarz" style="--c:var(--mk-black)"></button>
+      <button data-color="violet" aria-pressed="false" aria-label="Violet" title="Violet" style="--c:var(--mk-violet)"></button>
+      <button data-color="blue" aria-pressed="false" aria-label="Blue" title="Blue" style="--c:var(--mk-blue)"></button>
+      <button data-color="cyan" aria-pressed="false" aria-label="Cyan" title="Cyan" style="--c:var(--mk-cyan)"></button>
+      <button data-color="green" aria-pressed="false" aria-label="Green" title="Green" style="--c:var(--mk-green)"></button>
+      <button data-color="yellow" aria-pressed="false" aria-label="Yellow" title="Yellow" style="--c:var(--mk-yellow)"></button>
+      <button data-color="white" aria-pressed="false" aria-label="White" title="White" style="--c:var(--mk-white)"></button>
+      <button data-color="black" aria-pressed="false" aria-label="Black" title="Black" style="--c:var(--mk-black)"></button>
     </div>
     <div class="msep"></div>
-    <label class="mi keep mk-custom" title="Beliebige Farbe im Farbdialog wählen"><input id="mark-color-custom" type="color" value="#f29a38"><span>Eigene Farbe …</span></label>
-    <div class="mnote">Ist eine Form ausgewählt, bekommt sie die Farbe gleich mit.</div>
+    <label class="mi keep mk-custom" title="Choose any color in the color dialog"><input id="mark-color-custom" type="color" value="#f29a38"><span>Custom color …</span></label>
+    <div class="mnote">If a shape is selected, it gets the color right away.</div>
   </div>
 
   <div id="start" class="start" hidden>
     <header class="top"><span class="logo"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></span><b class="brand">SOMA</b><span id="start-version" class="c3 small"></span><span class="grow"></span>
-      <button id="btn-start-close" class="btn">Zurück zum Modell</button></header>
+      <button id="btn-start-close" class="btn">Back to the model</button></header>
     <div class="start-body">
       <div class="start-grid">
         <div>
-          <h1>Modelle</h1>
-          <p class="c2 lead">Ein Modell ist eine ZIP-Datei mit Code, Ergebnis und Verlauf. Du kannst sie frei verschieben und weitergeben.</p>
+          <h1>Models</h1>
+          <p class="c2 lead">A model is a ZIP file with code, result and history. You can move it and share it freely.</p>
           <div class="bigcards">
-            <button id="start-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="22" data-stroke="2.2"></i></span><b>Neues Modell</b><span class="c2">Vorlage mit Beispielteil, dazu ein Terminal im Modellordner</span><span class="c3 small">Strg N</span></button>
-            <button id="start-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="22"></i></span><b>Öffnen …</b><span class="c2">ZIP-Datei von diesem oder einem anderen Rechner</span><span class="c3 small">Strg O</span></button>
+            <button id="start-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="22" data-stroke="2.2"></i></span><b>New model</b><span class="c2">Template with an example part, plus a terminal in the model folder</span><span class="c3 small">Ctrl N</span></button>
+            <button id="start-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="22"></i></span><b>Open …</b><span class="c2">ZIP file from this or another computer</span><span class="c3 small">Ctrl O</span></button>
           </div>
-          <div class="cap">ZULETZT GEÖFFNET</div>
+          <div class="cap">RECENT</div>
           <div id="start-recent" class="recent-grid"></div>
         </div>
         <div class="start-side">
           <section class="panel-card">
-            <div class="ph"><b>Agenten auf diesem Rechner</b><span class="c3 small">Du bringst deinen eigenen Agenten mit und installierst ihn selbst.</span></div>
+            <div class="ph"><b>Agents on this computer</b><span class="c3 small">You bring your own agent and install it yourself.</span></div>
             <div id="start-agents"></div>
           </section>
           <section id="start-note" class="panel-card note">
             <span class="note-ico"><i data-icon="info" data-size="18"></i></span>
-            <div class="note-text"><b>Gut zu wissen</b>
-              <span class="c2">Der Agent arbeitet mit deinen Benutzerrechten. Er kann Dateien auf diesem Rechner lesen und ändern. Freigaben und Schutz regelst du im Agenten selbst.</span>
-              <button id="btn-note-ok" class="btn sm">Verstanden</button></div>
+            <div class="note-text"><b>Good to know</b>
+              <span class="c2">The agent works with your user rights. It can read and change files on this computer. You set permissions and protection in the agent itself.</span>
+              <button id="btn-note-ok" class="btn sm">Got it</button></div>
           </section>
         </div>
       </div>

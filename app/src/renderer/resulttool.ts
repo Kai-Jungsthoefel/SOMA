@@ -28,19 +28,19 @@ interface Deps {
   changed(): void;
 }
 
-const num = (v: number, unit: string) => (+v.toFixed(unit === '°' ? 1 : 2) + 0).toLocaleString('de-DE'); // + 0: kein „-0“
+const num = (v: number, unit: string) => (+v.toFixed(unit === '°' ? 1 : 2) + 0).toLocaleString('en-US'); // + 0: kein „-0“
 // Ohne Einheit (Sicherheitsfaktor der FEM) steht die Zahl allein
 const withUnit = (v: number, unit: string) => `${num(v, unit)}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
 const dot = (v: number, unit: string) => `${v.toFixed(unit === '°' ? 1 : 2)}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
-const de = (v: number, digits: number) => (+v.toFixed(digits) + 0).toLocaleString('de-DE');
+const loc = (v: number, digits: number) => (+v.toFixed(digits) + 0).toLocaleString('en-US');
 /** Höchster Sicherheitsfaktor in der Datei (soma.fem VALUE_CAP): Dort ist kaum Spannung, der Wert selbst sagt nichts. */
 const SAFETY_CAP = 99;
-const safety = (v: number) => (v >= SAFETY_CAP ? `über ${SAFETY_CAP}` : de(v, 2));
+const safety = (v: number) => (v >= SAFETY_CAP ? `over ${SAFETY_CAP}` : loc(v, 2));
 /** FEM an einer Stelle: die gezeigte Größe zuerst, dann die andere und die Verschiebung. */
 const femAt = (p: ResultProbe, field: ResultField, label: boolean) => {
-  const stress = p.stress != null ? `${de(p.stress, 1)} MPa` : null;
-  const sf = `${label || field === 'stress' ? 'Sicherheit ' : ''}${safety(p.value)}`;
-  return [...(field === 'stress' && stress ? [stress, sf] : [sf, stress]), p.disp != null ? `${de(p.disp, 3)} mm` : null].filter(Boolean).join(' · ');
+  const stress = p.stress != null ? `${loc(p.stress, 1)} MPa` : null;
+  const sf = `${label || field === 'stress' ? 'Safety ' : ''}${safety(p.value)}`;
+  return [...(field === 'stress' && stress ? [stress, sf] : [sf, stress]), p.disp != null ? `${loc(p.disp, 3)} mm` : null].filter(Boolean).join(' · ');
 };
 type RangeMode = 'auto' | 'minmax' | 'custom';
 /** Abstand des Schilds vom Zeiger (px): neben den Armen des Fadenkreuzes, nicht darauf. */
@@ -184,7 +184,7 @@ export class ResultTool {
       this.pinned = null;
       this.d.changed();
     } catch (err) {
-      this.d.toast(`Das Ergebnis ließ sich nicht laden: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      this.d.toast(`Could not load the result: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
     this.render();
   }
@@ -202,18 +202,18 @@ export class ResultTool {
     // Ohne Ergebnis keine Skala zum Einstellen
     this.ui.range.parentElement!.hidden = !r;
     if (!r) {
-      this.ui.hint.textContent = 'Noch kein Ergebnis. Der Agent erzeugt es mit soma analyze (Überhang, Wandstärke, Abstand, Festigkeit mit FEM).';
+      this.ui.hint.textContent = 'No result yet. The agent creates it with soma analyze (overhang, wall thickness, clearance, strength with FEM).';
       return;
     }
-    this.ui.hint.textContent = this.busy ? 'Wird neu berechnet …' : r.stale ? 'Älter als der Code. „Neu berechnen“ wertet das aktuelle Modell aus.' : `soma ${r.command.join(' ')}`;
+    this.ui.hint.textContent = this.busy ? 'Recalculating …' : r.stale ? 'Older than the code. “Recalculate” evaluates the current model.' : `soma ${r.command.join(' ')}`;
     this.renderLegend();
     for (const p of r.parts) {
-      const range = p.min != null && p.max != null ? `${withUnit(p.min, r.unit)} bis ${withUnit(p.max, r.unit)}` : 'keine Werte';
-      const crit = p.critical > 0 ? `${(p.critical / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })} cm² kritisch` : 'nichts kritisch';
+      const range = p.min != null && p.max != null ? `${withUnit(p.min, r.unit)} to ${withUnit(p.max, r.unit)}` : 'no values';
+      const crit = p.critical > 0 ? `${(p.critical / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} cm² critical` : 'nothing critical';
       // FEM: kleinste Sicherheit, höchste Spannung und größte Verschiebung sagen mehr als die Spanne
       // („kritisch“ nur, wenn es so ist: die Zeile ist schmal, und sie ist dann ohnehin rot)
       const text = r.fem && p.stress && p.displacement && p.min != null
-        ? `Sicherheit ${de(p.min, 2)} · ${de(p.stress.value, 1)} MPa · ${de(p.displacement.value, 3)} mm${p.critical > 0 ? ` · ${crit}` : ''}`
+        ? `Safety ${loc(p.min, 2)} · ${loc(p.stress.value, 1)} MPa · ${loc(p.displacement.value, 3)} mm${p.critical > 0 ? ` · ${crit}` : ''}`
         : `${range} · ${crit}`;
       this.ui.summary.append(el('div', { className: 'rs-row' + (p.critical > 0 ? ' bad' : '') },
         el('b', { textContent: p.name }), el('span', { textContent: text })));
@@ -239,9 +239,9 @@ export class ResultTool {
     mark.hidden = v.threshold < lo || v.threshold > hi;
     mark.style.left = `${Math.max(0, Math.min(100, ((v.threshold - lo) / (hi - lo || 1)) * 100))}%`;
     bar.append(mark);
-    const weakest = this.d.layer.field === 'stress' && this.d.layer.stressLimitMixed ? ' (schwächster Werkstoff)' : '';
+    const weakest = this.d.layer.field === 'stress' && this.d.layer.stressLimitMixed ? ' (weakest material)' : '';
     // Gewählte Spanne: Rot heißt dort „oberes Ende der Skala“, nicht kritisch. Das steht dabei
-    const thr = `Grenze ${withUnit(v.threshold, v.unit)}${weakest}, ${v.ramp ? 'Farbe über die Spanne' : `kritisch ${v.bad === 'high' ? 'darüber' : 'darunter'}`}`;
+    const thr = `Limit ${withUnit(v.threshold, v.unit)}${weakest}, ${v.ramp ? 'color across the range' : `critical ${v.bad === 'high' ? 'above' : 'below'}`}`;
     this.ui.legend.append(
       el('div', { className: 'rs-q', textContent: v.unit ? `${v.quantity} (${v.unit})` : v.quantity }), bar,
       el('div', { className: 'rs-scale' }, el('span', { textContent: withUnit(lo, v.unit) }),
@@ -282,18 +282,18 @@ export class ResultTool {
     const fem = r.fem;
     this.ui.femRow.hidden = !fem;
     if (!fem) return;
-    const n = (v: number[]) => `${de(Math.hypot(v[0], v[1], v[2]), 1)} N`;
+    const n = (v: number[]) => `${loc(Math.hypot(v[0], v[1], v[2]), 1)} N`;
     for (const b of fem.bcs) {
-      const what = b.kind === 'fix' ? `fest${b.axes && b.axes !== 'xyz' ? ` (nur ${b.axes.toUpperCase().split('').join(', ')})` : ''}`
-        : b.kind === 'force' ? 'Kraft' : 'Druck';
-      const val = b.kind === 'fix' ? (b.reaction ? `Lagerkraft ${n(b.reaction)}` : '')
-        : b.kind === 'pressure' ? `${de(b.value ?? 0, 3)} MPa, zusammen ${n(b.total ?? [0, 0, 0])}` : n(b.total ?? [0, 0, 0]);
+      const what = b.kind === 'fix' ? `Fixed${b.axes && b.axes !== 'xyz' ? ` (${b.axes.toUpperCase().split('').join(', ')} only)` : ''}`
+        : b.kind === 'force' ? 'Force' : 'Pressure';
+      const val = b.kind === 'fix' ? (b.reaction ? `reaction force ${n(b.reaction)}` : '')
+        : b.kind === 'pressure' ? `${loc(b.value ?? 0, 3)} MPa, total ${n(b.total ?? [0, 0, 0])}` : n(b.total ?? [0, 0, 0]);
       this.ui.summary.append(el('div', { className: 'rs-row bc' }, el('b', { textContent: what }), el('span', { textContent: `${b.label} · ${val}` })));
     }
     for (const t of r.notes ?? []) this.ui.summary.append(el('div', { className: 'rs-note', textContent: t }));
     const l = this.d.layer;
-    const opts: [number, string][] = [[0, 'Unverformt'], [1, 'Echte Größe']];
-    if (l.autoScale > 1) opts.push([l.autoScale, `${fmtScale(l.autoScale)}-fach überhöht`]);
+    const opts: [number, string][] = [[0, 'Undeformed'], [1, 'True scale']];
+    if (l.autoScale > 1) opts.push([l.autoScale, `Exaggerated ${fmtScale(l.autoScale)}×`]);
     this.ui.deform.replaceChildren(...opts.map(([v, t]) => el('option', { value: String(v), textContent: t })));
     this.ui.deform.value = String(l.scale);
     this.ui.bcs.setAttribute('aria-pressed', String(l.bcsVisible));
@@ -302,7 +302,7 @@ export class ResultTool {
   private showProbe(p: ResultProbe | null, pinned: boolean): void {
     const r = this.current;
     if (!r) return;
-    if (!p) { if (!pinned || !this.pinned) this.ui.probe.textContent = this.pinned ? this.probeText(this.pinned, true) : 'Zeiger aufs Modell: Wert an der Stelle. Klick merkt sie für den Agenten.'; return; }
+    if (!p) { if (!pinned || !this.pinned) this.ui.probe.textContent = this.pinned ? this.probeText(this.pinned, true) : 'Point at the model to see the value there. Click to keep the spot for the agent.'; return; }
     this.ui.probe.textContent = this.probeText(p, pinned);
   }
 
@@ -341,7 +341,7 @@ export class ResultTool {
   private probeText(p: ResultProbe, pinned: boolean): string {
     const r = this.current!;
     const what = r.fem ? femAt(p, this.d.layer.field, true) : withUnit(p.value, r.unit);
-    return `${pinned ? 'Gewählt' : 'Zeiger'}: ${p.name}, ${what} bei (${p.point.map((v) => (v + 0).toLocaleString('de-DE')).join('; ')})`;
+    return `${pinned ? 'Picked' : 'Pointer'}: ${p.name}, ${what} at (${p.point.map((v) => (v + 0).toLocaleString('en-US')).join(', ')})`;
   }
 
   private async rerun(): Promise<void> {
@@ -351,7 +351,7 @@ export class ResultTool {
     this.render();
     try {
       const res = await this.d.rerun(r.id);
-      if (!res.ok) this.d.toast(`Neu berechnen ging nicht: ${res.error ?? 'unbekannter Fehler'}`, 'error');
+      if (!res.ok) this.d.toast(`Could not recalculate: ${res.error ?? 'unknown error'}`, 'error');
     } finally {
       this.busy = false;
       await this.refresh();
@@ -361,16 +361,16 @@ export class ResultTool {
   private agentNote(): string | null {
     const r = this.current;
     if (!r) return null;
-    const head = `[Ergebnis: "${r.title}" (${r.file}, Grenzwert ${dot(r.threshold, r.unit)})`;
+    const head = `[Result: "${r.title}" (${r.file}, limit ${dot(r.threshold, r.unit)})`;
     const p = this.pinned;
     // FEM: Sicherheit mit Spannung und Verschiebung, damit der Agent die Stelle ohne neue Rechnung einordnen kann
-    const extra = p && p.stress != null ? ` (${p.stress.toFixed(1)} MPa${p.disp != null ? `, Verschiebung ${p.disp.toFixed(3)} mm` : ''})` : '';
-    return p ? `${head}, Bauteil "${p.name}": ${r.fem ? 'Sicherheit ' : ''}${r.fem && p.value >= SAFETY_CAP ? `über ${SAFETY_CAP}` : dot(p.value, r.unit)}${extra} bei (${p.point.map((v) => v.toFixed(1)).join(', ')}) mm] ` : `${head}] `;
+    const extra = p && p.stress != null ? ` (${p.stress.toFixed(1)} MPa${p.disp != null ? `, displacement ${p.disp.toFixed(3)} mm` : ''})` : '';
+    return p ? `${head}, part "${p.name}": ${r.fem ? 'safety factor ' : ''}${r.fem && p.value >= SAFETY_CAP ? `over ${SAFETY_CAP}` : dot(p.value, r.unit)}${extra} at (${p.point.map((v) => v.toFixed(1)).join(', ')}) mm] ` : `${head}] `;
   }
 
   /** Für die Markierung: Welches Ergebnis zu sehen ist (null: keines). */
   agentText(): string | null {
-    return this.active && this.current ? `zeigt das Ergebnis „${this.current.title}“ (${this.current.file})` : null;
+    return this.active && this.current ? `shows the result "${this.current.title}" (${this.current.file})` : null;
   }
 
   /** Prüfhilfe. */

@@ -55,7 +55,7 @@ function frame(s: Scene, t: number, stamp: string | null, forceView: boolean): H
 }
 
 function png(c: HTMLCanvasElement): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => c.toBlob((b) => (b ? b.arrayBuffer().then(resolve, reject) : reject(new Error('PNG ließ sich nicht erzeugen'))), 'image/png'));
+  return new Promise((resolve, reject) => c.toBlob((b) => (b ? b.arrayBuffer().then(resolve, reject) : reject(new Error('Could not create the PNG'))), 'image/png'));
 }
 
 /** Übersicht: Standbilder gleichmäßig über die Dauer, je mit Zeit, oben Name und Dauer der Animation. */
@@ -71,7 +71,7 @@ async function sheet(s: Scene, job: RenderJob, cols: number, rows: number): Prom
   g.fillStyle = '#e6e8eb';
   g.font = `600 ${Math.round(head * 0.45)}px "IBM Plex Sans", "Segoe UI", sans-serif`;
   g.textBaseline = 'middle';
-  g.fillText(`${anim.meta.name} · ${fmtTime(anim.duration)} · ${n} Standbilder`, gap * 2, head / 2 + gap / 2);
+  g.fillText(`${anim.meta.name} · ${fmtTime(anim.duration)} · ${n} stills`, gap * 2, head / 2 + gap / 2);
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0 : (anim.duration * i) / (n - 1);
     const img = frame(s, t, fmtTime(t), !!job.view);
@@ -90,7 +90,7 @@ async function video(s: Scene, job: RenderJob, progress: (f: number) => void): P
   let codec: 'avc' | 'vp9' = 'avc';
   if (!(await canEncodeVideo('avc', { width: c.width, height: c.height }))) {
     codec = 'vp9';
-    warnings.push('H.264 lässt sich auf diesem Rechner nicht kodieren, das Video ist VP9 (spielt in der App und in Browsern, nicht in jedem Player).');
+    warnings.push('This computer cannot encode H.264, the video is VP9 (plays in the app and in browsers, not in every player).');
   }
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
   const source = new CanvasSource(c, { codec, bitrate: QUALITY_HIGH, keyFrameInterval: 1 });
@@ -105,7 +105,7 @@ async function video(s: Scene, job: RenderJob, progress: (f: number) => void): P
   }
   await output.finalize();
   const buf = output.target.buffer;
-  if (!buf) throw new Error('Das Video ist leer.');
+  if (!buf) throw new Error('The video is empty.');
   return { mp4: buf, warnings };
 }
 
@@ -116,7 +116,7 @@ async function run(job: RenderJob): Promise<RenderOutput> {
     const t = s.anim ? Math.min(job.at, s.anim.duration) : 0;
     return { ok: true, png: await png(frame(s, t, null, !!job.view)), warnings };
   }
-  if (!s.anim) return { ok: false, error: 'Übersicht und Video brauchen eine Animation.' };
+  if (!s.anim) return { ok: false, error: 'A contact sheet or video needs an animation.' };
   if (job.kind === 'sheet') return { ok: true, png: await sheet(s, job, job.grid[0], job.grid[1]), warnings };
   const v = await video(s, job, (f) => api.progress(job.id, f * 0.9));
   // Übersicht zum Video, damit der Agent sieht, was darin steht (Videos kann er nicht ansehen)

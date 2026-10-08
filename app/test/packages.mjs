@@ -127,7 +127,7 @@ try {
   await app.answers([0]);
   const restored = await ev((h) => window.soma.versions.restore(h), first);
   check('Startstand wiederhergestellt', !restored.error && !restored.cancelled, JSON.stringify(restored).slice(0, 120));
-  await waitFor('Build nach Wiederherstellung', () => window.__t.status().state === 'ok' && !window.__t.status().text.includes('Installiert'), 90000).catch(() => {});
+  await waitFor('Build nach Wiederherstellung', () => window.__t.status().state === 'ok' && !window.__t.status().text.includes('Installing packages'), 90000).catch(() => {});
   await sleep(1500);
   check('Startstand hat keine requirements.txt, und der Build legt keine an (Paket nur noch installiert)', !fs.existsSync(req) && fs.existsSync(path.join(site, 'somatestpkg')));
   check('Nach dem Wiederherstellen keine ungespeicherte Änderung durch die Paketliste', !(await g('status', '--porcelain')).includes('requirements.txt'));
@@ -150,10 +150,10 @@ try {
   let sawInstalling = false;
   for (const t0 = Date.now(); Date.now() - t0 < 120000; await sleep(150)) {
     const st = await ev(() => ({ id: window.__t.project()?.id, ...window.__t.status(), parts: window.__t.partCount() }));
-    if (st.id === proj.id && st.text.startsWith('Installiert Pakete')) sawInstalling = true;
-    if (st.id === proj.id && st.state === 'ok' && st.parts === 2 && !st.text.startsWith('Installiert')) break;
+    if (st.id === proj.id && st.text.startsWith('Installing packages')) sawInstalling = true;
+    if (st.id === proj.id && st.state === 'ok' && st.parts === 2 && !st.text.startsWith('Installing packages')) break;
   }
-  check('Beim Öffnen zeigt die Statuszeile „Installiert Pakete …“', sawInstalling);
+  check('Beim Öffnen zeigt die Statuszeile „Installing packages …“', sawInstalling);
   const dir2 = (await ev(() => window.__t.project())).dir; // neue App-Daten, also ein anderer Arbeitsordner
   const site2 = path.join(dir2, '.soma', 'env', 'Lib', 'site-packages');
   const req2 = path.join(dir2, 'requirements.txt');
@@ -174,7 +174,7 @@ try {
     await sleep(600);
     await app.screenshot(path.join(APP, 'test', 'shots', 'packages-fehler.png')).catch((e) => console.log('Screenshot:', e.message));
   }
-  await waitFor('Build danach', () => window.__t.status().state === 'ok' && !window.__t.status().text.includes('Installiert'), 90000).catch(() => {});
+  await waitFor('Build danach', () => window.__t.status().state === 'ok' && !window.__t.status().text.includes('Installing packages'), 90000).catch(() => {});
   await sleep(1000);
   check('Build läuft trotzdem, die Liste behält das fehlende Paket', (await ev(() => window.__t.status().state)) === 'ok' && /^somamissing==2\.0$/m.test(reqText(req2)) && /^somatestpkg==1\.0$/m.test(reqText(req2)), reqText(req2).split('\n').slice(2).join(' | '));
 

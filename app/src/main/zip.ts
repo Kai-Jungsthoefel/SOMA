@@ -57,7 +57,7 @@ export async function saveProjectZip(dir: string, zipPath: string, info: ZipInfo
 
 function openZip(zipPath: string): Promise<yauzl.ZipFile> {
   return new Promise((resolve, reject) => {
-    yauzl.open(zipPath, { lazyEntries: true, autoClose: true }, (err, z) => (err || !z ? reject(err ?? new Error('ZIP nicht lesbar')) : resolve(z)));
+    yauzl.open(zipPath, { lazyEntries: true, autoClose: true }, (err, z) => (err || !z ? reject(err ?? new Error('ZIP not readable')) : resolve(z)));
   });
 }
 
@@ -77,7 +77,7 @@ export async function readZipTexts(zipPath: string, names: string[]): Promise<Re
     zip.on('entry', (entry: yauzl.Entry) => {
       if (!names.includes(entry.fileName) || entry.uncompressedSize > 5 * 1024 * 1024) { zip.readEntry(); return; }
       zip.openReadStream(entry, (err, stream) => {
-        if (err || !stream) { reject(err ?? new Error('Eintrag nicht lesbar')); return; }
+        if (err || !stream) { reject(err ?? new Error('Entry not readable')); return; }
         const chunks: Buffer[] = [];
         stream.on('data', (c: Buffer) => chunks.push(c));
         stream.on('end', () => { found[entry.fileName] = Buffer.concat(chunks).toString('utf8'); zip.readEntry(); });
@@ -99,14 +99,14 @@ export async function extractZip(zipPath: string, dest: string): Promise<number>
     zip.on('end', () => resolve(count));
     zip.on('entry', (entry: yauzl.Entry) => {
       total += entry.uncompressedSize;
-      if (total > MAX_UNPACKED) { reject(new Error('Die ZIP ist entpackt größer als 2 GB und wird nicht geöffnet.')); zip.close(); return; }
-      if (!isSafeEntryName(entry.fileName)) { reject(new Error(`Unsicherer Pfad in der ZIP: ${entry.fileName}`)); zip.close(); return; }
+      if (total > MAX_UNPACKED) { reject(new Error('Unpacked, the ZIP is larger than 2 GB and will not be opened.')); zip.close(); return; }
+      if (!isSafeEntryName(entry.fileName)) { reject(new Error(`Unsafe path in the ZIP: ${entry.fileName}`)); zip.close(); return; }
       const target = path.resolve(root, entry.fileName);
-      if (target !== root && !target.startsWith(root + path.sep)) { reject(new Error(`Unsicherer Pfad in der ZIP: ${entry.fileName}`)); zip.close(); return; }
+      if (target !== root && !target.startsWith(root + path.sep)) { reject(new Error(`Unsafe path in the ZIP: ${entry.fileName}`)); zip.close(); return; }
       if (entry.fileName.endsWith('/')) { fs.mkdirSync(target, { recursive: true }); zip.readEntry(); return; }
       fs.mkdirSync(path.dirname(target), { recursive: true });
       zip.openReadStream(entry, (err, stream) => {
-        if (err || !stream) { reject(err ?? new Error('Eintrag nicht lesbar')); return; }
+        if (err || !stream) { reject(err ?? new Error('Entry not readable')); return; }
         pipeline(stream, fs.createWriteStream(target)).then(() => { count++; zip.readEntry(); }, reject);
       });
     });

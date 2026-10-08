@@ -35,7 +35,7 @@ export function renderMarkdown(src: string, file: string, readOnly: boolean, dep
   const lineAt = (pos: number) => { let n = 1; for (let i = src.indexOf('\n'); i >= 0 && i < pos; i = src.indexOf('\n', i + 1)) n++; return n; };
   let tokens: Token[];
   try { tokens = lexer(src, { gfm: true }); } catch (e) {
-    root.append(el('p', { className: 'md-err', textContent: `Die Datei lässt sich nicht als Markdown lesen: ${e instanceof Error ? e.message : String(e)}` }));
+    root.append(el('p', { className: 'md-err', textContent: `The file cannot be read as Markdown: ${e instanceof Error ? e.message : String(e)}` }));
     return root;
   }
 
@@ -73,12 +73,12 @@ export function renderMarkdown(src: string, file: string, readOnly: boolean, dep
     const img = el('img', { className: 'md-img', alt, title: t.title ?? alt });
     // Nur Bilder aus dem Projekt. Fremde Adressen lädt die App nicht (offline, und der Agent soll nichts nachladen lassen).
     if (isWeb(href) || /^[a-z][a-z0-9+.-]*:/i.test(href)) {
-      return el('span', { className: 'md-imgmiss', textContent: `[Bild: ${alt || href}]`, title: `Externe Bilder werden nicht geladen: ${href}` });
+      return el('span', { className: 'md-imgmiss', textContent: `[Image: ${alt || href}]`, title: `External images are not loaded: ${href}` });
     }
     const rel = resolve(dir, href);
     void deps.image(rel).then((url) => {
       if (url) img.src = url;
-      else img.replaceWith(el('span', { className: 'md-imgmiss', textContent: `[Bild fehlt: ${rel}]` }));
+      else img.replaceWith(el('span', { className: 'md-imgmiss', textContent: `[Image missing: ${rel}]` }));
     });
     return img;
   };
@@ -101,7 +101,7 @@ export function renderMarkdown(src: string, file: string, readOnly: boolean, dep
       case 'blockquote': node = el('blockquote', {}, ...blocks(t.tokens, pos)); break;
       case 'list': node = list(t as Tokens.List, pos); break;
       case 'table': node = table(t as Tokens.Table); break;
-      case 'html': node = el('pre', { className: 'md-html', title: 'HTML wird nicht ausgeführt, nur gezeigt', textContent: t.text.replace(/\n$/, '') }); break;
+      case 'html': node = el('pre', { className: 'md-html', title: 'HTML is not run, only shown', textContent: t.text.replace(/\n$/, '') }); break;
       default: node = el('p', { textContent: t.raw });
     }
     if (pos >= 0) node.dataset.line = String(lineAt(pos));
@@ -138,7 +138,7 @@ export function renderMarkdown(src: string, file: string, readOnly: boolean, dep
         // Umschalten nur, wenn das Kästchen sicher im Quelltext gefunden ist. Sonst nur anzeigen.
         if (m && !readOnly) {
           const p = at + m[0].length - 2;
-          box.title = 'Abhaken ändert die Datei (speichern mit Strg+S)';
+          box.title = 'Checking it off changes the file (save with Ctrl+S)';
           box.addEventListener('change', () => deps.toggleTask(p, box.checked ? 'x' : ' '));
         } else box.disabled = true;
         li.prepend(box);
@@ -160,7 +160,7 @@ export function renderMarkdown(src: string, file: string, readOnly: boolean, dep
   };
 
   root.append(...blocks(tokens, 0));
-  if (!root.childElementCount) root.append(el('p', { className: 'md-empty', textContent: readOnly ? 'Leere Datei.' : 'Leere Datei. „Bearbeiten“ oben schreibt hinein.' }));
+  if (!root.childElementCount) root.append(el('p', { className: 'md-empty', textContent: readOnly ? 'Empty file.' : 'Empty file. “Edit” at the top lets you write in it.' }));
 
   root.addEventListener('click', (e) => {
     const a = (e.target as HTMLElement).closest<HTMLElement>('.md-link');

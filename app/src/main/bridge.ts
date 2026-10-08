@@ -19,7 +19,7 @@ export function startBridge(handler: BridgeHandler): Promise<void> {
   if (server) return Promise.resolve();
   return new Promise((resolve) => {
     const srv = http.createServer((req, res) => void serve(req, res, handler));
-    srv.on('error', (e) => { console.error('[soma] Verbindung für soma render nicht verfügbar:', e); server = null; port = 0; resolve(); });
+    srv.on('error', (e) => { console.error('[soma] Connection for soma render not available:', e); server = null; port = 0; resolve(); });
     // Port 0: das System vergibt einen freien (ein fester Port kann schon belegt sein)
     srv.listen(0, '127.0.0.1', () => {
       const a = srv.address();
@@ -47,17 +47,17 @@ async function serve(req: http.IncomingMessage, res: http.ServerResponse, handle
   try {
     const given = String(req.headers['x-soma-token'] ?? '');
     const ok = given.length === token.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(token));
-    if (!ok) { reply(res, 403, { ok: false, error: 'Falscher Schlüssel. Nur die Terminals der App dürfen die App ansprechen.' }); return; }
-    if (req.method !== 'POST' || !req.url?.startsWith('/v1/')) { reply(res, 404, { ok: false, error: 'Unbekannte Anfrage' }); return; }
+    if (!ok) { reply(res, 403, { ok: false, error: 'Wrong key. Only the terminals of the app may talk to the app.' }); return; }
+    if (req.method !== 'POST' || !req.url?.startsWith('/v1/')) { reply(res, 404, { ok: false, error: 'Unknown request' }); return; }
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const c of req) {
       size += (c as Buffer).length;
-      if (size > MAX_BODY) { reply(res, 413, { ok: false, error: 'Anfrage zu groß' }); return; }
+      if (size > MAX_BODY) { reply(res, 413, { ok: false, error: 'Request too large' }); return; }
       chunks.push(c as Buffer);
     }
     let body: unknown;
-    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { reply(res, 400, { ok: false, error: 'Kein gültiges JSON' }); return; }
+    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { reply(res, 400, { ok: false, error: 'Not valid JSON' }); return; }
     const r = await handler(req.url.slice(4), body);
     reply(res, r.status, r.body);
   } catch (e) {

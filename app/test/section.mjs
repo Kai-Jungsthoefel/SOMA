@@ -57,16 +57,16 @@ try {
   await domClick('btn-section');
   let s = await sec();
   let v = await vs();
-  check('„Schnitt": Karte offen, Ebene X in der Mitte (X = 14), weggeschnitten X > 14', s.active && s.axis === 'x' && near(s.value, 14, 1e-3)
-    && vecNear(v.plane?.normal, [-1, 0, 0]) && near(v.plane.constant, 14, 1e-3) && s.text.includes('Weggeschnitten: X > 14,00 mm')
+  check('„Section": Karte offen, Ebene X in der Mitte (X = 14), weggeschnitten X > 14', s.active && s.axis === 'x' && near(s.value, 14, 1e-3)
+    && vecNear(v.plane?.normal, [-1, 0, 0]) && near(v.plane.constant, 14, 1e-3) && s.text.includes('Cut away: X > 14.00 mm')
     && await ev(() => document.getElementById('btn-section').getAttribute('aria-pressed') === 'true'), JSON.stringify(v.plane));
   check('Alle Bauteile geschnitten, beide mit Deckel, Kontur vorhanden', v.clipped && v.capped.length === 2 && v.contour >= 8, JSON.stringify(v));
 
   // 2) Lage eingeben (Enter), Pfeiltasten in 1- und 10-mm-Schritten
   await setValue('0');
   s = await sec();
-  check('Eingabe „0" + Enter: Ebene bei X = 0, das Feld zeigt danach „0,00"', near(s.value, 0) && near((await vs()).plane.constant, 0) && s.text.includes('X > 0,00 mm')
-    && await ev(() => document.getElementById('section-value').value) === '0,00');
+  check('Eingabe „0" + Enter: Ebene bei X = 0, das Feld zeigt danach „0.00"', near(s.value, 0) && near((await vs()).plane.constant, 0) && s.text.includes('X > 0.00 mm')
+    && await ev(() => document.getElementById('section-value').value) === '0.00');
   await ev(() => {
     const i = document.getElementById('section-value');
     i.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
@@ -74,15 +74,17 @@ try {
   });
   s = await sec();
   check('Pfeil hoch: +1 mm, mit Umschalt +10 mm', near(s.value, 11), String(s.value));
-  await setValue('−2,5');
-  check('Eingabe mit Minuszeichen und Komma: „−2,5" ergibt X = −2.5', near((await sec()).value, -2.5), String((await sec()).value));
+  await setValue('−2.5');
+  check('Eingabe mit Minuszeichen und Punkt: „−2.5" ergibt X = −2.5', near((await sec()).value, -2.5), String((await sec()).value));
+  await setValue('−3,5');
+  check('Ein Komma als Dezimaltrenner geht weiter: „−3,5" ergibt X = −3.5', near((await sec()).value, -3.5), String((await sec()).value));
   await setValue('0');
 
   // 3) Blick auf den Schnitt: Kamera von der weggeschnittenen Seite (+X)
   await domClick('btn-section-look');
   await settle();
   const dir = (await ev(() => window.__t.viewer.viewState())).dir;
-  check('„Blick auf den Schnitt": Kamera blickt von +X senkrecht auf die Ebene', vecNear(dir, [1, 0, 0], 1e-3), JSON.stringify(dir));
+  check('„Look at section": Kamera blickt von +X senkrecht auf die Ebene', vecNear(dir, [1, 0, 0], 1e-3), JSON.stringify(dir));
   await ev((id) => window.__t.viewer.setView('right', [id]), ids.Kasten);
   await sleep(300);
   await shot('schnitt-1-x');
@@ -99,8 +101,8 @@ try {
   await clickAt(wall);
   await waitFor('Auswahl', () => window.__t.info().startsWith('Kasten'), 5000);
   let pk = await ev(() => window.__t.pick());
-  check('Klick auf die Schnittfläche: Kasten gewählt, „Schnittfläche · ganzes Bauteil"', pk?.cut === true && pk.faceId == null
-    && (await ev(() => window.__t.info())).includes('Schnittfläche · ganzes Bauteil'), JSON.stringify(pk));
+  check('Klick auf die Schnittfläche: Kasten gewählt, „Cut face · whole part"', pk?.cut === true && pk.faceId == null
+    && (await ev(() => window.__t.info())).includes('Cut face · whole part'), JSON.stringify(pk));
   await clickAt(hollow);
   await waitFor('Fläche gewählt', () => window.__t.pick()?.faceId != null, 5000);
   pk = await ev(() => window.__t.pick());
@@ -115,26 +117,26 @@ try {
   await clickAt(wall);
   await sleep(300);
   m = await ev(() => window.__t.measure());
-  check('Klick auf die Schnittfläche selbst: Hinweis, die Messung bleibt', !!m.a && !m.b && m.text.includes('Schnittfläche selbst lässt sich nicht messen'), m.text.slice(0, 120));
+  check('Klick auf die Schnittfläche selbst: Hinweis, die Messung bleibt', !!m.a && !m.b && m.text.includes('section face itself cannot be measured'), m.text.slice(0, 120));
   await clickAt(await screen([0, 11, 10]));
   await waitFor('Messung A–B', () => !!window.__t.measure().result?.pair, 60000);
   m = await ev(() => window.__t.measure());
-  check('Innere Schnittkontur: Abstand der Ebenen 4,00 mm (Wandstärke)', near(m.result?.pair?.planes?.value ?? 0, 4, 1e-6) && m.text.includes('4,00 mm'), m.error || m.text.replace(/\s+/g, ' ').slice(0, 120));
+  check('Innere Schnittkontur: Abstand der Ebenen 4.00 mm (Wandstärke)', near(m.result?.pair?.planes?.value ?? 0, 4, 1e-6) && m.text.includes('4.00 mm'), m.error || m.text.replace(/\s+/g, ' ').slice(0, 120));
   await shot('schnitt-2-messen');
   await domClick('btn-measure');
 
   // 7) Seite wechseln
   await domClick('btn-section-flip');
   v = await vs();
-  check('„Seite wechseln": jetzt fällt X < 0 weg', vecNear(v.plane.normal, [1, 0, 0]) && near(v.plane.constant, 0) && (await sec()).text.includes('X < 0,00 mm'));
-  check('Text für den Agenten nennt Ebene und weggeschnittene Seite', (await sec()).agent === 'Schnittansicht bei X = 0.000 mm, weggeschnitten ist X < 0.000', (await sec()).agent);
+  check('„Flip side": jetzt fällt X < 0 weg', vecNear(v.plane.normal, [1, 0, 0]) && near(v.plane.constant, 0) && (await sec()).text.includes('X < 0.00 mm'));
+  check('Text für den Agenten nennt Ebene und weggeschnittene Seite', (await sec()).agent === 'section view at X = 0.000 mm, X < 0.000 is cut away', (await sec()).agent);
 
   // 8) An einer Fläche ausrichten: erst die Bohrung (nicht eben), dann die Oberseite des Blocks
   await ev(() => window.__t.viewer.setView('iso'));
   await sleep(300);
   await ev(() => document.querySelector('#section-axes [data-axis="face"]').click());
   s = await sec();
-  check('„Fläche": wartet auf einen Klick, Hinweis in der Karte', s.picking && (await vs()).picking && s.text.includes('Ebene Fläche im Modell anklicken'));
+  check('„Face": wartet auf einen Klick, Hinweis in der Karte', s.picking && (await vs()).picking && s.text.includes('Click a planar face in the model'));
   await ev(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
   s = await sec();
   check('Escape bricht das Anklicken ab, die Ebene bleibt bei X', !s.picking && !(await vs()).picking && s.axis === 'x');
@@ -142,23 +144,23 @@ try {
   await clickAt(await screen([40, 3, 9]));
   await sleep(200);
   s = await sec();
-  check('Klick in die Bohrung: „keine ebene Fläche", wartet weiter', s.picking && s.text.includes('keine ebene Fläche'), s.text.slice(0, 120));
+  check('Klick in die Bohrung: „not a planar face", wartet weiter', s.picking && s.text.includes('not a planar face'), s.text.slice(0, 120));
   await clickAt(await screen([44, -4, 10]));
   await sleep(200);
   s = await sec();
   v = await vs();
   check('Oberseite des Blocks: Ebene parallel dazu, mitten durch den Block (z = 5, Tiefe 5 mm)', !s.picking && s.axis === 'face' && vecNear(s.face?.normal, [0, 0, 1])
-    && vecNear(v.plane.normal, [0, 0, -1]) && near(v.plane.constant, 5, 1e-3) && near(s.shown, 5, 1e-3) && s.text.includes('Tiefe') && s.text.includes('„Block“'), JSON.stringify({ v: v.plane, s: s.face }));
+    && vecNear(v.plane.normal, [0, 0, -1]) && near(v.plane.constant, 5, 1e-3) && near(s.shown, 5, 1e-3) && s.text.includes('Depth') && s.text.includes('“Block”'), JSON.stringify({ v: v.plane, s: s.face }));
   await setValue('2');
   v = await vs();
   check('Tiefe 2 mm: Ebene bei z = 8', near(v.plane.constant, 8, 1e-6), JSON.stringify(v.plane));
-  check('Text für den Agenten: Ebene durch einen Punkt, Fläche, Richtung', /^Schnittansicht, Ebene durch \(40\.000, 0\.000, 8\.000\) mm parallel zu einer Fläche von "Block", weggeschnitten ist die Seite in Richtung \(0, 0, 1\)$/.test((await sec()).agent ?? ''), (await sec()).agent);
+  check('Text für den Agenten: Ebene durch einen Punkt, Fläche, Richtung', /^section view, plane through \(40\.000, 0\.000, 8\.000\) mm parallel to a face of "Block", the side towards \(0, 0, 1\) is cut away$/.test((await sec()).agent ?? ''), (await sec()).agent);
   await shot('schnitt-3-flaeche');
 
   // 9) Ebene Z
   await ev(() => document.querySelector('#section-axes [data-axis="z"]').click());
   v = await vs();
-  check('Ebene Z: mitten durch das Modell (z = 10), oben fällt weg', vecNear(v.plane.normal, [0, 0, -1]) && near(v.plane.constant, 10, 1e-3) && (await sec()).text.includes('Z > 10,00 mm'), JSON.stringify(v.plane));
+  check('Ebene Z: mitten durch das Modell (z = 10), oben fällt weg', vecNear(v.plane.normal, [0, 0, -1]) && near(v.plane.constant, 10, 1e-3) && (await sec()).text.includes('Z > 10.00 mm'), JSON.stringify(v.plane));
 
   // 10) Neuer Build: Der Schnitt bleibt, Deckel und Kontur passen zum neuen Modell
   fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL(14));
@@ -173,7 +175,7 @@ try {
   await domClick('btn-section');
   v = await vs();
   s = await sec();
-  check('„Schnitt" aus: keine Ebene, keine Deckel, keine Kontur, Karte zu', !s.active && !v.plane && !v.capped.length && !v.contour
+  check('„Section" aus: keine Ebene, keine Deckel, keine Kontur, Karte zu', !s.active && !v.plane && !v.capped.length && !v.contour
     && await ev(() => document.getElementById('section-card').hidden), JSON.stringify(v));
   await ev((id) => { window.__t.viewer.setVisible(id, false); }, ids.Block); // stünde sonst vor der Wand
   await ev((id) => window.__t.viewer.setView('right', [id]), ids.Kasten);

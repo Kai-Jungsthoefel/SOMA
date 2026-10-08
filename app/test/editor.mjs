@@ -96,8 +96,8 @@ try {
   await sleep(2500);
   s = await ed();
   check('Tippen: Platte unverändert, kein Build', s.dirty && disk().includes('LENGTH = 60.0') && await builds() === b0 && await body() === 60, `${await builds() - b0} Builds`);
-  check('Anzeige: Punkt am Reiter, „Nicht gespeichert · Strg+S" und Knopf „Speichern und bauen"', await ev(() => !!document.querySelector('#code-tabs .ctab.on .dirty')
-    && document.getElementById('code-info').textContent.includes('Nicht gespeichert · Strg+S') && document.getElementById('btn-code-save')?.textContent === 'Speichern und bauen'));
+  check('Anzeige: Punkt am Reiter, „Not saved · Ctrl+S" und Knopf „Save and build"', await ev(() => !!document.querySelector('#code-tabs .ctab.on .dirty')
+    && document.getElementById('code-info').textContent.includes('Not saved · Ctrl+S') && document.getElementById('btn-code-save')?.textContent === 'Save and build'));
   await shot('8-editor-ungespeichert');
 
   // 4) Strg+S im Editor: speichern, dann genau ein Build
@@ -112,7 +112,7 @@ try {
   await replace('LENGTH = 70.0', 'LENGTH = 72.0');
   await domClick('btn-code-save');
   await waitFor('Build mit 72', () => window.__t.status().state === 'ok' && (window.__t.partSize('Body') || [0])[0] === 72, 60000).catch(() => {});
-  check('Knopf „Speichern und bauen": gespeichert und gebaut (72 mm), Knopf wieder weg', disk().includes('LENGTH = 72.0') && await body() === 72 && await ev(() => !document.getElementById('btn-code-save')?.isConnected));
+  check('Knopf „Save and build": gespeichert und gebaut (72 mm), Knopf wieder weg', disk().includes('LENGTH = 72.0') && await body() === 72 && await ev(() => !document.getElementById('btn-code-save')?.isConnected));
 
   // 6) Änderung von außen ohne eigene Eingaben: Der Editor übernimmt sie
   fs.writeFileSync(modelPy, disk().replace('LENGTH = 72.0', 'LENGTH = 75.0'));
@@ -130,7 +130,7 @@ try {
     && await ev(() => !document.getElementById('code-banner').hidden && !!document.querySelector('#code-tabs .dirty.warn')));
   await ctrlS();
   await sleep(300);
-  check('Strg+S bei Konflikt: nichts geschrieben, Meldung', disk().includes('LENGTH = 77.0') && (await ev(() => window.__t.toast())).text.includes('Nicht alles ließ sich speichern'));
+  check('Strg+S bei Konflikt: nichts geschrieben, Meldung', disk().includes('LENGTH = 77.0') && (await ev(() => window.__t.toast())).text.includes('Not everything could be saved'));
   await shot('9-editor-konflikt');
   await idle();
   const b1 = await builds();
@@ -151,7 +151,7 @@ try {
   // 8) Dateien der App: nur lesen, mit Begründung
   await open('AGENTS.md');
   s = await ed();
-  check('AGENTS.md: nur lesen, mit Begründung und Verweis auf NOTES.md', s.readOnly && /NOTES\.md/.test(s.locked ?? '') && await ev(() => document.getElementById('code-info').textContent.startsWith('Nur lesen')));
+  check('AGENTS.md: nur lesen, mit Begründung und Verweis auf NOTES.md', s.readOnly && /NOTES\.md/.test(s.locked ?? '') && await ev(() => document.getElementById('code-info').textContent.startsWith('Read only')));
   check('Eingaben in AGENTS.md werden nicht angenommen', !(await replace('Instructions', 'Anweisungen')) && !(await ed()).dirty);
 
   // 9) Notizen (Markdown): speichern ja, bauen nein. Dazu Zeilenenden: Eine Datei mit CRLF behält sie.
@@ -162,7 +162,7 @@ try {
   await idle();
   const b2 = await builds();
   await replace('Wunsch: Deckel', 'Wunsch: Deckel mit Lippe');
-  check('Nur Markdown ungespeichert: Der Knopf heißt „Speichern", nicht „Speichern und bauen"', await ev(() => document.getElementById('btn-code-save')?.textContent === 'Speichern'));
+  check('Nur Markdown ungespeichert: Der Knopf heißt „Save", nicht „Save and build"', await ev(() => document.getElementById('btn-code-save')?.textContent === 'Save'));
   await ctrlS();
   await until('NOTES.md geschrieben', () => fs.readFileSync(notes, 'utf8').includes('Lippe'));
   await sleep(2000);
@@ -229,12 +229,12 @@ try {
   check('Text markiert: schwebender Knopf „Zitat an Agent" erscheint', selected && (await ed()).pdf.float);
   await ev(() => document.querySelector('.pdf-float').click());
   await sleep(200);
-  check('Zitat geht mit Datei und Seite an den Agenten', await ev(() => window.__inserted) === '[Zitat: docs/datenblatt.pdf S. 1: "Haltemoment 0,45 Nm"] ',
+  check('Zitat geht mit Datei und Seite an den Agenten', await ev(() => window.__inserted) === '[Quote: docs/datenblatt.pdf p. 1: "Haltemoment 0,45 Nm"] ',
     `${await ev(() => window.__inserted)} | ${(await ev(() => window.__t.toast())).text} | ${await ev(() => window.__t.terminals.count)}`);
   await ev(() => window.__t.editor.pdfMarkPage(2));
   await waitFor('Seite auf der Zeichenfläche', () => window.__t.markup().active, 10000).catch(() => {});
   const mk = await ev(() => window.__t.markup());
-  check('„Seite markieren": Seite 2 öffnet auf der Zeichenfläche', mk.active && mk.source === 'docs/datenblatt.pdf S. 2', mk.source);
+  check('„Mark up page": Seite 2 öffnet auf der Zeichenfläche', mk.active && mk.source === 'docs/datenblatt.pdf p. 2', mk.source);
   await shot('9d-pdf-seite-markieren');
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   fs.writeFileSync(pdfFile, makePdf([['Datenblatt NEMA 17'], ['Seite zwei'], ['Neue Seite drei']]));
@@ -246,7 +246,7 @@ try {
   await open('docs/kaputt.pdf');
   await waitFor('Fehlermeldung', () => !!window.__t.editor.state().pdf?.error, 10000).catch(() => {});
   s = await ed();
-  check('Kaputte PDF: Meldung in der Ansicht, App läuft weiter', !!s.pdf?.error && await ev(() => [...document.querySelectorAll('.pdf-msg')].some((m) => m.offsetParent && m.textContent.includes('lässt sich nicht lesen'))), s.pdf?.error ?? '');
+  check('Kaputte PDF: Meldung in der Ansicht, App läuft weiter', !!s.pdf?.error && await ev(() => [...document.querySelectorAll('.pdf-msg')].some((m) => m.offsetParent && m.textContent.includes('cannot be read'))), s.pdf?.error ?? '');
 
   // 10) Build-Fehler: „Code öffnen" markiert die Zeile rot
   await open('model.py');
@@ -271,7 +271,7 @@ try {
   const inHead = (await exec(['show', 'HEAD:model.py'], proj.dir)).stdout;
   check('„Speichern" oben: Eingabe aus dem Editor ist im Snapshot und in der ZIP', inHead.includes('LENGTH = 81.0') && fs.existsSync(zipPath) && !(await ed()).dirty);
   await replace('LENGTH = 81.0', 'LENGTH = 82.0');
-  check('Ungespeicherte Eingabe im Editor: Speicherstand oben zeigt „Nicht gespeichert"', await ev(() => document.getElementById('save-badge').textContent.startsWith('Nicht gespeichert')),
+  check('Ungespeicherte Eingabe im Editor: Speicherstand oben zeigt „Not saved"', await ev(() => document.getElementById('save-badge').textContent.startsWith('Not saved')),
     await ev(() => document.getElementById('save-badge').textContent));
 
   // 12) Modellwechsel mit ungespeicherter Eingabe: Rückfrage (Abbrechen, dann Speichern)
@@ -302,7 +302,7 @@ try {
 
   // 14) Späte Schreibanfrage für ein schon gewechseltes Modell: nicht ins neue schreiben, sondern sichern
   const late = await ev((id) => window.soma.fs.writeText(id, 'model.py', 'X = 1\n', null, true), proj.id);
-  check('Späte Eingabe für das alte Modell: nicht ins neue geschrieben, sondern gesichert', !late.ok && /Sicherung/.test(late.error ?? '') && fs.readFileSync(model2, 'utf8').includes('LENGTH = 60.0')
+  check('Späte Eingabe für das alte Modell: nicht ins neue geschrieben, sondern gesichert', !late.ok && /backup/.test(late.error ?? '') && fs.readFileSync(model2, 'utf8').includes('LENGTH = 60.0')
     && backups().includes('X = 1\n'), (late.error ?? '').slice(0, 60));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));

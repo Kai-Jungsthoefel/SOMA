@@ -20,7 +20,8 @@ interface Ui {
 }
 interface Deps { viewer: Viewer }
 
-const num = (v: number, digits = 2) => (Math.abs(v) < 5e-4 ? 0 : v).toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: 3 }).replace(/^-/, '−');
+// Ohne Tausendertrennzeichen: Der Wert steht auch im Eingabefeld und muss sich wieder lesen lassen
+const num = (v: number, digits = 2) => (Math.abs(v) < 5e-4 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: 3, useGrouping: false }).replace(/^-/, '−');
 /** Für den Agenten: Punkt als Dezimalzeichen, drei Stellen, kein „-0“. */
 const f3 = (v: number) => (Math.abs(v) < 5e-4 ? 0 : v).toFixed(3);
 const vec = (d: number[]) => `(${d.map((x) => +(Math.abs(x) < 5e-7 ? 0 : x).toFixed(4)).join(', ')})`;
@@ -114,12 +115,12 @@ export class SectionTool {
     if (this.axis !== 'face') {
       const name = this.axis.toUpperCase();
       const gone = this.removedSign() > 0 ? '>' : '<';
-      return `Schnittansicht bei ${name} = ${f3(this.value)} mm, weggeschnitten ist ${name} ${gone} ${f3(this.value)}`;
+      return `section view at ${name} = ${f3(this.value)} mm, ${name} ${gone} ${f3(this.value)} is cut away`;
     }
     const r = this.removedDir();
     const p = this.planePoint();
-    return `Schnittansicht, Ebene durch (${p.map(f3).join(', ')}) mm parallel zu einer Fläche von "${this.face!.name}", `
-      + `weggeschnitten ist die Seite in Richtung ${vec(r)}`;
+    return `section view, plane through (${p.map(f3).join(', ')}) mm parallel to a face of "${this.face!.name}", `
+      + `the side towards ${vec(r)} is cut away`;
   }
 
   // ---- Zustand ------------------------------------------------------------------------------------------------
@@ -155,7 +156,9 @@ export class SectionTool {
   private showValue(): void { if (this.active) this.ui.value.value = num(this.shown()); }
 
   private takeInput(): void {
-    const t = this.ui.value.value.trim().replace(/\s/g, '').replace('−', '-').replace(',', '.');
+    // Komma als Dezimaltrenner weiter annehmen, neben einem Punkt ist es ein Tausendertrennzeichen
+    const s = this.ui.value.value.trim().replace(/\s/g, '').replace('−', '-');
+    const t = s.includes('.') ? s.replace(/,/g, '') : s.replace(',', '.');
     const u = Number(t);
     if (t === '' || !Number.isFinite(u)) { this.render(); return; }
     this.setShown(u);
@@ -191,7 +194,7 @@ export class SectionTool {
     if (!this.picking) return;
     if (!h || h.surface !== 'PLANE') {
       // Weiter warten: Ein Fehlklick soll nicht gleich alles abbrechen
-      this.note = h ? 'Das ist keine ebene Fläche. Bitte eine ebene Fläche anklicken.' : 'Dort ist keine Fläche. Bitte eine ebene Fläche anklicken.';
+      this.note = h ? 'That is not a planar face. Please click a planar face.' : 'There is no face there. Please click a planar face.';
       this.deps.viewer.pickPlane((x) => this.picked(x));
       this.render();
       return;
@@ -246,13 +249,13 @@ export class SectionTool {
     ui.range.step = String(step);
     ui.range.value = String(u);
     if (document.activeElement !== ui.value) this.showValue();
-    ui.label.textContent = faceMode ? 'Tiefe' : `${this.axis.toUpperCase()} =`;
+    ui.label.textContent = faceMode ? 'Depth' : `${this.axis.toUpperCase()} =`;
     ui.flip.disabled = ui.look.disabled = this.picking;
     ui.range.disabled = ui.value.disabled = this.picking;
     let hint: string;
-    if (this.picking) hint = this.note || 'Ebene Fläche im Modell anklicken. Escape bricht ab.';
-    else if (faceMode) hint = `Parallel zu einer Fläche von „${this.face!.name}“, Tiefe ab der Fläche.`;
-    else hint = `Weggeschnitten: ${this.axis.toUpperCase()} ${this.removedSign() > 0 ? '>' : '<'} ${num(this.value)} mm`;
+    if (this.picking) hint = this.note || 'Click a planar face in the model. Escape cancels.';
+    else if (faceMode) hint = `Parallel to a face of “${this.face!.name}”, depth from the face.`;
+    else hint = `Cut away: ${this.axis.toUpperCase()} ${this.removedSign() > 0 ? '>' : '<'} ${num(this.value)} mm`;
     ui.hint.textContent = hint;
     ui.hint.classList.toggle('warn', !!this.note);
   }

@@ -11,8 +11,9 @@ export interface GitStatus { dirty: boolean; changed: number; head: string | nul
  * Markiert Commits der App, damit die Verlaufsleiste sie von Commits des Agenten unterscheiden kann. Der Autor taugt dafür
  * nicht: Agent und App committen mit derselben Git-Identität. Ältere Projekte ohne Trailer erkennt die Leiste am Betreff.
  */
-const APP_TRAILER = ['--trailer', 'Erstellt-von: SOMA'];
-const APP_SUBJECT = /^(Neues Modell angelegt|Automatischer Snapshot beim Speichern|Sicherung vor Wiederherstellung|Stand wiederhergestellt: )/;
+const APP_TRAILER = ['--trailer', 'Created-by: SOMA'];
+// Ältere Projekte haben deutsche Betreffe und den Trailer `Erstellt-von` (vor E73), beide gelten weiter
+const APP_SUBJECT = /^(New model created|Automatic snapshot on save|Backup before restore|Restored version: |Neues Modell angelegt|Automatischer Snapshot beim Speichern|Sicherung vor Wiederherstellung|Stand wiederhergestellt: )/;
 
 /** Gilt für jeden Aufruf: UTF-8-Pfade lesbar, keine Zeilenenden-Umwandlung (ZIPs wandern zwischen Systemen). */
 const COMMON = ['-c', 'core.quotepath=false', '-c', 'core.autocrlf=false'];
@@ -82,13 +83,13 @@ export class GitRepo {
       if (!missing.length) return;
       fs.mkdirSync(path.dirname(file), { recursive: true });
       const head = have && !have.endsWith('\n') ? '\n' : '';
-      fs.appendFileSync(file, `${head}# SOMA: Zwischenergebnisse der App (neue Projekte haben sie in der .gitignore)\n${missing.join('\n')}\n`);
+      fs.appendFileSync(file, `${head}# SOMA: intermediate results of the app (new projects have them in .gitignore)\n${missing.join('\n')}\n`);
     } catch { /* nächster Versuch beim nächsten Öffnen */ }
   }
 
   private async mustRun(args: string[], write = false): Promise<string> {
     const r = await this.run(args, write);
-    if (!r.ok) throw new Error(`git ${args[0]} fehlgeschlagen: ${(r.err || r.out).trim().slice(0, 400)}`);
+    if (!r.ok) throw new Error(`git ${args[0]} failed: ${(r.err || r.out).trim().slice(0, 400)}`);
     return r.out;
   }
 
@@ -142,7 +143,7 @@ export class GitRepo {
 
   /** Verlauf, älteste zuerst. Ein kaputtes oder leeres Repository liefert eine leere Liste. */
   async log(limit = 500): Promise<Commit[]> {
-    const fmt = '--format=%H%x1f%h%x1f%an%x1f%aI%x1f%s%x1f%(trailers:key=Erstellt-von,valueonly,separator=%x2c)%x1e';
+    const fmt = '--format=%H%x1f%h%x1f%an%x1f%aI%x1f%s%x1f%(trailers:key=Created-by,key=Erstellt-von,valueonly,separator=%x2c)%x1e';
     const r = await this.run(['log', `-n${limit}`, fmt, 'HEAD']);
     if (!r.ok) return [];
     return r.out.split('\x1e').map((e) => e.trim()).filter(Boolean).map((e) => {
@@ -153,7 +154,7 @@ export class GitRepo {
 
   /** Schreibt eine Datei eines Standes in `outFile` (binärsicher, Arbeitsordner bleibt unberührt). */
   exportFile(hash: string, rel: string, outFile: string): Promise<void> {
-    if (!HASH.test(hash)) return Promise.reject(new Error('Ungültiger Commit'));
+    if (!HASH.test(hash)) return Promise.reject(new Error('Invalid commit'));
     return new Promise((resolve, reject) => {
       fs.mkdirSync(path.dirname(outFile), { recursive: true });
       const child = spawn([...COMMON, 'show', `${hash}:${rel}`], this.dir, { env: { GIT_OPTIONAL_LOCKS: '0' } });
@@ -164,7 +165,7 @@ export class GitRepo {
       child.on('error', reject);
       child.on('close', (code) => {
         out.end();
-        if (code === 0) resolve(); else { fs.rmSync(outFile, { force: true }); reject(new Error(err.trim() || `git show endete mit Code ${code}`)); }
+        if (code === 0) resolve(); else { fs.rmSync(outFile, { force: true }); reject(new Error(err.trim() || `git show ended with code ${code}`)); }
       });
     });
   }
@@ -174,17 +175,17 @@ export class GitRepo {
    * Vorher wird ein ungesicherter Arbeitsstand als eigener Commit gesichert, damit nichts verloren geht.
    */
   async restore(hash: string): Promise<{ commit: string | null; safety: string | null }> {
-    if (!HASH.test(hash)) throw new Error('Ungültiger Commit');
+    if (!HASH.test(hash)) throw new Error('Invalid commit');
     return this.serial(async () => {
       const type = await this.run(['cat-file', '-t', hash]);
-      if (!type.ok || type.out.trim() !== 'commit') throw new Error('Dieser Stand existiert im Verlauf nicht mehr.');
+      if (!type.ok || type.out.trim() !== 'commit') throw new Error('This version no longer exists in the history.');
       const subject = (await this.mustRun(['log', '-1', '--format=%s', hash])).trim();
       const short = (await this.mustRun(['rev-parse', '--short', hash])).trim();
 
       let safety: string | null = null;
       if ((await this.status()).dirty) {
         await this.addAll();
-        await this.mustRun(['commit', '--no-verify', '-m', 'Sicherung vor Wiederherstellung', ...APP_TRAILER], true);
+        await this.mustRun(['commit', '--no-verify', '-m', 'Backup before restore', ...APP_TRAILER], true);
         safety = (await this.mustRun(['rev-parse', 'HEAD'])).trim();
       }
       const target = new Set((await this.mustRun(['ls-tree', '-r', '-z', '--name-only', hash])).split('\0').filter(Boolean));
@@ -196,19 +197,19 @@ export class GitRepo {
       await this.addAll();
       const diff = await this.run(['diff', '--cached', '--quiet']);
       if (diff.ok) return { commit: null, safety }; // Stand war schon identisch
-      await this.mustRun(['commit', '--no-verify', '-m', `Stand wiederhergestellt: ${subject} (${short})`, ...APP_TRAILER], true);
+      await this.mustRun(['commit', '--no-verify', '-m', `Restored version: ${subject} (${short})`, ...APP_TRAILER], true);
       return { commit: (await this.mustRun(['rev-parse', 'HEAD'])).trim(), safety };
     });
   }
 
   /** Auffälligkeiten im Verlauf. Nur melden, nichts reparieren (E28). */
   async problems(): Promise<string[]> {
-    if (!(await this.isRepo())) return ['Kein Git-Verlauf gefunden (.git fehlt oder ist unlesbar). Der Verlauf ist nicht verfügbar, Speichern als ZIP geht weiter.'];
+    if (!(await this.isRepo())) return ['No Git history found (.git is missing or unreadable). The history is not available, saving as ZIP still works.'];
     const out: string[] = [];
-    if (!(await this.head())) out.push('Der Git-Verlauf hat noch keinen Commit.');
+    if (!(await this.head())) out.push('The Git history has no commit yet.');
     const branch = await this.run(['symbolic-ref', '-q', '--short', 'HEAD']);
-    if (!branch.ok) out.push('Git steht auf einem losen Stand (detached HEAD). Neue Commits gehören auf den Branch main.');
-    else if (branch.out.trim() !== 'main') out.push(`Git steht auf dem Branch „${branch.out.trim()}“ statt main.`);
+    if (!branch.ok) out.push('Git is on a detached HEAD. New commits belong on the branch main.');
+    else if (branch.out.trim() !== 'main') out.push(`Git is on the branch “${branch.out.trim()}” instead of main.`);
     return out;
   }
 

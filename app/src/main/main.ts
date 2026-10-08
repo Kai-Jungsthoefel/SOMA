@@ -49,7 +49,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('versions:preview', (_e, hash: string) => ctl.preview(hash));
   ipcMain.handle('versions:restore', (_e, hash: string) => ctl.restore(hash));
 
-  ipcMain.handle('build:run', () => ctl.need().builds.start('manuell'));
+  ipcMain.handle('build:run', () => ctl.need().builds.start('manual'));
   ipcMain.handle('build:cancel', () => ctl.need().builds.cancel());
   ipcMain.handle('build:setAuto', (_e, on: boolean) => ctl.need().builds.setAuto(!!on));
   ipcMain.handle('build:status', () => ctl.need().builds.status);
@@ -65,14 +65,14 @@ function registerIpc(ctl: ProjectController): void {
     if (!r.abs) return { ok: false, error: r.error };
     // Gesperrtes gar nicht erst zur Rückfrage bringen (trashEntry prüft danach noch einmal mit bereinigtem Pfad)
     const block = fileOpBlockReason(String(rel), 'delete');
-    if (block) return { ok: false, error: `${rel} lässt sich nicht löschen. ${block}` };
+    if (block) return { ok: false, error: `${rel} cannot be deleted. ${block}` };
     const isDir = fs.statSync(r.abs).isDirectory();
     // Die Rückfrage stellt der Hauptprozess: So beantworten Tests sie wie alle anderen Dialoge (dialogs.ts)
     const c = await choose(win, {
-      title: 'Löschen',
-      message: isDir ? `Den Ordner „${path.basename(r.abs)}“ mit allem darin in den Papierkorb verschieben?` : `„${path.basename(r.abs)}“ in den Papierkorb verschieben?`,
-      detail: 'Aus dem Papierkorb lässt es sich wiederherstellen. Gespeicherte Stände im Verlauf bleiben ohnehin erhalten.',
-      buttons: ['In den Papierkorb', 'Abbrechen'],
+      title: 'Delete',
+      message: isDir ? `Move the folder “${path.basename(r.abs)}” and everything in it to the Recycle Bin?` : `Move “${path.basename(r.abs)}” to the Recycle Bin?`,
+      detail: 'It can be restored from the Recycle Bin. Saved versions in the history are kept anyway.',
+      buttons: ['Move to Recycle Bin', 'Cancel'],
     });
     if (c !== 0) return { ok: false, canceled: true };
     return trashEntry(root, String(rel), (abs) => trashItem(abs));
@@ -93,7 +93,7 @@ function registerIpc(ctl: ProjectController): void {
   // Links aus Markdown-Dateien (E51). Nur Web und Mail: file:, Programme und eigene Protokolle könnten etwas ausführen.
   ipcMain.handle('app:openUrl', async (_e, url: unknown): Promise<FileOpResult> => {
     const u = String(url ?? '');
-    if (!/^(https?:\/\/|mailto:)/i.test(u)) return { ok: false, error: `Nur Web- und Mail-Adressen lassen sich öffnen: ${u.slice(0, 100)}` };
+    if (!/^(https?:\/\/|mailto:)/i.test(u)) return { ok: false, error: `Only web and mail addresses can be opened: ${u.slice(0, 100)}` };
     if (process.env.SOMA_TEST === '1') return { ok: true, path: u };
     try { await shell.openExternal(u); return { ok: true, path: u }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   });
@@ -102,13 +102,13 @@ function registerIpc(ctl: ProjectController): void {
     const s = ctl.session;
     // Späte Eingabe aus einem schon gewechselten Modell: nicht ins falsche Projekt schreiben, aber auch nicht verlieren
     if (!s || s.id !== id) {
-      if (!isProjectId(String(id))) return { ok: false, error: 'Unbekanntes Modell.' };
-      return { ok: false, error: `Das Modell wurde inzwischen gewechselt. Die Änderung liegt als Sicherung unter ${backupText(editBackupsDir(id), String(rel), String(text))}` };
+      if (!isProjectId(String(id))) return { ok: false, error: 'Unknown model.' };
+      return { ok: false, error: `The model has been switched in the meantime. The change is kept as a backup in ${backupText(editBackupsDir(id), String(rel), String(text))}` };
     }
     return writeProjectText(s.dir, String(rel), String(text), base == null ? null : String(base), !!force, editBackupsDir(s.id));
   });
   ipcMain.handle('fs:backupText', (_e, id: string, rel: string, text: string) => {
-    if (!isProjectId(String(id))) throw new Error('Unbekanntes Modell.');
+    if (!isProjectId(String(id))) throw new Error('Unknown model.');
     return backupText(editBackupsDir(String(id)), String(rel), String(text));
   });
   ipcMain.handle('fs:readText', (_e, rel: string) => fs.readFileSync(resolveInside(dir(), rel), 'utf8'));
@@ -159,13 +159,13 @@ function registerIpc(ctl: ProjectController): void {
 }
 
 function onRendererGone(wc: WebContents, reason: string, exitCode: number): void {
-  console.error(`[soma] Renderer-Prozess beendet: Grund=${reason} Code=${exitCode}`);
+  console.error(`[soma] Renderer process ended: reason=${reason} code=${exitCode}`);
   if (reason === 'launch-failed' && process.env.SOMA_HIDDEN !== '1') {
     // Häufigste Ursache unter Windows: das Programm liegt auf einem Netzlaufwerk. Die sandboxed Prozesse laufen mit
     // eingeschränktem Token, verlieren dort den Zugriff und starten nicht. Ohne Meldung bliebe nur ein schwarzes Fenster.
-    dialog.showErrorBox('SOMA kann die Oberfläche nicht starten',
-      `Der Anzeigeprozess ließ sich nicht starten (Code ${exitCode}).\n\nHäufige Ursache: Das Programm liegt auf einem Netzlaufwerk. ` +
-      'Installiere oder starte es von einer lokalen Platte (z. B. C:).');
+    dialog.showErrorBox('SOMA cannot start its user interface',
+      `The display process could not be started (code ${exitCode}).\n\nA common cause: the program is on a network drive. ` +
+      'Install or start it from a local disk (for example C:).');
     app.quit();
   }
   void wc;
@@ -212,7 +212,7 @@ function createWindow(): void {
   registerIpc(ctl);
   // Stürzt der Anzeigeprozess ab, steht der Grund im Protokoll (sonst bliebe nur ein schwarzes Fenster).
   wc.on('render-process-gone', (_e, d) => onRendererGone(wc, d.reason, d.exitCode));
-  wc.on('unresponsive', () => console.error('[soma] Renderer reagiert nicht'));
+  wc.on('unresponsive', () => console.error('[soma] Renderer is not responding'));
   wc.on('console-message', (_e, level, message, line, source) => { if (level >= 2) console.error(`[renderer] ${message} (${source}:${line})`); });
   wc.once('did-finish-load', () => {
     // Die App beginnt auf der Startseite, dort stehen die zuletzt geöffneten Modelle (E69). Ein Arbeitsstand von vor einem
@@ -220,7 +220,7 @@ function createWindow(): void {
     if (process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_START === 'home') return;
     void (async () => {
       try { await ctl.open(getLastProject() ?? (await createProject()).id); }
-      catch (e) { console.error('[soma] Projekt konnte nicht geöffnet werden:', e); }
+      catch (e) { console.error('[soma] Could not open the project:', e); }
     })();
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
@@ -250,9 +250,9 @@ app.whenReady().then(async () => {
   warmUp();
   sweepDiscarded(); // Reste verworfener Modelle (E69) vom letzten Mal
   await startBridge(async (route, body) => {
-    if (!controller) return { status: 503, body: { ok: false, error: 'Die App hat gerade kein Fenster.' } };
+    if (!controller) return { status: 503, body: { ok: false, error: 'The app has no window right now.' } };
     if (route === 'render') return controller.renderForAgent(body);
-    return { status: 404, body: { ok: false, error: `Unbekannte Anfrage: ${route}` } };
+    return { status: 404, body: { ok: false, error: `Unknown request: ${route}` } };
   });
   createWindow();
 });

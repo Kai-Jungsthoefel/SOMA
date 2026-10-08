@@ -1,13 +1,13 @@
 ---
-title: Verbindungen
+title: Joints
 name: Joints and fasteners
-summary: Schrauben (bevorzugt {{screw}}) mit Einschraubtiefe und Randabstand, Schnapphaken, Scharniere, Stifte und Formschluss, Magnete, Kleben.
+summary: Screws (preferably {{screw}}) with thread engagement and edge distance, snap fits, hinges, pins and positive locking, magnets, glue.
 order: 21
-category: Konstruktionswissen
+category: Design knowledge
 default: on-demand
 when: parts are joined: screws, snap fits, hinges, pins, magnets or glue
-topics: Schrauben; Schnapphaken; Scharniere; Stifte und Formschluss; Magnete und Kleben
-var screw: M3 | | Bevorzugte Schraube | M2, M2.5, M3, M4, M5, M6, M8
+topics: Screws; Snap fits; Hinges; Pins and positive locking; Magnets and glue
+var screw: M3 | | Preferred screw | M2, M2.5, M3, M4, M5, M6, M8
 ---
 # Skill: Joints and fasteners
 

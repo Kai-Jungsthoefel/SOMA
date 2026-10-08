@@ -1,15 +1,15 @@
 ---
-title: 3D-Druck Harz und Pulver (SLA, SLS)
+title: Resin and powder printing (SLA, SLS)
 name: Resin and powder 3D printing (SLA, SLS, MJF)
-summary: {{process}}: Wände ab {{min_wall}} mm, Spiel {{clearance}} mm je Seite, Hohlkörper mit Ablauflöchern, Ausrichtung und Stützen.
+summary: {{process}}: walls from {{min_wall}} mm, clearance {{clearance}} mm per side, hollow parts with escape holes, orientation and supports.
 order: 11
-category: Fertigungsverfahren
+category: Manufacturing
 default: on-demand
 when: the parts will be printed in resin (SLA, DLP) or powder (SLS, MJF)
-topics: Verfahren: {{process}}; Wände und Details; Hohlkörper; Ausrichtung und Stützen; Spiel und Gewinde; Prüfen und Export
-var process: SLA | | Verfahren | SLA=Harz (SLA, DLP), SLS=Pulver (SLS, MJF)
-var min_wall: 1 | mm | Mindestwand | 0.3..10
-var clearance: 0.2 | mm | Spiel je Seite (Gleitpassung) | 0..2
+topics: Process: {{process}}; Walls and details; Hollow parts; Orientation and support; Fits and threads; Checks and export
+var process: SLA | | Process | SLA=Resin (SLA, DLP), SLS=Powder (SLS, MJF)
+var min_wall: 1 | mm | Minimum wall | 0.3..10
+var clearance: 0.2 | mm | Clearance per side (sliding fit) | 0..2
 ---
 # Skill: Resin and powder 3D printing
 

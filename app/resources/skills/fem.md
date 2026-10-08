@@ -1,13 +1,13 @@
 ---
-title: Festigkeit mit FEM
+title: Strength with FEM
 name: Strength with FEM
-summary: Spannungen, Sicherheit und Verformung unter Last mit der Finite-Elemente-Methode (soma analyze fem), Lastfall als Python-Datei, Ergebnis farbig in der App.
+summary: Stresses, safety factor and deformation under load with the finite element method (soma analyze fem), load case as a Python file, colored result in the app.
 order: 32
-category: Prüfen und Zeigen
+category: Check and present
 default: on-demand
 when: a part carries a real load and the user wants to know whether it holds, where it is weakest or how far it bends
-topics: Lastfall; Rechnen und lesen; Ergebnis prüfen; Grenzen; Rückmeldung
-var safety: 2 | | Sicherheitsfaktor | 1..10
+topics: Load case; Compute and read; Check the result; Limits; Feedback
+var safety: 2 | | Safety factor | 1..10
 ---
 # Skill: Strength with FEM
 
@@ -63,7 +63,7 @@ face the hand, the shelf or the shaft touches, not on a whole side.
 
 ## Check the result
 
-- **Support forces** must carry the loads ("im Gleichgewicht"). If a support force is far from what you expect, the
+- **Support forces** must carry the loads ("in equilibrium"). If a support force is far from what you expect, the
   wrong faces are held.
 - **Mesh check:** every run computes a second time with a coarser mesh. If the highest stress changes by more than 15 %,
   it says so: the peak sits at a sharp inner corner or at the edge of a support or load. There the value grows without
@@ -82,6 +82,6 @@ face the hand, the shelf or the shaft touches, not on a whole side.
 
 ## Feedback from the user
 
-`[Ergebnis: "Bracket, 5 kg on the arm" (.soma/results/bracket.glb, Grenzwert 2.00), Bauteil "Bracket": Sicherheit
-0.90 (22.2 MPa, Verschiebung 0.412 mm) bei (12.0, -5.0, 26.0) mm]`: the user clicked that spot. The point is in the
+`[Result: "Bracket, 5 kg on the arm" (.soma/results/bracket.glb, limit 2.00), part "Bracket": safety factor 0.90
+(22.2 MPa, displacement 0.412 mm) at (12.0, -5.0, 26.0) mm]`: the user clicked that spot. The point is in the
 undeformed model.

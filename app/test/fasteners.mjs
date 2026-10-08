@@ -140,14 +140,14 @@ msgs = {
     "m10": err(lambda: HeatSetInsert("M10x12.7", at=(0, 0, 0))),
     "amb": err(lambda: HeatSetInsert("M3", at=(0, 0, 0))),
 }
-out("DIN 912: Hinweis auf ISO 4762", "heisst heute ISO 4762" in msgs["din"], msgs["din"])
-out("M3x11: keine Normlänge, Liste und check_length=False genannt", "Normlaengen: 5, 6, 8, 10, 12" in msgs["len"] and "check_length=False" in msgs["len"]
+out("DIN 912: Hinweis auf ISO 4762", "is now called ISO 4762" in msgs["din"], msgs["din"])
+out("M3x11: keine Normlänge, Liste und check_length=False genannt", "Standard lengths: 5, 6, 8, 10, 12" in msgs["len"] and "check_length=False" in msgs["len"]
     and Screw("ISO 4762", "M3x11", at=(0, 0, 0), check_length=False).length == 11, msgs["len"])
-out("M7 gibt es nicht: vorhandene Größen genannt", "Vorhanden: M1.6, M2" in msgs["size"], msgs["size"])
-out("at fehlt, (x, y) ohne on, Gerade verfehlt das Teil: je eine Erklärung", "at fehlt" in msgs["at"] and "on=teil" in msgs["xy"] and "trifft das Teil nicht" in msgs["miss"],
+out("M7 gibt es nicht: vorhandene Größen genannt", "Available: M1.6, M2" in msgs["size"], msgs["size"])
+out("at fehlt, (x, y) ohne on, Gerade verfehlt das Teil: je eine Erklärung", "at is missing" in msgs["at"] and "on=part" in msgs["xy"] and "does not hit the part" in msgs["miss"],
     msgs["miss"])
-out("Einsatz M10 (Tabelle nennt Bohrer M14): abgelehnt statt falscher Bohrung", "keine brauchbare Bohrung" in msgs["m10"], msgs["m10"])
-out("Einsatz M3 ohne Länge: nicht eindeutig, Längen genannt", "nicht eindeutig" in msgs["amb"] and "5.7" in msgs["amb"], msgs["amb"])
+out("Einsatz M10 (Tabelle nennt Bohrer M14): abgelehnt statt falscher Bohrung", "no usable hole" in msgs["m10"], msgs["m10"])
+out("Einsatz M3 ohne Länge: nicht eindeutig, Längen genannt", "ambiguous" in msgs["amb"] and "5.7" in msgs["amb"], msgs["amb"])
 
 # 8) Viele gleiche Schrauben: die Geometrie wird nur einmal gebaut
 t0 = time.perf_counter()
@@ -262,12 +262,12 @@ try {
   const outline = await ev(() => [...document.querySelectorAll('#tab-model .row, #tab-model .grp')].map((r) => (r.classList.contains('grp') ? '#' : '')
     + ((r.querySelector('.gname') ?? r.querySelector('.pname'))?.textContent ?? r.textContent)).join(' '));
   check('Bauteilbaum: Normteile als Gruppe bei den eigenen Teilen, keine Referenzen-Überschrift', outline.includes('Normteile') && outline.includes('Einsätze')
-    && !outline.includes('#REFERENZEN'), outline.slice(0, 120));
+    && !outline.includes('#REFERENCES'), outline.slice(0, 120));
 
   await ev(() => [...document.querySelectorAll('#tab-model .row:not(.gr)')].find((r) => r.querySelector('.pname')?.textContent === 'Schraube 1').querySelector('.nm').click());
   await waitFor('Auswahl', () => window.__t.info() !== '', 5000).catch(() => {});
   const info = await ev(() => window.__t.info());
-  check('Auswahl einer Schraube: Name mit „(Zukaufteil)“, Codestelle wie bei eigenen Teilen', info.startsWith('Schraube 1 (Zukaufteil)'), info.slice(0, 60));
+  check('Auswahl einer Schraube: Name mit „(purchased part)“, Codestelle wie bei eigenen Teilen', info.startsWith('Schraube 1 (purchased part)'), info.slice(0, 60));
   await ev(() => window.__t.viewer.setView('iso'));
   if (process.env.SMOKE_SHOTS) {
     fs.mkdirSync(path.join(APP, 'test', 'shots'), { recursive: true });
@@ -279,7 +279,7 @@ try {
   const exp = py(['-m', 'soma', 'export', '--all', '--format', 'stl', '--project', proj.dir, '--out', 'exp-test']);
   const files = fs.existsSync(path.join(proj.dir, 'exp-test')) ? fs.readdirSync(path.join(proj.dir, 'exp-test')).sort() : [];
   check('soma export --all: nur Gehäuse und Deckel, Meldung über 10 übersprungene Teile', exp.status === 0 && files.join(',') === 'Deckel.stl,Gehaeuse.stl'
-    && exp.stdout.includes('nicht exportiert: 10'), `${files.join(',')} ${exp.stderr.slice(-120)}`);
+    && exp.stdout.includes('not exported: 10'), `${files.join(',')} ${exp.stderr.slice(-120)}`);
   const one = py(['-m', 'soma', 'export', 'Klemmschraube', '--format', 'step', '--project', proj.dir, '--out', 'exp-test']);
   check('Einzeln exportiert: soma export Klemmschraube', one.status === 0 && fs.existsSync(path.join(proj.dir, 'exp-test', 'Klemmschraube.step')), one.stderr.slice(-120));
   fs.rmSync(path.join(proj.dir, 'exp-test'), { recursive: true, force: true });

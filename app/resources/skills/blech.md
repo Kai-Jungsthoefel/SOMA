@@ -1,16 +1,16 @@
 ---
-title: Blech
+title: Sheet metal
 name: Sheet metal
-summary: {{material}}, {{thickness}} mm, Innenradius {{bend_radius}} mm: Biegungen modellieren, Schenkel, Freistiche, Abstände zur Biegung, Abwicklung mit K-Faktor {{k_factor}}.
+summary: {{material}}, {{thickness}} mm, inner radius {{bend_radius}} mm: modeling bends, flanges, relief notches, distances to the bend, flat pattern with K-factor {{k_factor}}.
 order: 14
-category: Fertigungsverfahren
+category: Manufacturing
 default: on-demand
 when: parts will be made from bent sheet metal
-topics: Material und Dicke; Biegungen modellieren; Schenkel, Löcher, Freistiche; Abwicklung; Gewinde und Verbindungen
-var material: steel | | Material | steel=Stahl (DC01), stainless steel=Edelstahl, aluminium=Aluminium
-var thickness: 1.5 | mm | Blechdicke | 0.3..10
-var bend_radius: 1.5 | mm | Innenradius der Biegung | 0..30
-var k_factor: 0.4 | | K-Faktor | 0.2..0.5
+topics: Material and thickness; Modeling bends; Flanges, holes, relief notches; Flat pattern; Threads and joints
+var material: steel | | Material | steel=Steel (DC01), stainless steel=Stainless steel, aluminium=Aluminium
+var thickness: 1.5 | mm | Sheet thickness | 0.3..10
+var bend_radius: 1.5 | mm | Inner bend radius | 0..30
+var k_factor: 0.4 | | K-factor | 0.2..0.5
 ---
 # Skill: Sheet metal
 

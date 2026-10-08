@@ -1,13 +1,13 @@
 ---
-title: Festigkeit und Steifigkeit
+title: Strength and stiffness
 name: Strength and stiffness
-summary: Gestaltungsregeln ohne Simulation: Kerben vermeiden, Rippen statt Masse, kurzer Kraftfluss, Überschlagsrechnung mit Sicherheit {{safety}}, Werkstoffwerte, Gewicht.
+summary: Design rules without simulation: avoid notches, ribs instead of mass, short load paths, rough calculation with safety factor {{safety}}, material values, weight.
 order: 23
-category: Konstruktionswissen
+category: Design knowledge
 default: on-demand
 when: a part carries load or must be stiff, strong or light
-topics: Gestaltungsregeln; Überschlagsrechnung; Werkstoffwerte; Gewicht
-var safety: 2 | | Sicherheitsfaktor | 1..10
+topics: Design rules; Rough calculation; Material values; Weight
+var safety: 2 | | Safety factor | 1..10
 ---
 # Skill: Strength and stiffness
 

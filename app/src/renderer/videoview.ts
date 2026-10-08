@@ -32,10 +32,10 @@ export class VideoView {
     ui.range.addEventListener('input', () => { v.pause(); v.currentTime = Number(ui.range.value); });
     ui.close.addEventListener('click', () => this.close());
     ui.mark.addEventListener('click', () => void this.mark());
-    ui.agent.addEventListener('click', () => { if (this.file) d.insert(`[Video: ${this.file} bei ${videoStamp(v.currentTime)}] `); });
+    ui.agent.addEventListener('click', () => { if (this.file) d.insert(`[Video: ${this.file} at ${videoStamp(v.currentTime)}] `); });
     for (const ev of ['timeupdate', 'seeked', 'loadedmetadata', 'play', 'pause', 'ended']) v.addEventListener(ev, () => this.render());
     v.addEventListener('click', () => (v.paused ? void v.play().catch(() => {}) : v.pause()));
-    v.addEventListener('error', () => { if (this.file) d.toast(`${this.file} lässt sich nicht abspielen (Format?). Rechtsklick im Dateibaum: „Mit Standardprogramm öffnen“.`, 'error'); });
+    v.addEventListener('error', () => { if (this.file) d.toast(`${this.file} can't be played (format?). Right-click it in the file tree: “Open with default app”.`, 'error'); });
     window.addEventListener('keydown', (e) => {
       if (ui.root.hidden || (e.target as HTMLElement | null)?.closest?.('input, textarea, select, .cm-editor, #terminals, #markup')) return;
       if (e.key === ' ') { e.preventDefault(); if (v.paused) void v.play().catch(() => {}); else v.pause(); }
@@ -50,7 +50,7 @@ export class VideoView {
 
   async open(rel: string): Promise<void> {
     let data: ArrayBuffer;
-    try { data = await this.d.readBinary(rel); } catch (e) { this.d.toast(`${rel} lässt sich nicht lesen: ${e instanceof Error ? e.message : String(e)}`, 'error'); return; }
+    try { data = await this.d.readBinary(rel); } catch (e) { this.d.toast(`Can't read ${rel}: ${e instanceof Error ? e.message : String(e)}`, 'error'); return; }
     this.release();
     this.file = rel;
     this.url = URL.createObjectURL(new Blob([data], { type: /\.webm$/i.test(rel) ? 'video/webm' : 'video/mp4' }));
@@ -89,7 +89,7 @@ export class VideoView {
     this.ui.range.value = String(v.currentTime);
     this.ui.time.textContent = `${videoStamp(v.currentTime)} / ${videoStamp(dur)}`;
     this.ui.play.replaceChildren(icon(v.paused ? 'play' : 'pause', 16, 2));
-    this.ui.play.setAttribute('aria-label', v.paused ? 'Abspielen' : 'Anhalten');
+    this.ui.play.setAttribute('aria-label', v.paused ? 'Play' : 'Pause');
   }
 
   /** Das gerade gezeigte Bild in voller Auflösung. */
@@ -107,8 +107,8 @@ export class VideoView {
     const v = this.ui.video;
     v.pause();
     const c = this.frame();
-    if (!c || !this.file) { this.d.toast('Das Video zeigt noch kein Bild.', 'error'); return; }
-    await this.d.markFrame(`${this.file} bei ${videoStamp(v.currentTime)}`, c);
+    if (!c || !this.file) { this.d.toast('The video shows no frame yet.', 'error'); return; }
+    await this.d.markFrame(`${this.file} at ${videoStamp(v.currentTime)}`, c);
   }
 
   /** Prüfhilfen. */

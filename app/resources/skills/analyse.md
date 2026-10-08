@@ -1,17 +1,17 @@
 ---
-title: Analyse
+title: Analysis
 name: Analysis
-summary: Überhang, Wandstärke und Spalt zwischen Teilen als Wert an jeder Stelle der Oberfläche (soma analyze), als Text und farbiges Bild.
+summary: Overhang, wall thickness and gaps between parts as a value at every spot of the surface (soma analyze), as text and as a colored picture.
 order: 30
-category: Prüfen und Zeigen
+category: Check and present
 default: on-demand
 when: you check printability, wall thickness or gaps between parts, or the user asks for an analysis
-topics: Auswertungen; Ablauf; Grenzen; Rückmeldung
+topics: Analyses; Workflow; Limits; Feedback
 ---
 # Skill: Analysis
 
 `soma analyze` computes a value at every spot of the surface, prints a summary per part and writes
-`.soma/results/<name>.glb`. The user sees it in colour in the app (Analyse), you see it with `soma render --result`.
+`.soma/results/<name>.glb`. The user sees it in colour in the app (Analysis), you see it with `soma render --result`.
 
 | Command | Value | Critical by default |
 |---|---|---|
@@ -47,5 +47,5 @@ accuracy of the threshold count as exactly at the threshold, not critical (a 45�
 
 ## Feedback from the user
 
-`[Ergebnis: "Wandstärke" (.soma/results/thickness.glb, Grenzwert 1.20 mm), Bauteil "Lid": 0.80 mm bei (12.0, -5.0,
-26.0) mm]`: the user clicked that spot. A marking may say `zeigt das Ergebnis „Wandstärke“`: it shows the colours.
+`[Result: "Wall thickness" (.soma/results/thickness.glb, limit 1.20 mm), part "Lid": 0.80 mm at (12.0, -5.0, 26.0)
+mm]`: the user clicked that spot. A markup may say `shows the result "Wall thickness"`: it shows the colours.

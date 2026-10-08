@@ -1,15 +1,15 @@
 ---
-title: Toleranzen und Passungen
+title: Tolerances and fits
 name: Tolerances and fits
-summary: Spiel als benannte Konstanten, Kollisionsprüfung im Code, Durchgangs- und Kernlöcher, Senkungen für Zylinderschrauben, ISO-Passungen.
+summary: Clearances as named constants, interference checks in code, clearance holes and tap drills, counterbores for socket head screws, ISO fits.
 order: 20
-category: Konstruktionswissen
+category: Design knowledge
 default: on-demand
 when: parts must fit together: clearances, holes for screws, sliding or press fits
-topics: Fertigung: {{process}}; Spiel als benannte Konstanten; Kollisionen und Abstände im Code prüfen; Durchgangslöcher ({{hole_fit}}) und Kernlöcher; Senkungen für Zylinderschrauben; ISO-Passungen für gefertigte Teile
-var process: unknown | | Fertigung | unknown=noch offen (Agent fragt), 3D printing=3D-Druck, CNC milling=CNC-Fräsen, laser cutting=Laserschneiden, sheet metal=Blech
-var hole_fit: medium | | Durchgangslöcher nach ISO 273 | fine=fein, medium=mittel, coarse=grob
-var min_gap: 0.2 | mm | Mindestabstand zwischen Teilen | 0..5
+topics: Manufacturing: {{process}}; Clearances as named constants; Checking interference and gaps in code; Clearance holes ({{hole_fit}}) and tap drills; Counterbores for socket head screws; ISO fits for machined parts
+var process: unknown | | Manufacturing | unknown=not decided yet (agent asks), 3D printing=3D printing, CNC milling=CNC milling, laser cutting=Laser cutting, sheet metal=Sheet metal
+var hole_fit: medium | | Clearance holes to ISO 273 | fine=fine, medium=medium, coarse=coarse
+var min_gap: 0.2 | mm | Minimum gap between parts | 0..5
 ---
 # Skill: Tolerances and fits
 

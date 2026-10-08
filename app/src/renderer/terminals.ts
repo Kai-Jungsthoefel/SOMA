@@ -25,7 +25,7 @@ export class TerminalTabs {
       if (!t) return;
       t.exited = true;
       t.tab.classList.add('exited');
-      t.term.write(`\r\n\x1b[90m[Prozess beendet, Code ${code}]\x1b[0m\r\n`);
+      t.term.write(`\r\n\x1b[90m[Process ended, code ${code}]\x1b[0m\r\n`);
       this.renderStrip();
     });
     new ResizeObserver(() => this.fitActive()).observe(panes);
@@ -69,10 +69,10 @@ export class TerminalTabs {
 
     const agent = !!opts.command;
     const title = opts.title ?? (this.tabs.size ? `Terminal ${this.tabs.size + 1}` : 'Terminal');
-    const label = el('button', { className: 't', title: agent ? `${title} läuft in einer Shell im Modellordner` : 'Shell im Modellordner' },
+    const label = el('button', { className: 't', title: agent ? `${title} runs in a shell in the model folder` : 'Shell in the model folder' },
       agent ? el('span', { className: 'dot' }) : icon('term', 14, 2), el('span', { textContent: title }));
-    const x = el('button', { className: 'x', title: `${title} schließen` }, icon('x', 12, 2.2));
-    x.setAttribute('aria-label', `${title} schließen`);
+    const x = el('button', { className: 'x', title: `Close ${title}` }, icon('x', 12, 2.2));
+    x.setAttribute('aria-label', `Close ${title}`);
     x.addEventListener('click', (e) => { e.stopPropagation(); this.close(id); });
     label.addEventListener('click', () => this.activate(id));
     const tab = el('div', { className: 'tab' }, label, x);
@@ -139,7 +139,7 @@ export class TerminalTabs {
 
   private renderStrip(): void {
     this.strip.replaceChildren(...[...this.tabs.values()].map((t) => {
-      const b = el('button', { className: (t.id === this.active ? 'on' : '') + (t.exited ? ' exited' : ''), title: `${t.title} (Agent-Bereich ausklappen)` },
+      const b = el('button', { className: (t.id === this.active ? 'on' : '') + (t.exited ? ' exited' : ''), title: `${t.title} (expand the agent area)` },
         t.agent ? el('span', { className: 'dot' }) : icon('term', 14, 2), el('span', { className: 'v', textContent: t.title }));
       b.addEventListener('click', () => { this.activate(t.id); this.onStripClick(); });
       return b;

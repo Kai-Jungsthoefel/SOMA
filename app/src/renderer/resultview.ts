@@ -64,7 +64,7 @@ export class ResultLayer {
     const m = this.meta;
     if (!m) return null;
     const base: ResultMeta = this.field === 'stress'
-      ? { ...m, quantity: 'Vergleichsspannung (von Mises)', unit: 'MPa', bad: 'high', threshold: this.stressLimit, range: this.autoRange('stress') }
+      ? { ...m, quantity: 'von Mises stress', unit: 'MPa', bad: 'high', threshold: this.stressLimit, range: this.autoRange('stress') }
       : m;
     return this.range ? { ...base, range: this.range, ramp: true } : base;
   }
@@ -102,7 +102,7 @@ export class ResultLayer {
   async show(glb: ArrayBuffer): Promise<ResultMeta> {
     const gltf = await new GLTFLoader().parseAsync(glb, '');
     const meta = (gltf.parser.json as { extras?: { soma_result?: ResultMeta } }).extras?.soma_result;
-    if (!meta || !Array.isArray(meta.range)) throw new Error('Kein Ergebnis von soma (extras.soma_result fehlt)');
+    if (!meta || !Array.isArray(meta.range)) throw new Error('Not a result from soma (extras.soma_result is missing)');
     this.hide();
     const meshes: ResultMesh[] = [];
     const deformables: Deformable[] = [];
@@ -258,7 +258,7 @@ export class ResultLayer {
   /** Zeile für die Legende im Bild: wie stark die Verformung überhöht ist. */
   deformNote(): string | null {
     if (!this.isFem || this.scale <= 0) return null;
-    return this.scale === 1 ? 'Verformung in echter Größe' : `Verformung ${fmtScale(this.scale)}-fach überhöht`;
+    return this.scale === 1 ? 'Deformation at true scale' : `Deformation exaggerated ${fmtScale(this.scale)}×`;
   }
 
   /** Farben neu aus den Werten (etwa nach geänderter Spanne). */
@@ -338,4 +338,4 @@ export function niceScale(x: number): number {
   return (f < 2 ? 1 : f < 5 ? 2 : 5) * e;
 }
 
-export const fmtScale = (s: number) => s.toLocaleString('de-DE', { maximumFractionDigits: 0 });
+export const fmtScale = (s: number) => s.toLocaleString('en-US', { maximumFractionDigits: 0 });

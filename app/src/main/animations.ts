@@ -87,7 +87,7 @@ export class AnimBuilder {
       const errors: string[] = [];
       for (const f of files ?? [null]) {
         const r = await runSoma(['anim', 'build', ...(f ? [f] : []), '--project', this.dir, '--json'], this.dir, 5 * 60 * 1000);
-        if (!r.out.trim().startsWith('{')) errors.push((r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n') || 'soma anim build ohne Ergebnis');
+        if (!r.out.trim().startsWith('{')) errors.push((r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n') || 'soma anim build returned no result');
       }
       res = { ...readAnimList(this.dir), ok: errors.length === 0, ...(errors.length ? { error: errors.join('\n') } : {}) };
     } catch (e) {
@@ -131,28 +131,28 @@ export function listResults(dir: string): ResultEntry[] {
  */
 export async function rerunResult(dir: string, id: string): Promise<{ ok: boolean; error?: string }> {
   const r = listResults(dir).find((x) => x.id === id);
-  if (!r) return { ok: false, error: `Kein Ergebnis „${id}“.` };
+  if (!r) return { ok: false, error: `No result “${id}”.` };
   const cmd = Array.isArray(r.command) ? r.command.map(String) : [];
-  if (cmd[0] !== 'analyze' || !KINDS.has(cmd[1])) return { ok: false, error: 'Unbekannte Auswertung in der Datei.' };
+  if (cmd[0] !== 'analyze' || !KINDS.has(cmd[1])) return { ok: false, error: 'Unknown analysis in the file.' };
   const args = ['analyze', cmd[1]];
   let rest = cmd.slice(2);
   if (cmd[1] === 'fem') {
     // Die Datei mit dem Lastfall: relativ, im Projekt, eine .py-Datei
     const study = rest[0] ?? '';
-    if (!STUDY.test(study) || study.startsWith('-') || study.includes('..')) return { ok: false, error: `Unerwartete Studie in der Datei: ${study.slice(0, 60)}` };
-    try { resolveInside(dir, study); } catch { return { ok: false, error: 'Die Studie liegt außerhalb des Projekts.' }; }
+    if (!STUDY.test(study) || study.startsWith('-') || study.includes('..')) return { ok: false, error: `Unexpected study in the file: ${study.slice(0, 60)}` };
+    try { resolveInside(dir, study); } catch { return { ok: false, error: 'The study is outside the project.' }; }
     args.push(study);
     rest = rest.slice(1);
   }
   for (const a of rest) {
     // Immer als --schalter=wert: Werte wie -z oder -0.5 sind dann keine Schalter für argparse
     const m = /^(--parts|--threshold|--up|--name)=(.{1,400})$/s.exec(a);
-    if (!m) return { ok: false, error: `Unerwartete Angabe in der Datei: ${a.slice(0, 60)}` };
+    if (!m) return { ok: false, error: `Unexpected argument in the file: ${a.slice(0, 60)}` };
     args.push(a);
   }
   const res = await runSoma([...args, '--project', dir, '--json'], dir, 5 * 60 * 1000);
   if (res.ok) return { ok: true };
-  return { ok: false, error: (res.err || res.out).trim().split(/\r?\n/).slice(-3).join('\n') || 'Auswertung fehlgeschlagen' };
+  return { ok: false, error: (res.err || res.out).trim().split(/\r?\n/).slice(-3).join('\n') || 'Analysis failed' };
 }
 
 /** Gleicher Ordner? Unter Windows ohne Groß- und Kleinschreibung, Kurznamen (NAME~1) aufgelöst. */

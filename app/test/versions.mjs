@@ -43,7 +43,7 @@ try {
 
   // ---- 1) Neues Projekt hat einen Git-Verlauf, mitgeliefertes Git im Terminal ----
   await waitFor('Verlauf geladen', () => window.__t.versions().count === 1);
-  check('Neues Projekt: Git-Repository mit Startcommit', (await g('log', '--format=%s')) === 'Neues Modell angelegt');
+  check('Neues Projekt: Git-Repository mit Startcommit', (await g('log', '--format=%s')) === 'New model created');
   check('Startcommit enthält output/model.step (Vorschau des ersten Standes möglich)', (await g('ls-files', 'output/model.step')) === 'output/model.step');
   check('Nach dem ersten Build gilt der Stand als sauber (output/ zählt nicht)', (await versions()).dirtyFiles === 0);
   check('Git-Identität ist gesetzt (Agent kann committen)', (await g('config', 'user.name')).length > 0 && (await g('config', 'user.email')).length > 0);
@@ -70,8 +70,12 @@ try {
     && cmap.parts.every((x) => x.role !== 'basic' && !('file' in x) && !('line' in x)) && fs.existsSync(path.join(cached(head2), 'geometry', `${cmap.build}.brep`)));
   const kinds = (await versions()).byApp;
   check('Leiste unterscheidet App-Stand (Start) und Agenten-Stand', kinds[0] === true && kinds[1] === false, JSON.stringify(kinds));
-  check('App-Commits tragen den Trailer „Erstellt-von: SOMA"', (await g('log', '--format=%(trailers:key=Erstellt-von,valueonly)', 'HEAD~1')).includes('SOMA'));
+  check('App-Commits tragen den Trailer „Created-by: SOMA"', (await g('log', '--format=%(trailers:key=Created-by,valueonly)', 'HEAD~1')).includes('SOMA'));
   check('Commit enthält die STEP-Datei des gebauten Standes', (await g('show', '--stat', '--format=', 'HEAD')).includes('output/model.step'));
+  // Ältere Projekte (vor E73): Der deutsche Trailer zählt weiter als Stand der App, auch bei einem Betreff, den die App nicht kennt
+  await g('commit', '--allow-empty', '--no-verify', '-q', '-m', 'Alter Stand der App', '--trailer', 'Erstellt-von: SOMA');
+  await waitFor('dritter Stand im Verlauf', () => window.__t.versions().count === 3, 20000);
+  check('Alter Trailer „Erstellt-von: SOMA“ gilt weiter als App-Stand', (await versions()).byApp[2] === true, JSON.stringify((await versions()).byApp));
 
   // ---- 3) Speichern: Snapshot + ZIP ----
   fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nWunsch: Deckel mit Lippe\n');
@@ -84,20 +88,20 @@ try {
   const names = await listZip(zipPath);
   check('ZIP enthält Modell, .git, Projektdaten und Marker', ['model.py', '.git/HEAD', '.soma/project.json', '.soma/zip-info.json', 'AGENTS.md'].every((n) => names.includes(n)));
   check('ZIP enthält keine Caches (GLB, Mapping, build.json, __pycache__)', !names.some((n) => /model\.glb|model\.map\.json|build\.json|__pycache__/.test(n)));
-  await waitFor('Meldung und Name', () => window.__t.toast().text.startsWith('Gespeichert') && window.__t.project().name === 'Testmodell', 20000);
-  check('Auto-Snapshot beim Speichern hat die Notiz gesichert', (await g('log', '-1', '--format=%s')) === 'Automatischer Snapshot beim Speichern');
+  await waitFor('Meldung und Name', () => window.__t.toast().text.startsWith('Saved') && window.__t.project().name === 'Testmodell', 20000);
+  check('Auto-Snapshot beim Speichern hat die Notiz gesichert', (await g('log', '-1', '--format=%s')) === 'Automatic snapshot on save');
   check('Modellname folgt dem Dateinamen der ZIP', (await ev(() => window.__t.project())).name === 'Testmodell');
-  check('Nach dem Speichern: sauber, Anzeige „Gespeichert · Uhrzeit"', (await saveState()).dirtyFiles === 0 && /^Gespeichert · \d\d:\d\d$/.test(await ev(() => document.getElementById('save-badge').textContent)), await ev(() => document.getElementById('save-badge').textContent));
+  check('Nach dem Speichern: sauber, Anzeige „Saved · Uhrzeit"', (await saveState()).dirtyFiles === 0 && /^Saved · \d\d:\d\d$/.test(await ev(() => document.getElementById('save-badge').textContent)), await ev(() => document.getElementById('save-badge').textContent));
   await waitFor('grüner Punkt', () => document.querySelectorAll('#vdots .vdot.saved').length === 1, 10000).catch(() => {});
   check('Verlaufsleiste markiert den gespeicherten Stand', await ev(() => document.querySelectorAll('#vdots .vdot.saved').length) === 1);
-  check('Meldung „Gespeichert" erscheint', (await ev(() => window.__t.toast())).text.startsWith('Gespeichert'));
+  check('Meldung „Saved" erscheint', (await ev(() => window.__t.toast())).text.startsWith('Saved'));
   const commitsBefore = (await g('rev-list', '--count', 'HEAD'));
   await app.domClick('btn-save');
   await sleep(2500);
   check('Zweites Speichern ohne Änderung legt keinen leeren Snapshot an', (await g('rev-list', '--count', 'HEAD')) === commitsBefore);
 
   // ---- 4) Vorschau alter Stände ----
-  const first = await g('rev-parse', 'HEAD~2');
+  const first = await g('rev-list', '--max-parents=0', 'HEAD');
   check('Erster Stand liegt schon als Vorschau bereit (beim Anlegen abgelegt)', fs.existsSync(path.join(cached(first), 'model.glb')));
   // Ohne Cache entsteht die Vorschau wie bisher aus der STEP-Datei des Standes
   fs.rmSync(cached(first), { recursive: true, force: true });
@@ -108,7 +112,7 @@ try {
   const smap = JSON.parse(fs.readFileSync(path.join(cached(first), 'model.map.json'), 'utf8'));
   check('Ohne Cache: Vorschau aus der STEP-Datei des Standes erzeugt (Basismodus)', smap.parts.length === 2 && smap.parts.every((x) => x.role === 'basic'));
   const bn = (await ev(() => window.__t.banner())).text.replace(/\s+/g, ' ').trim();
-  check('Banner zeigt „Vorschau · Stand 1 von …, nur ansehen"', bn.includes('Vorschau · Stand 1 von') && bn.includes('nur ansehen') && bn.includes('Arbeitsstand bleibt unverändert'), bn.slice(0, 60));
+  check('Banner zeigt „Preview · version 1 of …, view only"', bn.includes('Preview · version 1 of') && bn.includes('view only') && bn.includes('current work stays unchanged'), bn.slice(0, 60));
   check('Viewer hat den Vorschau-Rahmen', await ev(() => document.getElementById('viewer').classList.contains('preview')));
   await sleep(800); // capturePage liefert bei unsichtbaren Fenstern sonst ein etwas älteres Bild
   const shot = await app.screenshot(path.join(import.meta.dirname, 'versions.png')).catch((e) => ({ error: String(e) }));
@@ -125,18 +129,18 @@ try {
   await waitFor('Zeichenfläche', () => window.__t.markup().active, 30000).catch(() => {});
   await domClick('btn-mark-send');
   const firstShort = await g('rev-parse', '--short', first);
-  await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markierung: .soma/feedback/'), 30000, await term()).catch(() => {});
-  check('Markierung in der Vorschau nennt den alten Stand', (await termText()).includes(`zeigt den älteren Stand ${firstShort} "Neues Modell angelegt"]`), (await termText()).match(/\[Markierung:[^\]]*\]/)?.[0]?.slice(0, 90) ?? '');
+  await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markup: .soma/feedback/'), 30000, await term()).catch(() => {});
+  check('Markierung in der Vorschau nennt den alten Stand', (await termText()).includes(`shows the older version ${firstShort} "New model created"]`), (await termText()).match(/\[Markup:[^\]]*\]/)?.[0]?.slice(0, 90) ?? '');
   check('Nach der Markierung läuft die Vorschau weiter', !!(await versions()).previewing && await ev(() => document.getElementById('viewer').classList.contains('preview')));
   await ev((i) => window.soma.term.write(i, '\x03'), await term()); // Zeile verwerfen
 
   // ---- 5) Wiederherstellen als neuer Commit ----
   await app.answers([0]);
   await domClick('btn-restore');
-  await waitFor('wiederhergestellt', () => !window.__t.versions().previewing && window.__t.versions().subjects.some((s) => s.startsWith('Stand wiederhergestellt')), 60000);
+  await waitFor('wiederhergestellt', () => !window.__t.versions().previewing && window.__t.versions().subjects.some((s) => s.startsWith('Restored version')), 60000);
   // Vorher lud die Ansicht hier den vorherigen Build (Body 80) und zeigte ihn, bis der neue fertig war
   check('Gleich nach dem Wiederherstellen ist der wiederhergestellte Stand zu sehen (Body 60, nicht 80)', (await ev(() => window.__t.partSize('Body')))[0] === 60);
-  check('Wiederherstellen legt einen NEUEN Commit an', (await g('log', '-1', '--format=%s')).startsWith('Stand wiederhergestellt: Neues Modell angelegt'));
+  check('Wiederherstellen legt einen NEUEN Commit an', (await g('log', '-1', '--format=%s')).startsWith('Restored version: New model created'));
   check('Verlauf blieb vollständig (alter Startcommit unverändert vorhanden)', (await g('cat-file', '-t', first)) === 'commit' && (await g('rev-list', '--count', 'HEAD')) > commitsBefore);
   check('Dateien sind zurück: model.py mit 60, Notiz-Wunsch entfernt', fs.readFileSync(modelPy, 'utf8').includes('LENGTH = 60.0') && !fs.readFileSync(path.join(dir, 'NOTES.md'), 'utf8').includes('Wunsch'));
   await waitFor('Build nach Wiederherstellung', () => window.__t.status().state === 'ok' && (window.__t.partSize('Body') || [0])[0] === 60);
@@ -146,16 +150,16 @@ try {
   // ---- 6) Störfall: .git verschwindet (Agent hat es gelöscht/verschoben) ----
   await app.domClick('btn-save');
   await waitFor('gespeichert nach Restore', () => !window.__t.saveState().unsaved, 60000);
-  check('ZIP enthält die Markierung aus .soma/feedback/ (in Git ist sie nicht)', (await listZip(zipPath)).some((n) => /^\.soma\/feedback\/markierung-\d{8}-\d{4}\.png$/.test(n))
+  check('ZIP enthält die Markierung aus .soma/feedback/ (in Git ist sie nicht)', (await listZip(zipPath)).some((n) => /^\.soma\/feedback\/markup-\d{8}-\d{4}\.png$/.test(n))
     && (await g('ls-files', '.soma/feedback')) === '');
   fs.renameSync(path.join(dir, '.git'), path.join(dir, '.git_weg'));
-  await waitFor('Problem gemeldet', () => window.__t.versions().problems.some((p) => p.includes('Kein Git-Verlauf')), 20000);
-  check('Ohne .git: Verlauf meldet das Problem verständlich', (await versions()).problems[0].includes('Kein Git-Verlauf'), (await versions()).problems[0].slice(0, 50));
+  await waitFor('Problem gemeldet', () => window.__t.versions().problems.some((p) => p.includes('No Git history')), 20000);
+  check('Ohne .git: Verlauf meldet das Problem verständlich', (await versions()).problems[0].includes('No Git history'), (await versions()).problems[0].slice(0, 50));
   check('Ohne .git: App und Terminal laufen weiter', await ev(() => window.__t.terminals.count) === 1);
   fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nohne git geändert\n');
   await sleep(300);
   await app.domClick('btn-save');
-  await waitFor('Speichern ohne Git', () => window.__t.toast().text.includes('Kein Git-Verlauf'), 60000);
+  await waitFor('Speichern ohne Git', () => window.__t.toast().text.includes('No Git history'), 60000);
   check('Ohne .git: Speichern klappt trotzdem, mit Warnung', !(await ev(() => window.__t.toast())).hidden);
   fs.renameSync(path.join(dir, '.git_weg'), path.join(dir, '.git'));
   await waitFor('Problem weg', () => window.__t.versions().problems.length === 0, 20000);
@@ -212,7 +216,7 @@ try {
   await waitFor('Fehlermeldung', () => window.__t.toast().error, 20000);
   const evilToast = (await ev(() => window.__t.toast())).text;
   // Zwei Schichten: yauzl lehnt ungültige Pfade schon beim Lesen ab, unsere Prüfung beim Entpacken ist die zweite
-  check(`Böse ZIP („../evil.txt", ${replaced} Einträge im Archiv) wird abgelehnt`, /Unsicher|invalid relative path/.test(evilToast), evilToast.slice(0, 70));
+  check(`Böse ZIP („../evil.txt", ${replaced} Einträge im Archiv) wird abgelehnt`, /Unsafe|invalid relative path/.test(evilToast), evilToast.slice(0, 70));
   check('Nichts außerhalb des Zielordners geschrieben, keine Reste', !fs.existsSync(path.join(ud, 'evil.txt')) && !fs.existsSync(path.join(ud, 'workspaces', 'evil.txt')) && !fs.readdirSync(path.join(ud, 'workspaces')).some((n) => n.startsWith('.tmp-')));
   check('Keine ZIP-Datei im Weg: Projekt bleibt offen und nutzbar', (await ev(() => window.__t.project().id)) === proj.id);
 
@@ -252,7 +256,7 @@ try {
   await h.domClick('start-new');
   await h.waitFor('erstes neues Modell', () => !!window.__t.project() && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000);
   const m1 = await h.ev(() => window.__t.project());
-  check('„Neues Modell“ auf der Startseite: Modell offen, Startseite zu', fs.existsSync(m1.dir) && await h.ev(() => document.getElementById('start').hidden));
+  check('„New model“ auf der Startseite: Modell offen, Startseite zu', fs.existsSync(m1.dir) && await h.ev(() => document.getElementById('start').hidden));
   await h.domClick('btn-new');
   await h.waitFor('zweites neues Modell', (id) => window.__t.project()?.id !== id && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000, m1.id);
   const m2 = await h.ev(() => window.__t.project());
@@ -268,7 +272,7 @@ try {
   await h.ev(() => window.__t.showStart(true));
   await h.waitFor('Karten', () => document.querySelectorAll('#start-recent .recent-item').length === 2, 10000).catch(() => {});
   const cards = await h.ev(() => [...document.querySelectorAll('#start-recent .recent-item')].map((c) => ({ text: c.textContent, rm: !!c.querySelector('.recent-rm') })));
-  check('Karten nennen „nie gespeichert“, Entfernen gibt es nur beim nicht geöffneten', cards.length === 2 && cards.every((c) => c.text.includes('nie gespeichert'))
+  check('Karten nennen „never saved“, Entfernen gibt es nur beim nicht geöffneten', cards.length === 2 && cards.every((c) => c.text.includes('never saved'))
     && cards.filter((c) => c.rm).length === 1, JSON.stringify(cards).slice(0, 120));
   await h.answers([1]);
   await h.ev(() => document.querySelector('#start-recent .recent-rm').click());

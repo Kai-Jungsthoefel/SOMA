@@ -45,7 +45,7 @@ const writeJson = (file: string, value: unknown) => {
 export const isProjectId = (id: string) => UUID.test(id);
 
 export function projectDir(id: string): string {
-  if (!isProjectId(id)) throw new Error(`Ungültige Projekt-ID: ${id}`);
+  if (!isProjectId(id)) throw new Error(`Invalid project ID: ${id}`);
   return path.join(workspacesDir(), id);
 }
 
@@ -53,7 +53,7 @@ const stateFile = (id: string) => path.join(projectStateDir(), `${id}.json`);
 export const readProjectJson = (id: string) => readJson<ProjectJson>(path.join(projectDir(id), '.soma', 'project.json'));
 
 /** Neues Projekt: UUID-Ordner in den App-Daten (E21), Vorlage kopieren, Zustand doppelt ablegen (E27), Git-Verlauf anlegen (E7). */
-export async function createProject(name = 'Neues Modell'): Promise<{ id: string; dir: string }> {
+export async function createProject(name = 'New model'): Promise<{ id: string; dir: string }> {
   const id = randomUUID();
   const dir = projectDir(id);
   fs.mkdirSync(dir, { recursive: true });
@@ -68,10 +68,10 @@ export async function createProject(name = 'Neues Modell'): Promise<{ id: string
   // und lässt sich im Verlauf als Vorschau öffnen. Scheitert der Build, geht das Anlegen trotzdem weiter.
   await runSoma(['build', '--project', dir], dir, 90000);
   try {
-    await new GitRepo(dir).init('Neues Modell angelegt');
+    await new GitRepo(dir).init('New model created');
   } catch (e) {
     // Ohne Git bleibt das Projekt benutzbar. Der Verlauf meldet den Grund (Projekt-Check), statt das Anlegen scheitern zu lassen.
-    console.error('[soma] Git-Verlauf konnte nicht angelegt werden:', e);
+    console.error('[soma] Could not create the Git history:', e);
   }
   setLastProject(id);
   return { id, dir };
@@ -124,7 +124,7 @@ export function readSkillModes(id: string): SkillModes | null {
 export function updateProjectSkills(id: string, patch: { modes?: SkillModes; skill_settings?: ProjectJson['skill_settings'] }): void {
   const file = path.join(projectDir(id), '.soma', 'project.json');
   const pj = readJson<ProjectJson>(file);
-  if (!pj) throw new Error('.soma/project.json fehlt oder ist unlesbar. Ohne sie lässt sich kein Skill eintragen.');
+  if (!pj) throw new Error('.soma/project.json is missing or unreadable. Without it no skill can be recorded.');
   // Leere Einstellungen fallen weg, damit project.json ohne Änderung auch gleich bleibt
   const settings = Object.fromEntries(Object.entries(patch.skill_settings ?? pj.skill_settings ?? {}).filter(([, v]) => v && Object.keys(v).length));
   // `skills` bleibt auch leer stehen (wie bisher), `skills_on_demand` nur, wenn es welche gibt
@@ -145,27 +145,27 @@ export function updateProjectSkills(id: string, patch: { modes?: SkillModes; ski
 export function inspectProject(id: string): { name: string; problems: string[] } {
   const dir = projectDir(id);
   const problems: string[] = [];
-  if (!fs.existsSync(dir)) return { name: id, problems: ['Der Arbeitsordner existiert nicht.'] };
+  if (!fs.existsSync(dir)) return { name: id, problems: ['The working folder does not exist.'] };
   const pj = readJson<ProjectJson>(path.join(dir, '.soma', 'project.json'));
   const backup = readJson<ProjectState>(stateFile(id));
   if (!pj) {
     problems.push(backup
-      ? '.soma/project.json fehlt oder ist unlesbar. Eine Kopie liegt in den App-Daten (nicht automatisch wiederhergestellt).'
-      : '.soma/project.json fehlt oder ist unlesbar, und es gibt keine Kopie.');
+      ? '.soma/project.json is missing or unreadable. A copy is in the app data (not restored automatically).'
+      : '.soma/project.json is missing or unreadable, and there is no copy.');
   } else if (pj.id !== id) {
-    problems.push('Die ID in .soma/project.json passt nicht zum Arbeitsordner.');
+    problems.push('The ID in .soma/project.json does not match the working folder.');
   } else if (pj.api_version > API_VERSION) {
-    problems.push(`Das Projekt nutzt api_version ${pj.api_version}, diese App kennt nur ${API_VERSION}.`);
+    problems.push(`The project uses api_version ${pj.api_version}, this app only knows ${API_VERSION}.`);
   } else if (isNewerVersion(pj.app_version)) {
-    problems.push(`Das Modell wurde zuletzt mit SOMA ${pj.app_version} gespeichert, diese App ist ${SOMA_VERSION}. Neuere Funktionen fehlen hier vielleicht.`);
+    problems.push(`The model was last saved with SOMA ${pj.app_version}, this app is ${SOMA_VERSION}. Newer features may be missing here.`);
   }
   const entry = pj?.entry ?? 'model.py';
-  if (!fs.existsSync(path.join(dir, entry))) problems.push(`Einstiegspunkt ${entry} fehlt.`);
+  if (!fs.existsSync(path.join(dir, entry))) problems.push(`Entry point ${entry} is missing.`);
   for (const s of [pj?.skills, pj?.skills_on_demand].flatMap((x) => (Array.isArray(x) ? x : [])).filter(isSkillId)) {
-    if (!fs.existsSync(path.join(dir, SKILLS_DIR, `${s}.md`))) problems.push(`Der Skill „${s}“ ist eingeschaltet, aber ${SKILLS_DIR}/${s}.md fehlt.`);
+    if (!fs.existsSync(path.join(dir, SKILLS_DIR, `${s}.md`))) problems.push(`The skill “${s}” is switched on, but ${SKILLS_DIR}/${s}.md is missing.`);
   }
   for (const bad of ['.venv', 'venv', 'env']) {
-    if (fs.existsSync(path.join(dir, bad, 'pyvenv.cfg'))) problems.push(`Im Projekt liegt eine eigene Python-Umgebung (${bad}/). Sie wird ignoriert und nicht in die ZIP gepackt.`);
+    if (fs.existsSync(path.join(dir, bad, 'pyvenv.cfg'))) problems.push(`The project contains its own Python environment (${bad}/). It is ignored and not packed into the ZIP.`);
   }
   return { name: pj?.name ?? backup?.name ?? id, problems };
 }
@@ -231,7 +231,7 @@ export async function backupWorkspace(id: string): Promise<string> {
     try { fs.renameSync(src, dst); return dst; } catch (e) {
       const code = (e as NodeJS.ErrnoException).code ?? '';
       if (!['EPERM', 'EBUSY', 'EACCES'].includes(code) || attempt >= 20) {
-        throw new Error('Der Arbeitsordner ist noch in Benutzung (ein Terminal oder Programm liegt darin). Schließe es und versuche es erneut.');
+        throw new Error('The working folder is still in use (a terminal or program is open in it). Close it and try again.');
       }
       await new Promise((r) => setTimeout(r, 300));
     }
@@ -309,7 +309,7 @@ export function sweepDiscarded(): void {
 /** Entpackt eine ZIP als Arbeitsordner `id`. Erst in einen Temp-Ordner, dann umbenennen: nie ein halb entpacktes Projekt. */
 export async function extractProject(zipPath: string, id: string): Promise<string> {
   const dst = projectDir(id);
-  if (fs.existsSync(dst)) throw new Error('Der Arbeitsordner existiert schon (erst sichern).');
+  if (fs.existsSync(dst)) throw new Error('The working folder already exists (back it up first).');
   const tmp = path.join(workspacesDir(), `.tmp-${randomUUID()}`);
   try {
     await extractZip(zipPath, tmp);

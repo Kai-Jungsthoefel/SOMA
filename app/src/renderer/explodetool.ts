@@ -479,7 +479,7 @@ export class ExplodeTool {
   constructor(ui: Ui, private deps: Deps) {
     const own = <T extends HTMLElement>(id: string): T => {
       const e = ui.card.querySelector<T>(`#${id}`);
-      if (!e) throw new Error(`Explosionskarte: #${id} fehlt in index.html`);
+      if (!e) throw new Error(`Exploded view card: #${id} is missing in index.html`);
       return e;
     };
     this.ui = {
@@ -567,7 +567,7 @@ export class ExplodeTool {
     const ctl = new AbortController();
     this.loading = ctl;
     const { viewer } = this.deps;
-    const view = this.deps.busy.show('Explosion wird vorbereitet', () => this.setActive(false, false));
+    const view = this.deps.busy.show('Preparing the exploded view', () => this.setActive(false, false));
     try {
       // Strahltest und Hüllquader in Einbaulage
       if (this.shown > 0) viewer.setOffsets(null);
@@ -575,7 +575,7 @@ export class ExplodeTool {
       const size = diagonal(own);
       const t0 = performance.now();
       const { dirs, opp } = directions(own);
-      view.detail(`${own.length} Bauteile: Was steht wem im Weg?`);
+      view.detail(`${own.length} ${own.length === 1 ? 'part' : 'parts'}: what blocks what?`);
       const block = await viewer.explodeRays(own.map((p) => p.id), dirs, opp,
         { eps: Math.max(EPS_MIN, EPS * size), touch: Math.max(TOUCH_MIN, TOUCH * size), samples: SAMPLES },
         { signal: ctl.signal, progress: (f) => view.progress(f) });
@@ -597,8 +597,8 @@ export class ExplodeTool {
   /** Beschreibung für den Agenten, etwa beim Markieren. Ohne Explosion null. */
   agentText(): string | null {
     if (!this.active || this.shown <= 0 || !this.moving) return null;
-    const step = this.stepPos === null ? '' : `, Schritt ${this.shownStep()} von ${this.order.length} des Auseinanderbaus`;
-    return `Explosionsansicht (${Math.round(this.shown * 100)} %${step}): Die Bauteile sind nur zur Darstellung auseinandergezogen, ihre Lage im Bild ist nicht die Einbaulage`;
+    const step = this.stepPos === null ? '' : `, step ${this.shownStep()} of ${this.order.length} of the disassembly`;
+    return `exploded view (${Math.round(this.shown * 100)} %${step}): the parts are only pulled apart for display, their position in the picture is not the assembled position`;
   }
 
   /** Plan und Lagen aus der Analyse (prepare() hat sie gerechnet). */
@@ -781,11 +781,11 @@ export class ExplodeTool {
     };
     const lines = this.order.map((ids, k) => `${k + 1}. ${ids.map((id) => {
       const { st, pl } = steps.get(id)!;
-      const what = st.members.length > 1 ? `Baugruppe aus ${st.members.map(name).join(', ')}` : name(id);
-      return `${what} nach ${dirName(pl.dirs[st.dir])}${st.forced ? ' (steckt fest)' : ''}`;
+      const what = st.members.length > 1 ? `assembly of ${st.members.map(name).join(', ')}` : name(id);
+      return `${what} towards ${dirName(pl.dirs[st.dir])}${st.forced ? ' (stuck)' : ''}`;
     }).join('; ')}`);
-    return `Reihenfolge des Auseinanderbaus laut Explosionsansicht (Strahltest auf dem Netz, ohne Gewähr; zum Zusammenbau rückwärts lesen). `
-      + `Es bleibt stehen: ${name(plan.base)}.\n${lines.join('\n')}\n`;
+    return `Disassembly order from the exploded view (ray test on the mesh, not guaranteed; read backwards to assemble). `
+      + `Stays in place: ${name(plan.base)}.\n${lines.join('\n')}\n`;
   }
 
   /** Gleitend zum Ziel. Ohne Bildwiederholung (unsichtbares Fenster) steht sie nach Ablauf trotzdem dort. */
@@ -824,11 +824,11 @@ export class ExplodeTool {
     const playButton = (b: HTMLButtonElement, on: boolean, name: string, title: string) => {
       b.replaceChildren(icon(on ? 'pause' : 'play', 15));
       b.classList.toggle('on', on);
-      b.setAttribute('aria-label', on ? 'Anhalten' : name);
-      b.title = on ? 'Anhalten (der laufende Schritt wird noch fertig)' : title;
+      b.setAttribute('aria-label', on ? 'Pause' : name);
+      b.title = on ? 'Pause (the current step still finishes)' : title;
     };
-    playButton(ui.play, this.playing && this.playDir > 0, 'Auseinanderbauen abspielen', 'Den Auseinanderbau Schritt für Schritt abspielen');
-    playButton(ui.assemble, this.playing && this.playDir < 0, 'Zusammenbauen abspielen', 'Den Zusammenbau Schritt für Schritt abspielen');
+    playButton(ui.play, this.playing && this.playDir > 0, 'Play disassembly', 'Play the disassembly step by step');
+    playButton(ui.assemble, this.playing && this.playDir < 0, 'Play assembly', 'Play the assembly step by step');
     const pos = this.stepPos ?? this.shownStep();
     ui.back.disabled = !n || pos <= 1e-6;
     ui.next.disabled = !n || pos >= n - 1e-6;
@@ -836,12 +836,12 @@ export class ExplodeTool {
     // Nur bei Abweichung: render() läuft beim Abspielen in jedem Bild, eine offene Auswahlliste soll dabei stehen bleiben
     if (ui.speed.value !== String(this.speed)) ui.speed.value = String(this.speed);
     const k = this.shownStep();
-    ui.step.textContent = n ? `Schritt ${k} von ${n}` : '';
+    ui.step.textContent = n ? `Step ${k} of ${n}` : '';
     // Darunter, was in diesem Schritt herauskommt (Namen können lang sein, die Zeile hat die volle Breite)
     let what = '';
     if (n) {
-      if (k === 0) what = 'Zusammengebaut';
-      else if (this.stepPos === null) what = 'Alle Schritte zugleich';
+      if (k === 0) what = 'Assembled';
+      else if (this.stepPos === null) what = 'All steps at once';
       else {
         const names = new Map(this.deps.viewer.partList().map((x) => [x.id, x.name]));
         what = this.order[k - 1].map((id) => this.label(id, names)).join(', ');
@@ -854,10 +854,10 @@ export class ExplodeTool {
     if (!this.active) return;
     // Im Normalfall kein Hinweis: Die Zeile verschwindet dann ganz, statt leer Platz zu nehmen
     const notes: string[] = [];
-    if (!this.plan?.base) notes.push('Keine Bauteile zum Auseinanderziehen.');
-    else if (!this.moving) notes.push('Nur ein Bauteil, da rückt nichts auseinander.');
-    if (this.forced) notes.push(`${this.forced === 1 ? 'Ein Teil steckt' : `${this.forced} Teile stecken`} fest (verklemmt oder eingeschlossen) und ${this.forced === 1 ? 'fährt' : 'fahren'} durch andere hindurch.`);
-    if (this.refs && this.plan?.base) notes.push('Referenzen bleiben stehen.');
+    if (!this.plan?.base) notes.push('No parts to pull apart.');
+    else if (!this.moving) notes.push('Only one part, nothing moves apart.');
+    if (this.forced) notes.push(`${this.forced === 1 ? 'One part is' : `${this.forced} parts are`} stuck (jammed or enclosed) and ${this.forced === 1 ? 'moves' : 'move'} through others.`);
+    if (this.refs && this.plan?.base) notes.push('Reference parts stay in place.');
     ui.hint.textContent = notes.join(' ');
     ui.hint.hidden = !notes.length;
     ui.hint.classList.toggle('warn', this.forced > 0);

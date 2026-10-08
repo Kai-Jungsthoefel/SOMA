@@ -1,14 +1,14 @@
 ---
-title: Konstruktionsablauf
+title: Design workflow
 name: Design workflow
-summary: Erst Anforderungen klären, dann vom Groben ins Feine, in kleinen Schritten, mit kurzem Bericht. Fehlende Angaben: {{ask}}. Detailgrad: {{detail}}.
+summary: Clarify the requirements first, then from coarse to fine, in small steps, with a short report. Missing information: {{ask}}. Level of detail: {{detail}}.
 order: 1
-category: Arbeitsweise
+category: Way of working
 default: always
 when: you start a new design or a larger change
-topics: Anforderungen klären; Vom Groben ins Feine; Kleine Schritte; Bericht am Ende
-var ask: ask | | Fehlende Angaben | ask=erst fragen, assume=annehmen und notieren
-var detail: prototype | | Detailgrad | concept=Konzept, prototype=Prototyp, production=fertigungsreif
+topics: Clarify requirements; Coarse to fine; Small steps; Report at the end
+var ask: ask | | Missing information | ask=ask first, assume=assume and note it
+var detail: prototype | | Level of detail | concept=Concept, prototype=Prototype, production=Ready for production
 ---
 # Skill: Design workflow
 

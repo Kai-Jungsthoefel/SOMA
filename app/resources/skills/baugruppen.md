@@ -1,13 +1,13 @@
 ---
-title: Baugruppen und Bewegung
+title: Assemblies and motion
 name: Assemblies and motion
-summary: Teile in Einbaulage aus gemeinsamen Bezügen, Schnittstellen nur einmal definiert, Montierbarkeit, bewegliche Teile über den ganzen Weg prüfen ({{motion_gap}} mm Abstand), Stückliste.
+summary: Parts in assembled position from shared references, interfaces defined only once, ease of assembly, moving parts checked over their whole travel ({{motion_gap}} mm gap), parts list.
 order: 24
-category: Konstruktionswissen
+category: Design knowledge
 default: on-demand
 when: several parts are assembled or move against each other
-topics: Bezüge und Einbaulage; Schnittstellen; Montierbarkeit; Bewegliche Teile; Stückliste
-var motion_gap: 1 | mm | Mindestabstand bewegter Teile | 0..20
+topics: References and assembled position; Interfaces; Ease of assembly; Moving parts; Parts list
+var motion_gap: 1 | mm | Minimum gap between moving parts | 0..20
 ---
 # Skill: Assemblies and motion
 

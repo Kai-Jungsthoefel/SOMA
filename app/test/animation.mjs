@@ -106,30 +106,35 @@ try {
   check('Animationsdatei baut das Modell nicht neu (eigener Weg)', await ev(() => window.__t.buildStarts()) <= 2, String(await ev(() => window.__t.buildStarts())));
 
   let r = soma(['anim', 'info', 'Deckel öffnen']);
-  check('soma anim info: Ablauf mit Zeiten, Gelenk, Kamera, Untertitel, Beschriftung', r.status === 0 && r.stdout.includes('Dauer 8.00 s')
-    && r.stdout.includes('1.00-3.00 s      Lid: 0 -> -110 Grad') && r.stdout.includes('Kamera: Umlauf 90 Grad') && r.stdout.includes('"Der Deckel öffnet bis 110°"')
-    && r.stdout.includes('"Scharnier" an Lid') && r.stdout.includes('nicht geprueft'), r.stdout.slice(0, 300) + r.stderr);
+  check('soma anim info: Ablauf mit Zeiten, Gelenk, Kamera, Untertitel, Beschriftung', r.status === 0 && r.stdout.includes('duration 8.00 s')
+    && r.stdout.includes('1.00-3.00 s      Lid: 0 -> -110 deg') && r.stdout.includes('Camera: orbit 90 deg') && r.stdout.includes('"Der Deckel öffnet bis 110°"')
+    && r.stdout.includes('"Scharnier" on Lid') && r.stdout.includes('not checked'), r.stdout.slice(0, 300) + r.stderr);
 
   // 2) Kollisionen: falsche Drehachse dreht den Deckel in den Kasten
   fs.writeFileSync(path.join(dir, 'animations', 'falsch.py'), FALSCH);
   await waitFor('zweite Animation', () => window.soma.anim.list().then((x) => x.animations.length === 2 && !x.building), 90000);
   r = soma(['anim', 'check', 'Deckel falsch', '--step', '0.25']);
-  check('soma anim check meldet die Kollision Lid / Body mit Zeit und Tiefe (Exit 1)', r.status === 1 && /Lid \/ Body: Kollision, bis \d+\.\d\d mm tief/.test(r.stdout), r.stdout + r.stderr);
+  check('soma anim check meldet die Kollision Lid / Body mit Zeit und Tiefe (Exit 1)', r.status === 1 && /Lid \/ Body: collision, up to \d+\.\d\d mm deep/.test(r.stdout), r.stdout + r.stderr);
   r = soma(['anim', 'check', 'Deckel öffnen', '--step', '0.5']);
-  check('Richtige Drehachse: keine Kollision (Exit 0), der aufliegende Deckel gilt als gewollte Berührung', r.status === 0 && !r.stdout.includes('Kollision,')
-    && /Beruehren sich schon im Modell[^\n]*Lid \/ Body/.test(r.stdout), r.stdout);
+  check('Richtige Drehachse: keine Kollision (Exit 0), der aufliegende Deckel gilt als gewollte Berührung', r.status === 0 && !r.stdout.includes('collision,')
+    && /Already touching in the model[^\n]*Lid \/ Body/.test(r.stdout), r.stdout);
   r = soma(['anim', 'info', 'Deckel falsch']);
-  check('Ergebnis der Prüfung steht danach in soma anim info', r.stdout.includes('Lid / Body: Kollision'), r.stdout.slice(-300));
+  check('Ergebnis der Prüfung steht danach in soma anim info', r.stdout.includes('Lid / Body: collision'), r.stdout.slice(-300));
+  // Prüfungen von vor E73 stehen mit deutschen Arten in .check.json: Sie werden weiter gelesen
+  const checkFile = path.join(dir, '.soma', 'anim', 'deckel-falsch.check.json');
+  fs.writeFileSync(checkFile, fs.readFileSync(checkFile, 'utf8').replaceAll('"collision"', '"Kollision"'));
+  r = soma(['anim', 'info', 'Deckel falsch']);
+  check('Alte Prüfung mit „Kollision“ in .check.json: soma anim info zeigt sie englisch', r.stdout.includes('Lid / Body: collision, up to'), r.stdout.slice(-300));
 
   // 3) Fehler in einer Animationsdatei: Datei, Zeile, Liste der Bauteile. Die anderen bleiben
   fs.writeFileSync(path.join(dir, 'animations', 'kaputt.py'), KAPUTT);
   await waitFor('Fehler gemeldet', () => window.soma.anim.list().then((x) => x.errors.length === 1 && !x.building), 90000);
   l = await list();
   check('Fehler mit Datei und Zeile 3, nennt das Bauteil und die vorhandenen, die anderen Animationen bleiben', l.errors[0].file === 'animations/kaputt.py'
-    && l.errors[0].line === 3 && l.errors[0].message.includes("'Gibtsnicht' gibt es im Modell nicht") && l.errors[0].message.includes("'Lid'") && l.animations.length === 2,
+    && l.errors[0].line === 3 && l.errors[0].message.includes("'Gibtsnicht' does not exist in the model") && l.errors[0].message.includes("'Lid'") && l.animations.length === 2,
     JSON.stringify(l.errors[0]));
   r = soma(['anim', 'build', 'animations/kaputt.py']);
-  check('soma anim build: FEHLER mit Ort im Fehlerkanal, Exit 1', r.status === 1 && r.stderr.includes('Animation FEHLER (animations/kaputt.py:3)'), r.stderr.slice(0, 200));
+  check('soma anim build: FEHLER mit Ort im Fehlerkanal, Exit 1', r.status === 1 && r.stderr.includes('Animation ERROR (animations/kaputt.py:3)'), r.stderr.slice(0, 200));
   fs.rmSync(path.join(dir, 'animations', 'kaputt.py'));
   await waitFor('Fehler weg', () => window.soma.anim.list().then((x) => x.errors.length === 0), 20000).catch(() => {});
   check('Gelöschte Datei: Ihr Fehler verschwindet aus der Liste', (await list()).errors.length === 0);
@@ -146,7 +151,7 @@ try {
   await waitFor('Deckel öffnen gewählt', () => window.__t.anim().name === 'Deckel öffnen', 10000);
   let s = await ev(() => window.__t.anim());
   check('Karte „Animation“: zwei zur Auswahl, Dauer 8 s, Kamera folgt (eigene Kamera), Hinweis mit Datei', s.active && s.options.length === 2 && near(s.duration, 8)
-    && s.follow && s.hint.startsWith('animations/deckel.py, Zeile 4') && s.time === '0,00 / 8,00 s'
+    && s.follow && s.hint.startsWith('animations/deckel.py, line 4') && s.time === '0.00 / 8.00 s'
     && JSON.stringify(await ev(() => window.__t.viewSwitch())) === '{"name":"Deckel öffnen","sub":"","unseen":0,"closable":true}', JSON.stringify(s));
   await ev(() => window.__t.animSeek(3));
   let pose = await ev((id) => window.__t.viewer.partPose(id), ids.Lid);
@@ -162,7 +167,7 @@ try {
   check('Bei 7,5 s: Kasten hervorgehoben, Kamera von vorn, Texte werden gemalt', vs.highlight.includes(ids.Body) && vs.painter
     && near(view.dir[0], 0, 0.02) && near(view.dir[1], -1, 0.02), JSON.stringify([vs, view.dir]));
   s = await ev(() => window.__t.anim());
-  check('„An Agent geben“: Name, Datei und Zeit', s.note === '[Animation: "Deckel öffnen" (animations/deckel.py) bei 7.50 s] ', s.note);
+  check('„An Agent geben“: Name, Datei und Zeit', s.note === '[Animation: "Deckel öffnen" (animations/deckel.py) at 7.50 s] ', s.note);
   // Schalter „Texte“: Titel, Untertitel und Beschriftungen aus, Bewegung und Hervorhebung bleiben
   await domClick('btn-anim-texts');
   const noText = { s: await ev(() => window.__t.anim()), vs: await ev(() => window.__t.viewer.animViewState()) };
@@ -190,27 +195,27 @@ try {
 
   // 6) soma render: Fehler der Verbindung
   r = soma(['render'], { env: { ...process.env, PYTHONUTF8: '1', SOMA_APP: '', SOMA_APP_TOKEN: '' } });
-  check('Ohne die Umgebung der App: verständliche Meldung', r.status === 1 && r.stderr.includes('braucht die laufende App'), r.stderr);
+  check('Ohne die Umgebung der App: verständliche Meldung', r.status === 1 && r.stderr.includes('needs the running app'), r.stderr);
   r = soma(['render'], { env: { ...env, SOMA_APP_TOKEN: 'x'.repeat(48) } });
-  check('Falscher Schlüssel: abgelehnt', r.status === 1 && r.stderr.includes('Falscher Schlüssel'), r.stderr);
+  check('Falscher Schlüssel: abgelehnt', r.status === 1 && r.stderr.includes('Wrong key'), r.stderr);
   const other = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-anderes-'));
   r = soma(['render', '--project', other]);
-  check('Anderer Ordner als das offene Modell: abgelehnt', r.status === 1 && r.stderr.includes('nicht das Modell'), r.stderr);
+  check('Anderer Ordner als das offene Modell: abgelehnt', r.status === 1 && r.stderr.includes('not the model that is open'), r.stderr);
   cleanup(other);
   r = soma(['render', '--anim', 'Deckel öffnen', '--at', '99']);
-  check('Zeit außerhalb der Animation: Meldung mit der Dauer', r.status === 1 && r.stderr.includes('dauert 8 s'), r.stderr);
+  check('Zeit außerhalb der Animation: Meldung mit der Dauer', r.status === 1 && r.stderr.includes('the animation lasts 8 s'), r.stderr);
 
   // 7) soma render: Bild, Animation zu einer Zeit, Übersicht, Video
   r = soma(['render']);
-  const iso = path.join(dir, 'renders', 'ansicht-iso.png');
-  check('soma render: renders/ansicht-iso.png in 1280 x 800', r.status === 0 && r.stdout.includes('geschrieben: renders/ansicht-iso.png')
+  const iso = path.join(dir, 'renders', 'view-iso.png');
+  check('soma render: renders/view-iso.png in 1280 x 800', r.status === 0 && r.stdout.includes('written: renders/view-iso.png')
     && JSON.stringify(pngSize(iso)) === '[1280,800]', r.stdout + r.stderr);
   r = soma(['render', '--view', 'top', '--size', '640x400', '--out', 'renders/oben.png']);
   check('--view, --size und --out', r.status === 0 && JSON.stringify(pngSize(path.join(dir, 'renders', 'oben.png'))) === '[640,400]', r.stdout + r.stderr);
   r = soma(['render', '--anim', 'Deckel öffnen', '--at', '2']);
   check('Animation zu einer Zeit: renders/deckel-oeffnen-2s.png', r.status === 0 && fs.existsSync(path.join(dir, 'renders', 'deckel-oeffnen-2s.png')), r.stdout + r.stderr);
   r = soma(['render', '--anim', 'Deckel öffnen', '--sheet', '3x2', '--size', '320x200']);
-  const sheet = pngSize(path.join(dir, 'renders', 'deckel-oeffnen-uebersicht.png'));
+  const sheet = pngSize(path.join(dir, 'renders', 'deckel-oeffnen-sheet.png'));
   check('Übersicht 3 x 2 Standbilder mit Kopfzeile', r.status === 0 && sheet && sheet[0] === 3 * 320 + 4 * 6 && sheet[1] > 2 * 200, JSON.stringify(sheet) + r.stderr);
   const t0 = Date.now();
   r = soma(['render', '--anim', 'Deckel öffnen', '--video']);
@@ -218,10 +223,10 @@ try {
   const head = fs.existsSync(mp4) ? fs.readFileSync(mp4).subarray(4, 8).toString('ascii') : '';
   const vtt = fs.existsSync(mp4.replace('.mp4', '.vtt')) ? fs.readFileSync(mp4.replace('.mp4', '.vtt'), 'utf8') : '';
   check('Video: MP4, Untertitel als WebVTT, Übersicht für den Agenten', r.status === 0 && head === 'ftyp' && vtt.startsWith('WEBVTT')
-    && vtt.includes('00:00:01.000 --> 00:00:05.500') && vtt.includes('Der Deckel öffnet bis 110°') && r.stdout.includes('Uebersicht (PNG)'),
+    && vtt.includes('00:00:01.000 --> 00:00:05.500') && vtt.includes('Der Deckel öffnet bis 110°') && r.stdout.includes('contact sheet (PNG)'),
     `${head} ${Date.now() - t0} ms ${r.stderr}`);
-  await waitFor('Hinweis im Fenster', () => window.__t.toast().text.includes('Der Agent hat renders/deckel-oeffnen.mp4'), 5000).catch(() => {});
-  check('Das Fenster meldet, was der Agent erzeugt hat', (await ev(() => window.__t.toast())).text.includes('Der Agent hat renders/deckel-oeffnen.mp4'));
+  await waitFor('Hinweis im Fenster', () => window.__t.toast().text.includes('The agent created renders/deckel-oeffnen.mp4'), 5000).catch(() => {});
+  check('Das Fenster meldet, was der Agent erzeugt hat', (await ev(() => window.__t.toast())).text.includes('The agent created renders/deckel-oeffnen.mp4'));
 
   // 8) Video abspielen, Zeit und Standbild an den Agenten
   await ev(() => window.__t.showPanel('files'));
@@ -236,16 +241,16 @@ try {
   check('Springen auf 2 s: Zeitanzeige', v.time.startsWith('00:02.00 / 00:08'), v.time);
   await shot('video-1');
   await domClick('btn-video-agent');
-  await waitFor('Zeit im Terminal', (id) => window.__t.termText(id).includes('[Video: renders/deckel-oeffnen.mp4 bei 00:02.00]'), 8000, tid).catch(() => {});
-  check('„Zeit an Agent“: Datei und Zeitstempel in der Eingabe', (await term()).includes('[Video: renders/deckel-oeffnen.mp4 bei 00:02.00]'), (await term()).slice(-200));
+  await waitFor('Zeit im Terminal', (id) => window.__t.termText(id).includes('[Video: renders/deckel-oeffnen.mp4 at 00:02.00]'), 8000, tid).catch(() => {});
+  check('„Zeit an Agent“: Datei und Zeitstempel in der Eingabe', (await term()).includes('[Video: renders/deckel-oeffnen.mp4 at 00:02.00]'), (await term()).slice(-200));
   await domClick('btn-video-mark');
   await waitFor('Zeichenfläche', () => window.__t.markup().active, 8000);
   const mk = await ev(() => window.__t.markup());
-  check('„Markieren“: Standbild auf der Zeichenfläche, Quelle mit Zeitstempel', mk.source === 'renders/deckel-oeffnen.mp4 bei 00:02.00', JSON.stringify(mk.source));
+  check('„Markieren“: Standbild auf der Zeichenfläche, Quelle mit Zeitstempel', mk.source === 'renders/deckel-oeffnen.mp4 at 00:02.00', JSON.stringify(mk.source));
   await shot('video-2-markieren');
   await domClick('btn-mark-send');
-  await waitFor('Markierung im Terminal', (id) => window.__t.termText(id).includes('gezeichnet auf renders/deckel-oeffnen.mp4 bei 00:02.00]'), 10000, tid).catch(() => {});
-  check('Markierung des Standbilds: Pfad des Bilds, Video und Zeit in der Eingabe', /\[Markierung: \.soma\/feedback\/markierung-[\d-]+\.png, gezeichnet auf renders\/deckel-oeffnen\.mp4 bei 00:02\.00\]/.test(await term()),
+  await waitFor('Markierung im Terminal', (id) => window.__t.termText(id).includes('drawn on renders/deckel-oeffnen.mp4 at 00:02.00]'), 10000, tid).catch(() => {});
+  check('Markierung des Standbilds: Pfad des Bilds, Video und Zeit in der Eingabe', /\[Markup: \.soma\/feedback\/markup-[\d-]+\.png, drawn on renders\/deckel-oeffnen\.mp4 at 00:02\.00\]/.test(await term()),
     (await term()).slice(-200));
   await domClick('btn-video-close');
   check('Schließen: Player weg', !(await ev(() => window.__t.video())).open);
@@ -263,13 +268,13 @@ try {
   // 10) Auswertungen
   r = soma(['analyze', 'overhang']);
   check('Überhang: Konsole hat 3,64 cm² Überhang (Unterseite in 10 mm Höhe), Kasten keinen', r.status === 0
-    && /Konsole: 0\.0° bis 90\.0°, 3\.6\d cm² über 45\.0°/.test(r.stdout) && /Body: [^\n]*nichts über 45\.0°/.test(r.stdout), r.stdout + r.stderr);
+    && /Konsole: 0\.0° to 90\.0°, 3\.6\d cm² above 45\.0°/.test(r.stdout) && /Body: [^\n]*nothing above 45\.0°/.test(r.stdout), r.stdout + r.stderr);
   r = soma(['analyze', 'thickness']);
-  check('Wandstärke: Lasche 1 mm unter dem Grenzwert 1,2, Kasten nicht', r.status === 0 && /Lasche: 1\.00 mm bis [^\n]*cm² unter 1\.20 mm/.test(r.stdout)
-    && /Body: 2\.00 mm bis [^\n]*nichts unter 1\.20 mm/.test(r.stdout), r.stdout + r.stderr);
+  check('Wandstärke: Lasche 1 mm unter dem Grenzwert 1,2, Kasten nicht', r.status === 0 && /Lasche: 1\.00 mm to [^\n]*cm² below 1\.20 mm/.test(r.stdout)
+    && /Body: 2\.00 mm to [^\n]*nothing below 1\.20 mm/.test(r.stdout), r.stdout + r.stderr);
   r = soma(['analyze', 'clearance']);
   check('Abstand: Stift mit 0,2 mm Spalt kritisch, Störer überschneidet sich, Deckel liegt nur auf', r.status === 0
-    && /Stift: [^\n]*unter 0\.50 mm/.test(r.stdout) && /Störer: -[^\n]*Ueberschneidung/.test(r.stdout) && /Lid: [^\n]*nichts unter 0\.50 mm[^\n]*Beruehrung/.test(r.stdout),
+    && /Stift: [^\n]*below 0\.50 mm/.test(r.stdout) && /Störer: -[^\n]*overlap/.test(r.stdout) && /Lid: [^\n]*nothing below 0\.50 mm[^\n]*contact/.test(r.stdout),
     r.stdout + r.stderr);
   await pickView(1); // erste Analyse über den Umschalter oben links
   await waitFor('Ergebnis geladen', () => window.__t.result().id !== null, 20000);
@@ -278,7 +283,7 @@ try {
   let rs = await ev(() => window.__t.result());
   vs = await ev(() => window.__t.viewer.animViewState());
   check('Karte „Analyse“: drei Ergebnisse, Wandstärke je Bauteil, Lasche kritisch, Modell tritt zurück', rs.active && rs.options.length === 3
-    && rs.rows.some((x) => x.startsWith('Lasche') && x.includes('kritisch') && !x.includes('nichts')) && rs.rows.some((x) => x.startsWith('Body') && x.includes('nichts kritisch'))
+    && rs.rows.some((x) => x.startsWith('Lasche') && x.includes('critical') && !x.includes('nothing')) && rs.rows.some((x) => x.startsWith('Body') && x.includes('nothing critical'))
     && vs.modelHidden && !rs.stale, JSON.stringify(rs.rows));
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
@@ -286,20 +291,20 @@ try {
   const pin = await ev((p) => window.__t.resultPin(p.x, p.y), at);
   rs = await ev(() => window.__t.result());
   check('Klick auf die Lasche: Wert 1 mm an der Stelle, „An Agent geben“ nennt ihn', pin?.name === 'Lasche' && near(pin.value, 1, 0.02)
-    && rs.note.startsWith('[Ergebnis: "Wandstärke" (.soma/results/thickness.glb, Grenzwert 1.20 mm), Bauteil "Lasche": 1.00 mm bei ('), JSON.stringify([pin, rs.note]));
+    && rs.note.startsWith('[Result: "Wall thickness" (.soma/results/thickness.glb, limit 1.20 mm), part "Lasche": 1.00 mm at ('), JSON.stringify([pin, rs.note]));
   await ev(() => window.__t.viewer.setView('iso'));
   await shot('analyse-1');
   r = soma(['render', '--result', 'thickness']);
-  check('soma render --result: Bild mit Farben und Legende', r.status === 0 && JSON.stringify(pngSize(path.join(dir, 'renders', 'ergebnis-thickness.png'))) === '[1280,800]', r.stderr);
+  check('soma render --result: Bild mit Farben und Legende', r.status === 0 && JSON.stringify(pngSize(path.join(dir, 'renders', 'result-thickness.png'))) === '[1280,800]', r.stderr);
   // Code ändern: Ergebnis veraltet, „Neu berechnen“ wertet das neue Modell aus
   fs.writeFileSync(path.join(dir, 'model.py'), MODEL(2.0));
   await waitFor('neuer Build', () => window.__t.status().state === 'ok' && window.__t.result().stale === true, 60000).catch(() => {});
   rs = await ev(() => window.__t.result());
-  check('Nach Codeänderung: Ergebnis als veraltet gekennzeichnet', rs.stale && rs.hint.startsWith('Älter als der Code'), rs.hint);
+  check('Nach Codeänderung: Ergebnis als veraltet gekennzeichnet', rs.stale && rs.hint.startsWith('Older than the code'), rs.hint);
   await domClick('btn-result-rerun');
   await waitFor('neu berechnet', () => window.__t.result().stale === false, 90000).catch(() => {});
   rs = await ev(() => window.__t.result());
-  check('„Neu berechnen“: Lasche jetzt 2 mm, nichts kritisch', !rs.stale && rs.rows.some((x) => x.startsWith('Lasche') && x.includes('nichts kritisch')), JSON.stringify(rs.rows));
+  check('„Neu berechnen“: Lasche jetzt 2 mm, nichts kritisch', !rs.stale && rs.rows.some((x) => x.startsWith('Lasche') && x.includes('nothing critical')), JSON.stringify(rs.rows));
   await domClick('btn-result-close');
   check('Analyse aus: Modell wieder sichtbar', !(await ev(() => window.__t.viewer.animViewState())).modelHidden);
 
@@ -322,8 +327,8 @@ add_part("Drawer", drawer)
   await waitFor('Beispiel gebaut', () => window.soma.anim.list().then((x) => !x.building && (x.animations.some((a) => a.name === 'Open the lid') || x.errors.length > 0)), 90000).catch(() => {});
   l = await list();
   r = soma(['anim', 'info', 'Open the lid']);
-  check('Beispiel aus dem Skill „Animation und Video“ baut ohne Fehler, Ablauf mit Titel, Gelenk und Schublade', !l.errors.length
-    && r.status === 0 && r.stdout.includes('Lid: 0 -> -110 Grad') && r.stdout.includes('Drawer: 0 -> 60 mm') && r.stdout.includes('Titel: Storage box'),
+  check('Beispiel aus dem Skill „Animation and video“ baut ohne Fehler, Ablauf mit Titel, Gelenk und Schublade', !l.errors.length
+    && r.status === 0 && r.stdout.includes('Lid: 0 -> -110 deg') && r.stdout.includes('Drawer: 0 -> 60 mm') && r.stdout.includes('Title: Storage box'),
     JSON.stringify(l.errors) + r.stdout.slice(0, 200) + r.stderr);
 
   // 13) Ohne App, eigener Ordner (E64): Grenzwert mit Netzgenauigkeit, Teil vor Gruppe, Problemstellen, bessere Druckrichtung,
@@ -357,20 +362,20 @@ a.wait(0.5)
 `);
   const plainSoma = (args) => soma(args, { cwd: plain });
   r = plainSoma(['analyze', 'overhang']);
-  check('Fase mit genau 45°: nicht kritisch, als „genau am Grenzwert“ genannt', r.status === 0 && /Gehäuse: [^\n]*nichts über 45\.0°, 1\.41 cm² genau am Grenzwert/.test(r.stdout), r.stdout + r.stderr);
-  check('Pilz: Problemstelle mit Fläche und Größe, Hinweis auf --up -z', /Pilz: [^\n]*5\.12 cm² über 45\.0°, mit --up -z nur 0\.00 cm²/.test(r.stdout)
-    && /\n {4}512\.0 mm² in 24\.0 x 24\.0 mm, bis 90\.0° bei/.test(r.stdout), r.stdout);
+  check('Fase mit genau 45°: nicht kritisch, als „genau am Grenzwert“ genannt', r.status === 0 && /Gehäuse: [^\n]*nothing above 45\.0°, 1\.41 cm² exactly at the limit/.test(r.stdout), r.stdout + r.stderr);
+  check('Pilz: Problemstelle mit Fläche und Größe, Hinweis auf --up -z', /Pilz: [^\n]*5\.12 cm² above 45\.0°, with --up -z only 0\.00 cm²/.test(r.stdout)
+    && /\n {4}512\.0 mm² in 24\.0 x 24\.0 mm, up to 90\.0° at/.test(r.stdout), r.stdout);
   r = plainSoma(['analyze', 'overhang', '--parts', 'Gehäuse', '--name', 'teil']);
   const r2 = plainSoma(['analyze', 'overhang', '--parts', 'Gehäuse/', '--name', 'gruppe']);
   check('--parts: Bauteil vor gleichnamiger Gruppe mit Hinweis, „Gehäuse/“ meint die Gruppe', r.status === 0 && !r.stdout.includes('Schraube:')
-    && r.stdout.includes("Hinweis: 'Gehäuse' ist Bauteil und Gruppe") && r2.status === 0 && r2.stdout.includes('Schraube:') && !r2.stdout.includes('Hinweis'), r.stdout + r2.stdout);
+    && r.stdout.includes("Note: 'Gehäuse' is a part and a group") && r2.status === 0 && r2.stdout.includes('Schraube:') && !r2.stdout.includes('Note:'), r.stdout + r2.stdout);
   r = plainSoma(['anim', 'build']);
   check('Animation importiert aus model.py, das Modell läuft trotzdem nur einmal', r.status === 0 && fs.readFileSync(path.join(plain, 'laeufe.txt'), 'utf8') === 'xxxx',
     fs.readFileSync(path.join(plain, 'laeufe.txt'), 'utf8') + r.stderr);
   r = plainSoma(['anim', 'info', 'Schleife']);
-  check('soma anim info: zwölf kurze Schritte als eine Zeile', r.status === 0 && r.stdout.includes('Pilz: 0 -> 12 mm (12 Schritte)') && !r.stdout.includes('Pilz: 1 -> 2'), r.stdout);
+  check('soma anim info: zwölf kurze Schritte als eine Zeile', r.status === 0 && r.stdout.includes('Pilz: 0 -> 12 mm (12 steps)') && !r.stdout.includes('Pilz: 1 -> 2'), r.stdout);
   r = plainSoma(['anim', 'check', 'Schleife']);
-  check('soma anim check: frei, Exit 0', r.status === 0 && r.stdout.includes('Zeitpunkte') && r.stdout.includes('keine'), r.stdout + r.stderr);
+  check('soma anim check: frei, Exit 0', r.status === 0 && r.stdout.includes('time steps') && r.stdout.includes('none'), r.stdout + r.stderr);
   cleanup(plain);
 } catch (e) {
   t.fail();

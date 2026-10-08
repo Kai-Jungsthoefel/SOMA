@@ -1,15 +1,15 @@
 ---
-title: Laserschneiden
+title: Laser cutting
 name: Laser cutting
-summary: Teile aus {{material}}, {{thickness}} mm: Steckverbindungen mit Schnittbreite {{kerf}} mm, Mindeststege, Zusammenbau in 3D, DXF je Platte.
+summary: {{material}}, {{thickness}} mm: tab and slot joints with kerf {{kerf}} mm, minimum webs, assembly in 3D, one DXF per plate.
 order: 13
-category: Fertigungsverfahren
+category: Manufacturing
 default: on-demand
 when: parts will be laser cut from flat sheets (plywood, MDF, acrylic)
-topics: Material und Plattenstärke; Schnittbreite und Steckverbindungen; Stege, Löcher, Ecken; Aufbau im Modell; Prüfen und Export als DXF
-var material: plywood | | Material | plywood=Sperrholz, MDF=MDF, acrylic=Acryl (PMMA), cardboard=Karton
-var thickness: 3 | mm | Plattenstärke | 0.5..25
-var kerf: 0.15 | mm | Schnittbreite | 0..1
+topics: Material and sheet thickness; Kerf and joints; Webs, holes, corners; Structure in the model; Checks and export as DXF
+var material: plywood | | Material | plywood=Plywood, MDF=MDF, acrylic=Acrylic (PMMA), cardboard=Cardboard
+var thickness: 3 | mm | Sheet thickness | 0.5..25
+var kerf: 0.15 | mm | Kerf | 0..1
 ---
 # Skill: Laser cutting
 

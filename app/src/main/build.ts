@@ -50,14 +50,14 @@ export class BuildManager extends EventEmitter {
     if (file && this.proc && this.status.startedAt) {
       try { if (fs.statSync(file).mtimeMs <= this.status.startedAt) return; } catch { /* Datei weg: normal weiter */ }
     }
-    if (this.autoBuild) this.schedule('Dateiänderung');
+    if (this.autoBuild) this.schedule('file changed');
     else if (!this.status.stale) this.setStatus({ ...this.status, stale: true });
   }
 
   /** Auto-Build umschalten. Wird er eingeschaltet, während der Stand veraltet ist, baut er gleich nach. */
   setAuto(on: boolean): void {
     this.autoBuild = on;
-    if (on && this.status.stale) this.schedule('Auto-Build eingeschaltet', 0);
+    if (on && this.status.stale) this.schedule('auto build switched on', 0);
   }
 
   schedule(reason: string, delay = DEBOUNCE_MS): void {
@@ -66,7 +66,7 @@ export class BuildManager extends EventEmitter {
   }
 
   /** Sofort bauen (Knopf oder Agent-Aufruf ueber die App). Laeuft schon ein Build, wird ein weiterer eingereiht. */
-  start(reason = 'manuell'): void {
+  start(reason = 'manual'): void {
     if (this.disposed) return;
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     if (this.installing) { // ohne die Pakete scheiterte der Build nur am Import
@@ -95,7 +95,7 @@ export class BuildManager extends EventEmitter {
       this.proc = null;
       if (this.disposed) return;
       this.setStatus({ state: result.status === 'ok' ? 'ok' : 'error', result, seconds: (Date.now() - startedAt) / 1000, builtAt: Date.now() });
-      if (this.rerun) { this.rerun = false; this.start('Änderung während des Builds'); }
+      if (this.rerun) { this.rerun = false; this.start('change during the build'); }
     };
 
     // Das Ergebnis gilt, sobald seine Zeile vollständig da ist; auf das Prozessende muss niemand warten
@@ -104,10 +104,10 @@ export class BuildManager extends EventEmitter {
       try { finish(JSON.parse(l) as BuildResult); } catch { /* keine Ergebniszeile */ }
     };
     for (const l of w.lines) w.onLine(l);
-    w.onError = (e) => finish(errorResult('PythonStart', `Python konnte nicht gestartet werden (${pythonExe()}): ${e.message}`));
+    w.onError = (e) => finish(errorResult('PythonStart', `Could not start Python (${pythonExe()}): ${e.message}`));
     w.onClose = (code) => {
-      if (killedByTimeout) return finish(errorResult('Timeout', `Der Build wurde nach ${TIMEOUT_MS / 1000} s abgebrochen (Zeitlimit).`));
-      finish(errorResult('NoResult', `Der Build lieferte kein Ergebnis (Exit-Code ${code}).\n${(w.err || w.out).slice(-2000)}`));
+      if (killedByTimeout) return finish(errorResult('Timeout', `The build was stopped after ${TIMEOUT_MS / 1000} s (time limit).`));
+      finish(errorResult('NoResult', `The build returned no result (exit code ${code}).\n${(w.err || w.out).slice(-2000)}`));
     };
   }
 
@@ -120,7 +120,7 @@ export class BuildManager extends EventEmitter {
     const result: BuildResult = { status: 'ok', parts: last.parts, timings: last.timings, warnings: last.warnings };
     const seconds = typeof last.started === 'number' && typeof last.finished === 'number' ? Math.max(0, last.finished - last.started) : undefined;
     const builtAt = typeof last.finished === 'number' ? last.finished * 1000 : undefined;
-    this.setStatus({ state: 'ok', result, reason: 'letzter Build', seconds, builtAt });
+    this.setStatus({ state: 'ok', result, reason: 'last build', seconds, builtAt });
   }
 
   /**
@@ -140,7 +140,7 @@ export class BuildManager extends EventEmitter {
     this.packageError = error;
     const { queued: _q, ...rest } = this.status;
     this.setStatus(rest);
-    if (this.afterInstall) { this.afterInstall = false; this.start('Pakete installiert'); }
+    if (this.afterInstall) { this.afterInstall = false; this.start('packages installed'); }
   }
 
   /** Die Projektumgebung ließ sich nicht einrichten (E67): Die Oberfläche zeigt es als Hinweis. */

@@ -150,13 +150,6 @@ const HIGHLIGHT = HighlightStyle.define([
   { tag: [t.quote, t.processingInstruction, t.contentSeparator, t.meta], class: 'k-cm' },
 ]);
 
-const PHRASES = {
-  'Find': 'Suchen', 'Replace': 'Ersetzen', 'next': 'weiter', 'previous': 'zurück', 'all': 'alle', 'match case': 'Groß/klein',
-  'by word': 'ganzes Wort', 'regexp': 'Regex', 'replace': 'ersetzen', 'replace all': 'alle ersetzen', 'close': 'schließen',
-  'current match': 'aktueller Treffer', 'on line': 'in Zeile', 'replaced match on line $': 'Treffer in Zeile $ ersetzt',
-  'replaced $ matches': '$ Treffer ersetzt', 'Go to line': 'Gehe zu Zeile', 'go': 'los', 'Control character': 'Steuerzeichen',
-};
-
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
@@ -189,7 +182,7 @@ export class CodePanel {
       ui.link.setAttribute('aria-pressed', String(this.linked));
     });
     this.view = new EditorView({ parent: ui.view, state: EditorState.create({ doc: '' }) });
-    this.empty = el('div', { className: 'hint', textContent: 'Keine Datei geöffnet. Klick auf ein Bauteil oder links unter „Dateien“ auf eine Datei.' });
+    this.empty = el('div', { className: 'hint', textContent: 'No file open. Click a part, or a file under “Files” on the left.' });
     this.md = el('div', { className: 'mdview', tabIndex: -1 });
     this.md.hidden = true;
     ui.view.append(this.empty, this.md);
@@ -197,7 +190,7 @@ export class CodePanel {
       const m = (e.target as HTMLElement).closest<HTMLElement>('[data-mode]')?.dataset.mode;
       if (m) this.setPreview(m === 'view');
     });
-    this.saveBtn = el('button', { id: 'btn-code-save', className: 'btn sm acc', textContent: 'Speichern und bauen', title: 'Geänderte Dateien speichern und das Modell bauen (Strg+S im Editor). Die ZIP-Datei schreibt „Speichern“ oben.' });
+    this.saveBtn = el('button', { id: 'btn-code-save', className: 'btn sm acc', textContent: 'Save and build', title: 'Save the changed files and build the model (Ctrl+S in the editor). “Save” at the top writes the ZIP file.' });
     this.saveBtn.addEventListener('click', () => deps.saveAndBuild());
     this.renderChrome();
   }
@@ -329,10 +322,10 @@ export class CodePanel {
       p = (async () => {
         if (isPdf(file)) return this.loadPdf(file);
         let text: string;
-        try { text = await this.deps.read(file); } catch (e) { this.deps.toast(`${file} lässt sich nicht lesen: ${errText(e)}`, 'error'); return null; }
+        try { text = await this.deps.read(file); } catch (e) { this.deps.toast(`${file} cannot be read: ${errText(e)}`, 'error'); return null; }
         const locked = readOnlyReason(file)
-          ?? (text.length > MAX_EDIT_CHARS ? 'Zu groß zum Bearbeiten (über 2 MB).' : null)
-          ?? (text.includes('\uFFFD') ? 'Nicht als UTF-8 lesbar. Bearbeiten würde die Datei beschädigen.' : null);
+          ?? (text.length > MAX_EDIT_CHARS ? 'Too large to edit (over 2 MB).' : null)
+          ?? (text.includes('\uFFFD') ? 'Not readable as UTF-8. Editing would damage the file.' : null);
         const d: Doc = { file, base: text, eol: text.includes('\r\n') ? '\r\n' : '\n', locked, dirty: false, writing: false, queue: Promise.resolve(), conflict: null, mark: null, scrollTop: 0,
           preview: isMarkdown(file), previewScroll: 0, state: null! };
         d.state = EditorState.create({ doc: text, extensions: this.extensions(d) });
@@ -346,7 +339,7 @@ export class CodePanel {
 
   private async loadPdf(file: string): Promise<Doc | null> {
     let data: ArrayBuffer;
-    try { data = await this.deps.readBinary(file); } catch (e) { this.deps.toast(`${file} lässt sich nicht lesen: ${errText(e)}`, 'error'); return null; }
+    try { data = await this.deps.readBinary(file); } catch (e) { this.deps.toast(`${file} cannot be read: ${errText(e)}`, 'error'); return null; }
     const pdf = new PdfView(file, this.deps);
     pdf.root.hidden = true;
     this.ui.view.append(pdf.root);
@@ -370,7 +363,7 @@ export class CodePanel {
       lineNumbers(), highlightActiveLineGutter(), highlightSpecialChars(), history(), drawSelection(), indentOnInput(),
       syntaxHighlighting(HIGHLIGHT), bracketMatching(), closeBrackets(), highlightActiveLine(), highlightSelectionMatches(), search({ top: false }),
       py ? [python(), constants] : isMarkdown(d.file) ? [markdown(), EditorView.lineWrapping] : [],
-      indentUnit.of('    '), EditorState.tabSize.of(4), EditorState.phrases.of(PHRASES), EditorState.readOnly.of(!!d.locked),
+      indentUnit.of('    '), EditorState.tabSize.of(4), EditorState.readOnly.of(!!d.locked),
       keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
       markField,
       EditorView.updateListener.of((u) => this.onUpdate(d, u)),
@@ -418,9 +411,9 @@ export class CodePanel {
     if (!d) return;
     if (d.dirty || d.conflict) {
       const c = await this.deps.ask({
-        title: 'Datei schließen', message: `${file} hat ungespeicherte Änderungen.`,
-        detail: d.conflict ? 'Die Datei wurde außerdem außerhalb geändert. Verwerfen legt deine Fassung als Sicherung ab.' : 'Verwerfen legt deine Fassung als Sicherung ab.',
-        buttons: d.conflict ? ['Verwerfen', 'Abbrechen'] : ['Speichern', 'Verwerfen', 'Abbrechen'],
+        title: 'Close file', message: `${file} has unsaved changes.`,
+        detail: d.conflict ? 'The file was also changed outside the editor. Discard keeps your version as a backup.' : 'Discard keeps your version as a backup.',
+        buttons: d.conflict ? ['Discard', 'Cancel'] : ['Save', 'Discard', 'Cancel'],
       });
       const choice = d.conflict ? (c === 0 ? 'discard' : 'cancel') : c === 0 ? 'save' : c === 1 ? 'discard' : 'cancel';
       if (choice === 'cancel') return;
@@ -467,10 +460,10 @@ export class CodePanel {
       d.base = text;
       d.conflict = null;
       d.dirty = this.textOf(d) !== text; // während des Schreibens weitergetippt: bleibt ungespeichert
-      if (r.backup) this.deps.toast(`${d.file} gespeichert. Die Fassung von außen liegt als Sicherung unter ${r.backup}`, 'info');
+      if (r.backup) this.deps.toast(`${d.file} saved. The outside version is kept as a backup at ${r.backup}`, 'info');
     } else if (r.conflict) {
       d.conflict = { disk: r.disk ?? null };
-    } else this.deps.toast(`${d.file} ließ sich nicht speichern: ${r.error}`, 'error');
+    } else this.deps.toast(`${d.file} could not be saved: ${r.error}`, 'error');
     this.renderChrome();
     this.deps.changed();
     // Eine Änderung von außen kann während des Schreibens gekommen sein, ihr Ereignis wurde dann übersprungen
@@ -484,10 +477,10 @@ export class CodePanel {
     if (!id) return false;
     try {
       const b = await window.soma.fs.backupText(id, d.file, this.textOf(d));
-      this.deps.toast(`Deine Fassung von ${d.file} liegt als Sicherung unter ${b}`, 'info');
+      this.deps.toast(`Your version of ${d.file} is kept as a backup at ${b}`, 'info');
       return true;
     } catch (e) {
-      this.deps.toast(`${d.file} ließ sich nicht sichern, es wird nichts verworfen: ${errText(e)}`, 'error');
+      this.deps.toast(`${d.file} could not be backed up, nothing is discarded: ${errText(e)}`, 'error');
       return false;
     }
   }
@@ -535,11 +528,11 @@ export class CodePanel {
     const { tabs, info, banner } = this.ui;
     this.deps.active?.(this.active);
     tabs.replaceChildren(...[...this.docs.values()].map((d) => {
-      const x = el('button', { className: 'x', title: `${d.file} schließen` }, icon('x', 11, 2.2));
-      x.setAttribute('aria-label', `${d.file} schließen`);
+      const x = el('button', { className: 'x', title: `Close ${d.file}` }, icon('x', 11, 2.2));
+      x.setAttribute('aria-label', `Close ${d.file}`);
       x.addEventListener('click', (e) => { e.stopPropagation(); void this.close(d.file); });
-      const state = d.conflict ? el('span', { className: 'dirty warn', textContent: '●', title: 'Konflikt mit einer Änderung von außen' })
-        : d.dirty ? el('span', { className: 'dirty', textContent: '●', title: 'Nicht gespeichert' }) : null;
+      const state = d.conflict ? el('span', { className: 'dirty warn', textContent: '●', title: 'Conflict with a change from outside' })
+        : d.dirty ? el('span', { className: 'dirty', textContent: '●', title: 'Not saved' }) : null;
       const tab = el('div', { className: 'ctab' + (d.file === this.active ? ' on' : ''), title: d.file }, el('span', { textContent: d.file.split('/').pop()! }), state, x);
       tab.addEventListener('click', () => { this.activate(d); this.renderChrome(); });
       return tab;
@@ -558,18 +551,18 @@ export class CodePanel {
     const m = d.pdf ? null : d.mark;
     const left: (Node | string)[] = [];
     if (d.pdf) { /* PDF: eigene Leiste in der Ansicht */ }
-    else if (d.locked) left.push(icon('lock', 13, 2), `Nur lesen. ${d.locked}`);
+    else if (d.locked) left.push(icon('lock', 13, 2), `Read only. ${d.locked}`);
     else if (m) {
       const sw = m.kind === 'er' ? el('span', { className: 'ci-err' }, icon('alert', 13, 2)) : el('span', { className: 'sw' });
       if (m.color) sw.style.background = m.color;
-      left.push(sw, `${m.label} · Zeile ${m.from}${m.to !== m.from ? '–' + m.to : ''}`);
+      left.push(sw, `${m.label} · ${m.to !== m.from ? 'lines' : 'line'} ${m.from}${m.to !== m.from ? '–' + m.to : ''}`);
     }
     // Ungespeichert (in irgendeiner Datei, ohne Konflikt): Hinweis und Knopf, gespeichert und gebaut wird erst auf Wunsch
     const waiting = [...this.docs.values()].filter((x) => x.dirty && !x.conflict);
     const pending = waiting.length > 0;
     // Gebaut wird nur, wenn eine gespeicherte Datei das Modell betrifft. Sonst heißt der Knopf nur „Speichern“.
-    this.saveBtn.textContent = waiting.some((x) => affectsBuild(x.file)) ? 'Speichern und bauen' : 'Speichern';
-    const hint = !d.locked && d.dirty && !d.conflict ? el('span', { className: 'c3 ci-hint', textContent: 'Nicht gespeichert · Strg+S' }) : '';
+    this.saveBtn.textContent = waiting.some((x) => affectsBuild(x.file)) ? 'Save and build' : 'Save';
+    const hint = !d.locked && d.dirty && !d.conflict ? el('span', { className: 'c3 ci-hint', textContent: 'Not saved · Ctrl+S' }) : '';
     if (left.length || pending) info.replaceChildren(el('span', { className: 'ci-main' }, ...left), el('span', { className: 'grow' }), hint, pending ? this.saveBtn : '');
     else info.replaceChildren();
     info.classList.toggle('locked', !!d.locked && !d.pdf);
@@ -577,15 +570,15 @@ export class CodePanel {
     banner.hidden = !d.conflict;
     if (d.conflict) {
       const gone = d.conflict.disk === null;
-      const keep = el('button', { className: 'btn sm acc', textContent: gone ? 'Mit meiner Fassung neu anlegen' : 'Meine Fassung behalten' });
-      const take = el('button', { className: 'btn sm', textContent: gone ? 'Schließen' : 'Fassung von außen laden' });
+      const keep = el('button', { className: 'btn sm acc', textContent: gone ? 'Recreate with my version' : 'Keep my version' });
+      const take = el('button', { className: 'btn sm', textContent: gone ? 'Close' : 'Load the outside version' });
       keep.addEventListener('click', () => void this.keepMine(d.file));
       take.addEventListener('click', () => void this.takeTheirs(d.file));
       banner.replaceChildren(
         el('span', { className: 'cb-ico' }, icon('alert', 16)),
         el('div', { className: 'cb-text' },
-          el('b', { textContent: gone ? `${d.file} wurde außerhalb gelöscht` : `${d.file} wurde außerhalb geändert, vermutlich vom Agenten` }),
-          el('span', { textContent: 'Deine Eingaben hier sind noch nicht gespeichert. Die Fassung, die du nicht wählst, kommt in eine Sicherung.' }),
+          el('b', { textContent: gone ? `${d.file} was deleted outside the editor` : `${d.file} was changed outside the editor, probably by the agent` }),
+          el('span', { textContent: 'Your edits here are not saved yet. The version you do not choose goes into a backup.' }),
           el('div', { className: 'cb-actions' }, keep, take)));
     }
   }

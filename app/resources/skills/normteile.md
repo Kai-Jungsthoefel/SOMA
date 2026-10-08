@@ -1,12 +1,12 @@
 ---
-title: Normteile
+title: Standard parts
 name: Standard parts
-summary: Schrauben, Muttern, Scheiben und Gewindeeinsätze aus soma.fasteners mit passenden Bohrungen, Mutternfallen, Maße von Kugellagern, Passstiften und Alu-Profilen.
+summary: Screws, nuts, washers and threaded inserts from soma.fasteners with matching holes, nut traps, sizes of ball bearings, dowel pins and aluminium extrusions.
 order: 22
-category: Konstruktionswissen
+category: Design knowledge
 default: always
 when: the model needs screws, nuts, washers, threaded inserts, bearings, dowel pins or profiles
-topics: Schrauben, Muttern, Scheiben und Einsätze mit soma.fasteners; Lage und Bohrungen; Mutternfallen; Kugellager; Passstifte und Profile; Normteile im Modell
+topics: Screws, nuts, washers and inserts with soma.fasteners; Position and holes; Nut traps; Ball bearings; Pins and profiles; Standard parts in the model
 ---
 # Skill: Standard parts
 

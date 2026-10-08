@@ -96,7 +96,7 @@ export class VersionsBar {
       return;
     }
     const commit = this.log.commits[i];
-    this.ui.info.textContent = 'Lade Vorschau …';
+    this.ui.info.textContent = 'Loading preview …';
     const res = await window.soma.versions.preview(commit.hash);
     if (seq !== this.seq) return; // inzwischen etwas anderes gewählt
     if (res.error) {
@@ -115,7 +115,7 @@ export class VersionsBar {
     const r = await window.soma.versions.restore(this.previewHash);
     if (r.cancelled) return;
     if (r.error) { this.hooks.toast(r.error, 'error'); return; }
-    this.hooks.toast(r.commit ? 'Stand wiederhergestellt und als neuer Stand im Verlauf abgelegt.' : 'Dieser Stand war schon der aktuelle.', 'ok');
+    this.hooks.toast(r.commit ? 'Version restored and added to the history as a new version.' : 'This version already was the current one.', 'ok');
     this.previewHash = null;
     await this.refresh();
     await this.hooks.show(null, true);
@@ -130,25 +130,25 @@ export class VersionsBar {
     ui.dots.replaceChildren(...commits.map((c, i) => {
       const dot = el('button', { className: 'vdot' + (c.byApp ? ' app' : '') + (c.hash === this.savedHead ? ' saved' : '') + (i === idx ? ' cur' : '') }, el('i'));
       dot.style.left = pos(i);
-      const saved = c.hash === this.savedHead ? '\nZuletzt gespeichert' : '';
-      dot.title = `${c.subject}\n${who(c)} · ${fmtWhen(c.date, true)}${saved}\n${i === idx ? 'Wird gerade angezeigt' : 'Klick zeigt diesen Stand als Vorschau'}`;
+      const saved = c.hash === this.savedHead ? '\nLast saved' : '';
+      dot.title = `${c.subject}\n${who(c)} · ${fmtWhen(c.date, true)}${saved}\n${i === idx ? 'Shown right now' : 'Click to preview this version'}`;
       dot.setAttribute('aria-label', `${c.subject}, ${fmtWhen(c.date, true)}`);
       dot.addEventListener('click', () => void this.select(i));
       return dot;
     }), (() => {
-      const live = el('button', { className: 'vdot live' + (idx === n ? ' cur' : '') + (dirtyFiles ? ' dirty' : '') }, el('i'), el('span', { textContent: 'Jetzt' }));
+      const live = el('button', { className: 'vdot live' + (idx === n ? ' cur' : '') + (dirtyFiles ? ' dirty' : '') }, el('i'), el('span', { textContent: 'Now' }));
       live.style.left = pos(n);
-      live.title = `Jetzt: der Arbeitsstand${dirtyFiles ? `, ${dirtyFiles} Änderung${dirtyFiles === 1 ? '' : 'en'} noch in keinem Stand` : ''}`;
+      live.title = `Now: your current work${dirtyFiles ? `, ${dirtyFiles} change${dirtyFiles === 1 ? '' : 's'} not in any version yet` : ''}`;
       live.addEventListener('click', () => void this.select(n));
       return live;
     })());
 
     const previewCommit = this.previewHash ? commits.find((c) => c.hash === this.previewHash) : null;
-    ui.info.textContent = n === 0 ? '' : `${n + 1} Stände`;
+    ui.info.textContent = n === 0 ? '' : `${n + 1} versions`;
     ui.banner.hidden = !previewCommit;
     ui.viewer.classList.toggle('preview', !!previewCommit);
     if (previewCommit) {
-      ui.bannerTitle.textContent = `Vorschau · Stand ${idx + 1} von ${n + 1}`;
+      ui.bannerTitle.textContent = `Preview · version ${idx + 1} of ${n + 1}`;
       ui.bannerSub.textContent = `${previewCommit.subject} · ${who(previewCommit)} · ${fmtWhen(previewCommit.date, true)}`;
       ui.bannerSub.title = ui.bannerSub.textContent;
     }

@@ -36,7 +36,7 @@ const PLACEHOLDER = /\{\{\s*([a-z][a-z0-9_]{0,30})\s*\}\}/g;
 /** Stufen, in denen ein Skill im Projekt liegt. */
 export type OnMode = Exclude<SkillMode, 'off'>;
 const ON_MODES: OnMode[] = ['always', 'demand'];
-const MODE_LABEL: Record<SkillMode, string> = { off: 'Aus', demand: 'Bei Bedarf', always: 'Immer' };
+const MODE_LABEL: Record<SkillMode, string> = { off: 'Off', demand: 'On demand', always: 'Always' };
 
 /**
  * Stufen eines Modells laut project.json: `skills` (Immer, so hieß die Liste schon vor E55) und `skills_on_demand`
@@ -147,12 +147,12 @@ function sortSkills<T extends { category: string; order: number; title: string }
   const first = new Map<string, number>();
   for (const s of list) if (s.category) first.set(s.category, Math.min(first.get(s.category) ?? Infinity, s.order));
   const rank = (s: T) => (s.category ? first.get(s.category)! : Infinity);
-  return [...list].sort((a, b) => rank(a) - rank(b) || a.category.localeCompare(b.category, 'de') || a.order - b.order || a.title.localeCompare(b.title, 'de'));
+  return [...list].sort((a, b) => rank(a) - rank(b) || a.category.localeCompare(b.category, 'en') || a.order - b.order || a.title.localeCompare(b.title, 'en'));
 }
 
 /** Zahl für den Agenten: Punkt als Dezimalzeichen, ohne Rundungsreste. */
 const agentNum = (v: number) => String(+v.toFixed(6));
-const showNum = (v: number) => v.toLocaleString('de-DE', { maximumFractionDigits: 6 });
+const showNum = (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 6, useGrouping: false });
 
 /**
  * Prüft einen Wert gegen seine Variable. Zahlen dürfen als Text mit Komma kommen. Rückgabe: der saubere Wert oder ein
@@ -161,14 +161,15 @@ const showNum = (v: number) => v.toLocaleString('de-DE', { maximumFractionDigits
 export function checkValue(v: VarDef, input: unknown): { value: SkillValue } | { error: string } {
   if (v.kind === 'choice') {
     const s = typeof input === 'string' ? input.trim() : '';
-    return v.options!.some((o) => o.value === s) ? { value: s } : { error: `${v.label}: „${String(input)}“ steht nicht zur Auswahl.` };
+    return v.options!.some((o) => o.value === s) ? { value: s } : { error: `${v.label}: “${String(input)}” is not one of the choices.` };
   }
   const n = typeof input === 'number' ? input : typeof input === 'string' ? Number(input.trim().replace('−', '-').replace(',', '.')) : NaN;
-  if (typeof input === 'string' && !input.trim()) return { error: `${v.label}: Bitte eine Zahl eingeben.` };
-  if (!Number.isFinite(n)) return { error: `${v.label}: „${String(input)}“ ist keine Zahl.` };
+  if (typeof input === 'string' && !input.trim()) return { error: `${v.label}: please enter a number.` };
+  if (!Number.isFinite(n)) return { error: `${v.label}: “${String(input)}” is not a number.` };
   const unit = v.unit ? (v.unit === '°' ? '°' : ` ${v.unit}`) : '';
   if ((v.min != null && n < v.min) || (v.max != null && n > v.max)) {
-    return { error: `${v.label}: erlaubt sind ${showNum(v.min ?? -Infinity)} bis ${showNum(v.max ?? Infinity)}${unit}.` };
+    const range = v.min != null && v.max != null ? `between ${showNum(v.min)} and ${showNum(v.max)}` : v.min != null ? `at least ${showNum(v.min)}` : `at most ${showNum(v.max!)}`;
+    return { error: `${v.label}: must be ${range}${unit}.` };
   }
   return { value: +n.toFixed(6) };
 }
@@ -208,7 +209,7 @@ function demandNote(vars: VarDef[], values: SkillValues): string {
       : '> The values in this file are defaults of the app, the user has not',
     '> chosen them: say which ones you rely on, or ask when one matters.');
   }
-  lines.push('> In the app, the user can switch this skill to "Immer" (always) and change its settings.');
+  lines.push('> In the app, the user can switch this skill to "Always" and change its settings.');
   return lines.join('\n');
 }
 
@@ -329,15 +330,15 @@ export function listSkills(root: string, bundledDir: string, modes: SkillModes |
       problems: [],
     };
     const rel = relOf(id);
-    if (mode !== 'off' && copy == null) info.problems.push(`Steht auf „${MODE_LABEL[mode]}“, aber ${rel} fehlt oder ist unlesbar. Der Agent findet die Regeln nicht.`);
-    if (mode === 'off' && copy != null) info.problems.push(`Aus, aber ${rel} liegt noch im Projekt.`);
+    if (mode !== 'off' && copy == null) info.problems.push(`Set to “${MODE_LABEL[mode]}”, but ${rel} is missing or unreadable. The agent does not find the rules.`);
+    if (mode === 'off' && copy != null) info.problems.push(`Off, but ${rel} is still in the project.`);
     if (mode !== 'off' && agents != null && !agents[mode].includes(rel)) {
       const other: OnMode = mode === 'always' ? 'demand' : 'always';
       info.problems.push(agents[other].includes(rel)
-        ? `AGENTS.md führt diesen Skill unter „${MODE_LABEL[other]}“, eingestellt ist „${MODE_LABEL[mode]}“.`
-        : 'AGENTS.md nennt diesen Skill nicht. Ein Agent erfährt nichts davon.');
+        ? `AGENTS.md lists this skill under “${MODE_LABEL[other]}”, but it is set to “${MODE_LABEL[mode]}”.`
+        : 'AGENTS.md does not name this skill. An agent learns nothing about it.');
     }
-    if (!b && mode !== 'off') info.problems.push('Diese App bringt den Skill nicht mit. Die Kopie im Projekt gilt weiter.');
+    if (!b && mode !== 'off') info.problems.push('This app does not include the skill. The copy in the project still applies.');
     return info;
   });
   return sortSkills(out);
@@ -366,7 +367,7 @@ export function applyDefaultSkills(root: string, bundledDir: string, backupDir: 
   const done: SkillModes = { always: [], demand: [] };
   for (const mode of ON_MODES) {
     for (const id of want[mode]) {
-      try { copySkill(root, bundledDir, id, backupDir, {}, mode); done[mode].push(id); } catch (e) { console.error(`[soma] Skill „${id}“ ließ sich nicht einschalten:`, e); }
+      try { copySkill(root, bundledDir, id, backupDir, {}, mode); done[mode].push(id); } catch (e) { console.error(`[soma] Could not switch on skill “${id}”:`, e); }
     }
   }
   if (done.always.length || done.demand.length) {
@@ -374,7 +375,7 @@ export function applyDefaultSkills(root: string, bundledDir: string, backupDir: 
     try {
       const warning = writeAgentsList(root, agentsEntries(root, bundledDir, done));
       if (warning) console.error('[soma]', warning);
-    } catch (e) { console.error('[soma] AGENTS.md ließ sich nicht schreiben:', e); }
+    } catch (e) { console.error('[soma] Could not write AGENTS.md:', e); }
   }
   return done;
 }
@@ -404,7 +405,7 @@ export function copySkill(root: string, bundledDir: string, id: string, backupDi
   const old = projectCopy(root, id);
   if (!b) {
     // Nicht mitgeliefert: Nur einschalten, was schon im Projekt liegt
-    if (old == null) throw new Error(`Den Skill „${id}“ gibt es in dieser App nicht.`);
+    if (old == null) throw new Error(`The skill “${id}” does not exist in this app.`);
     return null;
   }
   const next = renderSkill(b.text, values, mode);
@@ -484,7 +485,7 @@ export function agentsEntries(root: string, bundledDir: string, modes: SkillMode
 export function writeAgentsList(root: string, entries: AgentsEntry[]): string | null {
   const file = path.join(root, 'AGENTS.md');
   const cur = agentsText(root);
-  if (cur == null) return 'AGENTS.md fehlt. Der Skill liegt im Projekt, ein Agent erfährt aber nichts davon.';
+  if (cur == null) return 'AGENTS.md is missing. The skill is in the project, but an agent learns nothing about it.';
   const eol = cur.includes('\r\n') ? '\r\n' : '\n';
   const block = skillsBlock(entries).replace(/\n/g, eol);
   const a = cur.indexOf(BEGIN), z = cur.indexOf(END);

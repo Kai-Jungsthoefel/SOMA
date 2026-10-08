@@ -71,42 +71,42 @@ try {
   // 1) Kragbalken gegen die Formel: w = 4 * 50 * 100³ / (70000 * 10 * 10³) = 0,2857 mm, Spannung an der Einspannung 30 MPa
   study('balken', BALKEN(50));
   let r = soma(['analyze', 'fem', 'analyses/balken.py']);
-  const w = Number(/größte Verschiebung (\d+\.\d+) mm/.exec(r.stdout)?.[1]);
-  const s = Number(/höchste Vergleichsspannung (\d+\.\d) MPa/.exec(r.stdout)?.[1]);
+  const w = Number(/largest displacement (\d+\.\d+) mm/.exec(r.stdout)?.[1]);
+  const s = Number(/highest von Mises stress (\d+\.\d) MPa/.exec(r.stdout)?.[1]);
   check('Kragbalken: Durchbiegung wie die Formel (0,286 mm, ±2 %)', r.status === 0 && near(w, 0.2857, 0.006), r.stdout + r.stderr);
-  check('Kragbalken: Spannung an der Einspannung um 30 MPa, Sicherheit über 2, nichts kritisch', near(s, 30, 4) && /kleinste Sicherheit [5-9]\.\d\d, nichts unter 2/.test(r.stdout), r.stdout);
-  check('Lastfall in der Ausgabe: fest 100 mm² mit Lagerkraft 50 N, Kraft 100 mm², im Gleichgewicht', /fest: Balken <X \(100\.0 mm²\), Lagerkraft \(0\.0, 0\.0, 50\.0\) N/.test(r.stdout)
-    && /Kraft: Balken >X \(100\.0 mm²\), \(0\.0, 0\.0, -50\.0\) N/.test(r.stdout) && r.stdout.includes('(im Gleichgewicht)'), r.stdout);
-  check('Netzprüfung: zweite Rechnung mit gröberem Netz genannt, Hinweis zur Spitze an der Einspannung', /mit gröberem Netz \d+\.\d MPa/.test(r.stdout)
-    && r.stdout.includes('am Rand einer Einspannung'), r.stdout);
+  check('Kragbalken: Spannung an der Einspannung um 30 MPa, Sicherheit über 2, nichts kritisch', near(s, 30, 4) && /lowest safety factor [5-9]\.\d\d, nothing below 2/.test(r.stdout), r.stdout);
+  check('Lastfall in der Ausgabe: fest 100 mm² mit Lagerkraft 50 N, Kraft 100 mm², im Gleichgewicht', /fixed: Balken <X \(100\.0 mm²\), reaction force \(0\.0, 0\.0, 50\.0\) N/.test(r.stdout)
+    && /force: Balken >X \(100\.0 mm²\), \(0\.0, 0\.0, -50\.0\) N/.test(r.stdout) && r.stdout.includes('(in equilibrium)'), r.stdout);
+  check('Netzprüfung: zweite Rechnung mit gröberem Netz genannt, Hinweis zur Spitze an der Einspannung', /with a coarser mesh \d+\.\d MPa/.test(r.stdout)
+    && r.stdout.includes('at the edge of a fixed support'), r.stdout);
   check('Ergebnisdatei .soma/results/balken.glb', fs.existsSync(path.join(dir, '.soma', 'results', 'balken.glb')));
 
   // 2) Zwei verschmolzene Teile mit eigenem Werkstoff, Druck über near=, Eigengewicht
   study('winkel', WINKEL);
   r = soma(['analyze', 'fem', 'analyses/winkel.py']);
   check('Winkel: beide Teile mit ihrem Werkstoff, Druck 0,2 MPa auf 1600 mm² (320 N), Eigengewicht, im Gleichgewicht', r.status === 0
-    && /Fuss \(Aluminium 6082/.test(r.stdout) && /Wand \(Steel S235/.test(r.stdout) && /Druck: Wand nahe \(30, 100, 30\) \(1600\.0 mm²\), 0\.2 MPa, zusammen \(-320\.0, 0\.0, 0\.0\) N/.test(r.stdout)
-    && r.stdout.includes('Eigengewicht') && r.stdout.includes('(im Gleichgewicht)'), r.stdout + r.stderr);
-  check('Winkel: Einspannung 2400 mm² trägt Druck und Gewicht', /fest: Fuss <Z \(2400\.0 mm²\), Lagerkraft \(320\.0, 0\.0, \d\.\d\) N/.test(r.stdout), r.stdout);
+    && /Fuss \(Aluminium 6082/.test(r.stdout) && /Wand \(Steel S235/.test(r.stdout) && /pressure: Wand near \(30, 100, 30\) \(1600\.0 mm²\), 0\.2 MPa, in total \(-320\.0, 0\.0, 0\.0\) N/.test(r.stdout)
+    && r.stdout.includes('self-weight') && r.stdout.includes('(in equilibrium)'), r.stdout + r.stderr);
+  check('Winkel: Einspannung 2400 mm² trägt Druck und Gewicht', /fixed: Fuss <Z \(2400\.0 mm²\), reaction force \(320\.0, 0\.0, \d\.\d\) N/.test(r.stdout), r.stdout);
 
   // 3) Fehler: verständlich, Exit 1, keine Ergebnisdatei
   study('lose', LOSE);
   r = soma(['analyze', 'fem', 'analyses/lose.py']);
-  check('Nur in Z gehalten: meldet, was noch frei ist', r.status === 1 && /Lagerung reicht nicht[^\n]*Fuss, Wand: noch frei beweglich \([^)]*Verschiebung in X/.test(r.stderr + r.stdout), r.stderr + r.stdout);
+  check('Nur in Z gehalten: meldet, was noch frei ist', r.status === 1 && /supports are not enough[^\n]*Fuss, Wand: still free \([^)]*moving in X/.test(r.stderr + r.stdout), r.stderr + r.stdout);
   study('kaputt', BALKEN(1).replace('fix("Balken"', 'fix("Gibtsnicht"'));
   r = soma(['analyze', 'fem', 'analyses/kaputt.py']);
-  check('Unbekanntes Bauteil: nennt die vorhandenen', r.status === 1 && (r.stderr + r.stdout).includes("Bauteil 'Gibtsnicht' gibt es nicht") && (r.stderr + r.stdout).includes("'Balken'"), r.stderr + r.stdout);
+  check('Unbekanntes Bauteil: nennt die vorhandenen', r.status === 1 && (r.stderr + r.stdout).includes("There is no part 'Gibtsnicht'") && (r.stderr + r.stdout).includes("'Balken'"), r.stderr + r.stdout);
   study('kaputt', BALKEN(1).replace('faces="<X"', 'faces="<Q"'));
   r = soma(['analyze', 'fem', 'analyses/kaputt.py']);
-  check('Falscher Selektor: Fehler nennt ihn', r.status === 1 && (r.stderr + r.stdout).includes("Selektor '<Q'"), r.stderr + r.stdout);
+  check('Falscher Selektor: Fehler nennt ihn', r.status === 1 && (r.stderr + r.stdout).includes("Selector '<Q'"), r.stderr + r.stdout);
   study('kaputt', BALKEN(1).replace(/study\.fix[^\n]*\n/, ''));
   r = soma(['analyze', 'fem', 'analyses/kaputt.py']);
-  check('Ohne fix: verlangt eine Einspannung', r.status === 1 && (r.stderr + r.stdout).includes('Mindestens ein study.fix'), r.stderr + r.stdout);
+  check('Ohne fix: verlangt eine Einspannung', r.status === 1 && (r.stderr + r.stdout).includes('At least one study.fix'), r.stderr + r.stdout);
   study('kaputt', 'from soma.fem import Study\nx = 1 / 0\n');
   r = soma(['analyze', 'fem', 'analyses/kaputt.py']);
-  check('Fehler im Code der Studie: Datei und Zeile 2', r.status === 1 && (r.stderr + r.stdout).includes('analyses/kaputt.py (Zeile 2): ZeroDivisionError'), r.stderr + r.stdout);
+  check('Fehler im Code der Studie: Datei und Zeile 2', r.status === 1 && (r.stderr + r.stdout).includes('analyses/kaputt.py (line 2): ZeroDivisionError'), r.stderr + r.stdout);
   r = soma(['analyze', 'fem']);
-  check('Ohne Studie: Hinweis auf die Datei', r.status === 1 && (r.stderr + r.stdout).includes('braucht die Datei mit dem Lastfall'), r.stderr + r.stdout);
+  check('Ohne Studie: Hinweis auf die Datei', r.status === 1 && (r.stderr + r.stdout).includes('needs the file with the load case'), r.stderr + r.stdout);
   check('Fehler legen keine Ergebnisse an', !fs.existsSync(path.join(dir, '.soma', 'results', 'kaputt.glb')) && !fs.existsSync(path.join(dir, '.soma', 'results', 'lose.glb')));
 
   // 4) Anzeige in der App: Karte mit Lastfall und Überhöhung, Wert unter dem Zeiger in Ausgangslage
@@ -116,9 +116,9 @@ try {
   let rs = await ev(() => window.__t.result());
   // Überhöhung: 5 % von 101 mm / 0,286 mm = 17,7, auf eine runde Zahl abgerundet 10
   check('Karte: Sicherheit, Spannung, Verschiebung je Teil, Lastfall in zwei Zeilen, verformt 10-fach', rs.active && rs.fem
-    && rs.rows.some((x) => x.startsWith('Balken') && /Sicherheit \d+,\d+ · 30(,\d)? MPa · 0,28\d mm$/.test(x))
-    && rs.fem.bcRows.length === 2 && rs.fem.bcRows[0].startsWith('fest') && rs.fem.bcRows[0].includes('Lagerkraft 50 N') && rs.fem.bcRows[1].startsWith('Kraft')
-    && rs.fem.scale === 10 && rs.fem.options.includes('10-fach überhöht') && rs.fem.bcs === true && rs.meta.unit === '', JSON.stringify(rs));
+    && rs.rows.some((x) => x.startsWith('Balken') && /Safety \d+\.\d+ · 30(\.\d)? MPa · 0\.28\d mm$/.test(x))
+    && rs.fem.bcRows.length === 2 && rs.fem.bcRows[0].startsWith('Fixed') && rs.fem.bcRows[0].includes('reaction force 50 N') && rs.fem.bcRows[1].startsWith('Force')
+    && rs.fem.scale === 10 && rs.fem.options.includes('Exaggerated 10×') && rs.fem.bcs === true && rs.meta.unit === '', JSON.stringify(rs));
   check('Hinweis in der Karte nennt den Befehl mit der Studie', rs.hint.startsWith('soma analyze fem analyses/balken.py'), rs.hint);
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
@@ -128,7 +128,7 @@ try {
   check('Klick auf das verformte Balkenende: Stelle in Ausgangslage, Verschiebung um 0,28 mm, Spannung klein', pin?.name === 'Balken'
     && near(pin.point[0], 97, 1) && near(pin.point[2], 0, 1.2) && near(pin.disp, 0.28, 0.03) && pin.stress < 5 && pin.value > 20, JSON.stringify(pin));
   rs = await ev(() => window.__t.result());
-  check('An Agent geben: Sicherheit, Spannung und Verschiebung', /^\[Ergebnis: "Balken unter Last" \(\.soma\/results\/balken\.glb, Grenzwert 2\.00\), Bauteil "Balken": Sicherheit (über 99|\d+\.\d\d) \(\d+\.\d MPa, Verschiebung 0\.2\d\d mm\) bei \(/.test(rs.note), rs.note);
+  check('An Agent geben: Sicherheit, Spannung und Verschiebung', /^\[Result: "Balken unter Last" \(\.soma\/results\/balken\.glb, limit 2\.00\), part "Balken": safety factor (over 99|\d+\.\d\d) \(\d+\.\d MPa, displacement 0\.2\d\d mm\) at \(/.test(rs.note), rs.note);
   await ev(() => window.__t.viewer.setView('iso'));
   await shot('fem-1');
   await ev(() => { const s = document.getElementById('result-deform'); s.value = '0'; s.dispatchEvent(new Event('change')); });
@@ -144,14 +144,14 @@ try {
   await pick('result-field', 'stress');
   rs = await ev(() => window.__t.result());
   check('Spannung: MPa, Grenze 125 MPa kritisch darüber, Skala 0 bis 250', rs.scale.field === 'stress' && rs.scale.unit === 'MPa'
-    && rs.scale.threshold === 125 && rs.scale.range.join() === '0,250' && rs.scale.legend.includes('Vergleichsspannung (von Mises) (MPa)')
-    && rs.scale.legend.includes('Grenze 125 MPa, kritisch darüber'), JSON.stringify(rs.scale));
+    && rs.scale.threshold === 125 && rs.scale.range.join() === '0,250' && rs.scale.legend.includes('von Mises stress (MPa)')
+    && rs.scale.legend.includes('Limit 125 MPa, critical above'), JSON.stringify(rs.scale));
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
   const pin2 = await ev((p) => window.__t.resultPin(p.x, p.y), at);
   await ev(() => window.__t.viewer.setView('iso'));
   rs = await ev(() => window.__t.result());
-  check('Stelle bei Spannung: MPa zuerst, Sicherheit danach', pin2?.stress != null && /: Balken, \d+,\d MPa · Sicherheit /.test(rs.probe), rs.probe);
+  check('Stelle bei Spannung: MPa zuerst, Sicherheit danach', pin2?.stress != null && /: Balken, \d+\.\d MPa · Safety /.test(rs.probe), rs.probe);
   await pick('result-range', 'minmax');
   rs = await ev(() => window.__t.result());
   check('Min bis Max: Spanne der Spannungen im Modell (bis rund 30 MPa)', rs.scale.mode === 'minmax' && rs.scale.range[0] >= 0 && rs.scale.range[0] < 5
@@ -168,7 +168,7 @@ try {
   // Farben über die Spanne: Das untere Ende ist grau, das obere rot, obwohl der Grenzwert weit darüber liegt
   const ends = await ev(() => getComputedStyle(document.querySelector('#result-legend .rs-bar')).backgroundImage.match(/rgb\([^)]*\)/g));
   check('Eigene Skala 10 bis 40 MPa gilt sofort, Farbe über die Spanne bis Rot, Grenze außerhalb ohne Strich', rs.scale.range.join() === '10,40'
-    && rs.scale.legend.includes('Farbe über die Spanne') && ends.at(-1) === 'rgb(240, 116, 112)'
+    && rs.scale.legend.includes('color across the range') && ends.at(-1) === 'rgb(240, 116, 112)'
     && await ev(() => document.querySelector('#result-legend .rs-mark').hidden), JSON.stringify(rs.scale) + ends?.join(' '));
   await shot('fem-2');
   await typeIn('result-lo', '50');
@@ -183,7 +183,7 @@ try {
 
   // 5) soma render --result: Bild mit Legende
   r = soma(['render', '--result', 'balken']);
-  check('soma render --result balken: Bild 1280 x 800', r.status === 0 && JSON.stringify(pngSize(path.join(dir, 'renders', 'ergebnis-balken.png'))) === '[1280,800]', r.stdout + r.stderr);
+  check('soma render --result balken: Bild 1280 x 800', r.status === 0 && JSON.stringify(pngSize(path.join(dir, 'renders', 'result-balken.png'))) === '[1280,800]', r.stdout + r.stderr);
 
   // 6) Studie ändern: Ergebnis veraltet (die Studie zählt mit), Neu berechnen rechnet die neue Last
   await sleep(1100);
@@ -194,8 +194,8 @@ try {
   await domClick('btn-result-rerun');
   await waitFor('neu berechnet', () => window.__t.result().stale === false && window.__t.result().fem?.bcRows?.[0]?.includes('100 N'), 120000).catch(() => {});
   rs = await ev(() => window.__t.result());
-  check('Neu berechnen: Lagerkraft jetzt 100 N, Verschiebung doppelt', !rs.stale && rs.fem?.bcRows[0].includes('Lagerkraft 100 N')
-    && rs.rows.some((x) => x.startsWith('Balken') && /0,5[67]\d mm/.test(x)), JSON.stringify(rs));
+  check('Neu berechnen: Lagerkraft jetzt 100 N, Verschiebung doppelt', !rs.stale && rs.fem?.bcRows[0].includes('reaction force 100 N')
+    && rs.rows.some((x) => x.startsWith('Balken') && /0\.5[67]\d mm/.test(x)), JSON.stringify(rs));
   await domClick('btn-result-close');
   check('Analyse aus: Modell wieder sichtbar', !(await ev(() => window.__t.viewer.animViewState())).modelHidden);
 
@@ -233,7 +233,7 @@ try {
   const block = /```python\r?\n([\s\S]*?)\r?\n```/.exec(skill)?.[1] ?? '';
   study('skill', block);
   r = soma(['analyze', 'fem', 'analyses/skill.py']);
-  check('Beispiel aus dem Skill „Festigkeit mit FEM“ rechnet ohne Fehler', r.status === 0 && r.stdout.includes('FEM "Bracket, 5 kg on the arm"')
+  check('Beispiel aus dem Skill „Strength with FEM“ rechnet ohne Fehler', r.status === 0 && r.stdout.includes('FEM "Bracket, 5 kg on the arm"')
     && /Bracket \(PETG/.test(r.stdout), r.stdout.slice(0, 600) + r.stderr);
 } catch (e) {
   t.fail();

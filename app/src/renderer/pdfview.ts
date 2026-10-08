@@ -73,15 +73,15 @@ export class PdfView {
     this.bar = {
       page: el('span', { className: 'pdf-page-no c3' }),
       zoom: el('span', { className: 'pdf-zoom c3' }),
-      quote: btn('send', 'Markierten Text als Zitat mit Seite an den Agenten geben', () => this.sendQuote(), 'Zitat an Agent'),
-      mark: btn('camera', 'Diese Seite als Bild markieren (für Zeichnungen und gescannte Seiten)', () => void this.markPage(), 'Seite markieren'),
+      quote: btn('send', 'Send the selected text to the agent as a quote with its page', () => this.sendQuote(), 'Quote to agent'),
+      mark: btn('camera', 'Mark up this page as an image (for drawings and scanned pages)', () => void this.markPage(), 'Mark up page'),
     };
-    const minus = btn('minus', 'Verkleinern', () => this.step(-1));
-    const plus = btn('plus', 'Vergrößern', () => this.step(1));
-    const fit = btn('fit', 'Auf Seitenbreite', () => this.setZoom(null));
+    const minus = btn('minus', 'Zoom out', () => this.step(-1));
+    const plus = btn('plus', 'Zoom in', () => this.step(1));
+    const fit = btn('fit', 'Fit page width', () => this.setZoom(null));
     this.pagesEl = el('div', { className: 'pdf-pages' });
     this.scroller = el('div', { className: 'pdf-scroll', tabIndex: -1 }, this.pagesEl);
-    this.floatBtn = el('button', { className: 'btn sm acc pdf-float', title: 'Markierten Text als Zitat an den Agenten geben' }, icon('send', 13, 2), 'Zitat an Agent');
+    this.floatBtn = el('button', { className: 'btn sm acc pdf-float', title: 'Send the selected text to the agent as a quote' }, icon('send', 13, 2), 'Quote to agent');
     this.floatBtn.hidden = true;
     // Mausdruck nicht als Klick ins Dokument werten, sonst ginge die Textauswahl vor dem Klick verloren
     this.floatBtn.addEventListener('mousedown', (e) => e.preventDefault());
@@ -129,8 +129,8 @@ export class PdfView {
       }).promise;
     } catch (e) {
       if (id !== this.loadId) return;
-      this.error = e instanceof PasswordException ? 'Die PDF ist mit einem Passwort geschützt. Rechtsklick im Dateibaum: „Mit Standardprogramm öffnen“.'
-        : `Die PDF lässt sich nicht lesen: ${e instanceof Error ? e.message : String(e)}`;
+      this.error = e instanceof PasswordException ? 'The PDF is password protected. Right-click it in the file tree: “Open with default app”.'
+        : `The PDF cannot be read: ${e instanceof Error ? e.message : String(e)}`;
       this.showMessage(this.error);
       return;
     }
@@ -336,12 +336,12 @@ export class PdfView {
   }
 
   private updatePageNo(): void {
-    this.bar.page.textContent = this.pages.length ? `Seite ${this.currentPage()} von ${this.pages.length}` : '';
+    this.bar.page.textContent = this.pages.length ? `Page ${this.currentPage()} of ${this.pages.length}` : '';
   }
 
   private updateBar(): void {
     this.updatePageNo();
-    this.bar.zoom.textContent = `${Math.round(this.scale() * 100)} %`;
+    this.bar.zoom.textContent = `${Math.round(this.scale() * 100)}%`;
     this.bar.mark.disabled = !this.pages.length;
     this.bar.quote.disabled = !this.selection();
   }

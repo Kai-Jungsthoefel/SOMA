@@ -12,19 +12,19 @@ export const setTestAnswers = (a: unknown[]) => { answers.length = 0; answers.pu
 export const pendingTestAnswers = () => answers.length;
 
 function nextAnswer<T>(what: string): T {
-  if (!answers.length) throw new Error(`Testmodus: Für den Dialog „${what}“ ist keine Antwort vorbereitet.`);
+  if (!answers.length) throw new Error(`Test mode: no answer is prepared for the dialog “${what}”.`);
   return answers.shift() as T;
 }
 
 export async function choosePath(win: BrowserWindow | null, kind: 'save' | 'open', defaultName: string): Promise<string | null> {
-  if (testMode()) return nextAnswer<string | null>(`${kind}-Pfad`);
-  const filters = [{ name: 'SOMA-Modell (ZIP)', extensions: ['zip'] }];
+  if (testMode()) return nextAnswer<string | null>(`${kind} path`);
+  const filters = [{ name: 'SOMA model (ZIP)', extensions: ['zip'] }];
   const defaultPath = path.join(app.getPath('documents'), defaultName);
   if (kind === 'save') {
-    const r = win ? await dialog.showSaveDialog(win, { title: 'Modell speichern', defaultPath, filters }) : await dialog.showSaveDialog({ title: 'Modell speichern', defaultPath, filters });
+    const r = win ? await dialog.showSaveDialog(win, { title: 'Save model', defaultPath, filters }) : await dialog.showSaveDialog({ title: 'Save model', defaultPath, filters });
     return r.canceled || !r.filePath ? null : r.filePath;
   }
-  const opts = { title: 'Modell öffnen', filters, properties: ['openFile' as const] };
+  const opts = { title: 'Open model', filters, properties: ['openFile' as const] };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
 }
@@ -36,11 +36,11 @@ export async function choosePath(win: BrowserWindow | null, kind: 'save' | 'open
 export async function chooseExportTarget(win: BrowserWindow | null, o: { kind: 'file' | 'dir'; title: string; defaultPath: string; ext?: string; label?: string }): Promise<string | null> {
   if (testMode()) return nextAnswer<string | null>(o.title);
   if (o.kind === 'file') {
-    const opts = { title: o.title, defaultPath: o.defaultPath, filters: o.ext ? [{ name: o.label ?? o.ext.toUpperCase(), extensions: [o.ext] }, { name: 'Alle Dateien', extensions: ['*'] }] : undefined };
+    const opts = { title: o.title, defaultPath: o.defaultPath, filters: o.ext ? [{ name: o.label ?? o.ext.toUpperCase(), extensions: [o.ext] }, { name: 'All files', extensions: ['*'] }] : undefined };
     const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
     return r.canceled || !r.filePath ? null : r.filePath;
   }
-  const opts = { title: o.title, defaultPath: o.defaultPath, buttonLabel: 'Hierhin exportieren', properties: ['openDirectory' as const, 'createDirectory' as const] };
+  const opts = { title: o.title, defaultPath: o.defaultPath, buttonLabel: 'Export here', properties: ['openDirectory' as const, 'createDirectory' as const] };
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
   return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
 }

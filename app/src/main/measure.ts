@@ -30,9 +30,9 @@ export class MeasureService {
 
   /** Den Dienst starten, ohne etwas zu messen (der Messmodus startet ihn beim Einschalten). */
   async warm(): Promise<MeasurePrepared> {
-    if (this.disposed) return { ok: false, error: 'Das Modell ist geschlossen.' };
+    if (this.disposed) return { ok: false, error: 'The model is closed.' };
     try { await this.start(); return { ok: true }; }
-    catch (e) { return { ok: false, error: `Der Messdienst ließ sich nicht starten: ${e instanceof Error ? e.message : String(e)}` }; }
+    catch (e) { return { ok: false, error: `Could not start the measuring service: ${e instanceof Error ? e.message : String(e)}` }; }
   }
 
   /** Einen Stand vorab laden. Der Dienst arbeitet der Reihe nach: Messungen danach warten, bis er geladen ist. */
@@ -45,10 +45,10 @@ export class MeasureService {
     const warm = await this.warm();
     if (!warm.ok) return warm;
     const proc = this.proc;
-    if (!proc?.stdin) return { ok: false, error: 'Der Messdienst läuft nicht.' };
+    if (!proc?.stdin) return { ok: false, error: 'The measuring service is not running.' };
     const id = ++this.seq;
     return new Promise((resolve) => {
-      const timer = setTimeout(() => { this.pending.delete(id); resolve({ ok: false, error: 'Der Messdienst antwortet nicht (Zeitlimit).' }); }, timeoutMs);
+      const timer = setTimeout(() => { this.pending.delete(id); resolve({ ok: false, error: 'The measuring service does not answer (time limit).' }); }, timeoutMs);
       this.pending.set(id, { resolve, timer });
       proc.stdin!.write(JSON.stringify({ ...payload, id }) + '\n');
     });
@@ -57,7 +57,7 @@ export class MeasureService {
   stop(): void {
     this.disposed = true;
     this.proc?.kill();
-    this.fail('Das Modell ist geschlossen.');
+    this.fail('The model is closed.');
   }
 
   private start(): Promise<void> {
@@ -70,7 +70,7 @@ export class MeasureService {
     this.proc = child;
     let err = '';
     this.ready = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => { reject(new Error('Zeitlimit beim Start')); child.kill(); }, START_TIMEOUT_MS);
+      const timer = setTimeout(() => { reject(new Error('Time limit at start')); child.kill(); }, START_TIMEOUT_MS);
       child.stdout!.setEncoding('utf8');
       child.stdout!.on('data', (d: string) => {
         this.buf += d;
@@ -94,8 +94,8 @@ export class MeasureService {
       child.on('exit', (code) => {
         clearTimeout(timer);
         if (this.proc === child) { this.proc = null; this.ready = null; }
-        reject(new Error(`beendet mit Code ${code}. ${err.trim().split('\n').pop() ?? ''}`));
-        this.fail(`Der Messdienst wurde beendet (Code ${code}). Die nächste Messung startet ihn neu.`);
+        reject(new Error(`ended with code ${code}. ${err.trim().split('\n').pop() ?? ''}`));
+        this.fail(`The measuring service ended (code ${code}). The next measurement starts it again.`);
       });
     });
     this.ready.catch(() => { /* wird bei der Anfrage gemeldet */ });

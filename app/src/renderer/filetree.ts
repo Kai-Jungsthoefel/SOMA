@@ -5,7 +5,7 @@ import { el, menuItem, menus } from './ui';
 
 /** Dateien, die die App verwaltet. Sie stehen eingeklappt unter „Vom Programm verwaltet“, damit der Baum ruhig bleibt. */
 const MANAGED = new Set(['AGENTS.md', 'CLAUDE.md', '.gitignore']);
-const TAGS: Record<string, string> = { 'model.py': 'Modell', 'output/model.step': 'Ergebnis', 'NOTES.md': 'Notizen', 'requirements.txt': 'Pakete' };
+const TAGS: Record<string, string> = { 'model.py': 'model', 'output/model.step': 'result', 'NOTES.md': 'notes', 'requirements.txt': 'packages' };
 /** Ordner der Markierungen. Der Hauptprozess liefert ihn als einzigen Teil von .soma/ mit. */
 const FEEDBACK = '.soma/feedback';
 export const TEXT_EXT = /\.(py|md|txt|json|toml|cfg|ini|yml|yaml|gitignore|csv)$|^[^.]*$/i;
@@ -108,13 +108,13 @@ export class FileTree {
       }
     };
     walk(rest, 0, '');
-    if (!rest.length && !ed) rows.push(el('div', { className: 'hint', textContent: 'Noch keine Dateien.' }));
+    if (!rest.length && !ed) rows.push(el('div', { className: 'hint', textContent: 'No files yet.' }));
     // Markierungen (E16) aus .soma/feedback/: eigene Gruppe, neueste zuerst. Zum Wiederfinden und erneut an den Agenten geben.
     if (feedback?.children?.length) {
       rows.push(el('div', { className: 'gap' }));
       const open = !this.collapsed.has(FEEDBACK);
-      const head = this.button(0, open ? 'down' : 'right', 'image', 'Markierungen', String(feedback.children.length), 'dim');
-      head.title = 'Bilder aus „Markieren“, abgelegt in .soma/feedback/. Klick öffnet zum Markieren, Rechtsklick gibt den Pfad an den Agenten oder öffnet im Bildprogramm.';
+      const head = this.button(0, open ? 'down' : 'right', 'image', 'Markups', String(feedback.children.length), 'dim');
+      head.title = 'Images from “Mark up”, stored in .soma/feedback/. Click to open for markup, right-click to send the path to the agent or open in an image viewer.';
       head.setAttribute('aria-expanded', String(open));
       head.dataset.path = FEEDBACK;
       head.addEventListener('click', () => this.toggle(FEEDBACK));
@@ -124,8 +124,8 @@ export class FileTree {
     if (managed.length) {
       rows.push(el('div', { className: 'gap' }));
       const open = !this.collapsed.has('#managed');
-      const head = this.button(0, open ? 'down' : 'right', 'lock', 'Vom Programm verwaltet', String(managed.length), 'dim');
-      head.title = 'Diese Dateien legt die App an und erneuert sie bei Updates. Ändern ist nicht nötig.';
+      const head = this.button(0, open ? 'down' : 'right', 'lock', 'Managed by the app', String(managed.length), 'dim');
+      head.title = 'The app creates these files and renews them with updates. There is no need to change them.';
       head.setAttribute('aria-expanded', String(open));
       head.addEventListener('click', () => this.toggle('#managed'));
       rows.push(head);
@@ -159,7 +159,7 @@ export class FileTree {
     const prev = this.input;
     // Neu gezeichnet, während das Feld offen ist: das Getippte übernehmen
     const input = el('input', { className: 'fedit', type: 'text', spellcheck: false, autocomplete: 'off', value: prev ? prev.value : value });
-    input.setAttribute('aria-label', this.edit?.mode === 'rename' ? 'Neuer Name' : this.edit?.mode === 'dir' ? 'Name des neuen Ordners' : 'Name der neuen Datei');
+    input.setAttribute('aria-label', this.edit?.mode === 'rename' ? 'New name' : this.edit?.mode === 'dir' ? 'Name of the new folder' : 'Name of the new file');
     if (!prev) input.dataset.fresh = '1';
     const finish = async (fromBlur: boolean) => {
       if (this.submitting || this.input !== input) return;
@@ -212,25 +212,25 @@ export class FileTree {
     const folder = n ? (n.dir ? n.path : parentOf(n.path)) : '';
     const blockCreate = fileOpBlockReason(folder, 'create');
     const blocked = (item: HTMLButtonElement, reason: string | null) => { if (reason) { item.disabled = true; item.title = reason; } return item; };
-    const items: HTMLElement[] = [el('div', { className: 'mh', textContent: n ? n.name : 'Projektordner' })];
+    const items: HTMLElement[] = [el('div', { className: 'mh', textContent: n ? n.name : 'Project folder' })];
     if (n && !n.dir) {
-      if (TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name)) items.push(menuItem('Öffnen', { icon: 'code', onClick: () => d.open(n) }));
-      if (IMAGE_EXT.test(n.name)) items.push(menuItem('Markieren', { icon: 'camera', onClick: () => d.mark(n.path) }));
-      if (VIDEO_EXT.test(n.name)) items.push(menuItem('Abspielen', { icon: 'play', onClick: () => d.open(n) }));
-      items.push(menuItem('Mit Standardprogramm öffnen', { icon: 'openext', onClick: () => d.openExternal(n.path) }));
+      if (TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name)) items.push(menuItem('Open', { icon: 'code', onClick: () => d.open(n) }));
+      if (IMAGE_EXT.test(n.name)) items.push(menuItem('Mark up', { icon: 'camera', onClick: () => d.mark(n.path) }));
+      if (VIDEO_EXT.test(n.name)) items.push(menuItem('Play', { icon: 'play', onClick: () => d.open(n) }));
+      items.push(menuItem('Open with default app', { icon: 'openext', onClick: () => d.openExternal(n.path) }));
     }
-    items.push(menuItem('Im Explorer zeigen', { icon: 'folder', onClick: () => d.reveal(n?.path ?? '') }));
+    items.push(menuItem('Show in Explorer', { icon: 'folder', onClick: () => d.reveal(n?.path ?? '') }));
     if (n) {
       items.push(el('div', { className: 'msep' }),
-        menuItem('Pfad an Agent geben', { icon: 'send', onClick: () => d.toAgent(n.path) }),
-        menuItem('Pfad kopieren', { icon: 'copy', onClick: () => d.copyPath(n.path) }));
+        menuItem('Send path to agent', { icon: 'send', onClick: () => d.toAgent(n.path) }),
+        menuItem('Copy path', { icon: 'copy', onClick: () => d.copyPath(n.path) }));
     }
     items.push(el('div', { className: 'msep' }),
-      blocked(menuItem(n?.dir ? 'Neue Datei hier' : 'Neue Datei', { icon: 'fileplus', onClick: () => this.startCreate(folder, false) }), blockCreate),
-      blocked(menuItem(n?.dir ? 'Neuer Ordner hier' : 'Neuer Ordner', { icon: 'folderplus', onClick: () => this.startCreate(folder, true) }), blockCreate));
+      blocked(menuItem(n?.dir ? 'New file here' : 'New file', { icon: 'fileplus', onClick: () => this.startCreate(folder, false) }), blockCreate),
+      blocked(menuItem(n?.dir ? 'New folder here' : 'New folder', { icon: 'folderplus', onClick: () => this.startCreate(folder, true) }), blockCreate));
     if (n) {
-      items.push(blocked(menuItem('Umbenennen', { icon: 'pen', kbd: 'F2', onClick: () => this.startRename(n) }), fileOpBlockReason(n.path, 'rename')),
-        blocked(menuItem('Löschen', { icon: 'trash', kbd: 'Entf', onClick: () => d.trash(n.path) }), fileOpBlockReason(n.path, 'delete')));
+      items.push(blocked(menuItem('Rename', { icon: 'pen', kbd: 'F2', onClick: () => this.startRename(n) }), fileOpBlockReason(n.path, 'rename')),
+        blocked(menuItem('Delete', { icon: 'trash', kbd: 'Del', onClick: () => d.trash(n.path) }), fileOpBlockReason(n.path, 'delete')));
     }
     this.menu.replaceChildren(...items);
     menus.at(this.menu, x, y);
@@ -263,8 +263,8 @@ export class FileTree {
       return b;
     }
     const b = this.button(depth, null, fileIcon(n.name), n.name, TAGS[n.path] ?? '', '');
-    b.title = TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name) ? `${n.path} im Code öffnen` : IMAGE_EXT.test(n.name) ? `${n.path} zum Markieren öffnen`
-      : VIDEO_EXT.test(n.name) ? `${n.path} abspielen` : n.path;
+    b.title = TEXT_EXT.test(n.name) || /\.pdf$/i.test(n.name) ? `Open ${n.path} in the code` : IMAGE_EXT.test(n.name) ? `Open ${n.path} for markup`
+      : VIDEO_EXT.test(n.name) ? `Play ${n.path}` : n.path;
     b.dataset.path = n.path;
     b.addEventListener('click', () => this.deps.open(n));
     if (n.path === this.active) b.classList.add('sel');

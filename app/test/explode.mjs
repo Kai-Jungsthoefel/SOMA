@@ -100,7 +100,7 @@ try {
   });
   await sleep(300);
   check('Abbrechen während der Analyse: Explosion aus, Karte zu, Ladeanzeige weg, nichts verschoben',
-    cancelled.during.loading && cancelled.during.busy?.title === 'Explosion wird vorbereitet' && !cancelled.after.active && !cancelled.after.loading
+    cancelled.during.loading && cancelled.during.busy?.title === 'Preparing the exploded view' && !cancelled.after.active && !cancelled.after.loading
     && cancelled.card && cancelled.busy === null && !(await ev(() => window.__t.explode())).active && !Object.keys((await vs()).offsets).length
     && await ev(() => document.getElementById('viewer-busy').hidden && document.getElementById('btn-explode').getAttribute('aria-pressed') === 'false'),
     JSON.stringify(cancelled).slice(0, 160));
@@ -112,7 +112,7 @@ try {
   let v = await vs();
   const st = s.steps;
   const dir = (id) => (st[id] ? sign(st[id].dir) : '-');
-  check('„Explosion": Karte offen ohne Richtungsknöpfe, Knopf gedrückt, Schieber 50 %, Vorzugsachse Z (aus den Schrauben), Anker Unterteil, nichts steckt fest',
+  check('„Explode": Karte offen ohne Richtungsknöpfe, Knopf gedrückt, Schieber 50 %, Vorzugsachse Z (aus den Schrauben), Anker Unterteil, nichts steckt fest',
     s.active && s.amount === 0.5 && s.shown === 0.5 && s.axis === 'z' && s.base === ids.Unterteil && s.forced === 0
     && s.text.includes('50 %') && await ev(() => !document.querySelector('#explode-card [data-axis]')
       && document.getElementById('btn-explode').getAttribute('aria-pressed') === 'true'), `${s.base} ${s.forced} ${s.analysisMs} ms`);
@@ -131,8 +131,8 @@ try {
   check('Stift (kein Normteil) kommt nach dem Deckel schräg entlang der Achse seiner Bohrung heraus, aus den Zylinderflächen des Meshers',
     !!st[ids.Stift] && st[ids.Stift].dir.every((v, k) => near(v, tilt[k], 1e-3)) && st[ids.Stift].level === 2 && !st[ids.Stift].forced
     && byId[ids.Stift].dirs.some((d) => Math.abs(d[0] * tilt[0] + d[1] * tilt[1] + d[2] * tilt[2]) > 0.9999), JSON.stringify(st[ids.Stift]));
-  check('Die Referenz bleibt stehen und zählt nicht mit', !st[ids.Tisch] && !v.offsets[ids.Tisch] && s.text.includes('Referenzen bleiben stehen'));
-  check('Im Normalfall kein allgemeiner Hinweis, nur der zu den Referenzen', s.hint === 'Referenzen bleiben stehen.' && !s.text.includes('Jedes Teil kommt'), String(s.hint));
+  check('Die Referenz bleibt stehen und zählt nicht mit', !st[ids.Tisch] && !v.offsets[ids.Tisch] && s.text.includes('Reference parts stay in place'));
+  check('Im Normalfall kein allgemeiner Hinweis, nur der zu den Referenzen', s.hint === 'Reference parts stay in place.' && !s.text.includes('Each part'), String(s.hint));
 
   // Abstände: gleiche Lücke g zwischen allem, was übereinander gestapelt ist
   const off = v.offsets;
@@ -154,7 +154,7 @@ try {
   const so = off[ids.Stift];
   check('Der Stift rückt nur entlang seiner Achse', !!so && near(so[0], 0, 1e-6) && near(so[1] / so[2], tilt[1] / tilt[2], 1e-3) && so[2] > 0, JSON.stringify(so));
   check('Alle Teile außer Anker und Referenz verschoben, gestrichelte Wege für jedes', s.moving === 12 && v.trails === 12, `${s.moving} ${v.trails}`);
-  check('Text für den Agenten: Explosionsansicht, nicht die Einbaulage', s.agent?.startsWith('Explosionsansicht (50 %)') && s.agent.includes('nicht die Einbaulage'), s.agent);
+  check('Text für den Agenten: Explosionsansicht, nicht die Einbaulage', s.agent?.startsWith('exploded view (50 %)') && s.agent.includes('not the assembled position'), s.agent);
   await domClick('btn-explode-fit');
   await waitFor('Kamera steht', () => !window.__t.viewer.viewState().animating, 5000);
   await shot('explosion-1');
@@ -179,31 +179,31 @@ try {
   const sorted = (xs) => [...xs].sort();
   const btn = (id) => ev((i) => { const b = document.getElementById(i); return { label: b.getAttribute('aria-label'), disabled: b.disabled, on: b.classList.contains('on') }; }, id);
   const setSpeed = (x) => ev((val) => { const e = document.getElementById('explode-speed'); e.value = val; e.dispatchEvent(new Event('change')); }, String(x));
-  check('Sechs Schritte, alle zugleich: Anzeige „Schritt 6 von 6", „Weiter" gesperrt, „Zurück" nicht',
-    s.order.length === 6 && s.stepPos === null && s.shownStep === 6 && s.text.includes('Schritt 6 von 6') && s.text.includes('Alle Schritte zugleich')
+  check('Sechs Schritte, alle zugleich: Anzeige „Step 6 of 6", „Step forward" gesperrt, „Step back" nicht',
+    s.order.length === 6 && s.stepPos === null && s.shownStep === 6 && s.text.includes('Step 6 of 6') && s.text.includes('All steps at once')
     && (await btn('btn-explode-next')).disabled && !(await btn('btn-explode-back')).disabled, s.text.replace(/\n/g, ' | '));
   // Zusammenbauen abspielen, erst im Viertel-Tempo: Das neue Tempo wirkt sofort (sonst dauerte es 6 × 2,8 s)
   await setSpeed(0.25);
   await domClick('btn-explode-assemble');
   s = await ex();
   let asm = await btn('btn-explode-assemble'), apart = await btn('btn-explode-play');
-  check('„Zusammenbauen abspielen": läuft rückwärts, der Knopf heißt „Anhalten" und leuchtet, „Auseinanderbauen abspielen" bleibt',
-    s.playing && s.direction === 'together' && s.speed === 0.25 && asm.label === 'Anhalten' && asm.on && apart.label === 'Auseinanderbauen abspielen' && !apart.on,
+  check('„Play assembly": läuft rückwärts, der Knopf heißt „Pause" und leuchtet, „Play disassembly" bleibt',
+    s.playing && s.direction === 'together' && s.speed === 0.25 && asm.label === 'Pause' && asm.on && apart.label === 'Play disassembly' && !apart.on,
     JSON.stringify([s.direction, asm, apart]));
   const t0 = Date.now();
   await setSpeed(2);
-  const together = await waitFor('Zusammengebaut', () => !window.__t.explode().animating, 8000).then(() => true, () => false);
+  const together = await waitFor('Assembled', () => !window.__t.explode().animating, 8000).then(() => true, () => false);
   const took = Date.now() - t0;
   s = await ex();
-  check('Tempo 2× während des Abspielens: nach gut 2 s zusammengebaut (nicht 17 s), „Schritt 0 von 6", „Zurück" gesperrt',
+  check('Tempo 2× während des Abspielens: nach gut 2 s zusammengebaut (nicht 17 s), „Step 0 of 6", „Step back" gesperrt',
     together && took < 6000 && s.speed === 2 && s.stepPos === 0 && !s.playing && s.direction === null && !Object.keys((await vs()).offsets).length
-    && s.shownStep === 0 && s.text.includes('Schritt 0 von 6') && s.text.includes('Zusammengebaut') && (await btn('btn-explode-back')).disabled
-    && (await btn('btn-explode-assemble')).label === 'Zusammenbauen abspielen', `${took} ms, ${s.text.replace(/\n/g, ' | ')}`);
+    && s.shownStep === 0 && s.text.includes('Step 0 of 6') && s.text.includes('Assembled') && (await btn('btn-explode-back')).disabled
+    && (await btn('btn-explode-assemble')).label === 'Play assembly', `${took} ms, ${s.text.replace(/\n/g, ' | ')}`);
   await domClick('btn-explode-next');
   await stepDone();
   s = await ex();
-  check('„Weiter": Schritt 1, nur die sechs Schrauben sind heraus, die Anzeige nennt sie', s.stepPos === 1 && s.shownStep === 1
-    && JSON.stringify(await movedIds()) === JSON.stringify(sorted([...screws, ...side])) && s.text.includes('Schritt 1 von 6') && s.text.includes('Schraube 1'), s.text);
+  check('„Step forward": Schritt 1, nur die sechs Schrauben sind heraus, die Anzeige nennt sie', s.stepPos === 1 && s.shownStep === 1
+    && JSON.stringify(await movedIds()) === JSON.stringify(sorted([...screws, ...side])) && s.text.includes('Step 1 of 6') && s.text.includes('Schraube 1'), s.text);
   await domClick('btn-explode-next');
   await stepDone();
   await domClick('btn-explode-next');
@@ -212,40 +212,40 @@ try {
   // Deckel und Seitenblech kamen in Schritt 2, die Anzeige nennt nur, was in diesem Schritt herauskommt
   check('Schritt 3: dazu Deckel, Seitenblech und Stift, Platine, Klotz und Mutter noch drin, die Anzeige nennt den Stift',
     JSON.stringify(await movedIds()) === JSON.stringify(sorted([...screws, ...side, ids.Deckel, ids.Seitenblech, ids.Stift]))
-    && s.text.includes('Schritt 3 von 6') && s.text.includes('Stift') && !s.text.includes('Deckel'), `${s.text.replace(/\s+/g, ' ').slice(0, 200)} | ${JSON.stringify(await movedIds())}`);
+    && s.text.includes('Step 3 of 6') && s.text.includes('Stift') && !s.text.includes('Deckel'), `${s.text.replace(/\s+/g, ' ').slice(0, 200)} | ${JSON.stringify(await movedIds())}`);
   await domClick('btn-explode-play');
   s = await ex();
   apart = await btn('btn-explode-play');
-  check('„Auseinanderbauen abspielen": läuft weiter, der Knopf heißt jetzt „Anhalten" und leuchtet', s.playing && s.direction === 'apart'
-    && apart.label === 'Anhalten' && apart.on && (await btn('btn-explode-assemble')).label === 'Zusammenbauen abspielen', JSON.stringify(apart));
+  check('„Play disassembly": läuft weiter, der Knopf heißt jetzt „Pause" und leuchtet', s.playing && s.direction === 'apart'
+    && apart.label === 'Pause' && apart.on && (await btn('btn-explode-assemble')).label === 'Play assembly', JSON.stringify(apart));
   await stepDone();
   s = await ex();
   const full = (await vs()).offsets;
-  check('Am Ende (Schritt 6) stehen alle Teile wie in der ganzen Explosion bei 100 %, „Weiter" gesperrt', s.stepPos === 6 && !s.playing
-    && s.text.includes('Schritt 6 von 6') && (await btn('btn-explode-next')).disabled
+  check('Am Ende (Schritt 6) stehen alle Teile wie in der ganzen Explosion bei 100 %, „Step forward" gesperrt', s.stepPos === 6 && !s.playing
+    && s.text.includes('Step 6 of 6') && (await btn('btn-explode-next')).disabled
     && Object.keys(s.far).every((id) => (s.far[id].every((x) => near(x, 0, 1e-6)) && !full[id]) || (full[id] && s.far[id].every((x, k) => near(full[id][k], x, 1e-3)))),
     JSON.stringify(full[ids.Mutter]));
   await domClick('btn-explode-back');
   await stepDone();
   const back = (await vs()).offsets;
-  check('„Zurück": Schritt 5, die Mutter steckt wieder im Klotz (geht mit der Baugruppe)', (await ex()).stepPos === 5
+  check('„Step back": Schritt 5, die Mutter steckt wieder im Klotz (geht mit der Baugruppe)', (await ex()).stepPos === 5
     && back[ids.Mutter].every((x, k) => near(x, back[ids.Klotz][k], 1e-6)), JSON.stringify([back[ids.Mutter], back[ids.Klotz]]));
   s = await ex();
-  check('Text für den Agenten nennt den Schritt', s.agent?.includes('Schritt 5 von 6 des Auseinanderbaus'), s.agent);
+  check('Text für den Agenten nennt den Schritt', s.agent?.includes('step 5 of 6 of the disassembly'), s.agent);
   // Umkehren und Anhalten in beide Richtungen, im halben Tempo (1,4 s je Schritt, genug Luft für die Klicks)
   await setSpeed(0.5);
   await domClick('btn-explode-assemble');
   await sleep(400);
   await domClick('btn-explode-play');
   s = await ex();
-  check('Beim Zusammenbauen „Auseinanderbauen abspielen": kehrt um, ohne Sprung', s.playing && s.direction === 'apart' && s.stepPos > 4 && s.stepPos < 5
+  check('Beim Zusammenbauen „Play disassembly": kehrt um, ohne Sprung', s.playing && s.direction === 'apart' && s.stepPos > 4 && s.stepPos < 5
     && (await btn('btn-explode-play')).on && !(await btn('btn-explode-assemble')).on, String(s.stepPos));
   await sleep(300);
   await domClick('btn-explode-play');
   s = await ex();
   let paused = s.stepPos;
-  check('Anhalten beim Auseinanderbauen: hält gleich an, Knopf wieder „Auseinanderbauen abspielen"', !s.playing && s.direction === null
-    && (await btn('btn-explode-play')).label === 'Auseinanderbauen abspielen', String(paused));
+  check('Anhalten beim Auseinanderbauen: hält gleich an, Knopf wieder „Play disassembly"', !s.playing && s.direction === null
+    && (await btn('btn-explode-play')).label === 'Play disassembly', String(paused));
   await stepDone();
   s = await ex();
   check('… und der laufende Schritt wird noch fertig (vorwärts auf den nächsten ganzen Schritt)', s.stepPos === Math.ceil(paused - 1e-6) && s.stepPos <= 6,
@@ -256,35 +256,35 @@ try {
   await domClick('btn-explode-assemble');
   s = await ex();
   paused = s.stepPos;
-  check('Anhalten beim Zusammenbauen: hält gleich an, Knopf wieder „Zusammenbauen abspielen"', !s.playing && s.direction === null && paused < from
-    && (await btn('btn-explode-assemble')).label === 'Zusammenbauen abspielen', `${from} → ${paused}`);
+  check('Anhalten beim Zusammenbauen: hält gleich an, Knopf wieder „Play assembly"', !s.playing && s.direction === null && paused < from
+    && (await btn('btn-explode-assemble')).label === 'Play assembly', `${from} → ${paused}`);
   await stepDone();
   s = await ex();
   check('… und der laufende Schritt wird noch fertig (rückwärts auf den ganzen Schritt davor), die Anzeige stimmt', s.stepPos === Math.floor(paused + 1e-6)
-    && s.stepPos < from && s.text.includes(`Schritt ${s.stepPos} von 6`), `${paused} → ${s.stepPos}`);
+    && s.stepPos < from && s.text.includes(`Step ${s.stepPos} of 6`), `${paused} → ${s.stepPos}`);
   await setSpeed(1);
   check('Reihenfolge für den Agenten: sechs Zeilen, Deckel nach +Z, Stift schräg, Baugruppe aus Klotz und Mutter, Anker Unterteil',
-    s.orderText.includes('Es bleibt stehen: "Unterteil"') && s.orderText.includes('2. ') && s.orderText.includes('"Deckel" nach +Z')
-    && s.orderText.includes('Baugruppe aus') && s.orderText.includes('3. "Stift" nach (0, -0.5, 0.866)') && s.orderText.includes('6. "Mutter" nach +Y'),
+    s.orderText.includes('Stays in place: "Unterteil"') && s.orderText.includes('2. ') && s.orderText.includes('"Deckel" towards +Z')
+    && s.orderText.includes('assembly of') && s.orderText.includes('3. "Stift" towards (0, -0.5, 0.866)') && s.orderText.includes('6. "Mutter" towards +Y'),
     s.orderText);
   await domClick('btn-explode-agent');
   await sleep(200);
   const toast = await ev(() => window.__t.toast());
-  check('„Reihenfolge an den Agenten geben" fügt sie in die Eingabe ein', toast.text.includes('eingefügt'), toast.text);
+  check('„Send the order to the agent" fügt sie in die Eingabe ein', toast.text.includes('Added to the input of'), toast.text);
   // Der Schieber verlässt das Abspielen, die Anzeige folgt ihm: 0 % ist der Anfang, alles darüber das Ende
   await slide(0);
   s = await ex();
-  check('Schieber auf 0 % verlässt das Abspielen: „Schritt 0 von 6", zusammengebaut, „Zurück" gesperrt', s.stepPos === null && s.shownStep === 0
-    && s.text.includes('Schritt 0 von 6') && s.text.includes('Zusammengebaut') && (await btn('btn-explode-back')).disabled, s.text.replace(/\n/g, ' | '));
+  check('Schieber auf 0 % verlässt das Abspielen: „Step 0 of 6", zusammengebaut, „Step back" gesperrt', s.stepPos === null && s.shownStep === 0
+    && s.text.includes('Step 0 of 6') && s.text.includes('Assembled') && (await btn('btn-explode-back')).disabled, s.text.replace(/\n/g, ' | '));
   await domClick('btn-explode-next');
   s = await ex();
-  check('„Weiter" bei 0 %: Der Abstand geht auf 50 %, sonst sähe man den Schritt nicht', s.amount === 0.5 && s.text.includes('50 %'), String(s.amount));
+  check('„Step forward" bei 0 %: Der Abstand geht auf 50 %, sonst sähe man den Schritt nicht', s.amount === 0.5 && s.text.includes('50 %'), String(s.amount));
   await stepDone();
   check('… und Schritt 1 ist heraus', (await ex()).stepPos === 1 && JSON.stringify(await movedIds()) === JSON.stringify(sorted([...screws, ...side])));
   await slide(100);
   s = await ex();
-  check('Schieber auf 100 %: wieder alle zugleich, „Schritt 6 von 6"', s.stepPos === null && s.shownStep === 6 && s.text.includes('Schritt 6 von 6')
-    && s.text.includes('Alle Schritte zugleich'), s.text.replace(/\n/g, ' | '));
+  check('Schieber auf 100 %: wieder alle zugleich, „Step 6 of 6"', s.stepPos === null && s.shownStep === 6 && s.text.includes('Step 6 of 6')
+    && s.text.includes('All steps at once'), s.text.replace(/\n/g, ' | '));
 
   // 3) Auswahl in der Explosion: Klick auf die Deckeloberseite wählt den Deckel, der Punkt steht in Einbaulage (z = 24)
   const lidUp = zz(ids.Deckel);
@@ -331,7 +331,7 @@ try {
   await ev((id) => window.__t.viewer.setVisible(id, true), ids.Platine);
   await domClick('btn-explode-trails');
   v = await vs();
-  check('„Wege" aus: keine Linien, Knopf nicht gedrückt', v.trails === 0 && await ev(() => document.getElementById('btn-explode-trails').getAttribute('aria-pressed') === 'false'), String(v.trails));
+  check('„Paths" aus: keine Linien, Knopf nicht gedrückt', v.trails === 0 && await ev(() => document.getElementById('btn-explode-trails').getAttribute('aria-pressed') === 'false'), String(v.trails));
   await domClick('btn-explode-trails');
 
   // 5) Schnitt dazu: Die Karten überdecken sich nicht, der Bereich des Schnitts reicht über das auseinandergezogene Modell
@@ -349,11 +349,11 @@ try {
   await domClick('btn-measure');
   s = await ex();
   v = await vs();
-  check('„Messen": Explosion aus, alle Teile in Einbaulage, Karte zu', !s.active && s.shown === 0 && !Object.keys(v.offsets).length && v.trails === 0
+  check('„Measure": Explosion aus, alle Teile in Einbaulage, Karte zu', !s.active && s.shown === 0 && !Object.keys(v.offsets).length && v.trails === 0
     && await ev(() => document.getElementById('explode-card').hidden && window.__t.measure().active), JSON.stringify(v.offsets).slice(0, 80));
   await domClick('btn-explode');
   await settle();
-  check('„Explosion" beendet das Messen und zieht wieder auseinander (75 %, wie zuletzt eingestellt)',
+  check('„Explode" beendet das Messen und zieht wieder auseinander (75 %, wie zuletzt eingestellt)',
     !(await ev(() => window.__t.measure().active)) && (await ex()).shown === 0.75 && Object.keys((await vs()).offsets).length === 12);
 
   // 7) Neuer Build: Die Explosion bleibt, die Analyse läuft neu (Deckel 6 mm dick)

@@ -136,7 +136,7 @@ export function resultColor(v: number, m: Pick<ResultMeta, 'bad' | 'threshold' |
   return mix(OK, FAR, (f - 0.15) / 0.85);
 }
 
-const fmt = (v: number, unit: string) => `${(+v.toFixed(unit === '°' ? 1 : 2)).toLocaleString('de-DE')}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
+const fmt = (v: number, unit: string) => `${(+v.toFixed(unit === '°' ? 1 : 2)).toLocaleString('en-US')}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
 
 /** Legende unten rechts: Farbverlauf über die Spanne, Grenzwert markiert. */
 function paintLegend(g: CanvasRenderingContext2D, w: number, h: number, unit: number, m: ResultMeta, note: string | null): void {
@@ -165,7 +165,7 @@ function paintLegend(g: CanvasRenderingContext2D, w: number, h: number, unit: nu
   g.fillText(fmt(hi, m.unit), bx + bw, by + bh + unit * 1.0);
   g.textAlign = 'center';
   g.fillStyle = '#e6e8eb';
-  g.fillText(`Grenze ${fmt(m.threshold, m.unit)}`, Math.min(Math.max(tx, bx + unit * 3), bx + bw - unit * 3), by + bh + unit * 2.1);
+  g.fillText(`Limit ${fmt(m.threshold, m.unit)}`, Math.min(Math.max(tx, bx + unit * 3), bx + bw - unit * 3), by + bh + unit * 2.1);
   g.textAlign = 'left';
   if (note) {
     g.fillStyle = '#a3acb6';

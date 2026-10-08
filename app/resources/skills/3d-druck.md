@@ -1,22 +1,22 @@
 ---
-title: 3D-Druck (FDM)
+title: 3D printing (FDM)
 name: 3D printing (FDM)
-summary: Druckbare Wandstärken, Überhänge bis {{overhang}}°, Spiel für Passungen, Ausrichtung auf dem Druckbett, Gewinde über Einschmelzmuttern.
+summary: Printable wall thicknesses, overhangs up to {{overhang}}°, clearance for fits, orientation on the print bed, threads with heat-set inserts.
 order: 10
-category: Fertigungsverfahren
+category: Manufacturing
 default: on-demand
 when: the parts will be 3D printed on a filament printer (FDM)
-topics: Drucker und Material; Wände und kleine Details; Überhänge und Brücken; Ausrichtung und Bauraum; Spiel und Passungen; Schrauben und Gewinde; Prüfen und Export
+topics: Printer and material; Walls and small features; Overhangs and bridges; Orientation and build volume; Clearances and fits; Screws and threads; Checks and export
 var material: PLA | | Material | PLA, PETG, ABS, ASA, TPU
-var nozzle: 0.4 | mm | Düse | 0.1..1.2
-var layer: 0.2 | mm | Schichthöhe | 0.04..0.8
-var bed_x: 220 | mm | Bauraum X | 30..2000
-var bed_y: 220 | mm | Bauraum Y | 30..2000
-var bed_z: 250 | mm | Bauraum Z | 30..2000
-var overhang: 45 | ° | Max. Überhangwinkel | 10..85
-var bridge: 10 | mm | Max. Brücke ohne Stütze | 0..200
-var min_wall: 1.2 | mm | Mindestwand | 0.2..20
-var clearance: 0.3 | mm | Spiel je Seite (Gleitpassung) | 0..3
+var nozzle: 0.4 | mm | Nozzle | 0.1..1.2
+var layer: 0.2 | mm | Layer height | 0.04..0.8
+var bed_x: 220 | mm | Build volume X | 30..2000
+var bed_y: 220 | mm | Build volume Y | 30..2000
+var bed_z: 250 | mm | Build volume Z | 30..2000
+var overhang: 45 | ° | Max. overhang angle | 10..85
+var bridge: 10 | mm | Max. bridge without support | 0..200
+var min_wall: 1.2 | mm | Minimum wall | 0.2..20
+var clearance: 0.3 | mm | Clearance per side (sliding fit) | 0..3
 ---
 # Skill: 3D printing (FDM)
 

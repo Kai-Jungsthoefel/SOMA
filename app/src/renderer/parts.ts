@@ -50,13 +50,13 @@ export class PartsCard {
   render(): void {
     const { list, count } = this.ui;
     count.textContent = this.parts.length ? String(this.parts.length) : '';
-    if (!this.parts.length) { list.replaceChildren(el('div', { className: 'hint', textContent: this.placeholder || 'Noch keine Bauteile.' })); return; }
+    if (!this.parts.length) { list.replaceChildren(el('div', { className: 'hint', textContent: this.placeholder || 'No parts yet.' })); return; }
     const match = (p: PartRow) => !this.filter || p.name.toLowerCase().includes(this.filter) || (p.group ?? '').toLowerCase().includes(this.filter);
     const own = this.tree('own', this.parts.filter((p) => p.role !== 'reference' && match(p)));
     const refs = this.tree('ref', this.parts.filter((p) => p.role === 'reference' && match(p)));
     const rows: HTMLElement[] = this.rows(own, 0);
-    if (refs.items.length) rows.push(el('div', { className: 'grp', textContent: 'REFERENZEN' }), ...this.rows(refs, 0));
-    if (!rows.length) rows.push(el('div', { className: 'hint', textContent: 'Kein Bauteil passt zur Suche.' }));
+    if (refs.items.length) rows.push(el('div', { className: 'grp', textContent: 'REFERENCES' }), ...this.rows(refs, 0));
+    if (!rows.length) rows.push(el('div', { className: 'hint', textContent: 'No part matches the search.' }));
     list.replaceChildren(...rows);
   }
 
@@ -96,13 +96,13 @@ export class PartsCard {
     const anyVisible = ids.some((id) => this.hooks.isVisible(id));
     const ghosts = ids.filter((id) => this.hooks.isGhost(id)).length;
     const toggle = () => { if (open) this.collapsed.add(g.key); else this.collapsed.delete(g.key); this.render(); };
-    const name = el('button', { className: 'nm', title: open ? 'Gruppe zuklappen' : 'Gruppe aufklappen' },
+    const name = el('button', { className: 'nm', title: open ? 'Collapse group' : 'Expand group' },
       el('span', { className: 'chev' + (open ? '' : ' shut') }, icon('down', 13, 2)), el('span', { className: 'gname', textContent: g.name }), el('span', { className: 'gcount', textContent: String(ids.length) }));
     name.setAttribute('aria-expanded', String(open));
     name.addEventListener('click', toggle);
     const row = el('div', { className: 'row gr' + (anyVisible ? '' : ' off') }, name,
-      this.ghostButton(`Gruppe ${g.name}`, ghosts === ids.length, ghosts > 0 && ghosts < ids.length, () => this.hooks.setGhost(ids, ghosts !== ids.length)),
-      this.eyeButton(`Gruppe ${g.name}`, anyVisible, () => this.hooks.setVisible(ids, !anyVisible)));
+      this.ghostButton(`group ${g.name}`, ghosts === ids.length, ghosts > 0 && ghosts < ids.length, () => this.hooks.setGhost(ids, ghosts !== ids.length)),
+      this.eyeButton(`group ${g.name}`, anyVisible, () => this.hooks.setVisible(ids, !anyVisible)));
     row.style.paddingLeft = `${4 + depth * 14}px`;
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); this.hooks.groupContext(ids, g.name, e.clientX, e.clientY); });
     return row;
@@ -113,7 +113,7 @@ export class PartsCard {
     const ghost = this.hooks.isGhost(p.id);
     const sw = el('span', { className: 'sw' + (p.role === 'reference' ? ' ref' : '') });
     sw.style.background = p.color;
-    const name = el('button', { className: 'nm', title: 'Auswählen und Codestelle zeigen' }, sw, el('span', { className: 'pname', textContent: p.name }));
+    const name = el('button', { className: 'nm', title: 'Select and show the code location' }, sw, el('span', { className: 'pname', textContent: p.name }));
     name.addEventListener('click', () => this.hooks.select(p.id));
     const row = el('div', { className: 'row' + (this.selected === p.id ? ' sel' : '') + (visible ? '' : ' off') }, name,
       this.ghostButton(p.name, ghost, false, () => this.hooks.setGhost([p.id], !ghost)),
@@ -127,16 +127,16 @@ export class PartsCard {
   }
 
   private eyeButton(what: string, visible: boolean, act: () => void): HTMLButtonElement {
-    const b = el('button', { className: 'eye', title: visible ? 'Ausblenden' : 'Einblenden' }, icon(visible ? 'eye' : 'eyeoff', 15));
-    b.setAttribute('aria-label', `${what} ${visible ? 'ausblenden' : 'einblenden'}`);
+    const b = el('button', { className: 'eye', title: visible ? 'Hide' : 'Show' }, icon(visible ? 'eye' : 'eyeoff', 15));
+    b.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} ${what}`);
     b.addEventListener('click', () => { act(); this.render(); });
     return b;
   }
 
   /** Transparent schalten. `partly`: nur ein Teil der Gruppe ist transparent. */
   private ghostButton(what: string, on: boolean, partly: boolean, act: () => void): HTMLButtonElement {
-    const b = el('button', { className: 'eye gh' + (on ? ' on' : partly ? ' partly' : ''), title: on ? 'Nicht mehr transparent' : 'Transparent schalten' }, icon('ghost', 15));
-    b.setAttribute('aria-label', `${what} ${on ? 'nicht mehr transparent' : 'transparent schalten'}`);
+    const b = el('button', { className: 'eye gh' + (on ? ' on' : partly ? ' partly' : ''), title: on ? 'Not transparent' : 'Make transparent' }, icon('ghost', 15));
+    b.setAttribute('aria-label', `${on ? 'Make opaque' : 'Make transparent'}: ${what}`);
     b.setAttribute('aria-pressed', String(on));
     b.addEventListener('click', () => { act(); this.render(); });
     return b;

@@ -48,10 +48,10 @@ try {
   // 1) Messmodus
   await domClick('btn-measure');
   let s = await ms();
-  check('„Messen": Modus an, Karte mit Hinweis, Auswahlkarte tritt zurück', s.active && s.text.includes('Klick auf einen Punkt, eine Kante oder eine Fläche')
+  check('„Measure": Modus an, Karte mit Hinweis, Auswahlkarte tritt zurück', s.active && s.text.includes('Click a point, an edge or a face')
     && await ev(() => document.getElementById('btn-measure').getAttribute('aria-pressed') === 'true' && getComputedStyle(document.getElementById('selcard')).display === 'none'));
 
-  check('Beim Einschalten startet die Vorbereitung (Messdienst, dann Geometrie), sichtbar in der Karte', s.preparing && s.text.includes('Messdienst startet'), s.phase);
+  check('Beim Einschalten startet die Vorbereitung (Messdienst, dann Geometrie), sichtbar in der Karte', s.preparing && s.text.includes('Starting the measuring service'), s.phase);
   // Der erste Klick kommt noch während der Vorbereitung: Seine Messung wartet darauf statt ins Zeitlimit zu laufen
 
   // 2) Eine Fläche: exakte Werte, Maße des Bauteils
@@ -62,8 +62,8 @@ try {
   check('Nach der Vorbereitung: keine Ladezeile, kein Fehler', !s.preparing && !s.phase && !s.error, s.error);
   const expArea = 40 * 30 - 2 * Math.PI * 9;
   check('Klick auf die Oberseite der Platte: Fläche eben, exakter Flächeninhalt, Normale +Z', s.result?.a.type === 'PLANE' && Math.abs(s.result.a.area - expArea) < 1e-6
-    && s.text.includes('Fläche · eben') && s.text.includes('+Z'), s.error || `${s.result?.a.area}`);
-  check('Karte nennt die Maße des Bauteils: 40,00 × 30,00 × 5,00 mm', s.text.includes('40,00 × 30,00 × 5,00 mm'), s.text.replace(/\s+/g, ' ').slice(0, 90));
+    && s.text.includes('Face · plane') && s.text.includes('+Z'), s.error || `${s.result?.a.area}`);
+  check('Karte nennt die Maße des Bauteils: 40.00 × 30.00 × 5.00 mm', s.text.includes('40.00 × 30.00 × 5.00 mm'), s.text.replace(/\s+/g, ' ').slice(0, 90));
   await shot('11-messen-flaeche');
 
   // 3) Zweite Fläche: Abstand der parallelen Ebenen, Beschriftung im Viewer
@@ -72,8 +72,8 @@ try {
   await result(() => !!window.__t.measure().result?.pair);
   s = await ms();
   check('Zweiter Klick auf die Oberseite des Blocks: Abstand der Ebenen 15,00 mm, parallel', Math.abs((s.result?.pair?.planes?.value ?? 0) - 15) < 1e-9
-    && s.text.includes('Abstand der Ebenen') && s.text.includes('15,00 mm') && s.text.includes('0° (parallel)'), s.error || s.text.replace(/\s+/g, ' ').slice(0, 90));
-  check('Im Viewer: Beschriftung „15,00 mm" und zwei Messpunkte', await ev(() => document.querySelector('.v-label')?.textContent === '15,00 mm' && document.querySelectorAll('.v-pt').length === 2));
+    && s.text.includes('Distance between planes') && s.text.includes('15.00 mm') && s.text.includes('0° (parallel)'), s.error || s.text.replace(/\s+/g, ' ').slice(0, 90));
+  check('Im Viewer: Beschriftung „15.00 mm" und zwei Messpunkte', await ev(() => document.querySelector('.v-label')?.textContent === '15.00 mm' && document.querySelectorAll('.v-pt').length === 2));
   await shot('12-messen-abstand');
 
   // 4) Kanten: obere Ränder der beiden Bohrungen (Kreise). Dritter Klick beginnt von vorn.
@@ -82,24 +82,24 @@ try {
   await clickAt(left.screen);
   await result(() => !!window.__t.measure().result && !window.__t.measure().b && window.__t.measure().a?.kind === 'edge');
   s = await ms();
-  check('Klick auf den Rand der linken Bohrung: Kante Kreis, Ø 6,00 mm', s.result?.a.type === 'CIRCLE' && Math.abs(s.result.a.radius - 3) < 1e-9 && s.text.includes('Ø 6,00 mm'),
+  check('Klick auf den Rand der linken Bohrung: Kante Kreis, Ø 6.00 mm', s.result?.a.type === 'CIRCLE' && Math.abs(s.result.a.radius - 3) < 1e-9 && s.text.includes('Ø 6.00 mm'),
     s.error || `${s.a?.kind} ${s.result?.a.type}`);
   await clickAt(right.screen);
   await result(() => !!window.__t.measure().result?.pair);
   s = await ms();
-  check('Rand der rechten Bohrung dazu: Abstand der Mittelpunkte 20,00 mm', Math.abs((s.result?.pair?.axes?.value ?? 0) - 20) < 1e-9 && s.text.includes('Abstand der Mittelpunkte'),
+  check('Rand der rechten Bohrung dazu: Abstand der Mittelpunkte 20.00 mm', Math.abs((s.result?.pair?.axes?.value ?? 0) - 20) < 1e-9 && s.text.includes('Distance between centers'),
     s.error || s.text.replace(/\s+/g, ' ').slice(0, 90));
   await shot('13-messen-bohrungen');
 
   // 5) An den Agenten
   const tid = await ev(() => window.__t.terminals.activeId);
   await domClick('btn-measure-agent');
-  await waitFor('Messung im Terminal', (id) => window.__t.termText(id).includes('[Messung:'), 10000, tid).catch(() => {});
+  await waitFor('Messung im Terminal', (id) => window.__t.termText(id).includes('[Measurement:'), 10000, tid).catch(() => {});
   const txt = await ev((id) => window.__t.termText(id), tid);
   // Den genauen Text prüft das Werkzeug selbst: Im Terminal kann beim Zeilenumbruch der Darstellung ein Zeichen fehlen
   const agentText = (await ms()).agentText ?? '';
-  check('„An Agent geben": Text mit Bauteil, Elementen und Wert (Punkt als Dezimalzeichen), steht im Terminal',
-    agentText.startsWith('[Messung: Bauteil "Platte" Kante Kreis und Bauteil "Platte" Kante Kreis: Abstand der Mittelpunkte 20.000 mm') && txt.includes('[Messung: Bauteil'),
+  check('„Send to agent": Text mit Bauteil, Elementen und Wert (Punkt als Dezimalzeichen), steht im Terminal',
+    agentText.startsWith('[Measurement: part "Platte" edge (circle) and part "Platte" edge (circle): Distance between centers 20.000 mm') && txt.includes('[Measurement: part'),
     agentText.slice(0, 90));
   await ev((id) => window.soma.term.write(id, '\x03'), tid);
 
@@ -115,13 +115,13 @@ try {
   await page.click(cornerR.screen.x + 4, cornerR.screen.y + 3); // knapp daneben: Der Punkt wird trotzdem gefasst
   await result(() => window.__t.measure().a?.kind === 'vertex' && !!window.__t.measure().result && !window.__t.measure().b);
   s = await ms();
-  check('Klick nahe einer Ecke fasst den Punkt (vor den Kanten dort): X 20,00 · Y −15,00 · Z 5,00', s.a?.kind === 'vertex' && s.result?.a.type === 'VERTEX'
-    && s.text.includes('Punkt') && s.text.includes('−15,00 mm') && await ev(() => document.querySelector('.v-label')?.textContent === 'X 20,00 · Y −15,00 · Z 5,00'),
+  check('Klick nahe einer Ecke fasst den Punkt (vor den Kanten dort): X 20.00 · Y −15.00 · Z 5.00', s.a?.kind === 'vertex' && s.result?.a.type === 'VERTEX'
+    && s.text.includes('Point') && s.text.includes('−15.00 mm') && await ev(() => document.querySelector('.v-label')?.textContent === 'X 20.00 · Y −15.00 · Z 5.00'),
     s.error || `${s.a?.kind} ${s.text.replace(/\s+/g, ' ').slice(0, 60)}`);
   await clickAt(cornerL.screen);
   await result(() => !!window.__t.measure().result?.pair);
   s = await ms();
-  check('Zweiter Punkt: Abstand der Punkte 40,00 mm (ΔX −40,00)', Math.abs((s.result?.pair?.points?.value ?? 0) - 40) < 1e-9 && s.text.includes('Abstand der Punkte') && s.text.includes('40,00 mm') && s.text.includes('ΔX −40,00'),
+  check('Zweiter Punkt: Abstand der Punkte 40.00 mm (ΔX −40.00)', Math.abs((s.result?.pair?.points?.value ?? 0) - 40) < 1e-9 && s.text.includes('Distance between points') && s.text.includes('40.00 mm') && s.text.includes('ΔX −40.00'),
     s.error || s.text.replace(/\s+/g, ' ').slice(0, 80));
   await shot('14-messen-punkte');
   await clickAt(cornerR.screen);
@@ -129,8 +129,8 @@ try {
   await clickAt(blockTop.screen);
   await result(() => !!window.__t.measure().result?.pair);
   s = await ms();
-  check('Punkt und Fläche: Abstand zur Ebene 15,00 mm', Math.abs((s.result?.pair?.toPlane?.value ?? 0) - 15) < 1e-9 && s.text.includes('Abstand zur Ebene'), s.error || s.text.replace(/\s+/g, ' ').slice(0, 80));
-  check('Text für den Agenten nennt den Punkt mit Lage', (s.agentText ?? '').startsWith('[Messung: Bauteil "Platte" Punkt und Bauteil "Block" Fläche eben: Abstand zur Ebene 15.000 mm'), (s.agentText ?? '').slice(0, 90));
+  check('Punkt und Fläche: Abstand zur Ebene 15.00 mm', Math.abs((s.result?.pair?.toPlane?.value ?? 0) - 15) < 1e-9 && s.text.includes('Distance to plane'), s.error || s.text.replace(/\s+/g, ' ').slice(0, 80));
+  check('Text für den Agenten nennt den Punkt mit Lage', (s.agentText ?? '').startsWith('[Measurement: part "Platte" point and part "Block" face (plane): Distance to plane 15.000 mm'), (s.agentText ?? '').slice(0, 90));
   const probeV = await ev((q) => window.__t.viewer.probe(q.x, q.y), cornerHidden.screen);
   check('Verdeckte Ecke lässt sich nicht fassen', !!probeV && !(probeV.kind === 'vertex' && probeV.id === cornerHidden.id), probeV ? `${probeV.kind} ${probeV.type}` : 'nichts');
 
@@ -151,7 +151,7 @@ try {
   fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL.replace('translate((45, 0, 15))', 'translate((45, 0, 18))'));
   await waitFor('neu gebaut', () => window.__t.status().state === 'ok' && !window.__t.measure().a, 60000).catch(() => {});
   s = await ms();
-  check('Neuer Build: Messung zurückgesetzt, Modus bleibt an', s.active && !s.a && !s.result && s.text.includes('Klick auf einen Punkt'));
+  check('Neuer Build: Messung zurückgesetzt, Modus bleibt an', s.active && !s.a && !s.result && s.text.includes('Click a point'));
   const blockTop2 = await topFace('Block', 23);
   await clickAt(plateTop.screen);
   await result(() => !!window.__t.measure().result);

@@ -55,7 +55,7 @@ function run(exe: string, args: string[], cwd: string, timeoutMs: number): Promi
     try {
       child = spawn(exe, args, { cwd, windowsHide: true, env: { ...process.env, PIP_PYTHON: undefined, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } });
     } catch (e) { resolve({ code: null, out, err: e instanceof Error ? e.message : String(e) }); return; }
-    const timer = setTimeout(() => { err += '\nZeitlimit überschritten.'; child.kill(); }, timeoutMs);
+    const timer = setTimeout(() => { err += '\nTime limit exceeded.'; child.kill(); }, timeoutMs);
     child.stdout?.on('data', (d: Buffer) => { out += d.toString('utf8'); });
     child.stderr?.on('data', (d: Buffer) => { err += d.toString('utf8'); });
     child.on('error', (e) => { clearTimeout(timer); resolve({ code: null, out, err: err + e.message }); });
@@ -78,7 +78,7 @@ export async function ensureEnv(dir: string): Promise<string | null> {
     if (res.ok) return null;
     if (res.error) return res.error;
   } catch { /* kein Ergebnis: unten mit der Fehlerausgabe melden */ }
-  return `Die Projektumgebung ließ sich nicht anlegen (${pythonExe()}): ${(r.err || r.out).trim().split('\n').slice(-3).join(' ')}`;
+  return `Could not create the project environment (${pythonExe()}): ${(r.err || r.out).trim().split('\n').slice(-3).join(' ')}`;
 }
 
 const norm = (name: string) => name.replace(/[-_.]+/g, '-').toLowerCase();
@@ -153,10 +153,10 @@ export async function installMissing(dir: string): Promise<string | null> {
   try { options = parseRequirements(fs.readFileSync(path.join(dir, 'requirements.txt'), 'utf8')).filter((r) => !r.name).map((r) => r.line); } catch { /* nur die Pakete */ }
   const list = path.join(env, 'restore-requirements.txt');
   try { fs.writeFileSync(list, [...options, ...missing.map((r) => r.line)].join('\n') + '\n'); } catch (e) {
-    return `Die Paketliste ließ sich nicht schreiben: ${e instanceof Error ? e.message : String(e)}`;
+    return `Could not write the package list: ${e instanceof Error ? e.message : String(e)}`;
   }
   const r = await run(python, ['-m', 'pip', 'install', '-r', list], dir, INSTALL_TIMEOUT_MS);
   if (r.code === 0) return null;
   const tail = (r.err || r.out).trim().split(/\r?\n/).filter((l) => l.trim()).slice(-4).join('\n');
-  return `Pakete aus requirements.txt ließen sich nicht installieren (${missing.map((m) => m.line).join(', ')}).\n${tail}`;
+  return `Could not install packages from requirements.txt (${missing.map((m) => m.line).join(', ')}).\n${tail}`;
 }

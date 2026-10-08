@@ -1,15 +1,15 @@
 ---
-title: CNC-Fräsen und Drehen
+title: CNC milling and turning
 name: CNC milling and turning
-summary: {{material}}, kleinster Fräser Ø {{tool_d}} mm, {{axes}}: Innenradien, Taschentiefen, Zugänglichkeit, Bohrungen und Gewinde, Drehteile.
+summary: {{material}}, smallest end mill Ø {{tool_d}} mm, {{axes}}: inner radii, pocket depths, access, holes and threads, turned parts.
 order: 12
-category: Fertigungsverfahren
+category: Manufacturing
 default: on-demand
 when: parts will be CNC milled or turned
-topics: Material und Maschine; Innenecken und Taschen; Zugänglichkeit und Aufspannungen; Wände, Bohrungen, Gewinde; Drehteile; Angaben für die Fertigung
-var material: aluminium | | Material | aluminium=Aluminium, steel=Stahl, stainless steel=Edelstahl, brass=Messing, POM=POM, plastic=anderer Kunststoff
-var tool_d: 6 | mm | Kleinster Fräser Ø | 0.5..25
-var axes: 3 | | Maschine | 3=3-Achs, 3+2=3+2-Achs (5 Seiten), 5=5-Achs simultan
+topics: Material and machine; Inner corners and pockets; Access and setups; Walls, holes, threads; Turned parts; Information for the shop
+var material: aluminium | | Material | aluminium=Aluminium, steel=Steel, stainless steel=Stainless steel, brass=Brass, POM=POM, plastic=Other plastic
+var tool_d: 6 | mm | Smallest end mill Ø | 0.5..25
+var axes: 3 | | Machine | 3=3-axis, 3+2=3+2-axis (5 sides), 5=5-axis simultaneous
 ---
 # Skill: CNC milling and turning
 
