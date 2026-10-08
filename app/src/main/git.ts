@@ -141,6 +141,21 @@ export class GitRepo {
     });
   }
 
+  /**
+   * Packt die Objekte vor dem Speichern als ZIP (E75). Lose legt Git jede Fassung von output/model.step ganz ab, nur mit
+   * zlib komprimiert, gepackt ähnliche Fassungen als Unterschied (Motor: 35 statt 81 MB). Commits und Hashes bleiben, wie
+   * sie sind (E35). `--keep-unreachable`: Nichts wird gelöscht, auch nicht Unerreichbares (etwa Blobs, die addAll wieder
+   * aus dem Index nimmt, oder Reste nach `git gc` des Agenten), es kommt mit ins Pack. Sonst blieben solche Objekte lose
+   * liegen, und jedes Speichern packte neu. `-n`: keine Dateien für Git-Server. Liefert false, wenn nichts lose lag.
+   */
+  async pack(): Promise<boolean> {
+    return this.serial(async () => {
+      if (/^count: 0$/m.test(await this.mustRun(['count-objects', '-v']))) return false;
+      await this.mustRun(['repack', '-a', '-d', '--keep-unreachable', '-n', '-q'], true);
+      return true;
+    });
+  }
+
   /** Verlauf, älteste zuerst. Ein kaputtes oder leeres Repository liefert eine leere Liste. */
   async log(limit = 500): Promise<Commit[]> {
     const fmt = '--format=%H%x1f%h%x1f%an%x1f%aI%x1f%s%x1f%(trailers:key=Created-by,key=Erstellt-von,valueonly,separator=%x2c)%x1e';

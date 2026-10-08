@@ -297,6 +297,9 @@ export class ProjectController {
       if (await s.git.isRepo()) {
         try { snapshot = await s.git.snapshot('Automatic snapshot on save'); }
         catch (e) { warnings.push(`Could not add a snapshot to the history: ${e instanceof Error ? e.message : String(e)}`); }
+        // Ähnliche Fassungen (vor allem output/model.step) als Unterschied ablegen, das macht die ZIP deutlich kleiner (E75)
+        try { await s.git.pack(); }
+        catch (e) { warnings.push(`Git could not pack the history, the ZIP is larger than necessary: ${e instanceof Error ? e.message : String(e)}`); }
       } else warnings.push('No Git history: no snapshot was created.');
 
       const head = await s.git.head();

@@ -16,7 +16,7 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 | `exports/` | Single-part exports written by `soma export` |
 | `animations/` | Optional. Motion, camera flights and captions in Python (`soma.anim`), one file per topic. The skill for animation explains them |
 | `analyses/` | Optional. Load cases for `soma analyze fem` in Python (`soma.fem`), one file per load case. The skill for FEM explains them |
-| `renders/` | Pictures and videos written by `soma render`. Not in the version history |
+| `renders/` | Pictures and videos written by `soma render`. Not in the version history and not in the saved ZIP |
 | `.soma/` | App data (viewer cache, build status, feedback images, skills, built animations, analysis results). Do not edit. Read the skills in `.soma/skills/` as the list at the end of this file says, and files in `.soma/feedback/` when the user points you to them |
 
 ## Rules for model.py

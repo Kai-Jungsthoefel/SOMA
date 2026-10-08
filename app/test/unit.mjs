@@ -291,8 +291,26 @@ try {
     const zip = path.join(tmp, 'altprojekt.zip');
     await saveProjectZip(old, zip, { savedAt: '', head: null, id: 'x', name: 'x' });
     const inZip = await readZipTexts(zip, ['model.py', '.soma/results/thickness.glb', '.soma/anim/deckel.glb', 'renders/view-iso.png']);
-    check('ZIP: ohne .soma/results und .soma/anim, mit Bildern und Modell', inZip['model.py'] === 'x = 2\n' && inZip['.soma/results/thickness.glb'] === null
-      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/view-iso.png'] === 'PNG', JSON.stringify(inZip));
+    check('ZIP: ohne .soma/results, .soma/anim und renders/ (E75), mit Modell', inZip['model.py'] === 'x = 2\n' && inZip['.soma/results/thickness.glb'] === null
+      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/view-iso.png'] === null, JSON.stringify(inZip));
+
+    // Packen vor der ZIP (E75): Verlauf und Hashes bleiben. Unerreichbares geht nicht verloren: der Blob, den addAll oben aus
+    // dem Index genommen hat (lose), und ein Objekt, das nur in einem älteren Pack liegt (ohne --keep-unreachable weg).
+    const loose = async () => Number(/^count: (\d+)$/m.exec((await repo.run(['count-objects', '-v'])).out)?.[1] ?? -1);
+    const commitsBefore = (await repo.run(['log', '--format=%H'])).out;
+    fs.writeFileSync(path.join(tmp, 'unerreichbar.txt'), 'nur in einem alten Pack');
+    const orphan = (await repo.run(['hash-object', '-w', path.join(tmp, 'unerreichbar.txt')], true)).out.trim();
+    await repo.run(['tag', 'halten', orphan], true);
+    const packed = await repo.pack();
+    const packs = fs.readdirSync(path.join(old, '.git', 'objects', 'pack')).filter((f) => f.endsWith('.pack'));
+    check('pack(): ein Pack, keine losen Objekte, Verlauf gleich, fsck ohne Fehler', packed && packs.length === 1 && (await loose()) === 0
+      && (await repo.run(['log', '--format=%H'])).out === commitsBefore && (await repo.run(['fsck', '--no-dangling'])).ok, `${packed} ${packs} ${await loose()}`);
+    check('pack() ohne lose Objekte tut nichts', (await repo.pack()) === false);
+    await repo.run(['tag', '-d', 'halten'], true);
+    put('model.py', 'x = 3\n');
+    await repo.snapshot('Automatic snapshot on save');
+    check('pack() nach neuem Snapshot: Unerreichbares aus dem alten Pack bleibt erhalten', (await repo.pack()) === true
+      && (await repo.run(['cat-file', '-e', orphan])).ok && fs.readdirSync(path.join(old, '.git', 'objects', 'pack')).filter((f) => f.endsWith('.pack')).length === 1);
   } finally {
     fs.rmSync(gz, { force: true });
   }
