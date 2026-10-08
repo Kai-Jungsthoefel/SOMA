@@ -218,10 +218,42 @@ try {
   // Animationsdateien (E58): bauen die Animation neu, nicht das Modell
   const ed = path.join(tmp, 'editable.mjs');
   await build({ entryPoints: [path.join(APP, 'src', 'shared', 'editable.ts')], outfile: ed, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
-  const { affectsBuild, affectsAnimation } = await import(pathToFileURL(ed).href);
+  const { affectsBuild, affectsAnimation, readOnlyReason, fileOpBlockReason } = await import(pathToFileURL(ed).href);
   check('animations/*.py: Animation, kein Model-Build. model.py, parts/, inputs/ bauen das Modell', affectsAnimation('animations/deckel.py') && affectsAnimation('animations\\x.py')
     && !affectsBuild('animations/deckel.py') && affectsBuild('model.py') && affectsBuild('parts/lid.py') && affectsBuild('inputs/a.step')
     && !affectsAnimation('animations/sub/x.py') && !affectsAnimation('model.py') && !affectsAnimation('animations/notes.md'));
+  check('parameters.json baut das Modell, ist im Editor nur lesbar, Umbenennen gesperrt, Löschen erlaubt', affectsBuild('parameters.json') && !affectsBuild('parts/parameters.json')
+    && !!readOnlyReason('parameters.json') && !!fileOpBlockReason('parameters.json', 'rename') && fileOpBlockReason('parameters.json', 'delete') === null);
+
+  // Werte aus dem Parameter-Panel (parameters.json): lesen, prüfen, schreiben, beim letzten Eintrag die Datei entfernen
+  const pmOut = path.join(tmp, 'params.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'main', 'params.ts')], outfile: pmOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const { readUserParams, writeUserParams, checkParamValue } = await import(pathToFileURL(pmOut).href);
+  const pdir = path.join(tmp, 'params-projekt');
+  fs.mkdirSync(pdir);
+  const pfile = path.join(pdir, 'parameters.json');
+  check('Ohne parameters.json: keine Werte, kein Fehler', JSON.stringify(readUserParams(pdir)) === '{"rest":{},"values":{}}');
+  let perr = writeUserParams(pdir, { BORE: 40, LID: false, NAME: 'Grüße' });
+  let pj = JSON.parse(fs.readFileSync(pfile, 'utf8'));
+  check('Schreiben: Werte unter „values“, Notiz für den Agenten, keine Zwischendatei', perr === null && pj.values.BORE === 40 && pj.values.LID === false && pj.values.NAME === 'Grüße'
+    && /Parameters panel/.test(pj.note) && fs.readdirSync(pdir).join(',') === 'parameters.json', JSON.stringify(pj));
+  fs.writeFileSync(pfile, '﻿' + JSON.stringify({ note: 'x', variants: { a: 1 }, values: { BORE: 40, BAD: [1], N: Infinity } }));
+  check('Lesen: BOM erlaubt, unbrauchbare Werte fallen weg, fremde Schlüssel bleiben', JSON.stringify(readUserParams(pdir).values) === '{"BORE":40}' && readUserParams(pdir).rest.variants?.a === 1);
+  perr = writeUserParams(pdir, { BORE: null });
+  pj = JSON.parse(fs.readFileSync(pfile, 'utf8'));
+  check('Letzter Wert entfernt, aber fremder Inhalt: Datei bleibt mit leeren Werten', perr === null && JSON.stringify(pj.values) === '{}' && pj.variants?.a === 1);
+  fs.writeFileSync(pfile, JSON.stringify({ values: { A: 1 } }));
+  check('Letzter Wert entfernt, sonst nichts: Datei verschwindet', writeUserParams(pdir, { A: null }) === null && !fs.existsSync(pfile));
+  fs.writeFileSync(pfile, '{ kaputt');
+  perr = writeUserParams(pdir, { A: 2 });
+  check('Kaputte Datei: gemeldet, nicht überschrieben (melden statt reparieren)', /not valid JSON/.test(readUserParams(pdir).error ?? '') && /Nothing was changed/.test(perr ?? '')
+    && fs.readFileSync(pfile, 'utf8') === '{ kaputt', perr ?? '');
+  check('Ungültiger Name wird abgelehnt', /not a parameter name/.test(writeUserParams(path.join(tmp, 'leer-' + process.pid), { 'a-b': 1 }) ?? ''));
+  const def = (kind, extra = {}) => ({ name: 'X', label: 'X', kind, default: 1, value: 1, source: 'code', min: null, max: null, step: null, unit: null, options: null, group: null, help: null, file: 'model.py', line: 1, ...extra });
+  check('Prüfung nach Typ: Zahl, ganze Zahl, Schalter, Auswahl, Text; Bereich zählt nicht', checkParamValue(def('number', { max: 5 }), 99) === null && !!checkParamValue(def('number'), 'a')
+    && !!checkParamValue(def('int'), 1.5) && checkParamValue(def('int'), 3) === null && !!checkParamValue(def('bool'), 1) && checkParamValue(def('bool'), true) === null
+    && checkParamValue(def('choice', { options: [{ value: 'a', label: 'A' }] }), 'a') === null && !!checkParamValue(def('choice', { options: [{ value: 'a', label: 'A' }] }), 'b')
+    && checkParamValue(def('text'), 'hallo') === null && !!checkParamValue(def('text'), 5));
 
   // Zwischenergebnisse der App (Ergebnisse von soma analyze bis 70 MB) nicht in Snapshot und ZIP, auch in älteren
   // Projekten ohne die Einträge in der .gitignore. dugite (und die CommonJS-Pakete für ZIP) bleiben extern, das Bündel

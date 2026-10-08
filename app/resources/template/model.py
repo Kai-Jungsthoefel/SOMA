@@ -4,13 +4,13 @@ Rules (see AGENTS.md): every part must be registered with add_part(), names must
 build with `soma build`. Units are millimetres, Z is up.
 """
 import cadquery as cq
-from soma import add_part
+from soma import add_part, param
 
-# --- parameters -------------------------------------------------------------------------
-LENGTH = 60.0
-WIDTH = 40.0
-HEIGHT = 25.0
-WALL = 2.0
+# --- parameters: the user can change param() values in the app (Parameters panel) ------
+LENGTH = param(60.0, "Length", min=30, max=200, unit="mm")
+WIDTH = param(40.0, "Width", min=20, max=150, unit="mm")
+HEIGHT = param(25.0, "Height", min=10, max=100, unit="mm")
+WALL = param(2.0, "Wall", min=1.2, max=4.0, step=0.1, unit="mm")
 
 # --- body: a box, hollowed out from the top ---------------------------------------------
 body = (

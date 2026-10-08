@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { affectsBuild } from '../shared/editable';
-import type { BuildResult, BuildStatus } from '../shared/types';
+import type { BuildResult, BuildStatus, ParamInfo } from '../shared/types';
 import { pythonExe, warmDir } from './paths';
 import { IGNORED_TOP } from './watcher';
 
@@ -38,8 +38,27 @@ export class BuildManager extends EventEmitter {
   private installing: string[] | null = null;
   private afterInstall = false;
   private packageError: string | null = null;
+  /**
+   * Parameter des Modells aus dem letzten Build, der sie kannte (null: noch keiner). Scheitert ein Build, bevor der Code
+   * seine Parameter anlegt, bleibt die Liste des vorigen stehen (`paramsStale`): Das Panel soll gerade dann bedienbar
+   * bleiben, denn oft war ein Wert daraus die Ursache.
+   */
+  params: ParamInfo[] | null = null;
+  paramsStale = false;
 
-  constructor(private readonly dir: string) { super(); }
+  constructor(private readonly dir: string) {
+    super();
+    // Bis zum ersten Build dieser Sitzung: die Liste des letzten Builds auf der Platte
+    const last = readLastBuild(dir);
+    if (Array.isArray(last?.params)) this.params = last.params;
+  }
+
+  private takeParams(result: BuildResult): void {
+    const list = Array.isArray(result.params) ? result.params : null;
+    if (result.status === 'ok') { this.params = list ?? []; this.paramsStale = false; }
+    else if (list?.length || !this.params) { this.params = list; this.paramsStale = false; }
+    else this.paramsStale = true;
+  }
 
   /**
    * Dateiaenderung im Projekt gemeldet. Ohne Auto-Build merkt sich der Stand nur, dass er veraltet ist.
@@ -94,6 +113,7 @@ export class BuildManager extends EventEmitter {
       clearTimeout(timeout);
       this.proc = null;
       if (this.disposed) return;
+      this.takeParams(result);
       this.setStatus({ state: result.status === 'ok' ? 'ok' : 'error', result, seconds: (Date.now() - startedAt) / 1000, builtAt: Date.now() });
       if (this.rerun) { this.rerun = false; this.start('change during the build'); }
     };
@@ -117,7 +137,8 @@ export class BuildManager extends EventEmitter {
    */
   adopt(last: LastBuild): void {
     if (this.disposed || this.busy) return;
-    const result: BuildResult = { status: 'ok', parts: last.parts, timings: last.timings, warnings: last.warnings };
+    const result: BuildResult = { status: 'ok', parts: last.parts, timings: last.timings, warnings: last.warnings, params: last.params };
+    this.takeParams(result);
     const seconds = typeof last.started === 'number' && typeof last.finished === 'number' ? Math.max(0, last.finished - last.started) : undefined;
     const builtAt = typeof last.finished === 'number' ? last.finished * 1000 : undefined;
     this.setStatus({ state: 'ok', result, reason: 'last build', seconds, builtAt });
@@ -283,7 +304,7 @@ export function runSoma(args: string[], cwd: string, timeoutMs = 120000): Promis
 
 // ---- Stand des letzten Builds ---------------------------------------------------------------------------------------
 
-/** Neuester Änderungszeitpunkt von Einstiegspunkt, parts/ und inputs/ (Quelltext des Modells). */
+/** Neuester Änderungszeitpunkt von Einstiegspunkt, parts/, inputs/ und parameters.json (Quelltext des Modells). */
 export function newestSourceMtime(dir: string): number {
   let newest = 0;
   const walk = (d: string, depth: number) => {
@@ -298,7 +319,7 @@ export function newestSourceMtime(dir: string): number {
     }
   };
   for (const top of ['parts', 'inputs']) walk(path.join(dir, top), 0);
-  for (const f of fs.readdirSync(dir)) if (f.endsWith('.py')) try { newest = Math.max(newest, fs.statSync(path.join(dir, f)).mtimeMs); } catch { /* weg */ }
+  for (const f of fs.readdirSync(dir)) if (f.endsWith('.py') || f === 'parameters.json') try { newest = Math.max(newest, fs.statSync(path.join(dir, f)).mtimeMs); } catch { /* weg */ }
   return newest;
 }
 

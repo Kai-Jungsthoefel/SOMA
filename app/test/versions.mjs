@@ -54,7 +54,7 @@ try {
 
   // ---- 2) Agent committet selbst ----
   const src = fs.readFileSync(modelPy, 'utf8');
-  fs.writeFileSync(modelPy, src.replace('LENGTH = 60.0', 'LENGTH = 80.0'));
+  fs.writeFileSync(modelPy, src.replace('LENGTH = param(60.0', 'LENGTH = param(80.0'));
   await waitFor('Build mit Länge 80', () => window.__t.status().state === 'ok' && (window.__t.partSize('Body') || [0])[0] > 79);
   check('Änderung am Modell erscheint im Viewer (Body 80 mm lang)', (await ev(() => window.__t.partSize('Body')))[0] === 80);
   await waitFor('ungesicherte Änderung', () => window.__t.versions().dirtyFiles === 1);
@@ -117,7 +117,7 @@ try {
   await sleep(800); // capturePage liefert bei unsichtbaren Fenstern sonst ein etwas älteres Bild
   const shot = await app.screenshot(path.join(import.meta.dirname, 'versions.png')).catch((e) => ({ error: String(e) }));
   check('Screenshot der Vorschau (Verlaufsleiste sichtbar)', !!shot.width, shot.width ? `${shot.width}x${shot.height}` : shot.error);
-  check('Arbeitsordner blieb unberührt (model.py hat weiter 80)', fs.readFileSync(modelPy, 'utf8').includes('LENGTH = 80.0'));
+  check('Arbeitsordner blieb unberührt (model.py hat weiter 80)', fs.readFileSync(modelPy, 'utf8').includes('LENGTH = param(80.0'));
   check('Kein neuer Commit durch die Vorschau', (await g('rev-list', '--count', 'HEAD')) === commitsBefore);
   fs.appendFileSync(modelPy, '\n# Kommentar während der Vorschau\n');
   await sleep(4000);
@@ -142,7 +142,7 @@ try {
   check('Gleich nach dem Wiederherstellen ist der wiederhergestellte Stand zu sehen (Body 60, nicht 80)', (await ev(() => window.__t.partSize('Body')))[0] === 60);
   check('Wiederherstellen legt einen NEUEN Commit an', (await g('log', '-1', '--format=%s')).startsWith('Restored version: New model created'));
   check('Verlauf blieb vollständig (alter Startcommit unverändert vorhanden)', (await g('cat-file', '-t', first)) === 'commit' && (await g('rev-list', '--count', 'HEAD')) > commitsBefore);
-  check('Dateien sind zurück: model.py mit 60, Notiz-Wunsch entfernt', fs.readFileSync(modelPy, 'utf8').includes('LENGTH = 60.0') && !fs.readFileSync(path.join(dir, 'NOTES.md'), 'utf8').includes('Wunsch'));
+  check('Dateien sind zurück: model.py mit 60, Notiz-Wunsch entfernt', fs.readFileSync(modelPy, 'utf8').includes('LENGTH = param(60.0') && !fs.readFileSync(path.join(dir, 'NOTES.md'), 'utf8').includes('Wunsch'));
   await waitFor('Build nach Wiederherstellung', () => window.__t.status().state === 'ok' && (window.__t.partSize('Body') || [0])[0] === 60);
   check('Live-Ansicht zeigt wieder den (wiederhergestellten) Stand, Body 60 mm', true);
   check('Kein HEAD-Umbau: Branch ist weiter main, nicht detached', (await g('symbolic-ref', '--short', 'HEAD')) === 'main');
@@ -194,7 +194,7 @@ try {
   await app.answers([zipPath]);
   await domClick('btn-open');
   await waitFor('entpackt und geöffnet', (id) => window.__t.project().id === id && window.__t.status().state === 'ok' && window.__t.versions().count > 1, 90000, proj.id);
-  check('Arbeitsordner fehlt (anderer Rechner): ZIP wird entpackt und geöffnet', fs.existsSync(modelPy) && fs.readFileSync(modelPy, 'utf8').includes('LENGTH = 60.0'));
+  check('Arbeitsordner fehlt (anderer Rechner): ZIP wird entpackt und geöffnet', fs.existsSync(modelPy) && fs.readFileSync(modelPy, 'utf8').includes('LENGTH = param(60.0'));
   check('Der Verlauf ist mitgekommen (gleiche Commits wie vorher)', (await g('log', '--format=%s')) === logBefore);
   // Der Build ist oft schneller da als der Speicherstand des neuen Modells (bis dahin gilt noch der des vorherigen)
   await waitFor('Speicherstand', () => window.__t.saveState() && !window.__t.saveState().unsaved, 15000).catch(() => {});

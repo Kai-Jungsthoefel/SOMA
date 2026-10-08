@@ -92,10 +92,10 @@ try {
 
   // 3) Tippen speichert nicht und baut nicht
   const b0 = await builds();
-  await replace('LENGTH = 60.0', 'LENGTH = 70.0');
+  await replace('LENGTH = param(60.0', 'LENGTH = param(70.0');
   await sleep(2500);
   s = await ed();
-  check('Tippen: Platte unverändert, kein Build', s.dirty && disk().includes('LENGTH = 60.0') && await builds() === b0 && await body() === 60, `${await builds() - b0} Builds`);
+  check('Tippen: Platte unverändert, kein Build', s.dirty && disk().includes('LENGTH = param(60.0') && await builds() === b0 && await body() === 60, `${await builds() - b0} Builds`);
   check('Anzeige: Punkt am Reiter, „Not saved · Ctrl+S" und Knopf „Save and build"', await ev(() => !!document.querySelector('#code-tabs .ctab.on .dirty')
     && document.getElementById('code-info').textContent.includes('Not saved · Ctrl+S') && document.getElementById('btn-code-save')?.textContent === 'Save and build'));
   await shot('8-editor-ungespeichert');
@@ -103,49 +103,49 @@ try {
   // 4) Strg+S im Editor: speichern, dann genau ein Build
   await ctrlS();
   await waitFor('Build mit 70', () => window.__t.status().state === 'ok' && (window.__t.partSize('Body') || [0])[0] === 70, 60000).catch(() => {});
-  check('Strg+S im Editor: Datei gespeichert und gebaut (Body 70 mm lang)', disk().includes('LENGTH = 70.0') && !(await ed()).dirty && await body() === 70);
+  check('Strg+S im Editor: Datei gespeichert und gebaut (Body 70 mm lang)', disk().includes('LENGTH = param(70.0') && !(await ed()).dirty && await body() === 70);
   await sleep(2000);
   check('Genau ein Build nach dem Speichern (die Dateiüberwachung baut nicht noch einmal)', await builds() === b0 + 1, `${await builds() - b0} Builds`);
   check('Strg+S im Editor schreibt keine ZIP (das macht „Speichern" oben)', !(await ev(() => window.__t.saveState()))?.zipPath);
 
   // 5) Knopf „Speichern und bauen"
-  await replace('LENGTH = 70.0', 'LENGTH = 72.0');
+  await replace('LENGTH = param(70.0', 'LENGTH = param(72.0');
   await domClick('btn-code-save');
   await waitFor('Build mit 72', () => window.__t.status().state === 'ok' && (window.__t.partSize('Body') || [0])[0] === 72, 60000).catch(() => {});
-  check('Knopf „Save and build": gespeichert und gebaut (72 mm), Knopf wieder weg', disk().includes('LENGTH = 72.0') && await body() === 72 && await ev(() => !document.getElementById('btn-code-save')?.isConnected));
+  check('Knopf „Save and build": gespeichert und gebaut (72 mm), Knopf wieder weg', disk().includes('LENGTH = param(72.0') && await body() === 72 && await ev(() => !document.getElementById('btn-code-save')?.isConnected));
 
   // 6) Änderung von außen ohne eigene Eingaben: Der Editor übernimmt sie
-  fs.writeFileSync(modelPy, disk().replace('LENGTH = 72.0', 'LENGTH = 75.0'));
-  await waitFor('Editor übernimmt', () => window.__t.editor.state().text.includes('LENGTH = 75.0'), 10000).catch(() => {});
+  fs.writeFileSync(modelPy, disk().replace('LENGTH = param(72.0', 'LENGTH = param(75.0'));
+  await waitFor('Editor übernimmt', () => window.__t.editor.state().text.includes('LENGTH = param(75.0'), 10000).catch(() => {});
   s = await ed();
-  check('Änderung von außen (Agent) erscheint im Editor, ohne als eigene Eingabe zu gelten', s.text.includes('LENGTH = 75.0') && !s.dirty && !s.conflict);
+  check('Änderung von außen (Agent) erscheint im Editor, ohne als eigene Eingabe zu gelten', s.text.includes('LENGTH = param(75.0') && !s.dirty && !s.conflict);
   await idle();
 
   // 7) Konflikt: ungespeicherte Eingabe, und der Agent ändert dieselbe Datei. Nichts wird überschrieben.
-  await replace('LENGTH = 75.0', 'LENGTH = 76.0');
-  fs.writeFileSync(modelPy, disk().replace('LENGTH = 75.0', 'LENGTH = 77.0'));
+  await replace('LENGTH = param(75.0', 'LENGTH = param(76.0');
+  fs.writeFileSync(modelPy, disk().replace('LENGTH = param(75.0', 'LENGTH = param(77.0'));
   await waitFor('Konflikt', () => window.__t.editor.state().conflict === 'changed', 10000).catch(() => {});
   s = await ed();
-  check('Gleichzeitige Änderung: Hinweis im Editor, die Platte bleibt beim Agenten', s.conflict === 'changed' && disk().includes('LENGTH = 77.0') && s.text.includes('LENGTH = 76.0')
+  check('Gleichzeitige Änderung: Hinweis im Editor, die Platte bleibt beim Agenten', s.conflict === 'changed' && disk().includes('LENGTH = param(77.0') && s.text.includes('LENGTH = param(76.0')
     && await ev(() => !document.getElementById('code-banner').hidden && !!document.querySelector('#code-tabs .dirty.warn')));
   await ctrlS();
   await sleep(300);
-  check('Strg+S bei Konflikt: nichts geschrieben, Meldung', disk().includes('LENGTH = 77.0') && (await ev(() => window.__t.toast())).text.includes('Not everything could be saved'));
+  check('Strg+S bei Konflikt: nichts geschrieben, Meldung', disk().includes('LENGTH = param(77.0') && (await ev(() => window.__t.toast())).text.includes('Not everything could be saved'));
   await shot('9-editor-konflikt');
   await idle();
   const b1 = await builds();
   await ev(() => window.__t.editor.keepMine());
-  await until('eigene Fassung auf der Platte', () => disk().includes('LENGTH = 76.0'));
+  await until('eigene Fassung auf der Platte', () => disk().includes('LENGTH = param(76.0'));
   await waitFor('Build mit 76', () => window.__t.status().state === 'ok' && (window.__t.partSize('Body') || [0])[0] === 76, 60000).catch(() => {});
   check('„Meine Fassung behalten": gespeichert und gebaut, die Fassung von außen liegt in der Sicherung',
-    disk().includes('LENGTH = 76.0') && await body() === 76 && await builds() > b1 && backups().some((b) => b.includes('LENGTH = 77.0')) && !(await ed()).conflict);
-  await replace('LENGTH = 76.0', 'LENGTH = 78.0');
-  fs.writeFileSync(modelPy, disk().replace('LENGTH = 76.0', 'LENGTH = 79.0'));
+    disk().includes('LENGTH = param(76.0') && await body() === 76 && await builds() > b1 && backups().some((b) => b.includes('LENGTH = param(77.0')) && !(await ed()).conflict);
+  await replace('LENGTH = param(76.0', 'LENGTH = param(78.0');
+  fs.writeFileSync(modelPy, disk().replace('LENGTH = param(76.0', 'LENGTH = param(79.0'));
   await waitFor('zweiter Konflikt', () => window.__t.editor.state().conflict === 'changed', 10000).catch(() => {});
   await ev(() => window.__t.editor.takeTheirs());
   s = await ed();
   check('„Fassung von außen laden": Editor zeigt sie, die eigene Eingabe liegt in der Sicherung',
-    s.text.includes('LENGTH = 79.0') && !s.dirty && !s.conflict && disk().includes('LENGTH = 79.0') && backups().some((b) => b.includes('LENGTH = 78.0')));
+    s.text.includes('LENGTH = param(79.0') && !s.dirty && !s.conflict && disk().includes('LENGTH = param(79.0') && backups().some((b) => b.includes('LENGTH = param(78.0')));
   await idle();
 
   // 8) Dateien der App: nur lesen, mit Begründung
@@ -250,27 +250,27 @@ try {
 
   // 10) Build-Fehler: „Code öffnen" markiert die Zeile rot
   await open('model.py');
-  await replace('LENGTH = 79.0', 'LENGTH = 79.0 +');
+  await replace('LENGTH = param(79.0', 'LENGTH = param(79.0 +');
   await ctrlS();
   await waitFor('Fehler', () => window.__t.status().state === 'error', 60000).catch(() => {});
   await domClick('btn-err-code');
   await waitFor('Fehlerzeile', () => window.__t.editor.state().marked.some((m) => m.startsWith('er:')), 10000).catch(() => {});
   s = await ed();
-  check('Fehlerkarte „Code öffnen": Fehlerzeile im Editor rot markiert', s.marked.some((m) => m.startsWith('er:') && m.includes('LENGTH = 79.0 +')), s.marked.join(' | ').slice(0, 60));
+  check('Fehlerkarte „Code öffnen": Fehlerzeile im Editor rot markiert', s.marked.some((m) => m.startsWith('er:') && m.includes('LENGTH = param(79.0 +')), s.marked.join(' | ').slice(0, 60));
   await shot('10-editor-fehler');
-  await replace('LENGTH = 79.0 +', 'LENGTH = 79.0');
+  await replace('LENGTH = param(79.0 +', 'LENGTH = param(79.0');
   await ctrlS();
   await waitFor('wieder gebaut', () => window.__t.status().state === 'ok', 60000).catch(() => {});
 
   // 11) „Speichern" oben: speichert auch die Eingaben im Editor, dann Snapshot und ZIP
-  await replace('LENGTH = 79.0', 'LENGTH = 81.0');
+  await replace('LENGTH = param(79.0', 'LENGTH = param(81.0');
   const zipPath = path.join(ud, 'Editortest.zip');
   await app.answers([zipPath]);
   await domClick('btn-save');
   await waitFor('gespeichert', () => !!window.__t.saveState()?.zipPath && !window.__t.saveState().unsaved, 60000).catch(() => {});
   const inHead = (await exec(['show', 'HEAD:model.py'], proj.dir)).stdout;
-  check('„Speichern" oben: Eingabe aus dem Editor ist im Snapshot und in der ZIP', inHead.includes('LENGTH = 81.0') && fs.existsSync(zipPath) && !(await ed()).dirty);
-  await replace('LENGTH = 81.0', 'LENGTH = 82.0');
+  check('„Speichern" oben: Eingabe aus dem Editor ist im Snapshot und in der ZIP', inHead.includes('LENGTH = param(81.0') && fs.existsSync(zipPath) && !(await ed()).dirty);
+  await replace('LENGTH = param(81.0', 'LENGTH = param(82.0');
   check('Ungespeicherte Eingabe im Editor: Speicherstand oben zeigt „Not saved"', await ev(() => document.getElementById('save-badge').textContent.startsWith('Not saved')),
     await ev(() => document.getElementById('save-badge').textContent));
 
@@ -278,31 +278,31 @@ try {
   await app.answers([2]);
   await domClick('btn-new');
   await sleep(1500);
-  check('Neues Modell, Rückfrage „Abbrechen": Modell bleibt, Eingabe bleibt ungespeichert', (await ev(() => window.__t.project())).id === proj.id && (await ed()).dirty && disk().includes('LENGTH = 81.0'));
+  check('Neues Modell, Rückfrage „Abbrechen": Modell bleibt, Eingabe bleibt ungespeichert', (await ev(() => window.__t.project())).id === proj.id && (await ed()).dirty && disk().includes('LENGTH = param(81.0'));
   await app.answers([0]);
   await domClick('btn-new');
   await waitFor('neues Modell', (old) => window.__t.project().id !== old && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000, proj.id).catch(() => {});
   const p2 = await ev(() => window.__t.project());
   const model2 = path.join(p2.dir, 'model.py');
-  check('Rückfrage „Speichern": Eingabe steht im alten Modell, das neue ist unberührt', p2.id !== proj.id && disk().includes('LENGTH = 82.0') && fs.readFileSync(model2, 'utf8').includes('LENGTH = 60.0'));
+  check('Rückfrage „Speichern": Eingabe steht im alten Modell, das neue ist unberührt', p2.id !== proj.id && disk().includes('LENGTH = param(82.0') && fs.readFileSync(model2, 'utf8').includes('LENGTH = param(60.0'));
   // Die Code-Spalte bleibt offen und zeigt dann model.py des neuen Modells (nicht leer), Reiter des alten sind weg
   await waitFor('model.py des neuen Modells', () => window.__t.editor.state().file === 'model.py', 10000).catch(() => {});
   const ed2 = await ed();
-  check('Nach dem Wechsel: keine Reiter des alten Modells, die Code-Spalte zeigt model.py des neuen', ed2.files.join(',') === 'model.py' && ed2.text.includes('LENGTH = 60.0') && !ed2.dirty, ed2.files.join(','));
+  check('Nach dem Wechsel: keine Reiter des alten Modells, die Code-Spalte zeigt model.py des neuen', ed2.files.join(',') === 'model.py' && ed2.text.includes('LENGTH = param(60.0') && !ed2.dirty, ed2.files.join(','));
 
   // 13) Reiter mit ungespeicherter Eingabe schließen: „Verwerfen" legt sie als Sicherung ab
   await open('model.py');
-  await replace('LENGTH = 60.0', 'LENGTH = 65.0');
+  await replace('LENGTH = param(60.0', 'LENGTH = param(65.0');
   await app.answers([1]);
   await ev(() => document.querySelector('#code-tabs .ctab.on .x').click());
   await waitFor('Reiter zu', () => window.__t.editor.state().files.length === 0, 10000).catch(() => {});
   const bdir2 = path.join(ud, 'workspace-backups', `${p2.id}-editor`);
   const back2 = fs.existsSync(bdir2) ? fs.readdirSync(bdir2).map((f) => fs.readFileSync(path.join(bdir2, f), 'utf8')) : [];
-  check('Reiter schließen, „Verwerfen": Datei unverändert, Eingabe in der Sicherung', fs.readFileSync(model2, 'utf8').includes('LENGTH = 60.0') && back2.some((b) => b.includes('LENGTH = 65.0')));
+  check('Reiter schließen, „Verwerfen": Datei unverändert, Eingabe in der Sicherung', fs.readFileSync(model2, 'utf8').includes('LENGTH = param(60.0') && back2.some((b) => b.includes('LENGTH = param(65.0')));
 
   // 14) Späte Schreibanfrage für ein schon gewechseltes Modell: nicht ins neue schreiben, sondern sichern
   const late = await ev((id) => window.soma.fs.writeText(id, 'model.py', 'X = 1\n', null, true), proj.id);
-  check('Späte Eingabe für das alte Modell: nicht ins neue geschrieben, sondern gesichert', !late.ok && /backup/.test(late.error ?? '') && fs.readFileSync(model2, 'utf8').includes('LENGTH = 60.0')
+  check('Späte Eingabe für das alte Modell: nicht ins neue geschrieben, sondern gesichert', !late.ok && /backup/.test(late.error ?? '') && fs.readFileSync(model2, 'utf8').includes('LENGTH = param(60.0')
     && backups().includes('X = 1\n'), (late.error ?? '').slice(0, 60));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));

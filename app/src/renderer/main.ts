@@ -12,6 +12,7 @@ import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
 import { SkillsPanel } from './skills';
+import { ParamsPanel } from './params';
 import { DRAG_PART, PartsCard } from './parts';
 import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
@@ -58,9 +59,10 @@ const SURFACE: Record<string, string> = {
 const surfaceName = (s: string | null) => (s ? SURFACE[s] ?? s.toLowerCase() : 'face');
 const ERROR_KIND: Record<string, string> = { Timeout: 'Time limit exceeded', PythonStart: 'Python could not be started', NoResult: 'Build without result' };
 
-// ---- Seitenleiste (Bauteile, Dateien, Skills) und Code-Spalte (Entwurf 2) -----------------------------------------
+// ---- Seitenleiste (Bauteile, Parameter, Dateien, Skills) und Code-Spalte (Entwurf 2) ------------------------------
 
-type PanelName = 'parts' | 'files' | 'skills';
+type PanelName = 'parts' | 'params' | 'files' | 'skills';
+const PANELS: PanelName[] = ['parts', 'params', 'files', 'skills'];
 let panel: PanelName | null = null;
 /** Zuletzt gezeigte Ansicht der Seitenleiste: Der Schalter oben bringt sie wieder. */
 let lastPanel: PanelName = 'parts';
@@ -75,10 +77,12 @@ function showPanel(p: PanelName | null): void {
   $('side').hidden = !p;
   $('split-side').hidden = !p;
   $('panel-parts').hidden = p !== 'parts';
+  $('panel-params').hidden = p !== 'params';
   $('panel-files').hidden = p !== 'files';
   $('panel-skills').hidden = p !== 'skills';
   document.querySelectorAll<HTMLButtonElement>('#rail [data-panel]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.panel === p)));
   if (p === 'files' && filesDirty) void refreshFiles();
+  if (p === 'params') void paramsPanel.refresh();
   if (p === 'skills') void skills.refresh();
   else skills.closeDetail();
   store.set('soma.side', p ?? '');
@@ -156,6 +160,15 @@ const skills = new SkillsPanel({ list: $('skills-list'), sum: $('skills-sum'), d
   insert: (text) => insertToAgent(text),
   toast,
   changed: () => { filesDirty = true; textCache.clear(); void refreshSaveState(); void code.refresh(); },
+});
+
+const paramsPanel = new ParamsPanel({ list: $('params-list'), foot: $('params-foot'), count: $('params-count') }, {
+  state: () => api.params.state(),
+  set: (values) => api.params.set(values),
+  resetAll: () => api.params.resetAll(),
+  openCode: (file, line, label) => void openCode(file, { from: line, to: line, label }),
+  insert: (text) => insertToAgent(text),
+  toast,
 });
 
 const files = new FileTree($('tab-files'), $('menu-ctx'), {
@@ -749,6 +762,8 @@ async function onProject(p: ProjectInfo): Promise<void> {
   code.reset();
   skills.reset();
   if (panel === 'skills') void skills.refresh();
+  paramsPanel.reset();
+  if (panel === 'params') void paramsPanel.refresh();
   if (codeOpen) void code.open('model.py'); // die Code-Spalte bleibt offen, dann nicht leer
   resetViewLists();
   selection = null;
@@ -1269,10 +1284,13 @@ let buildStarts = 0; // Prüfhilfe: Wie oft hat ein Build begonnen?
 api.build.onStatus((s) => {
   if (s.state === 'building' && buildStatus.state !== 'building') buildStarts++;
   renderBuild(s);
+  paramsPanel.setBuild(s);
   if (s.state === 'ok' && !s.stale) { void loadModel(); void refreshFiles(); void refreshViewLists(); }
+  // Nach jedem Build (auch einem gescheiterten): Liste und Werte neu, der Build kennt die Parameter des Codes
+  if (panel === 'params' && s.state !== 'building') void paramsPanel.refresh();
 });
 // Auch bei geschlossenem Code abgleichen: Offene Dateien können ungesicherte Eingaben enthalten
-api.fs.onChanged(() => { textCache.clear(); void refreshFiles(); void code.refresh(); scheduleViewLists(); });
+api.fs.onChanged(() => { textCache.clear(); void refreshFiles(); void code.refresh(); scheduleViewLists(); if (panel === 'params') void paramsPanel.refresh(); });
 // Beim Beenden fragt der Hauptprozess, was im Editor ungespeichert ist, und lässt speichern oder verwerfen
 api.fs.onEditorRequest(async (action) => {
   if (action === 'status') return { dirty: code.unsaved() };
@@ -1299,7 +1317,7 @@ if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
 // Seitenleiste wie beim letzten Mal, beim ersten Start mit den Bauteilen
 {
   const side = store.get('soma.side');
-  showPanel(side === null ? 'parts' : side === 'parts' || side === 'files' || side === 'skills' ? side : null);
+  showPanel(side === null ? 'parts' : PANELS.includes(side as PanelName) ? side as PanelName : null);
 }
 // Die App beginnt auf der Startseite (E69), der Hauptprozess öffnet kein Modell. Nur im Testmodus öffnet er gleich eins.
 if (api.startsHome) void showStart(true);
@@ -1338,6 +1356,8 @@ if (api.testMode) {
     videoOpen: (rel: string) => videoView.open(rel),
     videoSeek: (t: number) => videoView.testSeek(t),
     skills: () => skills.state(),
+    params: () => paramsPanel.state(),
+    paramsRefresh: () => paramsPanel.refresh(),
     pick: () => selection?.pick ?? null,
     markPixel: (x: number, y: number) => markup.pixel(x, y),
     markHandles: () => markup.handles(),

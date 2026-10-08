@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type {
   AnimBuildResult, AnimList, ExportResult, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
-  ProjectInfo, RemoveResult, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
+  ParamResult, ParamState, ParamValue, ProjectInfo, RemoveResult, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
 import { AnimBuilder, listResults, readAnimList, rerunResult, samePath } from './animations';
@@ -14,6 +14,7 @@ import { choose, chooseExportTarget, choosePath, documentsDir, trashItem } from 
 import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
+import { checkParamValue, isParamValue, readUserParams, writeUserParams } from './params';
 import { previewsDir, skillBackupsDir, skillsDir } from './paths';
 import { storeBuildAsPreview } from './previews';
 import {
@@ -563,6 +564,46 @@ export class ProjectController {
    * Darf das Fenster schließen? Bei ungespeicherten Änderungen fragt die App. Der Arbeitsstand bleibt in jedem Fall erhalten,
    * Eingaben im Editor (`editor.dirty`) aber nur, wenn sie gespeichert werden. „Nicht speichern“ legt sie als Sicherung ab.
    */
+  // ---- Parameter (param() im Code, Werte des Nutzers in parameters.json) -------------------------------------------
+
+  paramState(): ParamState {
+    const s = this.need();
+    const u = readUserParams(s.dir);
+    return { params: s.builds.params, values: u.values, ...(u.error ? { error: u.error } : {}), ...(s.builds.paramsStale ? { stale: true } : {}) };
+  }
+
+  /**
+   * Werte des Nutzers setzen (null: zurück auf den Wert aus dem Code) und gleich bauen, wie Strg+S im Editor (E39), auch
+   * ohne Auto-Build: Der Nutzer hat ausdrücklich etwas geändert und will das Ergebnis sehen. Erst alles prüfen, dann schreiben.
+   */
+  setParams(values: unknown): ParamResult {
+    const s = this.need();
+    const fail = (message: string): ParamResult => ({ ok: false, message, ...this.paramState() });
+    if (typeof values !== 'object' || values === null || Array.isArray(values)) return fail('No values given.');
+    const defs = new Map((s.builds.params ?? []).map((p) => [p.name, p]));
+    const changes: Record<string, ParamValue | null> = {};
+    for (const [name, v] of Object.entries(values as Record<string, unknown>)) {
+      if (v === null) { changes[name] = null; continue; }
+      if (!isParamValue(v)) return fail(`The value for ${name} cannot be stored.`);
+      const why = checkParamValue(defs.get(name), v);
+      if (why) return fail(why);
+      changes[name] = v;
+    }
+    if (!Object.keys(changes).length) return { ok: true, ...this.paramState() };
+    const err = writeUserParams(s.dir, changes);
+    if (err) return fail(err);
+    s.builds.start('parameter changed');
+    return { ok: true, ...this.paramState() };
+  }
+
+  /** Alle Werte des Nutzers entfernen. */
+  resetAllParams(): ParamResult {
+    const s = this.need();
+    const u = readUserParams(s.dir);
+    if (u.error) return { ok: false, message: `${u.error} Nothing was changed.`, ...this.paramState() };
+    return this.setParams(Object.fromEntries(Object.keys(u.values).map((k) => [k, null])));
+  }
+
   // ---- Skills (E17) -----------------------------------------------------------------------------------------------
 
   skills(): SkillInfo[] {

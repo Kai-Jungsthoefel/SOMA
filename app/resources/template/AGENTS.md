@@ -11,6 +11,7 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 | `model.py` | Entry point. Builds the model and registers every part. Small models live only here |
 | `parts/` | Optional. Move parts into modules here when `model.py` gets long, import them from `model.py` |
 | `inputs/` | Files the user brought (STEP, images). Never modify them, load them from `model.py` |
+| `parameters.json` | Values the user set in the app's Parameters panel (rule 7). Written by the app |
 | `output/model.step` | Main result with all parts, written by `soma build`. Never write it yourself |
 | `exports/` | Single-part exports written by `soma export` |
 | `animations/` | Optional. Motion, camera flights and captions in Python (`soma.anim`), one file per topic. The skill for animation explains them |
@@ -20,14 +21,15 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 
 ## Rules for model.py
 
-1. `from soma import add_part, import_step, import_assembly`
+1. `from soma import add_part, param, import_step, import_assembly`
 2. **Register every part**: `add_part("Name", workplane_or_shape)`. Unregistered geometry is invisible in the viewer and missing from exports.
 3. Names are unique. Umlauts are fine, they are shown as written.
 4. Group related parts with `group`: `add_part("Screw front", screw, group="Housing/Screws")` (nested with `/`). Groups show up in the part tree of the app and as sub-assemblies in `output/model.step`.
 5. Mark a part the user brought (for example a circuit board) with `role="reference"`: it is shown semi-transparent and skipped by `soma export --all`. Cut clearances around it, but do not export it.
 6. Units are millimetres, Z is up. Put dimensions in named constants at the top of `model.py` so the user can ask for changes ("make the wall 3 mm"). Once parts live in `parts/`, the constants go to `parts/params.py`, and `model.py` and the part modules import them from there.
-7. Load user files with `import_step("inputs/board.step")`: this merges the whole file into one shape. If the file has several parts or sub-assemblies, keep them with `asm = import_assembly("inputs/board.step")` and `add_part("Board", asm, role="reference")`: every body becomes its own part with its name and color, the sub-assemblies become groups under "Board". Move an assembly with `asm.loc = cq.Location((x, y, z))`. STEP files often have their origin in a corner: check the bounding box and move the part deliberately.
-8. Prefer simple, readable CadQuery. Check that operations produced solids. Do not use `show_object` or `cq_editor`.
+7. **Parameters for the user**: make the values the user would want to change themselves with `param()`: `BORE = param(38.0, "Cylinder bore", min=30, max=42, step=0.5, unit="mm", group="Crank train")`. They appear in the app's Parameters panel, where the user changes them without you. Good parameters are main dimensions, counts, options and positions (`CRANK = param(0, "Crank angle", min=0, max=360, unit="deg")`), usually 3 to 15 per model. Helper and derived values stay plain constants. Choose `min` and `max` so that the model builds and makes sense over the whole range. The default decides the field: `param(18, ...)` whole numbers, `param(True, ...)` a switch, `param("M3", ..., options=["M3", "M4"])` a choice. The user's values are kept in `parameters.json` and take the place of the defaults in the code, `soma build` lists them ("set by the user in the app"). So the number in the code is not always the one in the model. Do not edit `parameters.json` unless the user asks. If the user asks you for a new value of a parameter they set in the panel, change the default in the code and remove its entry from `parameters.json`, so that the code's value applies again.
+8. Load user files with `import_step("inputs/board.step")`: this merges the whole file into one shape. If the file has several parts or sub-assemblies, keep them with `asm = import_assembly("inputs/board.step")` and `add_part("Board", asm, role="reference")`: every body becomes its own part with its name and color, the sub-assemblies become groups under "Board". Move an assembly with `asm.loc = cq.Location((x, y, z))`. STEP files often have their origin in a corner: check the bounding box and move the part deliberately.
+9. Prefer simple, readable CadQuery. Check that operations produced solids. Do not use `show_object` or `cq_editor`.
 
 ## Commands
 
@@ -68,6 +70,7 @@ The app pastes short notes into your input. The user adds their own words and se
 - `[Markup: .soma/feedback/markup-20260930-1405.png]`: a picture of the 3D view (or a blank sketch) with the user's drawings: arrows, circles, handwritten text, often with dimensions. **Open the image file and look at it**, compare it with the model, then change the code. If the note says `shows the older version <hash>`, the picture shows that older commit, not the current code (`git show <hash>:model.py`). Leave the images where they are.
 - `[Selection: part "…", model.py line …]`: the part the user clicked, with the lines of its `add_part` call and the clicked face.
 - `[Build error: …]`: the message of the last failed build.
+- `[Parameter: "Cylinder bore" (BORE) = 40 mm, set in the app, code default 38 mm, model.py line 12]`: a parameter from the Parameters panel, with the user's value if they set one.
 - `[Animation: "Name" (animations/x.py) at 1.50 s]`, `[Video: renders/x.mp4 at 00:03.20]`: a moment in an animation or a video. A markup can name it too (`drawn on renders/x.mp4 at 00:03.20`).
 - `[Result: "Wall thickness" (.soma/results/…), part "…": 0.80 mm at (x, y, z) mm]`: a spot in the colours of an analysis.
 - `[Skill: .soma/skills/<name>.md]`: the user points you to this rule set, switched it on or changed its settings (the note may list them, they are already written into the file). Read the file again now and follow it from here on. When the user switches a skill off, it disappears from the list below: stop applying it.

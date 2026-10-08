@@ -13,6 +13,10 @@ const PATHS: Record<string, string> = {
   pkg: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
   sliders: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  // Zahnrad für „Options“ (Entwurf 2, cogPath), seit „sliders“ für die Parameter steht
+  cog: '<path d="M21.42 10.17L21.42 13.83L18.89 14.11L18.36 15.38L19.96 17.37L17.37 19.96L15.38 18.36L14.11 18.89L13.83 21.42L10.17 21.42L9.89 18.89L8.62 18.36L6.63 19.96L4.04 17.37L5.64 15.38L5.11 14.11L2.58 13.83L2.58 10.17L5.11 9.89L5.64 8.62L4.04 6.63L6.63 4.04L8.62 5.64L9.89 5.11L10.17 2.58L13.83 2.58L14.11 5.11L15.38 5.64L17.37 4.04L19.96 6.63L18.36 8.62L18.89 9.89Z"/><circle cx="12" cy="12" r="3"/>',
+  // Zurück auf den Wert aus dem Code (Parameter, Entwurf 2)
+  reset: '<path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5"/><path d="M4 3.5v5h5"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   eyeoff: '<path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/>',

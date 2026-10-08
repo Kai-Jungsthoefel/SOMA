@@ -14,6 +14,8 @@ topics: Parameters and structure; Order of operations; Selectors; Typical errors
 
 - Base dimensions are named constants at the top of `model.py`, everything else is derived (`INNER_W = WIDTH - 2 *
   WALL`). Never type the same number twice.
+- The base dimensions the user would want to change themselves become `param()` with a range in which the model works
+  (`WIDTH = param(40.0, "Width", min=20, max=80, unit="mm")`), see AGENTS.md. Derived values never do.
 - One function per part (`def make_lid(): ... return lid`), the `add_part` calls at the end of `model.py`. Move parts
   into `parts/` when `model.py` grows beyond about 200 lines. The constants then move to `parts/params.py`, imported
   by `model.py` and the part modules.

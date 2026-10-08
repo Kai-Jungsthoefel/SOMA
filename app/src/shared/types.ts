@@ -22,7 +22,30 @@ export interface BuildResult {
   error?: BuildError;
   timings?: Record<string, number>;
   warnings?: string[];
+  /** Parameter des Modells (`param()` im Code), auch nach einem Fehler: die bis dahin angelegten. */
+  params?: ParamInfo[];
 }
+
+/** Wert eines Parameters: Zahl, Schalter oder Text. */
+export type ParamValue = number | boolean | string;
+/**
+ * Ein Parameter aus `soma.param()`, so wie ihn der letzte Build kennt. `default` steht im Code (der Wert des Agenten),
+ * `value` hat der Build verwendet, `source` sagt, woher er kam (`user`: aus parameters.json).
+ */
+export interface ParamInfo {
+  name: string; label: string; kind: 'number' | 'int' | 'bool' | 'choice' | 'text';
+  default: ParamValue; value: ParamValue; source: 'code' | 'user';
+  min: number | null; max: number | null; step: number | null; unit: string | null;
+  options: { value: ParamValue; label: string }[] | null;
+  group: string | null; help: string | null; file: string; line: number;
+}
+/**
+ * Stand des Parameter-Panels. `params`: Parameter aus dem letzten Build, der sie kannte (null: noch keiner).
+ * `values`: Werte des Nutzers aus parameters.json, gelten vor den Werten im Code. `error`: Die Datei ist nicht lesbar.
+ * `stale`: Die Liste stammt von einem früheren Build, weil der letzte vor den Parametern scheiterte.
+ */
+export interface ParamState { params: ParamInfo[] | null; values: Record<string, ParamValue>; error?: string; stale?: boolean }
+export interface ParamResult extends ParamState { ok: boolean; message?: string }
 
 export type BuildState = 'idle' | 'building' | 'ok' | 'error';
 export interface BuildStatus {
@@ -306,6 +329,14 @@ export interface SomaApi {
     start(): Promise<MeasurePrepared>;
     /** Den Stand vorab in den Messdienst laden, damit der erste Klick nicht darauf wartet (große Baugruppen: Sekunden). */
     prepare(source: MeasureSource, build: string): Promise<MeasurePrepared>;
+  };
+  /** Parameter des Modells (`param()` im Code) und die Werte des Nutzers in parameters.json. */
+  params: {
+    state(): Promise<ParamState>;
+    /** Wert des Nutzers setzen (null: zurück auf den Wert aus dem Code) und bauen. */
+    set(values: Record<string, ParamValue | null>): Promise<ParamResult>;
+    /** Alle Werte des Nutzers entfernen: Es gelten wieder die Werte aus dem Code. */
+    resetAll(): Promise<ParamResult>;
   };
   /** Skills des offenen Modells (E17): auflisten, Stufe wählen (E55). */
   skills: {

@@ -5,6 +5,7 @@
 export function readOnlyReason(rel: string): string | null {
   const p = rel.replace(/\\/g, '/').replace(/^\.\//, '');
   if (/^(AGENTS|CLAUDE)\.md$/i.test(p)) return 'Managed by the app and replaced on updates. Your own wishes and rules belong in NOTES.md.';
+  if (/^parameters\.json$/i.test(p)) return 'Your values from the Parameters panel. Change them there, on the left under “Parameters”.';
   if (/^\.gitignore$/i.test(p)) return 'Managed by the app.';
   if (/^(output|exports)\//i.test(p)) return 'Recreated on every build or export.';
   if (/^\.soma\/skills\//i.test(p)) return 'Copy of a skill. Change it on the left under “Skills”.';
@@ -28,17 +29,19 @@ export function fileOpBlockReason(rel: string, op: 'create' | 'rename' | 'delete
   if (/^\.(soma|git)(\/|$)/i.test(p)) return 'Internal data of the app and of Git.';
   if (op !== 'create' && /^model\.py$/i.test(p)) return 'model.py is the fixed entry point of the model.';
   if (op === 'rename' && /^(inputs|parts)$/i.test(p)) return 'The agent looks for this folder by its name.';
+  if (op === 'rename' && /^parameters\.json$/i.test(p)) return 'The app and soma build look for this file by its name.';
   return null;
 }
 
 /**
- * Betrifft eine Änderung an dieser Datei das Modell? Python-Dateien und alles in inputs/ (mitgebrachte STEP-Dateien,
- * Tabellen, die model.py einliest). Notizen wie NOTES.md nicht: Nach ihrem Speichern wird nicht gebaut.
+ * Betrifft eine Änderung an dieser Datei das Modell? Python-Dateien, alles in inputs/ (mitgebrachte STEP-Dateien,
+ * Tabellen, die model.py einliest) und die Werte aus dem Parameter-Panel. Notizen wie NOTES.md nicht: Nach ihrem
+ * Speichern wird nicht gebaut.
  */
 export function affectsBuild(rel: string): boolean {
   const p = rel.replace(/\\/g, '/');
   if (affectsAnimation(p)) return false;
-  return /\.py$/i.test(p) || /^inputs\//i.test(p);
+  return /\.py$/i.test(p) || /^inputs\//i.test(p) || /^parameters\.json$/i.test(p);
 }
 
 /** Eine Animationsdatei (E58): Ihre Änderung baut die Animation neu, nicht das Modell. */

@@ -185,6 +185,69 @@ code { font-family:var(--mono); font-size:.95em; }
 .sk-reset { width:22px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:5px; color:var(--tx3); flex-shrink:0; }
 .sk-reset:hover { background:var(--s3); color:var(--tx); }
 .sk-reset[hidden] { display:flex; visibility:hidden; }
+
+/* Parameter (Entwurf 2, Bild 6): Werte aus param() im Code. Orange = weicht vom Wert im Code ab, Rot = außerhalb des
+   Bereichs oder unbrauchbar. Die aktive Zeile klappt auf: Schieber, Wert im Code, Sprung in den Code */
+.pm-list { flex:1; overflow:auto; padding:2px 0 10px; }
+.pm-list .hint { color:var(--tx3); padding:8px 14px; }
+.pm-note { padding:6px 14px; font-size:12px; color:var(--tx3); line-height:1.45; }
+.pm-warn { display:flex; gap:8px; align-items:flex-start; margin:8px 10px 2px; padding:8px 10px; border-radius:7px; background:rgba(232,197,71,.1); color:var(--warn); font-size:12px; line-height:1.45; }
+.pm-warn svg { margin-top:1px; }
+.pg { display:flex; align-items:center; gap:6px; width:100%; padding:12px 14px 4px 10px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); text-align:left; }
+.pg:hover:not(.static) { color:var(--tx2); }
+.pg .src { letter-spacing:0; text-transform:none; font-size:11.5px; }
+.pg.static { padding-left:14px; }
+.prm { position:relative; margin:0 6px; border-radius:7px; }
+.prm:hover:not(.open) { background:var(--s2); }
+.prm .r { display:flex; align-items:center; gap:6px; height:32px; padding:0 2px 0 14px; }
+.prm .lb { flex:1; min-width:0; height:100%; display:flex; align-items:center; gap:7px; white-space:nowrap; overflow:hidden; text-align:left; }
+.prm .lb .lt { overflow:hidden; text-overflow:ellipsis; min-width:24px; }
+.prm .lb .cn { font-family:var(--mono); font-size:10.5px; color:var(--tx3); overflow:hidden; text-overflow:ellipsis; flex-shrink:3; min-width:0; }
+.prm.chg::before { content:""; position:absolute; left:4px; top:13px; width:6px; height:6px; border-radius:50%; background:var(--acc); }
+.prm.chg.err::before { background:var(--err); }
+.prm.open { background:var(--s2); box-shadow:inset 0 0 0 1px var(--line2); }
+.pm-ctl { flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; width:104px; }
+.valbox { height:26px; padding:0 6px; gap:4px; border:1px solid var(--line2); border-radius:5px; background:var(--term); }
+.valbox:focus-within { border-color:var(--acc); }
+.valbox input { flex:1; min-width:0; width:100%; height:100%; padding:0; border:0; outline:none; background:none; color:inherit; font:12px var(--mono); text-align:right; }
+.valbox .u { color:var(--tx3); font-size:11px; white-space:nowrap; }
+.valbox.wide { width:124px; }
+.valbox.wide input { text-align:left; font-family:var(--sans); }
+.valbox.stepper { padding:0; }
+.valbox.stepper input { text-align:center; }
+.valbox.stepper .stp { width:22px; height:100%; display:flex; align-items:center; justify-content:center; color:var(--tx3); flex-shrink:0; }
+.valbox.stepper .stp:hover:not(:disabled) { color:var(--tx); background:var(--s3); }
+.valbox.stepper .u { padding-right:6px; }
+.pm-select { width:104px; height:26px; padding:0 4px; border-radius:5px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--sans); }
+.pm-switch { width:32px; height:18px; border-radius:9px; background:var(--s3); box-shadow:inset 0 0 0 1px var(--line2); position:relative; flex-shrink:0; }
+.pm-switch span { position:absolute; top:3px; left:3px; width:12px; height:12px; border-radius:50%; background:var(--tx2); transition:left .12s; }
+.pm-switch[aria-checked=true] { background:var(--acc-tint); box-shadow:inset 0 0 0 1px var(--acc-line); }
+.pm-switch[aria-checked=true] span { left:17px; background:var(--acc); }
+.prm.chg .valbox, .prm.chg .pm-select { border-color:var(--acc-line); color:var(--acc-tx); }
+.prm.err .valbox, .prm.err .pm-select { border-color:rgba(240,116,112,.6); color:#ffb8b3; }
+.prm .rst { width:22px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:5px; color:var(--tx3); flex-shrink:0; }
+.prm .rst:hover:not(:disabled) { background:var(--s3); color:var(--tx); }
+.prm .rst.off { visibility:hidden; }
+.prm .x { padding:2px 12px 12px 14px; display:flex; flex-direction:column; gap:9px; }
+.prm .x .slider { display:flex; align-items:center; gap:8px; }
+.prm .x .slider .c3 { font:11px var(--mono); }
+.pm-range { flex:1; min-width:0; accent-color:var(--acc); height:18px; }
+.pm-err { color:#ffb8b3; line-height:1.45; }
+.pm-links { display:flex; align-items:center; gap:12px; }
+.pm-links .lnk { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--tx2); }
+.pm-links .lnk:hover { color:var(--tx); }
+.pm-fail { margin:8px 10px 4px; padding:10px; border:1px solid rgba(240,116,112,.45); border-radius:8px; background:var(--err-tint); }
+.pm-fail-t { display:flex; gap:8px; align-items:flex-start; color:#ffb8b3; font-size:12.5px; line-height:1.45; }
+.pm-fail-t svg { margin-top:1px; }
+.pm-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.pm-empty { margin:12px 10px; padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--s2); display:flex; flex-direction:column; gap:10px; line-height:1.5; }
+.pm-empty .btn { align-self:flex-start; }
+.pm-orph { margin-top:6px; }
+.pm-orow { display:flex; align-items:center; gap:8px; min-height:32px; padding:0 8px 0 14px; margin:0 6px; font-size:12px; }
+.pm-orow .mono { font-family:var(--mono); }
+.pfoot { flex-shrink:0; display:flex; align-items:center; gap:8px; padding:8px 10px 8px 14px; border-top:1px solid var(--line); font-size:12px; color:var(--tx2); }
+.pfoot .dot { width:7px; height:7px; background:var(--acc); }
+.pfoot .pf-t { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .dropzone { margin:10px 12px 12px; padding:9px 12px; border:1px dashed var(--line2); border-radius:8px; display:flex; align-items:center; gap:10px; color:var(--tx3); font-size:12px; flex-shrink:0; }
 .dropzone b { color:var(--tx2); font-weight:500; }
 .dropzone.over, body.dragging .dropzone { border-color:var(--acc); background:var(--acc-tint); }

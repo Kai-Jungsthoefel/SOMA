@@ -37,11 +37,12 @@
   <div id="body">
     <nav id="rail" aria-label="Sidebars">
       <button data-panel="parts" aria-pressed="false" title="Parts of the model: select, hide and show, make transparent"><i data-icon="cube" data-size="20" data-stroke="1.7"></i><span>Parts</span></button>
+      <button data-panel="params" aria-pressed="false" title="Parameters: values of the model you can change, such as sizes, counts or angles"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Parameters</span></button>
       <button data-panel="files" aria-pressed="false" title="Files of the model. Click a file to open it in the code next to it."><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Files</span></button>
       <button data-panel="skills" aria-pressed="false" title="Skills: rules for the agent, set per model (3D printing, tolerances …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
       <span class="grow"></span>
       <button disabled title="Help is coming in a later version"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Help</span></button>
-      <button disabled title="Options are coming in a later version"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Options</span></button>
+      <button disabled title="Options are coming in a later version"><i data-icon="cog" data-size="20" data-stroke="1.6"></i><span>Options</span></button>
     </nav>
 
     <aside id="side" hidden>
@@ -52,6 +53,14 @@
           <button class="ibtn s side-close" aria-label="Close sidebar"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <input id="parts-filter" class="filter" type="search" placeholder="Search part" aria-label="Search part" hidden>
         <div id="tab-model" class="list ptree"></div>
+      </section>
+      <!-- Parameter (Entwurf 2, Bild 6): Werte, die der Agent mit param() freigibt. Der Wert im Code bleibt, die des Nutzers stehen in parameters.json -->
+      <section id="panel-params" class="panel" aria-label="Parameters" hidden>
+        <div class="side-hd"><b>Parameters</b><span id="params-count" class="c3 hd-count"></span><span class="grow"></span>
+          <button id="btn-params-info" class="ibtn s" aria-label="What are parameters?" title="Parameters are values of the model you can change here. The agent creates them in the code with param() and decides which ones. Your values are kept in parameters.json and take the place of the values in the code. Resetting brings back the agent’s value."><i data-icon="info" data-size="15" data-stroke="1.9"></i></button>
+          <button class="ibtn s side-close" aria-label="Close sidebar"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+        <div id="params-list" class="pm-list"></div>
+        <div id="params-foot" class="pfoot" hidden></div>
       </section>
       <section id="panel-files" class="panel" aria-label="Files" hidden>
         <div class="side-hd"><b>Files</b><span class="grow"></span>

@@ -67,6 +67,11 @@ const api: SomaApi = {
     start: () => ipcRenderer.invoke('measure:start'),
     prepare: (source, build) => ipcRenderer.invoke('measure:prepare', source, build),
   },
+  params: {
+    state: () => ipcRenderer.invoke('params:state'),
+    set: (values) => ipcRenderer.invoke('params:set', values),
+    resetAll: () => ipcRenderer.invoke('params:resetAll'),
+  },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     set: (id, mode) => ipcRenderer.invoke('skills:set', id, mode),
