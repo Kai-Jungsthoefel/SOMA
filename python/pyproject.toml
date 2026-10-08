@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soma"
-version = "0.1.0"
+# Versionsnummer von SOMA (E68), eine fuer App und soma: steht in soma/__init__.py und gleichlautend in app/package.json
+dynamic = ["version"]
 description = "Hilfsbibliothek und Kommandozeile von SOMA"
 requires-python = ">=3.11"
 # cadquery liegt in der mitgelieferten Basisumgebung und wird hier bewusst nicht als Abhaengigkeit gezogen
@@ -14,6 +15,9 @@ soma = "soma.cli:main"
 
 [tool.setuptools]
 packages = ["soma"]
+
+[tool.setuptools.dynamic]
+version = { attr = "soma.__version__" }
 
 [tool.setuptools.package-data]
 # Masstabellen der Normteile (aus bd_warehouse, Apache 2.0)
