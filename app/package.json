@@ -18,6 +18,7 @@
     "test:skills": "npm run build && node test/skills.mjs",
     "test:fasteners": "npm run build && node test/fasteners.mjs",
     "test:animation": "npm run build && node test/animation.mjs",
+    "test:packages": "npm run build && node test/packages.mjs",
     "test:unit": "node test/unit.mjs",
     "test": "npm run build && node test/run-all.mjs"
   },

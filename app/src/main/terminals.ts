@@ -2,18 +2,23 @@ import path from 'node:path';
 import type { WebContents } from 'electron';
 import * as pty from 'node-pty';
 import { bridgeEnv } from './bridge';
+import { envPaths } from './packages';
 import { gitCmdDir, pythonBinDir } from './paths';
 
 /**
- * Umgebung fuer Terminals: Python-Basisumgebung vorn im PATH, damit `python`, `pip` und `soma` gefunden werden. Dazu Adresse
- * und Schluessel der App fuer `soma render` (E58).
+ * Umgebung fuer Terminals: vorn im PATH die Projektumgebung (E67, `python` sieht Basis und Zusatzpakete), dahinter die
+ * Basisumgebung (`pip`, `soma`). PIP_PYTHON leitet jedes pip in die Projektumgebung, die Basis bleibt unverändert. Dazu
+ * Adresse und Schluessel der App fuer `soma render` (E58).
  */
 export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUTF8: '1', SOMA_PROJECT: projectDir, ...bridgeEnv() };
   const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
-  const front: string[] = [];
+  const pe = envPaths(projectDir);
+  const front: string[] = [pe.scripts];
+  env.VIRTUAL_ENV = pe.env;
+  env.PIP_PYTHON = pe.python;
   const bin = pythonBinDir();
-  if (bin) { front.push(bin); env.VIRTUAL_ENV = path.dirname(bin); }
+  if (bin) front.push(bin);
   const git = gitCmdDir(); // das mitgelieferte Git hat Vorrang vor einem Git des Systems
   if (git) front.push(git);
   env[key] = [...front, env[key] ?? ''].join(path.delimiter);

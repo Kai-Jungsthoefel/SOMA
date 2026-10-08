@@ -30,6 +30,10 @@ export interface BuildStatus {
   builtAt?: number;
   /** Auto-Build ist aus und der Quelltext hat sich seit dem letzten Build geändert. */
   stale?: boolean;
+  /** Pakete aus requirements.txt, die gerade installiert werden (E67). Builds warten so lange. */
+  installing?: string[];
+  /** Projektumgebung oder Pakete ließen sich nicht einrichten (E67). Bleibt, bis eine Installation gelingt. */
+  packageError?: string;
 }
 
 /** Einzelexport über `soma export` (E34). `files` relativ zum Projekt. */

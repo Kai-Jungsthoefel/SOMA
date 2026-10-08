@@ -586,20 +586,30 @@ function openGroupMenu(ids: string[], name: string, x: number, y: number): void 
 
 // ---- Build und Modell -------------------------------------------------------------------------------------------
 
+/** Zuletzt gezeigter Fehler der Projektumgebung (E67): als Hinweis nur einmal. */
+let shownPackageError = '';
+
 function renderBuild(s: BuildStatus): void {
   buildStatus = s;
   if (s.state === 'ok') lastOkAt = s.builtAt ?? Date.now();
   if (s.state === 'error') errorAt = Date.now();
   const dot = $('build-dot'), main = $('status'), detail = $('status-detail');
   $('build-pill').classList.toggle('err', s.state === 'error' && !s.stale);
-  $('btn-cancel').hidden = s.state !== 'building';
+  $('btn-cancel').hidden = s.state !== 'building' || !!s.installing;
   $('btn-buildnow').hidden = !(s.stale && s.state !== 'building');
   const count = s.result?.parts?.length ?? 0;
   const secs = s.seconds ?? 0;
   dot.replaceChildren();
   dot.className = 'dot';
   dot.style.background = '';
-  if (s.state === 'building') {
+  if (s.packageError && s.packageError !== shownPackageError) toast(s.packageError, 'error');
+  shownPackageError = s.packageError ?? '';
+  if (s.installing) {
+    dot.className = 'spin';
+    dot.append(icon('spin', 14, 2.4));
+    main.textContent = 'Installiert Pakete …';
+    detail.textContent = s.installing.join(', ');
+  } else if (s.state === 'building') {
     dot.className = 'spin';
     dot.append(icon('spin', 14, 2.4));
     main.textContent = 'Baut …';
@@ -694,8 +704,9 @@ const versions = new VersionsBar({
 }, {
   async show(res: PreviewResult | null, restored = false) {
     // Nach dem Wiederherstellen bleibt das Bild der Vorschau stehen, bis der Build danach fertig ist (er lädt dann wie jeder
-    // Build von selbst). Sonst wäre so lange wieder der vorherige Build zu sehen, bei großen Modellen viele Sekunden.
-    if (!res && restored && buildStatus.state === 'building') return;
+    // Build von selbst). Sonst wäre so lange wieder der vorherige Build zu sehen, bei großen Modellen viele Sekunden. Braucht
+    // der Stand erst Pakete (E67), kommt der Build nach der Installation.
+    if (!res && restored && (buildStatus.state === 'building' || buildStatus.installing)) return;
     if (!res) { await loadModel(); return; }
     animTool.setActive(false);
     resultTool.setActive(false);

@@ -17,3 +17,6 @@ __pycache__/
 renders/
 .soma/anim/
 .soma/results/
+
+# Environment with the model's extra packages (only requirements.txt is versioned)
+.soma/env/

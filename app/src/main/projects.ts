@@ -13,6 +13,7 @@ import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, chooseExportTarget, choosePath, documentsDir } from './dialogs';
 import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
+import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
 import { previewsDir, skillBackupsDir, skillsDir } from './paths';
 import { storeBuildAsPreview } from './previews';
 import {
@@ -42,6 +43,8 @@ interface Session {
   signature: string;
   /** Legt gerade den Build als Vorschau des letzten Commits ab (cachePreview). */
   caching?: boolean;
+  /** Projektumgebung bereit (E67): Fehlertext oder null. */
+  env: Promise<string | null>;
 }
 
 const POLL_MS = 2000;
@@ -94,8 +97,12 @@ export class ProjectController {
     const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
     const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'),
       (rel) => this.animFileChanged(rel));
-    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, stopWatch, signature: '', poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    // Projektumgebung (E67): Meist steht sie schon, sonst legt `soma env` sie in rund 0,5 s an. Die Terminals kennen ihre
+    // Pfade vorab, gewartet wird nur vor dem Installieren von Paketen
+    const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
+    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, stopWatch, signature: '', env, poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
+    void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
     builds.on('status', (st) => {
       this.send('build:status', st);
       if (st.state === 'ok' && !st.stale) void this.cachePreview(session);
@@ -104,7 +111,8 @@ export class ProjectController {
     // Gilt der letzte Build noch (seit seinem Start nichts geändert), zeigt der Viewer ihn gleich, statt neu zu bauen. Sonst
     // erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
     const last = currentBuild(dir);
-    if (!last) builds.start('Projekt geöffnet');
+    // Fehlen Pakete aus requirements.txt (ZIP von einem anderen Rechner), erst installieren, dann bauen
+    if (!this.installPackages(session, !last) && !last) builds.start('Projekt geöffnet');
     const info = this.info();
     this.send('project:changed', info);
     // Erst nach project:changed: Das Fenster räumt beim Projektwechsel den Viewer leer und lädt danach das Modell
@@ -115,6 +123,17 @@ export class ProjectController {
   async create(): Promise<ProjectInfo> {
     const { id } = await createProject();
     return this.open(id);
+  }
+
+  /**
+   * Fehlen Pakete aus requirements.txt in der Projektumgebung, werden sie installiert (E67), und Builds warten so lange.
+   * `build`: danach bauen. Gibt zurück, ob installiert wird.
+   */
+  private installPackages(s: Session, build: boolean): boolean {
+    const missing = missingPackages(s.dir);
+    if (!missing.length) return false;
+    void s.builds.installFirst(missing, async () => (await s.env) ?? installMissing(s.dir), build);
+    return true;
   }
 
   /** Meldet dem Fenster, wenn sich Verlauf oder Änderungsstand geändert haben (auch durch Commits des Agenten). */
@@ -434,7 +453,8 @@ export class ProjectController {
     if (c !== 0) return { cancelled: true };
     try {
       const r = await s.git.restore(hash);
-      s.builds.start('Stand wiederhergestellt');
+      // Ein alter Stand kann andere Zusatzpakete brauchen (E67)
+      if (!this.installPackages(s, true)) s.builds.start('Stand wiederhergestellt');
       this.send('versions:changed');
       this.send('save:state', await this.saveState());
       return { cancelled: false, ...r };

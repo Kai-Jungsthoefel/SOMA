@@ -55,8 +55,10 @@ This folder is a git repository, and the `git` on your PATH is the one the app u
 
 ## Environment
 
-- Use the `python` and `pip` on your PATH. They belong to this app. **Do not create virtual environments** (`.venv`, `venv`) and do not install packages globally.
-- Install only what the model really needs. The app records the packages of the project.
+- Use the `python` and `pip` on your PATH. They belong to this app and already have CadQuery, numpy, scipy and more.
+- If the model needs another package, run `pip install <package>`. It goes into this model's own environment, and `soma build` records it in `requirements.txt` (do not edit that file). Install only what the model really needs.
+- **Do not create virtual environments** (`.venv`, `venv`), and do not use `--user`, `uv` or another Python to install packages.
+- If pip refuses a package because it needs other versions of the app's libraries, pick another version or another package. The app's libraries stay as they are.
 - Do not move or rename `model.py`, and do not create your own STEP writer: the app relies on `soma build`.
 
 ## Feedback from the user

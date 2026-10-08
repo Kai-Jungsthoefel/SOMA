@@ -34,6 +34,10 @@ export class BuildManager extends EventEmitter {
   private timer: NodeJS.Timeout | null = null;
   private rerun = false;
   private disposed = false;
+  /** Pakete in Arbeit (E67) und ob danach gebaut wird. */
+  private installing: string[] | null = null;
+  private afterInstall = false;
+  private packageError: string | null = null;
 
   constructor(private readonly dir: string) { super(); }
 
@@ -65,6 +69,11 @@ export class BuildManager extends EventEmitter {
   start(reason = 'manuell'): void {
     if (this.disposed) return;
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    if (this.installing) { // ohne die Pakete scheiterte der Build nur am Import
+      this.afterInstall = true;
+      this.setStatus({ ...this.status, queued: true });
+      return;
+    }
     if (this.proc) {
       this.rerun = true;
       this.setStatus({ ...this.status, queued: true });
@@ -114,6 +123,33 @@ export class BuildManager extends EventEmitter {
     this.setStatus({ state: 'ok', result, reason: 'letzter Build', seconds, builtAt });
   }
 
+  /**
+   * Pakete aus requirements.txt installieren (E67), bevor gebaut wird. Wer in der Zwischenzeit bauen will, wartet, danach
+   * läuft genau ein Build. `build`: danach auf jeden Fall bauen (es gibt keinen gültigen Build). `install` gibt einen
+   * Fehlertext zurück oder null.
+   */
+  async installFirst(names: string[], install: () => Promise<string | null>, build: boolean): Promise<void> {
+    if (this.installing || this.disposed) return;
+    this.installing = names;
+    this.afterInstall = build;
+    this.setStatus(this.status);
+    let error: string | null;
+    try { error = await install(); } catch (e) { error = e instanceof Error ? e.message : String(e); }
+    this.installing = null;
+    if (this.disposed) return;
+    this.packageError = error;
+    const { queued: _q, ...rest } = this.status;
+    this.setStatus(rest);
+    if (this.afterInstall) { this.afterInstall = false; this.start('Pakete installiert'); }
+  }
+
+  /** Die Projektumgebung ließ sich nicht einrichten (E67): Die Oberfläche zeigt es als Hinweis. */
+  reportPackageError(error: string): void {
+    if (this.disposed) return;
+    this.packageError = error;
+    this.setStatus(this.status);
+  }
+
   /** Läuft gerade ein Build oder steht einer an? */
   get busy(): boolean { return this.proc !== null || this.timer !== null; }
 
@@ -141,8 +177,10 @@ export class BuildManager extends EventEmitter {
   }
 
   private setStatus(s: BuildStatus): void {
-    this.status = s;
-    this.emit('status', s);
+    // Installation und Paketfehler gehören zum Manager, nicht zum einzelnen Build: bei jedem Stand mitgeben
+    const { installing: _i, packageError: _p, ...rest } = s;
+    this.status = { ...rest, ...(this.installing ? { installing: this.installing } : {}), ...(this.packageError ? { packageError: this.packageError } : {}) };
+    this.emit('status', this.status);
   }
 }
 
