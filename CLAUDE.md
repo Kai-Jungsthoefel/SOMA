@@ -49,7 +49,7 @@ node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run bu
 - **Git in Nutzerprojekten nur vorwärts (E35):** neue Commits, kein Reset, Checkout, Rebase oder Branch. Schreibende Git-Aufrufe der App laufen über `GitRepo` nacheinander.
 - **Renderer ohne Node-Zugriff:** Alles geht über `preload.ts` und die Typen in `src/shared/types.ts`. Dateizugriffe nur über `resolveInside`. Texte aus dem Projekt nie per `innerHTML`.
 - **STEP-Namen nur ASCII** (`ascii_name`), Anzeigenamen stehen in `model.map.json`. `output/` zählt nicht als ungespeicherte Änderung, weil STEP-Dateien nicht byte-stabil sind.
-- **Sprache:** Oberfläche, Doku, Code-Kommentare und Commit-Nachrichten auf Deutsch. `AGENTS.md` und `model.py` der Vorlage auf Englisch (Agenten folgen englischen Anweisungen zuverlässiger). `README.md` im Hauptordner auf Englisch (Startseite des GitHub-Repos, E70): schlicht und knapp, ohne Emojis, Bilder in `docs/images/`.
+- **Sprache:** Die App ist auf Englisch (E73): Oberfläche, Meldungen, Dialoge, Ausgaben und Fehlermeldungen von `soma`, Docstrings der öffentlichen API, Skills samt Kopf, Übergabe-Notizen an den Agenten, `AGENTS.md` und `model.py` der Vorlage. Zahlen mit Dezimalpunkt. Doku, Code-Kommentare, Commit-Nachrichten und Testbeschreibungen auf Deutsch. Was die App aus älteren Projekten wiedererkennt (Commit-Betreffe, Trailer), erkennt sie auch in der alten deutschen Form. `README.md` im Hauptordner auf Englisch (Startseite des GitHub-Repos, E70): schlicht und knapp, ohne Emojis, Bilder in `docs/images/`.
 - Kommentare erklären das Warum, im Stil des umgebenden Codes.
 
 ## Tests

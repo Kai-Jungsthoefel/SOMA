@@ -95,7 +95,6 @@ Early prototype, version 0.1.0. See [CHANGELOG.md](CHANGELOG.md).
 
 - Developed and tested on Windows only
 - No installer yet. Python, CadQuery and Git are meant to ship with the app, for now you set them up yourself
-- The user interface is in German for now
 
 > **Note:** SOMA itself is vibe coded. Most of the code was written by coding agents (mainly Claude Code) under human direction and review. It has tests, but expect rough edges.
 
