@@ -5,7 +5,7 @@ import type { ProjectListEntry, SkillMode } from '../shared/types';
 import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
-import { appStateFile, backupsDir, editBackupsDir, previewsDir, projectStateDir, skillBackupsDir, skillsDir, templateDir, thumbnailsDir, workspacesDir } from './paths';
+import { appStateFile, backupsDir, editBackupsDir, previewsDir, projectStateDir, skillBackupsDir, skillDirs, templateDir, thumbnailsDir, workspacesDir } from './paths';
 import { SKILLS_DIR, applyDefaultSkills, isSkillId, isSkillMode, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
@@ -59,7 +59,7 @@ export async function createProject(name = 'New model'): Promise<{ id: string; d
   fs.mkdirSync(dir, { recursive: true });
   fs.cpSync(templateDir(), dir, { recursive: true });
   // Skills für neue Modelle (E46) vor dem ersten Build und dem Startcommit: Der erste Stand enthält sie schon
-  const skills = applyDefaultSkills(dir, skillsDir(), skillBackupsDir(id), getSkillDefaults());
+  const skills = applyDefaultSkills(dir, skillDirs(), skillBackupsDir(id), getSkillDefaults());
   const pj: ProjectJson = { id, name, api_version: API_VERSION, app_version: SOMA_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString(),
     ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) };
   writeJson(path.join(dir, '.soma', 'project.json'), pj);
@@ -215,6 +215,26 @@ export function setSkillDefault(id: string, mode: SkillMode, factory: SkillMode)
   if (mode === factory) delete next[id]; else next[id] = mode;
   const out: Record<string, unknown> = { ...s, skill_defaults: next };
   if (!Object.keys(next).length) delete out.skill_defaults;
+  writeJson(appStateFile(), out);
+}
+
+/**
+ * Fingerabdrücke der mitgelieferten Fassungen, auf denen bearbeitete Skills beruhen (E78), je Kennung. Bringt eine neuere
+ * App eine andere Fassung mit, sagen die Einstellungen das, statt die Bearbeitung still zu behalten oder zu ersetzen.
+ */
+export function getSkillBases(): Record<string, string> {
+  const raw = readJson<{ skill_bases?: unknown }>(appStateFile())?.skill_bases;
+  if (!raw || typeof raw !== 'object') return {};
+  return Object.fromEntries(Object.entries(raw).filter(([id, v]) => isSkillId(id) && typeof v === 'string')) as Record<string, string>;
+}
+
+/** Fingerabdruck setzen (null: entfernen, etwa nach dem Zurücksetzen). */
+export function setSkillBase(id: string, hash: string | null): void {
+  const s = readJson<Record<string, unknown>>(appStateFile()) ?? {};
+  const next = { ...getSkillBases() };
+  if (hash == null) delete next[id]; else next[id] = hash;
+  const out: Record<string, unknown> = { ...s, skill_bases: next };
+  if (!Object.keys(next).length) delete out.skill_bases;
   writeJson(appStateFile(), out);
 }
 

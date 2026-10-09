@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { SkillInfo, SkillMode, SkillValue, SkillVar } from '../shared/types';
+import type { SkillCheck, SkillInfo, SkillMode, SkillSource, SkillValue, SkillVar } from '../shared/types';
 import { backupText, resolveInside } from './files';
 
 /**
@@ -18,6 +18,11 @@ import { backupText, resolveInside } from './files';
  * Kategorien und Standard (E46): `category` ordnet den Skill im Panel unter eine Überschrift, `default:` gibt die Stufe bei
  * neuen Modellen vor (`always`, `on-demand` oder `off`, ohne Angabe Bei Bedarf). Der Nutzer kann das je Skill für die ganze
  * App umstellen (`skill_defaults` in state.json).
+ *
+ * Bibliothek (E78): Neben den mitgelieferten gibt es eigene Skills des Nutzers in den App-Daten (`<App-Daten>/skills/`),
+ * angelegt und bearbeitet in den Einstellungen. Eine eigene Datei mit der Kennung eines mitgelieferten Skills ersetzt
+ * diesen (bearbeitete Fassung), die mitgelieferte bleibt unangetastet und kommt mit „Zurücksetzen“ wieder. Für die Modelle
+ * gibt es keinen Unterschied: Kopie, Stufen und Einstellungen laufen für alle Skills der Bibliothek gleich.
  */
 
 /** Kennung = Dateiname ohne .md. Nur Kleinbuchstaben, Ziffern und Bindestrich: Sie landet in Pfaden und in AGENTS.md. */
@@ -29,7 +34,7 @@ const BEGIN = '<!-- soma:skills -->';
 const END = '<!-- /soma:skills -->';
 /** Überschrift der Liste „Bei Bedarf“ in AGENTS.md, trennt sie von „Immer“. */
 const DEMAND_HEAD = '### Read when relevant';
-const MAX_BYTES = 256 * 1024;
+export const MAX_BYTES = 256 * 1024;
 const VAR_LINE = /^var\s+([a-z][a-z0-9_]{0,30}):\s*(.*)$/;
 const PLACEHOLDER = /\{\{\s*([a-z][a-z0-9_]{0,30})\s*\}\}/g;
 
@@ -78,7 +83,7 @@ interface Parsed {
 }
 
 /** Zeilenenden vereinheitlichen: Eine Kopie mit CRLF (etwa nach einem Git-Checkout) gilt nicht als geändert. */
-const norm = (t: string) => t.replace(/\r\n?/g, '\n');
+export const norm = (t: string) => t.replace(/\r\n?/g, '\n');
 const FRONT = /^---\n([\s\S]*?)\n---\n?/;
 
 /**
@@ -139,11 +144,72 @@ export function parseSkill(id: string, raw: string): Parsed {
   };
 }
 
+/** Schlüssel im Kopf, die parseSkill liest (dazu `var`). */
+const KNOWN_KEYS = ['title', 'name', 'summary', 'order', 'category', 'default', 'when', 'topics'];
+const MODE_WORD = /^(always|immer|on|an|yes|ja|true|off|aus|no|nein|false|on-demand|demand|on demand|bei bedarf)$/i;
+
+/**
+ * Prüft den Text eines Skills für die Einstellungen (E78). Fehler verhindern das Speichern (leer, zu groß). Alles andere sind
+ * Hinweise, der Skill funktioniert trotzdem, nur fehlt etwas im Panel oder in AGENTS.md (E28: melden, nicht reparieren).
+ * Zeilen mit `#` im Kopf gelten als Kommentar (parseSkill übergeht sie, die Vorlage erklärt dort die Einstellungen).
+ */
+export function checkSkillText(raw: string): SkillCheck {
+  const errors: string[] = [], warnings: string[] = [];
+  const text = norm(raw);
+  if (!text.trim()) errors.push('The skill is empty.');
+  if (Buffer.byteLength(raw, 'utf8') > MAX_BYTES) errors.push(`The skill is larger than ${MAX_BYTES / 1024} KB. Agents read every word: keep it short.`);
+  if (errors.length) return { errors, warnings };
+  const m = FRONT.exec(text);
+  const meta: Record<string, string> = {};
+  const vars: string[] = [];
+  /** Text, in dem Platzhalter wirken: Kopf ohne Kommentare und Einstellungen, dazu der Inhalt. */
+  let used = m ? text.slice(m[0].length) : text;
+  if (!m) {
+    warnings.push(/^---[ \t]*$/.test(text.split('\n')[0])
+      ? 'The header starts with “---” but has no closing “---” line.'
+      : 'No header between two “---” lines: no summary, category, level for new models or settings.');
+  } else {
+    m[1].split('\n').forEach((line0, i) => {
+      const line = line0.trim();
+      if (!line || line.startsWith('#')) return;
+      const where = `Header line ${i + 2}`;
+      if (/^var\b/i.test(line)) {
+        const v = VAR_LINE.exec(line);
+        if (!v) { warnings.push(`${where}: “${line}” is not a setting. Write “var name: default | unit | label | range or choices”, the name in lowercase letters.`); return; }
+        const d = parseVar(v[1], v[2]);
+        if (!d) { warnings.push(`Setting “${v[1]}”: the default value is missing.`); return; }
+        if (vars.includes(d.name)) { warnings.push(`Setting “${d.name}” is declared twice. The app uses the first one.`); return; }
+        vars.push(d.name);
+        const n = d.default as number;
+        if (d.kind === 'number' && ((d.min != null && n < d.min) || (d.max != null && n > d.max))) warnings.push(`Setting “${d.name}”: the default ${n} is outside ${d.min}..${d.max}.`);
+        return;
+      }
+      const kv = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+      if (!kv) { warnings.push(`${where}: “${line}” is not “key: value”.`); return; }
+      if (!KNOWN_KEYS.includes(kv[1])) { warnings.push(`Unknown key “${kv[1]}” in the header. Known keys: ${KNOWN_KEYS.join(', ')} and var.`); return; }
+      meta[kv[1]] = kv[2].trim();
+      if (kv[1] !== 'default') used += `\n${kv[2]}`;
+    });
+    if (!meta.summary) warnings.push('No “summary:”: the list shows nothing below the title.');
+    if (!meta.category) warnings.push('No “category:”: the skill is listed under “Other”.');
+    if (!meta.when) warnings.push('No “when:”: on “On demand”, AGENTS.md does not tell the agent when to read the skill.');
+    if (meta.default && !MODE_WORD.test(meta.default)) warnings.push(`“default: ${meta.default}” is not a level (always, on-demand or off). New models get the skill “On demand”.`);
+    if (meta.order && !Number.isFinite(Number(meta.order))) warnings.push(`“order: ${meta.order}” is not a number.`);
+  }
+  const body = m ? text.slice(m[0].length) : text;
+  if (!meta.title && !/^#\s+\S/m.test(body)) warnings.push('No title: neither “title:” in the header nor a heading “# …”. The app shows the file name.');
+  if (!body.trim()) warnings.push('There are no rules below the header.');
+  const placeholders = new Set([...used.matchAll(PLACEHOLDER)].map((x) => x[1]));
+  for (const n of placeholders) if (!vars.includes(n)) warnings.push(`“{{${n}}}” has no setting (var ${n}: …). It stays in the text as it is.`);
+  for (const n of vars) if (!placeholders.has(n)) warnings.push(`Setting “${n}” is not used. Write {{${n}}} where its value belongs.`);
+  return { errors, warnings };
+}
+
 /**
  * Reihenfolge im Panel: nach Kategorien (eine Kategorie steht dort, wo ihr erster Skill laut `order` steht, ohne Kategorie
  * am Ende), darin nach `order` und Titel. So bleibt eine Kategorie beisammen, auch wenn die Nummern sich überschneiden.
  */
-function sortSkills<T extends { category: string; order: number; title: string }>(list: T[]): T[] {
+export function sortSkills<T extends { category: string; order: number; title: string }>(list: T[]): T[] {
   const first = new Map<string, number>();
   for (const s of list) if (s.category) first.set(s.category, Math.min(first.get(s.category) ?? Infinity, s.order));
   const rank = (s: T) => (s.category ? first.get(s.category)! : Infinity);
@@ -241,7 +307,7 @@ export function renderSkill(raw: string, values: SkillValues, mode: OnMode = 'al
 }
 
 /** Text der Oberfläche (Kurzbeschreibung, Themen) mit eingesetzten Werten, Zahlen mit Komma. */
-function showText(s: string, vars: VarDef[], values: SkillValues): string {
+export function showText(s: string, vars: VarDef[], values: SkillValues): string {
   const map = effective(vars, values);
   return s.replace(PLACEHOLDER, (all, name: string) => {
     const v = vars.find((x) => x.name === name);
@@ -251,14 +317,14 @@ function showText(s: string, vars: VarDef[], values: SkillValues): string {
   });
 }
 
-function readSkillFile(file: string): string | null {
+export function readSkillFile(file: string): string | null {
   try {
     if (fs.statSync(file).size > MAX_BYTES) return null;
     return fs.readFileSync(file, 'utf8');
   } catch { return null; }
 }
 
-/** Mitgelieferte Skills aus dem Ordner der App. Unlesbare oder falsch benannte Dateien fallen weg. */
+/** Skills aus einem Ordner (mitgeliefert oder eigene). Unlesbare oder falsch benannte Dateien fallen weg. */
 export function bundledSkills(dir: string): Map<string, Parsed> {
   const out = new Map<string, Parsed>();
   let names: string[] = [];
@@ -272,7 +338,19 @@ export function bundledSkills(dir: string): Map<string, Parsed> {
   return out;
 }
 
-export const bundledSkill = (dir: string, id: string): Parsed | undefined => bundledSkills(dir).get(id);
+/** Die beiden Ordner der Bibliothek: mitgeliefert (`resources/skills/`) und eigene des Nutzers (App-Daten). */
+export interface SkillDirs { bundled: string; user: string }
+export type LibSkill = Parsed & { source: SkillSource };
+
+/** Alle Skills, die die App kennt. Eigene ersetzen mitgelieferte mit derselben Kennung. */
+export function librarySkills(dirs: SkillDirs): Map<string, LibSkill> {
+  const out = new Map<string, LibSkill>();
+  for (const [id, p] of bundledSkills(dirs.bundled)) out.set(id, { ...p, source: 'builtin' });
+  for (const [id, p] of bundledSkills(dirs.user)) out.set(id, { ...p, source: out.has(id) ? 'edited' : 'own' });
+  return out;
+}
+
+export const librarySkill = (dirs: SkillDirs, id: string): LibSkill | undefined => librarySkills(dirs).get(id);
 
 const relOf = (id: string) => `${SKILLS_DIR}/${id}.md`;
 
@@ -299,11 +377,12 @@ function agentsSections(text: string): Record<OnMode, string> {
 }
 
 /**
- * Alle Skills für die Oberfläche: die mitgelieferten und solche, die nur im Projekt liegen (etwa aus einer neueren App).
- * `modes` und `settings` stammen aus project.json (modes null: unlesbar). Auffälligkeiten werden gemeldet, nicht behoben (E28).
+ * Alle Skills für die Oberfläche: die der Bibliothek (mitgeliefert und eigene) und solche, die nur im Projekt liegen (etwa
+ * aus einer neueren App oder von einem anderen Rechner). `modes` und `settings` stammen aus project.json (modes null:
+ * unlesbar). Auffälligkeiten werden gemeldet, nicht behoben (E28).
  */
-export function listSkills(root: string, bundledDir: string, modes: SkillModes | null, settings: unknown, defaults: SkillDefaults = {}): SkillInfo[] {
-  const bundled = bundledSkills(bundledDir);
+export function listSkills(root: string, dirs: SkillDirs, modes: SkillModes | null, settings: unknown, defaults: SkillDefaults = {}): SkillInfo[] {
+  const bundled = librarySkills(dirs);
   const known: SkillModes = { always: (modes?.always ?? []).filter(isSkillId), demand: (modes?.demand ?? []).filter(isSkillId) };
   let files: string[] = [];
   try { files = fs.readdirSync(path.join(root, SKILLS_DIR)).filter((n) => /\.md$/i.test(n)).map((n) => n.replace(/\.md$/i, '')).filter(isSkillId); } catch { /* noch keiner eingeschaltet */ }
@@ -315,15 +394,15 @@ export function listSkills(root: string, bundledDir: string, modes: SkillModes |
     const copy = projectCopy(root, id);
     const meta = b ?? (copy != null ? parseSkill(id, copy) : null);
     const mode = modeOf(known, id);
-    // Einstellen lassen sich nur mitgelieferte Skills: Nur dort gibt es den Text mit Platzhaltern
+    // Einstellen lassen sich nur Skills der Bibliothek: Nur dort gibt es den Text mit Platzhaltern
     const vars = b?.vars ?? [];
     const values = cleanValues(vars, (settings as Record<string, unknown> | null)?.[id]);
     // Abweichung gegenüber der Fassung der eingestellten Stufe. Bei „Aus“ zählt jede Fassung der App als unverändert.
     const rendered = (m: OnMode) => (b && copy != null ? norm(copy) === renderSkill(b.text, values, m) : false);
     const info: SkillInfo = {
       id, title: meta?.title ?? id, summary: showText(meta?.summary ?? '', vars, values), topics: (meta?.topics ?? []).map((x) => showText(x, vars, values)),
-      order: meta?.order ?? 100, category: meta?.category ?? '', bundled: !!b, mode, file: copy != null ? relOf(id) : null,
-      // Für neue Modelle gibt es nur, was die App mitbringt
+      order: meta?.order ?? 100, category: meta?.category ?? '', source: b?.source ?? null, mode, file: copy != null ? relOf(id) : null,
+      // Für neue Modelle gibt es nur, was die Bibliothek hat
       defaultMode: b ? (defaults[id] ?? b.defaultMode) : 'off',
       changed: !!b && copy != null && !(mode === 'off' ? ON_MODES.some(rendered) : rendered(mode)),
       vars: vars.map((v) => ({ ...v, value: values[v.name] ?? v.default })),
@@ -338,7 +417,7 @@ export function listSkills(root: string, bundledDir: string, modes: SkillModes |
         ? `AGENTS.md lists this skill under “${MODE_LABEL[other]}”, but it is set to “${MODE_LABEL[mode]}”.`
         : 'AGENTS.md does not name this skill. An agent learns nothing about it.');
     }
-    if (!b && mode !== 'off') info.problems.push('This app does not include the skill. The copy in the project still applies.');
+    if (!b && mode !== 'off') info.problems.push('Neither this app nor your own skills include this skill. The copy in the project still applies.');
     return info;
   });
   return sortSkills(out);
@@ -347,10 +426,10 @@ export function listSkills(root: string, bundledDir: string, modes: SkillModes |
 /** Vom Nutzer festgelegte Stufen für neue Modelle (nur Abweichungen vom Kopf der Skills). */
 export type SkillDefaults = Record<string, SkillMode>;
 
-/** Stufen für ein neues Modell: die mitgelieferten Skills nach Vorgabe des Nutzers oder Kopf (`default:`), in Panel-Reihenfolge. */
-export function defaultModes(bundledDir: string, defaults: SkillDefaults): SkillModes {
+/** Stufen für ein neues Modell: die Skills der Bibliothek nach Vorgabe des Nutzers oder Kopf (`default:`), in Panel-Reihenfolge. */
+export function defaultModes(dirs: SkillDirs, defaults: SkillDefaults): SkillModes {
   const out: SkillModes = { always: [], demand: [] };
-  for (const s of sortSkills([...bundledSkills(bundledDir).values()])) {
+  for (const s of sortSkills([...librarySkills(dirs).values()])) {
     const m = defaults[s.id] ?? s.defaultMode;
     if (m !== 'off') out[m].push(s.id);
   }
@@ -362,18 +441,18 @@ export function defaultModes(bundledDir: string, defaults: SkillDefaults): Skill
  * Ein Skill, der sich nicht kopieren lässt, bleibt aus (der Rest geht weiter). Rückgabe: die eingerichteten Stufen,
  * project.json trägt der Aufrufer ein.
  */
-export function applyDefaultSkills(root: string, bundledDir: string, backupDir: string, defaults: SkillDefaults): SkillModes {
-  const want = defaultModes(bundledDir, defaults);
+export function applyDefaultSkills(root: string, dirs: SkillDirs, backupDir: string, defaults: SkillDefaults): SkillModes {
+  const want = defaultModes(dirs, defaults);
   const done: SkillModes = { always: [], demand: [] };
   for (const mode of ON_MODES) {
     for (const id of want[mode]) {
-      try { copySkill(root, bundledDir, id, backupDir, {}, mode); done[mode].push(id); } catch (e) { console.error(`[soma] Could not switch on skill “${id}”:`, e); }
+      try { copySkill(root, dirs, id, backupDir, {}, mode); done[mode].push(id); } catch (e) { console.error(`[soma] Could not switch on skill “${id}”:`, e); }
     }
   }
   if (done.always.length || done.demand.length) {
     // Scheitert das, meldet die Karte des Skills später „AGENTS.md nennt diesen Skill nicht“. Das Anlegen geht weiter.
     try {
-      const warning = writeAgentsList(root, agentsEntries(root, bundledDir, done));
+      const warning = writeAgentsList(root, agentsEntries(root, dirs, done));
       if (warning) console.error('[soma]', warning);
     } catch (e) { console.error('[soma] Could not write AGENTS.md:', e); }
   }
@@ -381,7 +460,7 @@ export function applyDefaultSkills(root: string, bundledDir: string, backupDir: 
 }
 
 /** Text atomar schreiben: erst eine Nebendatei, dann umbenennen. */
-function writeAtomic(file: string, text: string): void {
+export function writeAtomic(file: string, text: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.soma-tmp`;
   try {
@@ -395,16 +474,16 @@ function writeAtomic(file: string, text: string): void {
 
 /**
  * Skill mit den Werten `values` in der Stufe `mode` ins Projekt schreiben. Liegt dort schon eine abweichende Fassung (vom
- * Nutzer, vom Agenten oder aus einer älteren App), wandert sie vorher in die Sicherung. Ausgenommen ist die unveränderte
+ * Nutzer, vom Agenten, aus einer älteren App oder einer früheren Fassung in der Bibliothek), wandert sie vorher in die Sicherung. Ausgenommen ist die unveränderte
  * Kopie mit den bisherigen Werten `prev` in einer der beiden Stufen (beim Umstellen einer Einstellung oder der Stufe).
  * Gibt den Pfad der Sicherung zurück, falls es eine gab.
  */
-export function copySkill(root: string, bundledDir: string, id: string, backupDir: string, values: SkillValues, mode: OnMode, prev?: SkillValues): string | null {
-  const b = bundledSkill(bundledDir, id);
+export function copySkill(root: string, dirs: SkillDirs, id: string, backupDir: string, values: SkillValues, mode: OnMode, prev?: SkillValues): string | null {
+  const b = librarySkill(dirs, id);
   const abs = resolveInside(root, relOf(id));
   const old = projectCopy(root, id);
   if (!b) {
-    // Nicht mitgeliefert: Nur einschalten, was schon im Projekt liegt
+    // Nicht in der Bibliothek: Nur einschalten, was schon im Projekt liegt
     if (old == null) throw new Error(`The skill “${id}” does not exist in this app.`);
     return null;
   }
@@ -417,14 +496,14 @@ export function copySkill(root: string, bundledDir: string, id: string, backupDi
 }
 
 /**
- * Kopie aus dem Projekt entfernen. Eine unveränderte Kopie eines mitgelieferten Skills (gleich in welcher Stufe) lässt sich
+ * Kopie aus dem Projekt entfernen. Eine unveränderte Kopie eines Skills der Bibliothek (gleich in welcher Stufe) lässt sich
  * jederzeit neu anlegen und wird einfach gelöscht, alles andere kommt vorher in die Sicherung.
  */
-export function removeSkill(root: string, bundledDir: string, id: string, backupDir: string, values: SkillValues): string | null {
+export function removeSkill(root: string, dirs: SkillDirs, id: string, backupDir: string, values: SkillValues): string | null {
   const abs = resolveInside(root, relOf(id));
   const old = projectCopy(root, id);
   if (old == null) { fs.rmSync(abs, { force: true }); return null; }
-  const b = bundledSkill(bundledDir, id);
+  const b = librarySkill(dirs, id);
   const backup = b && ON_MODES.some((m) => norm(old) === renderSkill(b.text, values, m)) ? null : backupText(backupDir, relOf(id), old);
   fs.rmSync(abs, { force: true });
   return backup;
@@ -461,8 +540,8 @@ export function skillsBlock(entries: AgentsEntry[]): string {
 }
 
 /** Einträge für AGENTS.md: „Immer“ in der Reihenfolge des Einschaltens, „Bei Bedarf“ wie im Panel. */
-export function agentsEntries(root: string, bundledDir: string, modes: SkillModes): AgentsEntry[] {
-  const bundled = bundledSkills(bundledDir);
+export function agentsEntries(root: string, dirs: SkillDirs, modes: SkillModes): AgentsEntry[] {
+  const bundled = librarySkills(dirs);
   const meta = (id: string) => {
     const b = bundled.get(id);
     if (b) return b;

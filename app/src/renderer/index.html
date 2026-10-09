@@ -42,7 +42,7 @@
       <button data-panel="skills" aria-pressed="false" title="Skills: rules for the agent, set per model (3D printing, tolerances …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
       <span class="grow"></span>
       <button disabled title="Help is coming in a later version"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Help</span></button>
-      <button disabled title="Options are coming in a later version"><i data-icon="cog" data-size="20" data-stroke="1.6"></i><span>Options</span></button>
+      <button id="btn-settings" title="Settings: edit skills and add your own"><i data-icon="cog" data-size="20" data-stroke="1.6"></i><span>Settings</span></button>
     </nav>
 
     <aside id="side" hidden>
@@ -73,6 +73,7 @@
       </section>
       <section id="panel-skills" class="panel" aria-label="Skills" hidden>
         <div class="side-hd"><b>Skills</b><span class="grow"></span>
+          <button id="btn-skills-manage" class="ibtn s" aria-label="Edit skills" title="Edit skills and add your own (Settings)"><i data-icon="pen" data-size="15" data-stroke="1.9"></i></button>
           <button id="btn-skills-info" class="ibtn s" aria-label="What are skills?" title="Skills are rules for the agent. Off: the agent does not see the skill. On demand: it reads the skill when the conversation turns to the topic. Always: it follows the skill with every change. Skills live in .soma/skills/, are listed in AGENTS.md and travel with the ZIP."><i data-icon="info" data-size="15" data-stroke="1.9"></i></button>
           <button class="ibtn s side-close" aria-label="Close sidebar"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="skills-sum" class="sk-sum"></div>
@@ -457,6 +458,7 @@
 
   <div id="start" class="start" hidden>
     <header class="top"><span class="logo"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></span><b class="brand">SOMA</b><span id="start-version" class="c3 small"></span><span class="grow"></span>
+      <button id="btn-start-settings" class="btn" title="Settings: edit skills and add your own"><i data-icon="cog" data-size="15" data-stroke="1.7"></i>Settings</button>
       <button id="btn-start-close" class="btn">Back to the model</button></header>
     <div class="start-body">
       <div class="start-grid">
@@ -485,6 +487,33 @@
       </div>
     </div>
   </div>
+
+  <!-- Einstellungen (E78): Fenster über der App, zuerst die Bibliothek der Skills. Inhalt rechts baut settings.ts -->
+  <div id="settings" class="st-scrim" hidden>
+    <div class="st-dlg" role="dialog" aria-modal="true" aria-labelledby="st-title">
+      <header class="st-hd"><i data-icon="cog" data-size="18" data-stroke="1.7"></i><b id="st-title">Settings</b><span class="grow"></span>
+        <button id="btn-st-close" class="ibtn" aria-label="Close settings" title="Close (Escape)"><i data-icon="x" data-size="16" data-stroke="2"></i></button></header>
+      <div class="st-body">
+        <nav class="st-nav" aria-label="Settings">
+          <button data-sec="skills" aria-current="page"><i data-icon="book" data-size="16" data-stroke="1.8"></i><span>Skills</span></button>
+        </nav>
+        <section id="st-skills" class="st-sec" aria-label="Skills">
+          <div class="st-col">
+            <div class="st-tools">
+              <button id="btn-st-new" class="btn sm acc" aria-haspopup="dialog"><i data-icon="plus" data-size="14" data-stroke="2.2"></i>New skill</button>
+              <button id="btn-st-import" class="btn sm" title="Add Markdown files as your own skills"><i data-icon="upload" data-size="14" data-stroke="1.9"></i>Import …</button>
+              <span class="grow"></span>
+              <button id="btn-st-folder" class="ibtn s" aria-label="Open folder" title="Open the folder of your own skills"><i data-icon="folder" data-size="15" data-stroke="1.8"></i></button>
+            </div>
+            <div class="st-intro">Rules for the agent. Built-in skills come with the app, your own are kept on this computer. All of them are available in every model: switch them on there under “Skills”.</div>
+            <div id="st-list" class="st-list" role="list" aria-label="Skills"></div>
+          </div>
+          <div id="st-editor" class="st-editor"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <div id="menu-skill-name" class="menu wide st-namepop" role="dialog" aria-label="Name of the skill" hidden></div>
 
   <div id="toast" role="status" hidden></div>
 </div>

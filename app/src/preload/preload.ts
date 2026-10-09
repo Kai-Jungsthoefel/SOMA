@@ -78,6 +78,17 @@ const api: SomaApi = {
     configure: (id, values) => ipcRenderer.invoke('skills:configure', id, values),
     setDefault: (id, mode) => ipcRenderer.invoke('skills:setDefault', id, mode),
   },
+  library: {
+    list: () => ipcRenderer.invoke('library:list'),
+    read: (id) => ipcRenderer.invoke('library:read', id),
+    check: (text) => ipcRenderer.invoke('library:check', text),
+    save: (id, text, base) => ipcRenderer.invoke('library:save', id, text, base),
+    create: (title, from) => ipcRenderer.invoke('library:create', title, from),
+    remove: (id) => ipcRenderer.invoke('library:remove', id),
+    import: () => ipcRenderer.invoke('library:import'),
+    setDefault: (id, mode) => ipcRenderer.invoke('library:setDefault', id, mode),
+    reveal: (id) => ipcRenderer.invoke('library:reveal', id),
+  },
   anim: {
     list: () => ipcRenderer.invoke('anim:list'),
     build: (file) => ipcRenderer.invoke('anim:build', file ?? null),

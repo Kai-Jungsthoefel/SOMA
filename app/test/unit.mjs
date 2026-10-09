@@ -196,7 +196,8 @@ try {
     && kp.when === 'the user asks' && ps.category === '' && ps.defaultMode === 'demand' && ps.when === '' && modeOf('on') === 'always' && modeOf('off') === 'off' && modeOf('on-demand') === 'demand');
   const cats = [...new Set(shipped.map((s) => s.category))];
   check('Mitgelieferte Skills: jeder mit Kategorie, vier Kategorien', shipped.every((s) => s.category) && cats.length === 4, cats.join(','));
-  const SKD = path.join(APP, 'resources', 'skills');
+  // Bibliothek (E78): mitgelieferte und eigene Skills, hier ohne eigene
+  const SKD = { bundled: path.join(APP, 'resources', 'skills'), user: path.join(tmp, 'keine-eigenen-skills') };
   const dm = defaultModes(SKD, {});
   check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise (mit Parametrik) und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'konstruktionsablauf,cadquery,parametrik,normteile'
     && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm));
@@ -214,6 +215,100 @@ try {
   check('AGENTS.md: zwei Listen, Bei Bedarf mit Anlass, ohne Skills ein Satz', blk.indexOf('### Always follow') < blk.indexOf('- `.soma/skills/a.md`: A')
     && blk.indexOf('- `.soma/skills/a.md`: A') < blk.indexOf('### Read when relevant') && blk.includes('- `.soma/skills/b.md`: B. Read when parts move.')
     && !skillsBlock([{ id: 'b', name: 'B', when: '', mode: 'demand' }]).includes('Always follow') && skillsBlock([]).includes('No skills are switched on'), blk);
+
+  // Bibliothek der Skills (E78): eigene in den App-Daten, eine eigene Datei ersetzt den mitgelieferten mit derselben Kennung
+  const slOut = path.join(tmp, 'skilllibrary.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'main', 'skilllibrary.ts')], outfile: slOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const SL = await import(pathToFileURL(slOut).href);
+  const { checkSkillText } = await import(pathToFileURL(sk).href);
+  const snOut = path.join(tmp, 'skillname.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'shared', 'skillname.ts')], outfile: snOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const { skillIdFrom } = await import(pathToFileURL(snOut).href);
+  const shippedWarnings = shipped.flatMap((s) => checkSkillText(s.text).warnings.map((w) => `${s.id}: ${w}`));
+  check('Mitgelieferte Skills: Prüfung ohne Fehler und Hinweise', shipped.every((s) => !checkSkillText(s.text).errors.length) && !shippedWarnings.length, shippedWarnings.slice(0, 3).join(' | '));
+  const ck = checkSkillText('---\ntitle: T\nTitel: x\nvar Dicke: 2 | mm\nvar wall: 30 | mm | Wand | 1..10\nvar unused: 1\ndefault: maybe\n---\n# T\n\n{{wall}} und {{missing}}\n');
+  const has = (re) => ck.warnings.some((w) => re.test(w));
+  check('Prüfung: unbekannter Schlüssel, falsche Einstellung, Standard außerhalb, ungenutzt, Platzhalter ohne Einstellung, Stufe, fehlende Angaben',
+    !ck.errors.length && has(/Unknown key “Titel”/) && has(/Header line 4: “var Dicke/) && has(/default 30 is outside 1..10/) && has(/“unused” is not used/)
+    && has(/“\{\{missing\}\}” has no setting/) && has(/“default: maybe” is not a level/) && has(/No “summary:”/) && has(/No “when:”/) && !has(/“wall” is not used/), ck.warnings.join(' | '));
+  check('Prüfung: leer und zu groß sind Fehler, ohne Kopf ein Hinweis, offener Kopf eigens gemeldet', checkSkillText('  \n').errors.length === 1
+    && checkSkillText('x'.repeat(300 * 1024)).errors.some((e) => /larger than 256 KB/.test(e)) && checkSkillText('# Nur Text\n\nRegel.\n').warnings.some((w) => /No header/.test(w))
+    && checkSkillText('---\ntitle: A\n# A\n').warnings.some((w) => /no closing/.test(w)));
+  check('Kennung aus dem Namen: Kleinbuchstaben, Umlaute umschrieben, Länge begrenzt, leer wird „skill“', skillIdFrom('Schweißen & Löten (Stahl)') === 'schweissen-loeten-stahl'
+    && skillIdFrom('Café Règles') === 'cafe-regles' && skillIdFrom('!!!') === 'skill' && skillIdFrom('a'.repeat(60)).length === 36);
+
+  const LIB = { bundled: path.join(APP, 'resources', 'skills'), user: path.join(tmp, 'eigene-skills') };
+  const lbak = path.join(tmp, 'skills-sicherung');
+  const libIds = () => SL.libraryState(LIB, {}, {}).skills;
+  check('Bibliothek ohne eigene Skills: die mitgelieferten, alle „builtin“', libIds().length === shipped.length && libIds().every((s) => s.source === 'builtin'));
+  const mine = SL.createLibrarySkill(LIB, 'Geschweißte Rahmen');
+  const mineText = fs.readFileSync(path.join(LIB.user, `${mine}.md`), 'utf8');
+  const mineCheck = checkSkillText(mineText);
+  check('Neuer Skill: Kennung aus dem Name, Vorlage mit Kopf (Kategorie „My skills“, Bei Bedarf), Vorlage ohne Hinweise, in der Bibliothek als „own“',
+    mine === 'geschweisste-rahmen' && mineText.startsWith('---\ntitle: Geschweißte Rahmen\nname: Geschweißte Rahmen\n') && mineText.includes('# Skill: Geschweißte Rahmen')
+    && !mineCheck.warnings.length && libIds().find((s) => s.id === mine)?.source === 'own' && libIds().find((s) => s.id === mine)?.category === 'My skills'
+    && SL.libraryState(LIB, {}, {}).skills.find((s) => s.id === mine)?.defaultMode === 'demand', mineCheck.warnings.join(' | '));
+  check('Gleicher Name noch einmal: eigene Kennung mit -2', SL.createLibrarySkill(LIB, 'Geschweißte Rahmen') === 'geschweisste-rahmen-2');
+  check('Name fehlt oder zu lang: abgelehnt', (() => { try { SL.createLibrarySkill(LIB, '  '); return false; } catch { return true; } })()
+    && (() => { try { SL.createLibrarySkill(LIB, 'x'.repeat(81)); return false; } catch { return true; } })());
+  const dupId = SL.createLibrarySkill(LIB, 'Mein 3D-Druck', '3d-druck');
+  const dupText = fs.readFileSync(path.join(LIB.user, `${dupId}.md`), 'utf8');
+  check('Duplikat eines mitgelieferten: neuer Titel und Name im Kopf und in der Überschrift, Einstellungen bleiben', dupId === 'mein-3d-druck' && dupText.includes('title: Mein 3D-Druck\nname: Mein 3D-Druck\n')
+    && dupText.includes('# Skill: Mein 3D-Druck') && dupText.includes('var overhang: 45') && !dupText.includes('title: 3D printing'));
+
+  // Mitgelieferten bearbeiten: eigene Datei, Herkunft „edited“, Fingerabdruck der mitgelieferten Fassung
+  const fdmBuiltin = SL.readLibrarySkill(LIB, '3d-druck');
+  const edited = fdmBuiltin.text.replace('summary: ', 'summary: Edited. ');
+  const sv = SL.saveLibrarySkill(LIB, '3d-druck', edited, fdmBuiltin.text, lbak);
+  const st1 = SL.libraryState(LIB, {}, { '3d-druck': sv.base });
+  check('Mitgelieferten speichern: eigene Datei, „edited“, Fingerabdruck der mitgelieferten Fassung, Bibliothek liefert die bearbeitete', sv.backup === null && sv.base === SL.textHash(fdmBuiltin.text)
+    && fs.existsSync(path.join(LIB.user, '3d-druck.md')) && st1.skills.find((s) => s.id === '3d-druck').source === 'edited' && !st1.skills.find((s) => s.id === '3d-druck').newerBuiltin
+    && st1.skills.find((s) => s.id === '3d-druck').summary.startsWith('Edited. ') && SL.readLibrarySkill(LIB, '3d-druck').builtin === fdmBuiltin.builtin);
+  check('Neuere mitgelieferte Fassung (anderer Fingerabdruck): gemeldet', SL.libraryState(LIB, {}, { '3d-druck': 'alt' }).skills.find((s) => s.id === '3d-druck').newerBuiltin);
+  // Außerhalb der App geändert (Datei weicht von `base` ab): diese Fassung kommt in die Sicherung
+  fs.writeFileSync(path.join(LIB.user, '3d-druck.md'), edited + '\nvon außen\n');
+  const sv2 = SL.saveLibrarySkill(LIB, '3d-druck', edited + '\nneu\n', edited, lbak);
+  check('Datei außerhalb geändert: alte Fassung in der Sicherung, neue geschrieben', !!sv2.backup && fs.readFileSync(sv2.backup, 'utf8').includes('von außen')
+    && fs.readFileSync(path.join(LIB.user, '3d-druck.md'), 'utf8').endsWith('\nneu\n'));
+  check('Fehler im Text (leer): nicht gespeichert', (() => { try { SL.saveLibrarySkill(LIB, '3d-druck', ' ', null, lbak); return false; } catch (e) { return /empty/.test(e.message); } })()
+    && fs.readFileSync(path.join(LIB.user, '3d-druck.md'), 'utf8').endsWith('\nneu\n'));
+  // Zurück auf den Text der mitgelieferten Fassung getippt: keine eigene Datei mehr, die bearbeitete in der Sicherung
+  const sv3 = SL.saveLibrarySkill(LIB, '3d-druck', fdmBuiltin.builtin, edited + '\nneu\n', lbak);
+  check('Text gleich der mitgelieferten Fassung: eigene Datei weg (gesichert), wieder „builtin“', sv3.base === null && !!sv3.backup && !fs.existsSync(path.join(LIB.user, '3d-druck.md'))
+    && libIds().find((s) => s.id === '3d-druck').source === 'builtin');
+  SL.saveLibrarySkill(LIB, '3d-druck', edited, fdmBuiltin.builtin, lbak);
+  const rb = SL.removeLibrarySkill(LIB, '3d-druck', lbak);
+  check('Zurücksetzen: eigene Fassung in der Sicherung, wieder die mitgelieferte', !!rb && fs.readFileSync(rb, 'utf8') === edited && libIds().find((s) => s.id === '3d-druck').source === 'builtin');
+  check('Mitgelieferte lassen sich nicht löschen', (() => { try { SL.removeLibrarySkill(LIB, 'cnc', lbak); return false; } catch (e) { return /cannot be deleted/.test(e.message); } })());
+  const rm = SL.removeLibrarySkill(LIB, 'geschweisste-rahmen-2', lbak);
+  check('Eigenen löschen: Datei in der Sicherung, nicht mehr in der Bibliothek', !!rm && !libIds().some((s) => s.id === 'geschweisste-rahmen-2') && !fs.existsSync(path.join(LIB.user, 'geschweisste-rahmen-2.md')));
+
+  // Neue Modelle bekommen eigene Skills nach ihrem Kopf (`default:`), Vorgaben des Nutzers gehen vor
+  fs.writeFileSync(path.join(LIB.user, 'immer-eigen.md'), '---\ntitle: Immer\ncategory: My skills\ndefault: always\n---\n# Immer\n');
+  const dmLib = defaultModes(LIB, { 'geschweisste-rahmen': 'off' });
+  check('Neue Modelle: eigener Skill mit „default: always“ immer, eigener auf „Aus“ fehlt, der Rest wie bisher', dmLib.always.includes('immer-eigen') && !dmLib.demand.includes('geschweisste-rahmen')
+    && !dmLib.always.includes('geschweisste-rahmen') && dmLib.demand.includes('mein-3d-druck') && dmLib.always.includes('normteile'), JSON.stringify(dmLib));
+  // Dateien, die die App nicht liest, werden gemeldet, nicht umbenannt
+  fs.writeFileSync(path.join(LIB.user, 'Meine Regeln.md'), '# X\n');
+  fs.writeFileSync(path.join(LIB.user, 'notiz.txt'), 'x');
+  const ign = SL.libraryState(LIB, {}, {}).ignored;
+  check('Falsch benannte Datei: gemeldet mit Vorschlag, andere Dateitypen still übergangen', ign.length === 1 && ign[0].name === 'Meine Regeln.md' && /meine-regeln\.md/.test(ign[0].reason), JSON.stringify(ign));
+
+  // Import: Kennung aus dem Dateinamen, Rückfrage bei vorhandener Kennung (ersetzen, Kopie, überspringen)
+  const impDir = path.join(tmp, 'import');
+  fs.mkdirSync(impDir);
+  fs.writeFileSync(path.join(impDir, 'Kleben.md'), '---\ntitle: Kleben\nsummary: S.\ncategory: My skills\nwhen: parts are glued\n---\n# Kleben\n\nRegel.\n');
+  fs.writeFileSync(path.join(impDir, 'immer-eigen.md'), '---\ntitle: Immer neu\n---\n# Immer neu\n');
+  fs.writeFileSync(path.join(impDir, 'cnc.md'), '---\ntitle: Meine CNC\n---\n# Meine CNC\n');
+  fs.writeFileSync(path.join(impDir, 'leer.md'), '\n');
+  const asked = [];
+  const answers = { 'immer-eigen': 'copy', cnc: 'replace' };
+  const imp = await SL.importLibrarySkills(LIB, ['Kleben.md', 'immer-eigen.md', 'cnc.md', 'leer.md'].map((n) => path.join(impDir, n)), lbak, async (c) => { asked.push(`${c.id}:${c.source}`); return answers[c.id]; });
+  check('Import: neue Kennung, Kopie bei vorhandenem eigenen, Ersetzen eines mitgelieferten (wird „edited“ mit Fingerabdruck), leere Datei gemeldet',
+    imp.ids.join(',') === 'kleben,immer-eigen-2,cnc' && asked.join(',') === 'immer-eigen:own,cnc:builtin' && imp.warnings.length === 1 && /leer\.md/.test(imp.warnings[0])
+    && libIds().find((s) => s.id === 'cnc').source === 'edited' && !!imp.bases.cnc && libIds().find((s) => s.id === 'kleben').source === 'own', JSON.stringify(imp));
+  const imp2 = await SL.importLibrarySkills(LIB, [path.join(impDir, 'Kleben.md')], lbak, async () => 'replace');
+  check('Import desselben Texts: nichts zu tun, gemeldet', !imp2.ids.length && /already there/.test(imp2.warnings[0] ?? ''), JSON.stringify(imp2));
 
   // Animationsdateien (E58): bauen die Animation neu, nicht das Modell
   const ed = path.join(tmp, 'editable.mjs');

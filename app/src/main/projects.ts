@@ -15,10 +15,10 @@ import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
 import { checkParamValue, isParamValue, readUserParams, writeUserParams } from './params';
-import { previewsDir, skillBackupsDir, skillsDir } from './paths';
+import { previewsDir, skillBackupsDir, skillDirs } from './paths';
 import { storeBuildAsPreview } from './previews';
 import {
-  agentsEntries, bundledSkill, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
+  agentsEntries, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
 } from './skills';
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
@@ -611,15 +611,15 @@ export class ProjectController {
 
   skills(): SkillInfo[] {
     const s = this.need();
-    return listSkills(s.dir, skillsDir(), readSkillModes(s.id), readProjectJson(s.id)?.skill_settings ?? null, getSkillDefaults());
+    return listSkills(s.dir, skillDirs(), readSkillModes(s.id), readProjectJson(s.id)?.skill_settings ?? null, getSkillDefaults());
   }
 
   /** Stufe für neue Modelle festlegen (E46, E55). Gilt für die App, das offene Modell bleibt, wie es ist. */
   setSkillDefault(skill: unknown, mode: unknown): SkillResult {
     this.need();
     const list = () => this.skills();
-    const b = isSkillId(skill) ? bundledSkill(skillsDir(), skill) : undefined;
-    if (!b) return { ok: false, error: 'The app does not include this skill. New models cannot get it.', skills: list() };
+    const b = isSkillId(skill) ? librarySkill(skillDirs(), skill) : undefined;
+    if (!b) return { ok: false, error: 'Neither the app nor your own skills include this skill. New models cannot get it.', skills: list() };
     if (!isSkillMode(mode)) return { ok: false, error: `Unknown level “${String(mode)}”.`, skills: list() };
     try {
       setSkillDefault(b.id, mode, b.defaultMode);
@@ -631,7 +631,7 @@ export class ProjectController {
 
   /** Gültige, vom Standard abweichende Werte eines Skills laut project.json. */
   private skillValues(id: string, skill: string): SkillValues {
-    const b = bundledSkill(skillsDir(), skill);
+    const b = librarySkill(skillDirs(), skill);
     return b ? cleanValues(b.vars, readProjectJson(id)?.skill_settings?.[skill]) : {};
   }
 
@@ -652,11 +652,11 @@ export class ProjectController {
       const was = modeOf(modes, skill);
       // Von einer eingeschalteten Stufe aus ist die bisherige Kopie der App unverändert ersetzbar, von Aus aus nicht (Reste)
       const backup = mode === 'off'
-        ? removeSkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), values)
-        : copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), values, mode, was === 'off' ? undefined : values);
+        ? removeSkill(s.dir, skillDirs(), skill, skillBackupsDir(s.id), values)
+        : copySkill(s.dir, skillDirs(), skill, skillBackupsDir(s.id), values, mode, was === 'off' ? undefined : values);
       const next = withMode(modes, skill, mode);
       updateProjectSkills(s.id, { modes: next });
-      const warning = writeAgentsList(s.dir, agentsEntries(s.dir, skillsDir(), next));
+      const warning = writeAgentsList(s.dir, agentsEntries(s.dir, skillDirs(), next));
       return { ok: true, backup, ...(warning ? { warning } : {}), skills: list() };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
@@ -670,8 +670,8 @@ export class ProjectController {
   configureSkill(skill: unknown, values: unknown): SkillResult {
     const s = this.need();
     const list = () => this.skills();
-    const b = isSkillId(skill) ? bundledSkill(skillsDir(), skill) : undefined;
-    if (!isSkillId(skill) || !b) return { ok: false, error: 'The app does not include this skill, it cannot be configured.', skills: list() };
+    const b = isSkillId(skill) ? librarySkill(skillDirs(), skill) : undefined;
+    if (!isSkillId(skill) || !b) return { ok: false, error: 'Neither the app nor your own skills include this skill, it cannot be configured.', skills: list() };
     const pj = readProjectJson(s.id);
     if (!pj) return { ok: false, error: '.soma/project.json is missing or unreadable. Without it nothing can be configured.', skills: list() };
     if (!values || typeof values !== 'object') return { ok: false, error: 'No values.', skills: list() };
@@ -689,7 +689,7 @@ export class ProjectController {
       updateProjectSkills(s.id, { skill_settings: { ...(pj.skill_settings ?? {}), [skill]: next } });
       const modes = readSkillModes(s.id);
       const mode = modes ? modeOf(modes, skill) : 'off';
-      const backup = mode !== 'off' ? copySkill(s.dir, skillsDir(), skill, skillBackupsDir(s.id), next, mode, prev) : null;
+      const backup = mode !== 'off' ? copySkill(s.dir, skillDirs(), skill, skillBackupsDir(s.id), next, mode, prev) : null;
       return { ok: true, backup, skills: list() };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };

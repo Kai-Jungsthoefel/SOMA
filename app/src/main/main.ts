@@ -4,14 +4,16 @@ import path from 'node:path';
 import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
-import { choose, setTestAnswers, trashItem } from './dialogs';
+import { choose, chooseSkillFiles, setTestAnswers, trashItem } from './dialogs';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
-import { appIcon, editBackupsDir, thumbnailsDir } from './paths';
+import { appIcon, editBackupsDir, libraryBackupsDir, skillDirs, thumbnailsDir, userSkillsDir } from './paths';
+import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, saveLibrarySkill } from './skilllibrary';
+import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
-import type { FileOpResult } from '../shared/types';
-import { createProject, getLastProject, isProjectId, sweepDiscarded } from './workspace';
+import type { FileOpResult, LibraryResult } from '../shared/types';
+import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
 // umgeleitet oder synchronisiert sein, das ist für Arbeitsordner und GPU-Cache ungeeignet. Tests leiten alles um.
@@ -133,6 +135,55 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('skills:set', (_e, id: unknown, mode: unknown) => ctl.setSkill(id, mode));
   ipcMain.handle('skills:configure', (_e, id: unknown, values: unknown) => ctl.configureSkill(id, values));
   ipcMain.handle('skills:setDefault', (_e, id: unknown, mode: unknown) => ctl.setSkillDefault(id, mode));
+
+  // Bibliothek der Skills in den Einstellungen (E78): unabhängig vom offenen Modell, also auch auf der Startseite
+  const lib = () => libraryState(skillDirs(), getSkillDefaults(), getSkillBases());
+  const libDo = async (f: () => Omit<LibraryResult, 'ok' | 'library'> | Promise<Omit<LibraryResult, 'ok' | 'library'>>): Promise<LibraryResult> => {
+    try { return { ok: true, ...(await f()), library: lib() }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e), library: lib() }; }
+  };
+  ipcMain.handle('library:list', () => lib());
+  ipcMain.handle('library:read', (_e, id: unknown) => readLibrarySkill(skillDirs(), String(id)));
+  ipcMain.handle('library:check', (_e, text: unknown) => checkLibraryText(text));
+  ipcMain.handle('library:save', (_e, id: unknown, text: unknown, base: unknown) => libDo(() => {
+    if (typeof text !== 'string') throw new Error('No text.');
+    const r = saveLibrarySkill(skillDirs(), String(id), text, typeof base === 'string' ? base : null, libraryBackupsDir());
+    if (r.base !== undefined) setSkillBase(String(id), r.base);
+    return { id: String(id), backup: r.backup, warnings: r.warnings };
+  }));
+  ipcMain.handle('library:create', (_e, title: unknown, from: unknown) =>
+    libDo(() => ({ id: createLibrarySkill(skillDirs(), String(title ?? ''), typeof from === 'string' ? from : undefined) })));
+  ipcMain.handle('library:remove', (_e, id: unknown) => libDo(() => {
+    const backup = removeLibrarySkill(skillDirs(), String(id), libraryBackupsDir());
+    setSkillBase(String(id), null);
+    return { id: String(id), backup };
+  }));
+  ipcMain.handle('library:import', () => libDo(async () => {
+    const files = await chooseSkillFiles(win);
+    if (!files.length) return { canceled: true };
+    const r = await importLibrarySkills(skillDirs(), files, libraryBackupsDir(), async (c) => {
+      const detail = c.source === 'own'
+        ? `${c.file} has the same file name as one of your skills. Replace: your current version goes into the backup. Import as a copy: the file gets its own name.`
+        : `${c.file} has the same file name as a built-in skill. Replace: the file takes the place of the built-in skill${c.source === 'edited' ? ', your edited version goes into the backup' : ''}, “Reset” brings the original back. Import as a copy: the file gets its own name.`;
+      const i = await choose(win, { title: 'Import skills', message: `“${c.title}” (${c.id}.md) already exists.`, detail, buttons: ['Replace', 'Import as a copy', 'Skip'] });
+      return i === 0 ? 'replace' : i === 1 ? 'copy' : 'skip';
+    });
+    for (const [id, h] of Object.entries(r.bases)) setSkillBase(id, h);
+    return { id: r.ids[0], imported: r.ids, warnings: r.warnings, backup: r.backups[0] ?? null };
+  }));
+  ipcMain.handle('library:setDefault', (_e, id: unknown, mode: unknown) => libDo(() => {
+    const s = isSkillId(id) ? librarySkill(skillDirs(), id) : undefined;
+    if (!s) throw new Error('This skill does not exist (any more).');
+    if (!isSkillMode(mode)) throw new Error(`Unknown level “${String(mode)}”.`);
+    setSkillDefault(s.id, mode, s.defaultMode);
+    return { id: s.id };
+  }));
+  ipcMain.handle('library:reveal', async (_e, id: unknown) => {
+    const file = typeof id === 'string' ? ownFile(skillDirs(), id) : null;
+    if (process.env.SOMA_TEST === '1') return;
+    if (file) { shell.showItemInFolder(file); return; }
+    fs.mkdirSync(userSkillsDir(), { recursive: true });
+    await shell.openPath(userSkillsDir());
+  });
   ipcMain.handle('anim:list', () => ctl.animList());
   ipcMain.handle('anim:build', (_e, file: unknown) => ctl.animBuild(file));
   ipcMain.handle('results:list', () => ctl.results());

@@ -47,6 +47,14 @@ export async function chooseExportTarget(win: BrowserWindow | null, o: { kind: '
 
 export const documentsDir = () => app.getPath('documents');
 
+/** Markdown-Dateien, die als eigene Skills übernommen werden (E78). Leere Liste: abgebrochen. */
+export async function chooseSkillFiles(win: BrowserWindow | null): Promise<string[]> {
+  if (testMode()) return nextAnswer<string[] | null>('Import skills') ?? [];
+  const opts = { title: 'Import skills', defaultPath: documentsDir(), filters: [{ name: 'Skill (Markdown)', extensions: ['md'] }], properties: ['openFile' as const, 'multiSelections' as const] };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return r.canceled ? [] : r.filePaths;
+}
+
 /** Liefert den Index des gewählten Knopfs. Der letzte Knopf gilt als Abbrechen (Esc, Fenster schließen). */
 export async function choose(win: BrowserWindow | null, o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> {
   if (testMode()) return nextAnswer<number>(o.title);

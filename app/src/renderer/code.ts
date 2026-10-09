@@ -10,6 +10,7 @@ import {
   MatchDecorator, ViewPlugin, type DecorationSet, type ViewUpdate,
 } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
+import type { MarkdownConfig } from '@lezer/markdown';
 import { affectsBuild, readOnlyReason } from '../shared/editable';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
@@ -134,7 +135,35 @@ const constants = ViewPlugin.fromClass(class {
   update(u: ViewUpdate) { this.decorations = CONSTANT.updateDeco(u, this.decorations); }
 }, { decorations: (p) => p.decorations });
 
-const HIGHLIGHT = HighlightStyle.define([
+/** Zeilen im Kopf eines Skills: `schlüssel: wert`, `var …`, Kommentar mit `#`, leer oder die schließende `---`. */
+const FRONT_LINE = /^(---[ \t]*|[ \t]*|#.*|[A-Za-z_][\w-]*:.*|var\s.*)$/;
+
+/**
+ * Kopf zwischen zwei `---` ganz am Anfang (Front Matter der Skills) als eigener Block. Ohne ihn liest der Markdown-Parser
+ * den Kopf als Überschrift (Text über `---`), und der ganze Kopf erscheint fett. Der Kopf beginnt nur, wenn die zweite
+ * Zeile wie `schlüssel: wert` aussieht, sonst bleibt `---` eine Trennlinie.
+ */
+export const frontMatter: MarkdownConfig = {
+  defineNodes: [{ name: 'FrontMatter', block: true, style: t.meta }],
+  parseBlock: [{
+    name: 'FrontMatter',
+    before: 'HorizontalRule',
+    parse(cx, line) {
+      if (cx.lineStart !== 0 || !/^---[ \t]*$/.test(line.text) || !/^[A-Za-z_][\w-]*:/.test(cx.peekLine())) return false;
+      let more = cx.nextLine();
+      while (more && FRONT_LINE.test(line.text)) {
+        const closing = /^---[ \t]*$/.test(line.text);
+        more = cx.nextLine();
+        if (closing) break;
+      }
+      cx.addElement(cx.elt('FrontMatter', 0, cx.prevLineEnd()));
+      return true;
+    },
+  }],
+};
+
+/** Farben im Editor, auch für den Editor der Skills in den Einstellungen (E78). */
+export const HIGHLIGHT = HighlightStyle.define([
   { tag: [t.keyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operatorKeyword, t.bool, t.null, t.self], class: 'k-kw' },
   { tag: [t.string, t.special(t.string), t.docString], class: 'k-str' },
   { tag: t.number, class: 'k-num' },
@@ -362,7 +391,7 @@ export class CodePanel {
     return [
       lineNumbers(), highlightActiveLineGutter(), highlightSpecialChars(), history(), drawSelection(), indentOnInput(),
       syntaxHighlighting(HIGHLIGHT), bracketMatching(), closeBrackets(), highlightActiveLine(), highlightSelectionMatches(), search({ top: false }),
-      py ? [python(), constants] : isMarkdown(d.file) ? [markdown(), EditorView.lineWrapping] : [],
+      py ? [python(), constants] : isMarkdown(d.file) ? [markdown({ extensions: [frontMatter] }), EditorView.lineWrapping] : [],
       indentUnit.of('    '), EditorState.tabSize.of(4), EditorState.readOnly.of(!!d.locked),
       keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
       markField,

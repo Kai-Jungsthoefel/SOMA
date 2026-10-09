@@ -238,7 +238,7 @@ try {
   await ev(() => window.__t.showPanel('skills'));
   await waitFor('geändert erkannt', () => window.__t.skills().skills.find((x) => x.id === '3d-druck')?.changed === true, 10000);
   await ev(() => window.__t.openSkill('3d-druck'));
-  check('Geänderte Kopie: „weicht ab" in der Zeile und in der Karte', (await st()).text.includes('The copy differs from the app’s version') && ((await st()).detail ?? '').includes('differs from this app’s version'));
+  check('Geänderte Kopie: „weicht ab" in der Zeile und in der Karte', (await st()).text.includes('The copy differs from the current version') && ((await st()).detail ?? '').includes('differs from the current version of the skill'));
   await setVar('3d-druck', 'overhang', '55');
   await waitFor('Überhang 55', () => window.__t.skills().skills.find((x) => x.id === '3d-druck')?.vars.overhang === 55, 10000);
   let backups = fs.existsSync(bdir) ? fs.readdirSync(bdir) : [];
@@ -353,6 +353,161 @@ try {
   await waitFor('Speicherstand neu', () => window.__t.saveState() && !window.__t.saveState().unsaved, 10000).catch(() => {});
   check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 16
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, String((await ev(() => window.__t.saveState())).dirtyFiles));
+
+  // 11) Einstellungen (E78): eigene Skills anlegen, mitgelieferte bearbeiten und zurücksetzen, löschen, importieren
+  const ust = () => ev(() => window.__t.settings());
+  const userSkill = (id) => { try { return fs.readFileSync(path.join(ud, 'skills', `${id}.md`), 'utf8'); } catch { return null; } };
+  const copyOf = (id) => { try { return fs.readFileSync(path.join(p2.dir, '.soma', 'skills', `${id}.md`), 'utf8'); } catch { return null; } };
+  const block2 = () => { const m = /<!-- soma:skills -->([\s\S]*?)<!-- \/soma:skills -->/.exec(norm(fs.readFileSync(path.join(p2.dir, 'AGENTS.md'), 'utf8'))); return m ? m[1] : ''; };
+  const skill2 = async (id) => (await ev(() => window.__t.skills())).skills.find((s) => s.id === id);
+  const selectRow = (id) => ev((i) => document.querySelector(`#st-list .st-row[data-id="${i}"]`).click(), id);
+  const waitSel = (id) => waitFor(`Einstellungen: ${id} offen`, (i) => window.__t.settings().selected === i && !window.__t.settings().busy, 10000, id);
+  const waitCheck = (re) => waitFor(`Prüfung ${re}`, (r) => { const c = window.__t.settings().check; return !!c && new RegExp(r).test([...c.errors, ...c.warnings, c.errors.length + c.warnings.length ? '' : 'OK'].join('|')); }, 10000, re.source);
+  const clickAct = (act) => ev((a) => document.querySelector(`#st-editor [data-act="${a}"]`).click(), act);
+  await ev(() => window.__t.showPanel('skills'));
+  check('Knopf „Settings“ in der Leiste ist aktiv', await ev(() => !document.getElementById('btn-settings').disabled && document.getElementById('btn-settings').textContent === 'Settings'));
+  await domClick('btn-settings');
+  await waitFor('Einstellungen offen', () => window.__t.settings().open && window.__t.settings().skills.length >= 17, 10000);
+  let us = await ust();
+  check('Einstellungen: alle mitgelieferten Skills nach Kategorien, keiner gewählt, Hintergrund gesperrt', us.skills.length === 17 && us.skills.every((s) => s.source === 'builtin') && us.selected === null
+    && us.list.includes('3D printing (FDM)') && /way of working/i.test(us.list) && await ev(() => {
+      // Echte Klicks: Das Fenster selbst darf nicht gesperrt sein, der Knopf liegt oben (Treffertest)
+      const b = document.getElementById('btn-st-new').getBoundingClientRect();
+      return document.getElementById('topbar').inert && document.getElementById('body').inert && !document.getElementById('settings').hidden
+        && !document.getElementById('settings').closest('[inert]') && !document.getElementById('menu-skill-name').closest('[inert]') && !document.getElementById('toast').closest('[inert]')
+        && !!document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)?.closest('#btn-st-new');
+    }), us.list.slice(0, 120));
+  await selectRow('3d-druck');
+  await waitSel('3d-druck');
+  await waitCheck(/^OK$/);
+  us = await ust();
+  check('Mitgelieferter Skill im Editor: Text mit Kopf, Hinweis zum Bearbeiten, Prüfung ohne Hinweise, Speichern gesperrt', us.source === 'builtin' && us.text.startsWith('---\ntitle: 3D printing (FDM)')
+    && us.editor.includes('3d-druck.md · built into the app') && us.editor.includes('Built-in skill. When you save') && !us.dirty
+    && await ev(() => document.querySelector('#st-editor [data-act="save"]').disabled && !document.querySelector('#st-editor [data-act="remove"]')), us.editor);
+  await shot('skills-5-einstellungen');
+
+  // Neuer Skill über das Popover: Name, Vorschau des Dateinamens, Enter legt an
+  await domClick('btn-st-new');
+  await ev(() => { const i = document.querySelector('#menu-skill-name .st-name-in'); i.value = 'Welded frames'; i.dispatchEvent(new Event('input')); });
+  await shot('skills-5b-neuer-name');
+  const preview = await ev(() => document.querySelector('#menu-skill-name .st-name-file').textContent);
+  await ev(() => document.querySelector('#menu-skill-name .st-name-in').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+  await waitSel('welded-frames');
+  us = await ust();
+  check('Neuer Skill: Dateiname vorab, angelegt in den App-Daten aus der Vorlage, gewählt, Meldung', preview === 'File: welded-frames.md' && us.source === 'own'
+    && (userSkill('welded-frames') ?? '').startsWith('---\ntitle: Welded frames\n') && us.skills.find((s) => s.id === 'welded-frames')?.category === 'My skills'
+    && (await ev(() => window.__t.toast())).text.includes('created as welded-frames.md'), preview);
+  const WF = '---\ntitle: Welded frames\nname: Welded frames\nsummary: Steel frames from tubes, wall {{wall}} mm.\ncategory: My skills\ndefault: on-demand\nwhen: the frame is welded\nvar wall: 2 | mm | Tube wall | 1..5\n---\n\n# Skill: Welded frames\n\n- Tubes with {{wall}} mm wall, {{gap}} gap.\n';
+  await ev((t) => window.__t.settingsType(t), WF);
+  await waitCheck(/“\{\{gap\}\}” has no setting/);
+  await shot('skills-6-eigener-skill');
+  us = await ust();
+  check('Tippen: ungespeichert (Punkt in der Zeile, Speichern frei), Prüfung meldet den Platzhalter ohne Einstellung', us.dirty && us.editor.includes('unsaved')
+    && await ev(() => document.querySelector('#st-list .st-row.sel').classList.contains('dirty') && !document.querySelector('#st-editor [data-act="save"]').disabled));
+  // Strg+S im Editor speichert den Skill, nicht das Modell
+  const head2 = async () => (await exec(['rev-parse', 'HEAD'], p2.dir)).stdout.trim();
+  const headBefore = await head2();
+  await ev(() => document.querySelector('#st-cm .cm-content').dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true })));
+  await waitFor('gespeichert', () => !window.__t.settings().dirty && !window.__t.settings().busy, 10000);
+  check('Strg+S: Skill gespeichert (Datei wie getippt), Modell nicht gespeichert, Hinweis bleibt nach dem Speichern', userSkill('welded-frames') === WF
+    && (await head2()) === headBefore && (await ust()).check.warnings.some((w) => /\{\{gap\}\}/.test(w))
+    && (await ev(() => window.__t.toast())).text.includes('“Welded frames” saved. New models get this version.'),
+  JSON.stringify({ same: userSkill('welded-frames') === WF, head: (await head2()) === headBefore, unsaved: (await ev(() => window.__t.saveState())).unsaved, check: (await ust()).check }));
+
+  // Im Modell: der eigene Skill steht im Panel und lässt sich einschalten wie ein mitgelieferter
+  await ev(() => window.__t.closeSettings());
+  await waitFor('Panel neu', () => window.__t.skills().skills.some((s) => s.id === 'welded-frames'), 10000);
+  check('Panel: eigener Skill unter „My skills“, aus, mit Einstellung', (await skill2('welded-frames')).mode === 'off' && (await skill2('welded-frames')).category === 'My skills'
+    && (await skill2('welded-frames')).vars.wall === 2 && !(await ev(() => document.getElementById('body').inert || document.getElementById('topbar').inert)));
+  await setMode('welded-frames', 'always');
+  check('Eigener Skill „Always“: Kopie mit eingesetztem Wert, in AGENTS.md', (copyOf('welded-frames') ?? '').includes('- Tubes with 2 mm wall') && block2().includes('- `.soma/skills/welded-frames.md`: Welded frames'), copyOf('welded-frames'));
+  check('Karte: Herkunft und Knopf „Edit“', await ev(() => {
+    window.__t.openSkill('welded-frames');
+    return document.getElementById('skill-detail').innerText.includes('My skills · your own skill') && !!document.querySelector('#skill-detail [data-act="edit"]');
+  }));
+  await shot('skills-7-karte-eigener');
+  // „Edit“ in der Karte öffnet die Einstellungen beim Skill. Gespeichert gilt die neue Fassung erst nach Aus und Ein im Modell
+  await ev(() => document.querySelector('#skill-detail [data-act="edit"]').click());
+  await waitSel('welded-frames');
+  await ev((t) => window.__t.settingsType(t), WF.replace(', {{gap}} gap', '').replace('\n- Tubes', '\n- Grind the welds.\n- Tubes'));
+  await clickAct('save');
+  await waitFor('gespeichert 2', () => !window.__t.settings().dirty && !window.__t.settings().busy, 10000);
+  await waitFor('Meldung mit Modell', () => window.__t.toast().text.includes('The open model keeps its copy'), 10000).catch(() => {});
+  check('Speichern bei eingeschaltetem Skill: Hinweis, dass das Modell seine Kopie behält, Kopie unverändert', (await ev(() => window.__t.toast())).text.includes('The open model keeps its copy')
+    && !(copyOf('welded-frames') ?? '').includes('Grind'), (await ev(() => window.__t.toast())).text);
+  await ev(() => window.__t.closeSettings());
+  await waitFor('Panel: Kopie weicht ab', () => window.__t.skills().skills.find((s) => s.id === 'welded-frames')?.changed, 10000);
+  await setMode('welded-frames', 'off');
+  await setMode('welded-frames', 'always');
+  check('Aus und wieder Ein übernimmt die neue Fassung', (copyOf('welded-frames') ?? '').includes('- Grind the welds.') && !(await skill2('welded-frames')).changed);
+
+  // Mitgelieferten bearbeiten: eigene Fassung in den App-Daten, Fingerabdruck in state.json, „Edited“ in der Liste
+  await ev(() => window.__t.openSettings('3d-druck'));
+  await waitSel('3d-druck');
+  const fdmText = (await ust()).text;
+  await ev((t) => window.__t.settingsType(t), fdmText.replace('summary: ', 'summary: Our printers. '));
+  await clickAct('save');
+  await waitFor('bearbeitet', () => window.__t.settings().source === 'edited' && !window.__t.settings().dirty, 10000);
+  us = await ust();
+  check('Mitgelieferten gespeichert: „edited“, eigene Datei, Fingerabdruck, Abzeichen „Edited“, Ansicht „Built-in“', (userSkill('3d-druck') ?? '').includes('summary: Our printers.')
+    && typeof appState().skill_bases?.['3d-druck'] === 'string' && us.list.includes('Edited') && us.editor.includes('edited by you')
+    && await ev(() => !!document.querySelector('#st-editor .st-mode [data-mode="builtin"]')), JSON.stringify(appState().skill_bases));
+  await ev(() => document.querySelector('#st-editor .st-mode [data-mode="builtin"]').click());
+  check('Ansicht „Built-in“: die mitgelieferte Fassung, nur lesbar', await ev(() => { const v = document.querySelector('.st-bi .cm-content'); return !!v && v.getAttribute('contenteditable') === 'false' && !v.textContent.includes('Our printers'); }));
+  await ev(() => document.querySelector('#st-editor .st-mode [data-mode="preview"]').click());
+  check('Vorschau: Dokument mit Überschrift', await ev(() => !document.querySelector('.st-md').hidden && document.querySelector('.st-md h1')?.textContent === 'Skill: 3D printing (FDM)'));
+  await app.answers([0]);
+  await clickAct('remove');
+  await waitFor('zurückgesetzt', () => window.__t.settings().source === 'builtin', 10000);
+  const libBak = path.join(ud, 'workspace-backups', 'skills-library');
+  check('Zurücksetzen: wieder mitgeliefert, eigene Fassung in der Sicherung, Fingerabdruck weg', userSkill('3d-druck') === null && !appState().skill_bases
+    && fs.readdirSync(libBak).some((n) => n.endsWith('3d-druck.md') && fs.readFileSync(path.join(libBak, n), 'utf8').includes('Our printers')), fs.existsSync(libBak) ? fs.readdirSync(libBak).join(',') : 'keine Sicherung');
+
+  // Ungespeichertes beim Wechsel: Abbrechen bleibt, Verwerfen wechselt ohne zu schreiben
+  await selectRow('welded-frames');
+  await waitSel('welded-frames');
+  const wfSaved = userSkill('welded-frames');
+  await ev(() => window.__t.settingsType('---\ntitle: X\n---\n# X\n'));
+  await app.answers([2]);
+  await selectRow('cnc');
+  await sleep(300);
+  check('Wechsel mit Ungespeichertem, „Cancel“: bleibt beim Skill, ungespeichert', (await ust()).selected === 'welded-frames' && (await ust()).dirty);
+  await app.answers([1]);
+  await selectRow('cnc');
+  await waitSel('cnc');
+  check('„Discard“: gewechselt, Datei unverändert', userSkill('welded-frames') === wfSaved);
+
+  // Import: Datei wählen, Kennung aus dem Dateinamen
+  const impFile = path.join(workDir, 'Glued joints.md');
+  fs.writeFileSync(impFile, '---\ntitle: Glued joints\nsummary: Gaps for adhesive.\ncategory: My skills\nwhen: parts are glued\n---\n# Glued joints\n\n- Leave 0.1 mm for the adhesive.\n');
+  await app.answers([[impFile]]);
+  await domClick('btn-st-import');
+  await waitSel('glued-joints');
+  check('Import: als eigener Skill übernommen und gewählt, Meldung', (await ust()).source === 'own' && (userSkill('glued-joints') ?? '').includes('0.1 mm')
+    && (await ev(() => window.__t.toast())).text.includes('“Glued joints” imported.'), (await ev(() => window.__t.toast())).text);
+
+  // Eigenen löschen: Das Modell behält seine Kopie, das Panel meldet, dass es ihn nicht mehr gibt
+  await selectRow('welded-frames');
+  await waitSel('welded-frames');
+  await app.answers([0]);
+  await clickAct('remove');
+  await waitFor('gelöscht', () => !window.__t.settings().skills.some((s) => s.id === 'welded-frames') && window.__t.settings().selected === null, 10000);
+  check('Eigenen gelöscht: Datei in der Sicherung, Kopie im Modell bleibt', userSkill('welded-frames') === null && !!copyOf('welded-frames')
+    && fs.readdirSync(libBak).some((n) => n.endsWith('welded-frames.md')));
+  // Escape schließt die Einstellungen
+  await ev(() => document.querySelector('.st-dlg').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+  await waitFor('geschlossen', () => !window.__t.settings().open, 5000);
+  await waitFor('Panel gelöscht', () => window.__t.skills().skills.find((s) => s.id === 'welded-frames')?.problems.length > 0, 10000);
+  check('Panel: gelöschter eigener Skill bleibt im Modell und wird gemeldet', (await skill2('welded-frames')).source === null && (await skill2('welded-frames')).mode === 'always'
+    && (await skill2('welded-frames')).problems.some((p) => p.includes('Neither this app nor your own skills include this skill')), JSON.stringify((await skill2('welded-frames')).problems));
+
+  // Auch von der Startseite aus
+  await ev(() => window.__t.showStart(true));
+  await domClick('btn-start-settings');
+  await waitFor('Einstellungen von der Startseite', () => window.__t.settings().open, 5000);
+  check('Startseite: „Settings“ öffnet die Einstellungen, Startseite gesperrt', await ev(() => document.getElementById('start').inert));
+  await ev(() => window.__t.closeSettings());
+  await ev(() => window.__t.showStart(false));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));

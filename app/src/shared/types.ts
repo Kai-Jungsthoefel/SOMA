@@ -155,8 +155,8 @@ export interface SkillInfo {
   title: string; summary: string; topics: string[]; order: number;
   /** Überschrift im Panel, leer: ohne Kategorie (steht unter „Weitere“). */
   category: string;
-  /** Bringt diese App mit (sonst liegt er nur im Projekt, etwa aus einer neueren App). */
-  bundled: boolean;
+  /** Herkunft in der Bibliothek (E78), null: nicht in der Bibliothek, er liegt nur im Projekt (neuere App, anderer Rechner). */
+  source: SkillSource | null;
   /** Stufe bei neuen Modellen (E46, E55), gilt für die ganze App, nicht für dieses Modell. */
   defaultMode: SkillMode;
   /** Stufe laut project.json. */
@@ -171,6 +171,39 @@ export interface SkillInfo {
   problems: string[];
 }
 export interface SkillResult { ok: boolean; error?: string; warning?: string; backup?: string | null; skills: SkillInfo[] }
+
+/** Herkunft eines Skills (E78): mitgeliefert, mitgeliefert und vom Nutzer bearbeitet, eigener des Nutzers. */
+export type SkillSource = 'builtin' | 'edited' | 'own';
+/** Ein Skill der Bibliothek in den Einstellungen (E78), unabhängig vom offenen Modell. */
+export interface LibrarySkill {
+  id: string; title: string; summary: string; category: string; order: number;
+  source: SkillSource;
+  /** Stufe bei neuen Modellen (Vorgabe des Nutzers oder Kopf des Skills). */
+  defaultMode: SkillMode;
+  /** Bei „edited“: Die App bringt inzwischen eine andere Fassung mit als die, auf der die Bearbeitung beruht. */
+  newerBuiltin: boolean;
+}
+/** Datei im Ordner der eigenen Skills, die die App nicht liest (falscher Name, zu groß), mit Grund. */
+export interface IgnoredSkillFile { name: string; reason: string }
+export interface LibraryState { skills: LibrarySkill[]; ignored: IgnoredSkillFile[]; dir: string }
+/** Text eines Skills zum Bearbeiten. `builtin`: die mitgelieferte Fassung, wenn es eine gibt. */
+export interface LibraryText { id: string; source: SkillSource; text: string; builtin: string | null }
+/** Prüfung eines Skill-Texts: Fehler verhindern das Speichern, Hinweise nicht (E28). */
+export interface SkillCheck { errors: string[]; warnings: string[] }
+export interface LibraryResult {
+  ok: boolean; error?: string;
+  /** Kennung des angelegten, gespeicherten oder importierten Skills. */
+  id?: string;
+  /** Sicherung einer ersetzten oder entfernten Fassung. */
+  backup?: string | null;
+  /** Hinweise zum gespeicherten Text oder zum Import. */
+  warnings?: string[];
+  /** Import: nichts gewählt oder abgebrochen. */
+  canceled?: boolean;
+  /** Import: Kennungen der übernommenen Skills. */
+  imported?: string[];
+  library: LibraryState;
+}
 /** Was vermessen wird: der aktuelle Stand oder die Vorschau eines alten Stands. */
 export type MeasureSource = 'live' | { preview: string };
 
@@ -346,6 +379,24 @@ export interface SomaApi {
     configure(id: string, values: Record<string, SkillValue | null>): Promise<SkillResult>;
     /** Stufe für neue Modelle festlegen (für die ganze App, das offene Modell bleibt, wie es ist). */
     setDefault(id: string, mode: SkillMode): Promise<SkillResult>;
+  };
+  /** Bibliothek der Skills in den Einstellungen (E78): mitgelieferte und eigene, ohne offenes Modell. */
+  library: {
+    list(): Promise<LibraryState>;
+    read(id: string): Promise<LibraryText>;
+    /** Text prüfen, ohne zu speichern. */
+    check(text: string): Promise<SkillCheck>;
+    /** Speichern. `base`: der Text beim Laden, weicht die Datei davon ab, kommt sie vorher in die Sicherung. */
+    save(id: string, text: string, base: string | null): Promise<LibraryResult>;
+    /** Neuer eigener Skill mit dem Namen `title`, leer aus der Vorlage oder als Kopie von `from`. */
+    create(title: string, from?: string): Promise<LibraryResult>;
+    /** Eigenen Skill löschen oder bearbeiteten zurücksetzen. Die Datei kommt in die Sicherung. */
+    remove(id: string): Promise<LibraryResult>;
+    /** Markdown-Dateien wählen und als eigene Skills übernehmen. */
+    import(): Promise<LibraryResult>;
+    setDefault(id: string, mode: SkillMode): Promise<LibraryResult>;
+    /** Datei eines eigenen Skills (oder ohne Kennung den Ordner) im Explorer zeigen. */
+    reveal(id?: string): Promise<void>;
   };
   /** Animationen (E58): Liste aus .soma/anim/index.json, bauen über `soma anim build`. */
   anim: {

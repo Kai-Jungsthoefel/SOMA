@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { SkillDirs } from './skills';
 
 /** App-Daten. Fuer Tests per SOMA_USER_DATA umleitbar, damit nichts im echten Profil landet. */
 export function userDataDir(): string {
@@ -32,6 +33,12 @@ export const templateDir = () => path.join(app.getAppPath(), 'resources', 'templ
 
 /** Mitgelieferte Skills (E17), je einer als Markdown. */
 export const skillsDir = () => path.join(app.getAppPath(), 'resources', 'skills');
+/** Eigene und bearbeitete Skills des Nutzers (E78), gelten für die ganze App. */
+export const userSkillsDir = () => path.join(userDataDir(), 'skills');
+/** Beide Ordner der Bibliothek der Skills. */
+export const skillDirs = (): SkillDirs => ({ bundled: skillsDir(), user: userSkillsDir() });
+/** Sicherungen eigener Skills (gelöscht, zurückgesetzt, beim Import ersetzt oder außerhalb der App geändert). */
+export const libraryBackupsDir = () => path.join(backupsDir(), 'skills-library');
 
 /** App-Icon (E44) für Fenster und Taskleiste. Windows nimmt die ICO mit allen Größen, andere Systeme das PNG. */
 export const appIcon = () => path.join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png');

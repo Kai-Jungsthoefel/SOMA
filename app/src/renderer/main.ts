@@ -11,6 +11,7 @@ import { MAX_QUOTE } from './pdfview';
 import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
+import { SettingsDialog } from './settings';
 import { SkillsPanel } from './skills';
 import { ParamsPanel } from './params';
 import { DRAG_PART, PartsCard } from './parts';
@@ -157,10 +158,31 @@ const skills = new SkillsPanel({ list: $('skills-list'), sum: $('skills-sum'), d
   configure: (id, values) => api.skills.configure(id, values),
   setDefault: (id, mode) => api.skills.setDefault(id, mode),
   open: (file) => void openCode(file),
+  edit: (id) => void settings.open(id),
   insert: (text) => insertToAgent(text),
   toast,
   changed: () => { filesDirty = true; textCache.clear(); void refreshSaveState(); void code.refresh(); },
 });
+
+// Einstellungen (E78): Bibliothek der Skills, auch von der Startseite aus. Änderungen dort zeigt das Panel „Skills“ sofort
+const settings = new SettingsDialog({
+  root: $('settings'), list: $('st-list'), editor: $('st-editor'), popover: $('menu-skill-name'), newBtn: $('btn-st-new'), importBtn: $('btn-st-import'),
+  // Gesperrt wird, was dahinter liegt. Nicht #app: Es umschließt auch Menüs, Meldungen und die Einstellungen selbst
+  folderBtn: $('btn-st-folder'), close: $('btn-st-close'), background: [$('topbar'), $('body'), $('start')],
+}, {
+  library: api.library,
+  choose: (o) => api.dialog.choose(o),
+  toast,
+  link: (href) => {
+    if (/^(https?:|mailto:)/i.test(href)) void api.openUrl(href).then((r) => { if (!r.ok) toast(r.error ?? `${href} could not be opened.`, 'error'); });
+    else toast('Only web links open from the preview of a skill.', 'info');
+  },
+  changed: () => { if (project && skills.isLoaded) void skills.refresh(); },
+  modelMode: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id)?.mode ?? 'off' : null),
+});
+$('btn-settings').addEventListener('click', () => void settings.open());
+$('btn-start-settings').addEventListener('click', () => void settings.open());
+$('btn-skills-manage').addEventListener('click', () => void settings.open());
 
 const paramsPanel = new ParamsPanel({ list: $('params-list'), foot: $('params-foot'), count: $('params-count') }, {
   state: () => api.params.state(),
@@ -898,7 +920,8 @@ const openProject = async (id: string) => { if (await leaveEditor('Open model'))
 
 // Kurzbefehle gelten nicht im Terminal: dort gehören Strg+S/Strg+O den Programmen (Claude Code nutzt Strg+O selbst)
 window.addEventListener('keydown', (e) => {
-  if ((e.target as HTMLElement | null)?.closest?.('#terminals') || !e.ctrlKey || e.altKey) return;
+  // Die Einstellungen liegen über allem und haben eigene Kurzbefehle (Strg+S speichert den Skill)
+  if (settings.isOpen || (e.target as HTMLElement | null)?.closest?.('#terminals') || !e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   // Ohne offenes Modell (Startseite beim Start, E69) gibt es nur Neu und Öffnen
   if (!project && k !== 'n' && k !== 'o') return;
@@ -1371,6 +1394,12 @@ if (api.testMode) {
     viewMenu: () => [...$('menu-view').querySelectorAll('.mi')].map((x) => x.textContent),
     refreshViewLists: () => refreshViewLists(),
     openSkill: (id: string | null) => skills.openDetail(id),
+    settings: () => settings.state(),
+    openSettings: (id?: string) => settings.open(id),
+    closeSettings: () => settings.close(),
+    settingsSelect: (id: string | null) => settings.select(id),
+    settingsType: (text: string) => settings.type(text),
+    settingsSave: () => settings.save(),
     /** Export wie über das Menü (`sel`: das ausgewählte Bauteil), liefert das Ergebnis. */
     exportAs: (fmt: string, scope: 'all' | 'sel') => { exportScope = scope; return doExport(fmt, fmt.toUpperCase()); },
     showStart: (on: boolean) => showStart(on),

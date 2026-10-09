@@ -10,6 +10,8 @@ interface Deps {
   setDefault(id: string, mode: SkillMode): Promise<SkillResult>;
   /** Kopie im Projekt im Code zeigen (nur lesen). */
   open(file: string): void;
+  /** Skill in den Einstellungen bearbeiten (E78). */
+  edit(id: string): void;
   /** Text in die Eingabe des Agenten einfügen (E11). */
   insert(text: string): void;
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
@@ -43,12 +45,14 @@ const MODES: { mode: SkillMode; label: string; title: string }[] = [
 ];
 const modeOf = (m: SkillMode) => MODES.find((x) => x.mode === m)!;
 /** Symbol vor der Überschrift einer Kategorie: Die Liste ist lang, so findet man die Gruppen schneller. */
-const CATEGORY_ICON: Record<string, string> = {
+export const CATEGORY_ICON: Record<string, string> = {
   'Way of working': 'route', Manufacturing: 'wrench', 'Design knowledge': 'compass', 'Check and present': 'gauge',
   // Kategorien älterer Skill-Köpfe (vor E73)
   Arbeitsweise: 'route', Fertigungsverfahren: 'wrench', Konstruktionswissen: 'compass', 'Prüfen und Zeigen': 'gauge',
 };
 const labelOf = (m: SkillMode) => modeOf(m).label;
+/** Zusatz zur Kategorie in der Karte: eigene und bearbeitete Skills (E78). */
+const SOURCE_NOTE: Record<string, string> = { edited: ' · edited by you', own: ' · your own skill' };
 
 /** Text für die Eingabe des Agenten: Pfad und die vom Standard abweichenden Einstellungen. */
 export function skillNote(s: SkillInfo): string {
@@ -147,7 +151,7 @@ export class SkillsPanel {
   private row(s: SkillInfo): HTMLElement {
     const set = changedVars(s);
     const note = s.problems.length || s.changed
-      ? el('span', { className: 'warn', textContent: s.problems[0] ?? 'The copy differs from the app’s version' })
+      ? el('span', { className: 'warn', textContent: s.problems[0] ?? 'The copy differs from the current version' })
       : set.length ? el('span', { className: 'cust', textContent: `${set.map((v) => shown(v)).join(' · ')} · customized` })
         : el('span', { textContent: s.summary });
     const open = el('button', { className: 'sk-open', title: `${s.title}: description, level and settings` }, el('b', { textContent: s.title }), note);
@@ -168,7 +172,7 @@ export class SkillsPanel {
       e.stopPropagation();
       const m = this.ui.menu;
       m.replaceChildren(el('div', { className: 'mh', textContent: s.title.toUpperCase() }), ...MODES.map((x) => {
-        const item = el('button', { className: 'mi two', disabled: x.mode !== 'off' && !s.bundled && !s.file },
+        const item = el('button', { className: 'mi two', disabled: x.mode !== 'off' && !s.source && !s.file },
           el('span', { className: 'chk' }, icon('check', 15, 2.2)), el('span', { className: 't' }, el('span', { textContent: x.label }), el('span', { className: 'sub', textContent: x.title })));
         item.setAttribute('role', 'menuitemradio');
         item.setAttribute('aria-checked', String(x.mode === s.mode));
@@ -191,7 +195,7 @@ export class SkillsPanel {
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(s.mode === m.mode));
       b.dataset.mode = m.mode;
-      b.disabled = this.busy.has(s.id) || (m.mode !== 'off' && !s.bundled && !s.file);
+      b.disabled = this.busy.has(s.id) || (m.mode !== 'off' && !s.source && !s.file);
       b.addEventListener('click', () => void this.setMode(s, m.mode));
       box.append(b);
     }
@@ -210,10 +214,10 @@ export class SkillsPanel {
     close.addEventListener('click', () => this.closeDetail());
     const kids: (HTMLElement | null)[] = [
       el('div', { className: 'mc-hd' }, el('span', { className: 'mc-ico sk-ico' }, icon('book', 15)),
-        el('div', { className: 'sk-title' }, el('b', { textContent: s.title }), el('span', { className: 'c3', textContent: s.category || 'Other' })), el('span', { className: 'grow' }), close),
+        el('div', { className: 'sk-title' }, el('b', { textContent: s.title }), el('span', { className: 'c3', textContent: `${s.category || 'Other'}${SOURCE_NOTE[s.source ?? ''] ?? ''}` })), el('span', { className: 'grow' }), close),
       el('div', { className: 'sk-desc', textContent: s.summary }),
     ];
-    if (s.changed) kids.push(el('div', { className: 'sk-note', textContent: 'The copy in the project differs from this app’s version. Switching it off and on again takes over the app’s version, the previous one goes into the backup.' }));
+    if (s.changed) kids.push(el('div', { className: 'sk-note', textContent: 'The copy in the project differs from the current version of the skill (Settings). Switching it off and on again takes over the current version, the previous one goes into the backup.' }));
     for (const p of s.problems) kids.push(el('div', { className: 'sk-warn', textContent: p }));
     kids.push(el('div', { className: 'sk-sec' }, el('div', { className: 'sk-h', textContent: 'For this model' }), this.modeSwitch(s),
       el('div', { className: 'c3 small', textContent: modeOf(s.mode).title })));
@@ -226,7 +230,7 @@ export class SkillsPanel {
         el('div', { className: 'sk-vars' }, ...s.vars.map((v) => this.field(s, v)))));
     }
     if (s.topics.length) kids.push(el('div', { className: 'sk-sec' }, el('div', { className: 'sk-h', textContent: 'What the agent watches for' }), el('ul', { className: 'sk-topics' }, ...s.topics.map((t) => el('li', { textContent: t })))));
-    if (s.bundled) {
+    if (s.source) {
       const id = `sk-${s.id}-default`;
       const sel = el('select', { id, className: 'sk-select', disabled: this.busy.has(s.id) }, ...MODES.map((m) => el('option', { value: m.mode, textContent: m.label })));
       sel.value = s.defaultMode;
@@ -239,6 +243,12 @@ export class SkillsPanel {
       const view = el('button', { className: 'btn sm', title: 'Show the copy in the project in the code (read only)' }, icon('file', 14, 1.9), 'View file');
       view.addEventListener('click', () => this.deps.open(s.file!));
       actions.append(view);
+    }
+    if (s.source) {
+      const edit = el('button', { className: 'btn sm', title: 'Edit the skill in the settings. Applies to new models, and here once the copy is taken over.' }, icon('pen', 14, 1.9), 'Edit');
+      edit.dataset.act = 'edit';
+      edit.addEventListener('click', () => this.deps.edit(s.id));
+      actions.append(edit);
     }
     if (s.mode !== 'off' && s.file) {
       const send = el('button', { className: 'btn sm acc', title: 'Add the path and customized settings to the agent’s input, so a running agent learns about them' }, icon('send', 14, 1.9), 'Send to agent');
@@ -329,7 +339,7 @@ export class SkillsPanel {
   /** Für Tests. */
   state() {
     return {
-      skills: this.skills.map((s) => ({ id: s.id, title: s.title, summary: s.summary, category: s.category, defaultMode: s.defaultMode, mode: s.mode, file: s.file, changed: s.changed, problems: s.problems,
+      skills: this.skills.map((s) => ({ id: s.id, title: s.title, summary: s.summary, category: s.category, source: s.source, defaultMode: s.defaultMode, mode: s.mode, file: s.file, changed: s.changed, problems: s.problems,
         vars: Object.fromEntries(s.vars.map((v) => [v.name, v.value])) })),
       busy: [...this.busy], text: this.ui.list.innerText, detail: this.ui.detail.hidden ? null : this.ui.detail.innerText, open: this.openId,
     };
