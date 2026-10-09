@@ -224,6 +224,10 @@ try {
     && !affectsAnimation('animations/sub/x.py') && !affectsAnimation('model.py') && !affectsAnimation('animations/notes.md'));
   check('parameters.json baut das Modell, ist im Editor nur lesbar, Umbenennen gesperrt, Löschen erlaubt', affectsBuild('parameters.json') && !affectsBuild('parts/parameters.json')
     && !!readOnlyReason('parameters.json') && !!fileOpBlockReason('parameters.json', 'rename') && fileOpBlockReason('parameters.json', 'delete') === null);
+  check('Kopien der Skills: im Editor nur lesbar, im Dateibaum kein Anlegen, Umbenennen, Löschen (Grund nennt das Panel), Markierungen schon',
+    /Skill/.test(readOnlyReason('.soma/skills/cnc.md') ?? '') && /“Skills”/.test(fileOpBlockReason('.soma/skills/cnc.md', 'rename') ?? '')
+    && !!fileOpBlockReason('.soma/skills/cnc.md', 'delete') && !!fileOpBlockReason('.soma/skills/neu.md', 'create') && !!fileOpBlockReason('.soma/skills', 'delete')
+    && fileOpBlockReason('.soma/feedback/a.png', 'delete') === null && /Internal/.test(fileOpBlockReason('.soma/project.json', 'delete') ?? ''));
 
   // Werte aus dem Parameter-Panel (parameters.json): lesen, prüfen, schreiben, beim letzten Eintrag die Datei entfernen
   const pmOut = path.join(tmp, 'params.mjs');

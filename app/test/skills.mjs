@@ -127,6 +127,34 @@ try {
   await waitFor('ungespeichert', () => window.__t.saveState()?.dirtyFiles >= 3, 10000).catch(() => {});
   check('Zählt als ungespeicherte Änderung (Kopie, project.json, AGENTS.md)', (await ev(() => window.__t.saveState())).dirtyFiles >= 3, String((await ev(() => window.__t.saveState())).dirtyFiles));
 
+  // Dateibaum: Kopien als eigene Gruppe „Skills“, eingeklappt, nur zum Lesen
+  await ev(() => window.__t.showPanel('files'));
+  await waitFor('Gruppe Skills im Dateibaum', () => window.__t.fileRows().includes('Skills'), 10000).catch(() => {});
+  const copies = fs.readdirSync(path.join(dir, '.soma', 'skills'));
+  const skHead = await ev(() => ({ rows: window.__t.fileRows(), count: document.querySelector('#tab-files .frow[data-path=".soma/skills"] .tag')?.textContent }));
+  check('Dateibaum: Gruppe „Skills“ eingeklappt, Zahl der Kopien, sonst nichts aus .soma', skHead.rows.includes('Skills') && skHead.count === String(copies.length)
+    && !skHead.rows.includes('3d-druck.md') && !skHead.rows.includes('project.json') && !skHead.rows.includes('env'), `${skHead.count}/${copies.length} ${skHead.rows.slice(-6).join(',')}`);
+  await ev(() => document.querySelector('#tab-files .frow[data-path=".soma/skills"]').click());
+  const skRows = await ev(() => window.__t.fileRows());
+  check('Aufgeklappt: die Kopien (3D-Druck), keine ausgeschaltete (Laser)', skRows.includes('3d-druck.md') && skRows.includes('cadquery.md') && !skRows.includes('laser.md'), skRows.join(','));
+  const skMenu = await ev(() => {
+    const row = document.querySelector('#tab-files .frow[data-path=".soma/skills/3d-druck.md"]');
+    const r = row.getBoundingClientRect();
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 20, clientY: r.top + 5 }));
+    return [...document.querySelectorAll('#menu-ctx .mi')].map((b) => (b.disabled ? '-' : '') + b.textContent.replace(/(F2|Del)$/, ''));
+  });
+  check('Menü der Kopie: Öffnen und Pfad ja, Anlegen, Umbenennen und Löschen gesperrt', ['Open', 'Send path to agent', '-New file', '-Rename', '-Delete'].every((x) => skMenu.includes(x)), skMenu.join(','));
+  await ev(() => [...document.querySelectorAll('#menu-ctx .mi')].find((b) => b.textContent.startsWith('Open'))?.click());
+  await waitFor('Kopie im Code', () => window.__t.editor.state().file === '.soma/skills/3d-druck.md', 10000).catch(() => {});
+  const skEd = await ev(() => window.__t.editor.state());
+  check('„Open“ im Dateibaum: Kopie im Code-Panel, nur lesen', skEd.file === '.soma/skills/3d-druck.md' && skEd.readOnly && skEd.text.includes('# Skill: 3D printing (FDM)'), JSON.stringify({ f: skEd.file, ro: skEd.readOnly }));
+  await waitFor('Dokumentansicht', () => !!document.querySelector('.mdview .md h1'), 10000).catch(() => {});
+  const skDoc = await ev(() => { const md = document.querySelector('.mdview .md'); return { first: md?.firstElementChild?.className, front: md?.querySelector('.md-front')?.textContent ?? '', h: [...(md?.querySelectorAll('h1, h2') ?? [])].map((h) => h.textContent).slice(0, 2) }; });
+  check('Dokumentansicht: Kopf (Front Matter) als Quelltext vorn, erste Überschrift ist der Titel, kein Kopf als Überschrift', skDoc.first === 'md-front'
+    && skDoc.front.startsWith('title: 3D printing (FDM)') && !skDoc.front.includes('---') && skDoc.h[0] === 'Skill: 3D printing (FDM)', JSON.stringify(skDoc));
+  await shot('skills-dateibaum');
+  await ev(() => window.__t.showPanel('skills'));
+
   // 3) Ansehen (nur lesen) und An Agent geben
   await ev(() => window.__t.openSkill('3d-druck'));
   await shot('skills-2-aktiv');
@@ -226,8 +254,15 @@ try {
   check('Meldung nennt den laufenden Agenten', /is off\..*tell it/.test((await ev(() => window.__t.toast())).text), (await ev(() => window.__t.toast())).text);
 
   // 6) Datei eines aktiven Skills fehlt: gemeldet, nicht neu angelegt (E28)
-  fs.rmSync(path.join(dir, '.soma', 'skills', 'toleranzen.md'));
+  // Der Dateibaum ist dabei offen: Er folgt Änderungen in .soma/skills/ ohne Wechsel des Panels
   await ev(() => window.__t.showPanel('files'));
+  await waitFor('toleranzen.md im Dateibaum', () => window.__t.fileRows().includes('toleranzen.md'), 10000).catch(() => {});
+  const hadTol = (await ev(() => window.__t.fileRows())).includes('toleranzen.md');
+  fs.rmSync(path.join(dir, '.soma', 'skills', 'toleranzen.md'));
+  await waitFor('Dateibaum ohne toleranzen.md', () => { const r = window.__t.fileRows(); return !r.includes('toleranzen.md') && r.includes('cadquery.md'); }, 10000).catch(() => {});
+  const tolRows = await ev(() => window.__t.fileRows());
+  check('Dateibaum folgt .soma/skills/: gelöschte Kopie verschwindet sofort, ausgeschalteter 3D-Druck fehlt', hadTol && !tolRows.includes('toleranzen.md')
+    && tolRows.includes('cadquery.md') && !tolRows.includes('3d-druck.md'), tolRows.join(','));
   await ev(() => window.__t.showPanel('skills'));
   await waitFor('Problem gemeldet', () => window.__t.skills().skills.find((x) => x.id === 'toleranzen')?.problems.length > 0, 10000);
   const info = await ev(() => window.soma.project.current());

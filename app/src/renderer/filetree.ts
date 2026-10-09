@@ -6,8 +6,9 @@ import { el, menuItem, menus } from './ui';
 /** Dateien, die die App verwaltet. Sie stehen eingeklappt unter „Vom Programm verwaltet“, damit der Baum ruhig bleibt. */
 const MANAGED = new Set(['AGENTS.md', 'CLAUDE.md', '.gitignore']);
 const TAGS: Record<string, string> = { 'model.py': 'model', 'output/model.step': 'result', 'NOTES.md': 'notes', 'requirements.txt': 'packages' };
-/** Ordner der Markierungen. Der Hauptprozess liefert ihn als einzigen Teil von .soma/ mit. */
+/** Ordner der Markierungen und der Kopien der Skills. Der Hauptprozess liefert nur diese beiden Teile von .soma/ mit. */
 const FEEDBACK = '.soma/feedback';
+const SKILLS = '.soma/skills';
 export const TEXT_EXT = /\.(py|md|txt|json|toml|cfg|ini|yml|yaml|gitignore|csv)$|^[^.]*$/i;
 /** Bilder, die die Zeichenfläche als Hintergrund laden kann (alles, was Chromium als <img> anzeigt). */
 export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
@@ -61,7 +62,7 @@ const parentOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastInde
  * Was gesperrt ist, regelt `fileOpBlockReason`, dieselbe Regel prüft der Hauptprozess noch einmal.
  */
 export class FileTree {
-  private collapsed = new Set<string>(['#managed']);
+  private collapsed = new Set<string>(['#managed', SKILLS]);
   private nodes: FileNode[] = [];
   private edit: Edit | null = null;
   private input: HTMLInputElement | null = null;
@@ -97,7 +98,8 @@ export class FileTree {
     if (this.edit?.mode === 'rename' && !this.find(this.edit.node.path) && !this.submitting) { this.edit = null; this.input = null; }
     const managed = nodes.filter((n) => !n.dir && MANAGED.has(n.name));
     const feedback = nodes.find((n) => n.path === FEEDBACK);
-    const rest = nodes.filter((n) => !managed.includes(n) && n !== feedback);
+    const skills = nodes.find((n) => n.path === SKILLS);
+    const rest = nodes.filter((n) => !managed.includes(n) && n !== feedback && n !== skills);
     const rows: HTMLElement[] = [];
     const ed = this.edit;
     const walk = (list: FileNode[], depth: number, parent: string) => {
@@ -107,29 +109,33 @@ export class FileTree {
         if (n.dir && n.children && !this.collapsed.has(n.path)) walk(n.children, depth + 1, n.path);
       }
     };
+    /** Kopf einer Gruppe unter den Projektdateien, liefert, ob sie aufgeklappt ist. `rel` macht den Kopf zum Ordner fürs Menü. */
+    const group = (key: string, ico: string, label: string, count: number, title: string, rel?: string): boolean => {
+      rows.push(el('div', { className: 'gap' }));
+      const open = !this.collapsed.has(key);
+      const head = this.button(0, open ? 'down' : 'right', ico, label, String(count), 'dim');
+      head.title = title;
+      head.setAttribute('aria-expanded', String(open));
+      if (rel) head.dataset.path = rel;
+      head.addEventListener('click', () => this.toggle(key));
+      rows.push(head);
+      return open;
+    };
     walk(rest, 0, '');
     if (!rest.length && !ed) rows.push(el('div', { className: 'hint', textContent: 'No files yet.' }));
     // Markierungen (E16) aus .soma/feedback/: eigene Gruppe, neueste zuerst. Zum Wiederfinden und erneut an den Agenten geben.
-    if (feedback?.children?.length) {
-      rows.push(el('div', { className: 'gap' }));
-      const open = !this.collapsed.has(FEEDBACK);
-      const head = this.button(0, open ? 'down' : 'right', 'image', 'Markups', String(feedback.children.length), 'dim');
-      head.title = 'Images from “Mark up”, stored in .soma/feedback/. Click to open for markup, right-click to send the path to the agent or open in an image viewer.';
-      head.setAttribute('aria-expanded', String(open));
-      head.dataset.path = FEEDBACK;
-      head.addEventListener('click', () => this.toggle(FEEDBACK));
-      rows.push(head);
-      if (open) walk(feedback.children, 1, FEEDBACK);
+    if (feedback?.children?.length && group(FEEDBACK, 'image', 'Markups', feedback.children.length,
+      'Images from “Mark up”, stored in .soma/feedback/. Click to open for markup, right-click to send the path to the agent or open in an image viewer.', FEEDBACK)) {
+      walk(feedback.children, 1, FEEDBACK);
     }
-    if (managed.length) {
-      rows.push(el('div', { className: 'gap' }));
-      const open = !this.collapsed.has('#managed');
-      const head = this.button(0, open ? 'down' : 'right', 'lock', 'Managed by the app', String(managed.length), 'dim');
-      head.title = 'The app creates these files and renews them with updates. There is no need to change them.';
-      head.setAttribute('aria-expanded', String(open));
-      head.addEventListener('click', () => this.toggle('#managed'));
-      rows.push(head);
-      if (open) for (const n of managed) rows.push(this.row(n, 1));
+    // Kopien der Skills (E17) aus .soma/skills/: zum Nachlesen, eingeklappt, weil es meist über ein Dutzend sind
+    if (skills?.children?.length && group(SKILLS, 'book', 'Skills', skills.children.length,
+      'Copies of the skills this model uses, stored in .soma/skills/. Click to read, switch them on and off on the left under “Skills”.', SKILLS)) {
+      walk(skills.children, 1, SKILLS);
+    }
+    if (managed.length && group('#managed', 'lock', 'Managed by the app', managed.length,
+      'The app creates these files and renews them with updates. There is no need to change them.')) {
+      for (const n of managed) rows.push(this.row(n, 1));
     }
     const hadFocus = !!this.input && document.activeElement === this.input;
     this.root.replaceChildren(...rows);

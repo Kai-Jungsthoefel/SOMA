@@ -26,6 +26,8 @@ export function fileOpBlockReason(rel: string, op: 'create' | 'rename' | 'delete
   // Markierungen (E16) gehören dem Nutzer: aufräumen und umbenennen ja. Neues legt dort nur „An Agent geben“ ab, das
   // sperrt die Prüfung des Ordners selbst (.soma/feedback fällt unter die nächste Regel).
   if (/^\.soma\/feedback\/[^/]+$/i.test(p)) return null;
+  // Kopien der Skills (E17): Das Panel schaltet sie mit project.json und AGENTS.md zusammen ein und aus
+  if (/^\.soma\/skills(\/|$)/i.test(p)) return 'Skills are switched on and off on the left under “Skills”.';
   if (/^\.(soma|git)(\/|$)/i.test(p)) return 'Internal data of the app and of Git.';
   if (op !== 'create' && /^model\.py$/i.test(p)) return 'model.py is the fixed entry point of the model.';
   if (op === 'rename' && /^(inputs|parts)$/i.test(p)) return 'The agent looks for this folder by its name.';

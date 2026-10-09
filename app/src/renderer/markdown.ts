@@ -33,8 +33,12 @@ export function renderMarkdown(src: string, file: string, readOnly: boolean, dep
   const root = el('article', { className: 'md' });
   const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/') + 1) : '';
   const lineAt = (pos: number) => { let n = 1; for (let i = src.indexOf('\n'); i >= 0 && i < pos; i = src.indexOf('\n', i + 1)) n++; return n; };
+  // Front Matter (Kopf der Skills zwischen zwei „---“): Daten für Programme. Als Markdown gelesen würde der ganze Kopf
+  // zu einer Überschrift (Text über „---“), deshalb steht er als Quelltext vorn und nur der Rest geht an den Lexer.
+  const fm = /^﻿?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(src);
+  const bodyAt = fm ? fm[0].length : 0;
   let tokens: Token[];
-  try { tokens = lexer(src, { gfm: true }); } catch (e) {
+  try { tokens = lexer(src.slice(bodyAt), { gfm: true }); } catch (e) {
     root.append(el('p', { className: 'md-err', textContent: `The file cannot be read as Markdown: ${e instanceof Error ? e.message : String(e)}` }));
     return root;
   }
@@ -159,7 +163,12 @@ export function renderMarkdown(src: string, file: string, readOnly: boolean, dep
       el('tbody', {}, ...t.rows.map((r) => el('tr', {}, ...r.map((c) => cell(c, 'td')))))));
   };
 
-  root.append(...blocks(tokens, 0));
+  if (fm) {
+    const head = el('pre', { className: 'md-front', title: 'Front matter: data for the app, not part of the text', textContent: fm[1] });
+    head.dataset.line = '1';
+    root.append(head);
+  }
+  root.append(...blocks(tokens, bodyAt));
   if (!root.childElementCount) root.append(el('p', { className: 'md-empty', textContent: readOnly ? 'Empty file.' : 'Empty file. “Edit” at the top lets you write in it.' }));
 
   root.addEventListener('click', (e) => {

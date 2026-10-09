@@ -320,7 +320,7 @@ code { font-family:var(--mono); font-size:.95em; }
 .md code { font:12px var(--mono); background:var(--s3); color:#e3c8a0; border-radius:4px; padding:1px 5px; }
 .md pre { background:var(--s1); border:1px solid var(--line); border-radius:7px; padding:10px 12px; overflow:auto; }
 .md pre code { background:none; color:#c9ced4; padding:0; font-size:12px; line-height:1.6; white-space:pre; }
-.md pre.md-html { font:12px/1.6 var(--mono); color:var(--tx3); white-space:pre-wrap; }
+.md pre.md-html, .md pre.md-front { font:12px/1.6 var(--mono); color:var(--tx3); white-space:pre-wrap; }
 .md blockquote { border-left:3px solid var(--line2); padding:2px 0 2px 12px; color:var(--tx2); }
 .md hr { border:0; border-top:1px solid var(--line2); margin:1.2em 0; }
 .md .md-link { color:#7fb4ff; cursor:pointer; text-decoration:underline; text-decoration-color:rgba(127,180,255,.4); text-underline-offset:2px; }

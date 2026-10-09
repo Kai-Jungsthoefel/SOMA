@@ -300,13 +300,15 @@ export function listFiles(root: string): FileNode[] {
     return nodes.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
   };
   const nodes = walk(root, '', 0);
-  // Markierungen (E16) liegen versteckt in .soma/feedback/. Der Nutzer soll sie wiederfinden und erneut an den Agenten
-  // geben können, deshalb kommt nur dieser Ordner mit. Neueste zuerst (der Name beginnt mit Datum und Uhrzeit).
-  const fb = path.join(root, '.soma', 'feedback');
-  try {
-    if (fs.lstatSync(fb).isDirectory() && !fs.lstatSync(path.join(root, '.soma')).isSymbolicLink()) {
-      nodes.push({ name: 'feedback', path: '.soma/feedback', dir: true, children: walk(fb, '.soma/feedback', 1).reverse() });
-    }
-  } catch { /* noch keine Markierung */ }
+  // Aus .soma/ kommen nur zwei Ordner mit, der Rest sind Zwischenstände und die Umgebung des Projekts (tausende Dateien).
+  // Markierungen (E16), damit der Nutzer sie wiederfindet und erneut an den Agenten geben kann, neueste zuerst (der Name
+  // beginnt mit Datum und Uhrzeit). Die Kopien der Skills (E17) zum Nachlesen, umgestellt wird im Panel „Skills“.
+  try { if (!fs.lstatSync(path.join(root, '.soma')).isDirectory()) return nodes; } catch { return nodes; }
+  for (const [name, newestFirst] of [['feedback', true], ['skills', false]] as const) {
+    const dir = path.join(root, '.soma', name);
+    try { if (!fs.lstatSync(dir).isDirectory()) continue; } catch { continue; }
+    const children = walk(dir, `.soma/${name}`, 1);
+    nodes.push({ name, path: `.soma/${name}`, dir: true, children: newestFirst ? children.reverse() : children });
+  }
   return nodes;
 }
