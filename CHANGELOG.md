@@ -8,6 +8,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ### Neu
 
+- Eigene Skills: „Settings“ unten in der linken Leiste (bisher ausgegraut) und auf der Startseite öffnet die Einstellungen. Dort lassen sich mitgelieferte Skills ändern und eigene anlegen, duplizieren, aus Markdown-Dateien importieren und löschen. Der Editor mit Vorschau prüft beim Tippen Kopf, Einstellungen und Platzhalter. Eigene Skills gelten für alle Modelle auf diesem Rechner und werden im Panel „Skills“ ein- und ausgeschaltet wie die mitgelieferten. Geänderte mitgelieferte Skills lassen sich jederzeit zurücksetzen, Gelöschtes und Ersetztes kommt in die Sicherung (E78).
 - Technische Zeichnungen: Der Agent beschreibt eine Zeichnung in `drawings/*.py` (`soma.drawing`) mit Ansichten, Schnitten, Einzelheiten, Maßen, Texten und Stückliste, `soma drawing build` schreibt PDF und DXF nach `output/drawings/`, alle Blätter zusammen nach `output/drawings.pdf`, und ein Bild, mit dem der Agent sein Ergebnis prüft. Lange Teile lassen sich unterbrochen zeichnen, Schnitte auch mit geknicktem Schnittverlauf. Die Maße werden immer am Modell gemessen, eine Prüfung meldet Überschneidungen von Texten mit Kanten, Maßen und Stückliste, zu lange Einträge im Schriftfeld, Maße neben Kanten und getippte Zahlen. Dazu der Skill „Technical drawings“ mit den Regeln nach ISO (E76).
 - Skill „Parametric models“, bei neuen Modellen immer an: Der Agent legt erst fest, was die Größe bestimmt und was beim Ändern stehen bleibt, gibt wenige unabhängige Werte als Parameter frei, leitet den Rest daraus ab und baut das Modell an den Grenzen jedes Bereichs zur Probe. Einstellbar sind die Höchstzahl der Parameter und der Umfang dieser Prüfung (E77).
 
@@ -19,6 +20,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ### Behoben
 
+- Im Editor erschien der Kopf eines Skills (zwischen zwei `---`) fett wie eine Überschrift. Er steht jetzt gedämpft als eigener Block.
 - Fetter Text im Terminal (etwa Überschriften des Agenten) wirkte wackelig, runde Buchstaben saßen einen Pixel tiefer als gerade. Die App bringt jetzt den echten fetten Schnitt der Terminalschrift mit, statt das Fett nachrechnen zu lassen.
 - Skills und andere Markdown-Dateien mit einem Kopf zwischen zwei `---` (Front Matter) zeigten diesen Kopf in der Dokumentansicht als riesige Überschrift. Er steht jetzt klein als Quelltext oben.
 - Nach dem Ändern eines Parameters hielten `soma anim` und `soma render --result` Animationen und Ergebnisse noch für aktuell. Jetzt zählt `parameters.json` wie in der App zum Modell (E74).
