@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+## [0.4.0] - 2026-10-09
+
+Strukturbaum im Viewer, Reiter Analysis und Animation mit ruhigem Bericht, Mehrfachauswahl und Tasten, Einstellungen Viewer, Shortcuts, Storage und About.
+
 ### Neu
 
 - Strukturbaum im Viewer: Die Bauteile stehen ganz oben links im Bild wie in CATIA, ohne Hintergrund. Eingeklappt nur der Name des Modells (mit „· 2 hidden“, wenn etwas ausgeblendet ist), aufgeklappt eine Ebene der Gruppen (die nächste klappt man bei Bedarf auf) mit Baumstrichen, Auge und Halbkreis direkt vor jedem Namen, Referenzen als Gruppe am Ende, Suche, „Show all“ im Fuß. F3 klappt ihn auf und zu. Ein Klick ins Modell markiert das Teil im Baum, in einer zugeklappten Gruppe die Gruppe. Derselbe Baum gilt im Modell, in der Analyse (nur die gerechneten Körper) und in der Animation (E82).
@@ -85,7 +89,8 @@ Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
 - Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
 - Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.3.0...HEAD
+[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Kai-Jungsthoefel/SOMA/releases/tag/v0.1.0
