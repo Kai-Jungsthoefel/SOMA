@@ -41,6 +41,7 @@ Any CLI agent that can read files and run commands works: Claude Code, OpenCode,
 
 **Looking at the result**
 - Click a part to jump to the line of code that created it
+- Mouse navigation like in SolidWorks, Fusion 360, Onshape, Creo or Rhino, perspective or orthographic view
 - Exact measurements on the B-rep, not on the mesh: faces, edges, distances, hole spacing
 - Section views, exploded views with a disassembly analysis, transparency and isolation per group
 - Analysis: overhangs, wall thickness, clearance between parts, strength with FEM

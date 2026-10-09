@@ -6,6 +6,16 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Neu
+
+- Einstellungen, Reiter „Viewer“: Mausbelegung wie in SolidWorks, Fusion 360 und Inventor, Onshape, Creo, NX und Blender oder Rhino, mit Legende. Zoomrichtung umkehrbar. Orthografische Ansicht ohne Fluchtpunkte, beim Umschalten bleibt das Bild stehen. Darstellung beim Öffnen eines Modells (Kanten, Drahtgitter, Transparent). Nachkommastellen beim Messen (0 bis 4), der Text für den Agenten behält drei. Alles gilt sofort (E81).
+- Einstellungen, Reiter „Storage“: wie viel Platz SOMA auf dem Rechner belegt, aufgeteilt in Modelle, Sicherungen, Vorschau-Cache, Bilder der Startseite und eigene Skills, mit Knopf zum Öffnen des Ordners. Der Vorschau-Cache lässt sich leeren (E81).
+- Einstellungen, Reiter „About“: Versionen von SOMA, soma, Python, CadQuery, OCP, Electron und Git, gefundene Agenten, Ordner und alle Komponenten mit Lizenz. „Copy system info“ legt die Angaben für eine Fehlermeldung in die Zwischenablage (E81).
+
+### Geändert
+
+- Im Viewer wählt nur noch ein Klick mit der linken Maustaste aus, nicht mehr auch mit der rechten oder mittleren. So wählt kurzes Drehen oder Verschieben mit diesen Tasten nichts aus.
+
 ## [0.3.0] - 2026-10-09
 
 Technische Zeichnungen, eigene Skills, das Dateiformat `.soma` und die DXF-Ansicht.
