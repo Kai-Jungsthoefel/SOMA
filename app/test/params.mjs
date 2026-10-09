@@ -266,7 +266,7 @@ try {
   b0 = await builds();
   await typeValue('SIZE', '50');
   await built(b0, 'Size 50');
-  const zipPath = path.join(workDir, 'Parameter.zip');
+  const zipPath = path.join(workDir, 'Parameter.soma');
   await app.answers([zipPath]);
   await domClick('btn-save');
   await waitFor('gespeichert', () => window.__t.saveState() && !window.__t.saveState().unsaved && window.__t.saveState().zipPath, 60000)

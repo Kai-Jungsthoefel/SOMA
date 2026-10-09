@@ -77,7 +77,7 @@ export async function createProject(name = 'New model'): Promise<{ id: string; d
   return { id, dir };
 }
 
-/** Angaben, die nur die App braucht (Pfad der ZIP, zuletzt gespeicherter Stand). */
+/** Angaben, die nur die App braucht (Pfad der Modelldatei, zuletzt gespeicherter Stand). */
 export function getAppState(id: string): AppState {
   return readJson<ProjectState>(stateFile(id))?.app ?? {};
 }
@@ -165,7 +165,7 @@ export function inspectProject(id: string): { name: string; problems: string[] }
     if (!fs.existsSync(path.join(dir, SKILLS_DIR, `${s}.md`))) problems.push(`The skill “${s}” is switched on, but ${SKILLS_DIR}/${s}.md is missing.`);
   }
   for (const bad of ['.venv', 'venv', 'env']) {
-    if (fs.existsSync(path.join(dir, bad, 'pyvenv.cfg'))) problems.push(`The project contains its own Python environment (${bad}/). It is ignored and not packed into the ZIP.`);
+    if (fs.existsSync(path.join(dir, bad, 'pyvenv.cfg'))) problems.push(`The project contains its own Python environment (${bad}/). It is ignored and not packed into the saved file.`);
   }
   return { name: pj?.name ?? backup?.name ?? id, problems };
 }
@@ -269,7 +269,7 @@ const hasFiles = (dir: string): boolean => {
 };
 
 /**
- * Ein neues Modell, das noch genau der Vorlage entspricht (E69): nie als ZIP gespeichert, im Verlauf nur der Startcommit,
+ * Ein neues Modell, das noch genau der Vorlage entspricht (E69): nie gespeichert, im Verlauf nur der Startcommit,
  * nichts geändert oder hinzugekommen, auch nicht dort, wo Git nicht hinsieht, und keine Sicherungen. Verschwindet es,
  * geht nichts verloren. Im Zweifel (Git unlesbar, Fehler) gilt es als verändert und bleibt.
  */
@@ -326,7 +326,7 @@ export function sweepDiscarded(): void {
   for (const n of names) void fs.promises.rm(path.join(workspacesDir(), n), { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }).catch(() => {});
 }
 
-/** Entpackt eine ZIP als Arbeitsordner `id`. Erst in einen Temp-Ordner, dann umbenennen: nie ein halb entpacktes Projekt. */
+/** Entpackt eine Modelldatei (.soma oder .zip) als Arbeitsordner `id`. Erst in einen Temp-Ordner, dann umbenennen: nie ein halb entpacktes Projekt. */
 export async function extractProject(zipPath: string, id: string): Promise<string> {
   const dst = projectDir(id);
   if (fs.existsSync(dst)) throw new Error('The working folder already exists (back it up first).');

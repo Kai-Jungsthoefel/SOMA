@@ -264,7 +264,7 @@ try {
 
   // 11) „Speichern" oben: speichert auch die Eingaben im Editor, dann Snapshot und ZIP
   await replace('LENGTH = param(79.0', 'LENGTH = param(81.0');
-  const zipPath = path.join(ud, 'Editortest.zip');
+  const zipPath = path.join(ud, 'Editortest.soma');
   await app.answers([zipPath]);
   await domClick('btn-save');
   await waitFor('gespeichert', () => !!window.__t.saveState()?.zipPath && !window.__t.saveState().unsaved, 60000).catch(() => {});

@@ -308,7 +308,7 @@ try {
   check('Nächstes Umstellen schreibt den Abschnitt neu: Meldung weg', !(await skill('laser')).problems.length && demand().includes('laser.md'));
 
   // 9) Speichern: Skills im Snapshot und in der ZIP
-  const zipPath = path.join(workDir, 'Skills.zip');
+  const zipPath = path.join(workDir, 'Skills.soma');
   await app.answers([zipPath]);
   await domClick('btn-save');
   await waitFor('gespeichert', () => window.__t.saveState() && !window.__t.saveState().unsaved && window.__t.saveState().zipPath, 60000)

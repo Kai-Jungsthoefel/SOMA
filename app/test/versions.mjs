@@ -1,4 +1,5 @@
-// Test für Git-Verlauf, ZIP speichern/öffnen, Vorschau und Wiederherstellen, dazu die Störfälle aus PLAN.md Abschnitt 9.
+// Test für Git-Verlauf, Speichern als .soma (innen eine ZIP), Öffnen von .soma und .zip, Export als ZIP (E79), Vorschau und
+// Wiederherstellen, dazu die Störfälle aus PLAN.md Abschnitt 9.
 // Aufruf: npm run test:versions (baut vorher).
 import { exec } from 'dugite';
 import fs from 'node:fs';
@@ -34,7 +35,7 @@ try {
   const term = () => ev(() => window.__t.terminals.activeId);
   const type = async (cmd) => { const id = await term(); await ev(([i, c]) => window.soma.term.write(i, c + '\r'), [id, cmd]); };
   const termText = async () => ev((i) => window.__t.termText(i), await term());
-  const zipPath = path.join(workDir, 'Testmodell.zip');
+  const zipPath = path.join(workDir, 'Testmodell.soma');
   const versions = () => ev(() => window.__t.versions());
   const saveState = () => ev(() => window.__t.saveState());
   // Vorschau-Cache eines Standes (previews/<Projekt>/<Commit>) und Warten auf Dateien außerhalb des Fensters
@@ -81,16 +82,18 @@ try {
   fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nWunsch: Deckel mit Lippe\n');
   await waitFor('Notizänderung', () => window.__t.saveState() && window.__t.saveState().dirtyFiles === 1);
   check('Vor dem Speichern: Badge „ungespeichert"', (await saveState()).unsaved === true);
-  await app.answers([zipPath]);
+  // Im Dialog ohne Endung eingegeben: Die App hängt .soma an
+  await app.answers([zipPath.replace(/\.soma$/, '')]);
   await domClick('btn-save');
   await waitFor('gespeichert', () => window.__t.saveState() && !window.__t.saveState().unsaved && window.__t.saveState().zipPath, 60000);
-  check('ZIP wurde geschrieben', fs.existsSync(zipPath), `${Math.round(fs.statSync(zipPath).size / 1024)} KB`);
+  check('Modell als .soma gespeichert (Endung angehängt)', fs.existsSync(zipPath) && (await saveState()).zipPath === zipPath,
+    `${fs.existsSync(zipPath) ? Math.round(fs.statSync(zipPath).size / 1024) : 0} KB, ${(await saveState()).zipPath}`);
   const names = await listZip(zipPath);
-  check('ZIP enthält Modell, .git, Projektdaten und Marker', ['model.py', '.git/HEAD', '.soma/project.json', '.soma/zip-info.json', 'AGENTS.md'].every((n) => names.includes(n)));
+  check('Die .soma ist eine ZIP mit Modell, .git, Projektdaten und Marker', ['model.py', '.git/HEAD', '.soma/project.json', '.soma/zip-info.json', 'AGENTS.md'].every((n) => names.includes(n)));
   check('ZIP enthält keine Caches (GLB, Mapping, build.json, __pycache__)', !names.some((n) => /model\.glb|model\.map\.json|build\.json|__pycache__/.test(n)));
   await waitFor('Meldung und Name', () => window.__t.toast().text.startsWith('Saved') && window.__t.project().name === 'Testmodell', 20000);
   check('Auto-Snapshot beim Speichern hat die Notiz gesichert', (await g('log', '-1', '--format=%s')) === 'Automatic snapshot on save');
-  check('Modellname folgt dem Dateinamen der ZIP', (await ev(() => window.__t.project())).name === 'Testmodell');
+  check('Modellname folgt dem Dateinamen', (await ev(() => window.__t.project())).name === 'Testmodell');
   check('Nach dem Speichern: sauber, Anzeige „Saved · Uhrzeit"', (await saveState()).dirtyFiles === 0 && /^Saved · \d\d:\d\d$/.test(await ev(() => document.getElementById('save-badge').textContent)), await ev(() => document.getElementById('save-badge').textContent));
   await waitFor('grüner Punkt', () => document.querySelectorAll('#vdots .vdot.saved').length === 1, 10000).catch(() => {});
   check('Verlaufsleiste markiert den gespeicherten Stand', await ev(() => document.querySelectorAll('#vdots .vdot.saved').length) === 1);
@@ -99,6 +102,19 @@ try {
   await app.domClick('btn-save');
   await sleep(2500);
   check('Zweites Speichern ohne Änderung legt keinen leeren Snapshot an', (await g('rev-list', '--count', 'HEAD')) === commitsBefore);
+
+  // ---- 3b) Export „Everything as ZIP“ (E79): gleicher Inhalt, kein Snapshot, die .soma bleibt die Modelldatei ----
+  const exported = path.join(workDir, 'Weitergabe.zip');
+  const somaBytes = fs.readFileSync(zipPath);
+  await app.answers([exported]);
+  await domClick('exp-zip');
+  await waitFor('exportiert', () => window.__t.toast().text.startsWith('Model exported as ZIP'), 60000).catch(() => {});
+  const expNames = fs.existsSync(exported) ? await listZip(exported) : [];
+  check('Export als ZIP: Modell, .git und Marker darin', ['model.py', '.git/HEAD', '.soma/project.json', '.soma/zip-info.json'].every((n) => expNames.includes(n)),
+    (await ev(() => window.__t.toast())).text.slice(0, 120));
+  const st3 = await saveState();
+  check('Export ändert nichts am Modell: kein neuer Commit, .soma unverändert und weiter die Modelldatei, gespeichert',
+    (await g('rev-list', '--count', 'HEAD')) === commitsBefore && st3.zipPath === zipPath && !st3.unsaved && somaBytes.equals(fs.readFileSync(zipPath)), JSON.stringify(st3).slice(0, 160));
 
   // ---- 4) Vorschau alter Stände ----
   const first = await g('rev-list', '--max-parents=0', 'HEAD');
@@ -129,8 +145,9 @@ try {
   await waitFor('Zeichenfläche', () => window.__t.markup().active, 30000).catch(() => {});
   await domClick('btn-mark-send');
   const firstShort = await g('rev-parse', '--short', first);
-  await waitFor('Markierung im Terminal', (i) => window.__t.termText(i).includes('[Markup: .soma/feedback/'), 30000, await term()).catch(() => {});
-  check('Markierung in der Vorschau nennt den alten Stand', (await termText()).includes(`shows the older version ${firstShort} "New model created"]`), (await termText()).match(/\[Markup:[^\]]*\]/)?.[0]?.slice(0, 90) ?? '');
+  // Bis zur schließenden Klammer warten: Unter Last kommt das Echo der Shell stückweise
+  await waitFor('Markierung im Terminal', (i) => /\[Markup: \.soma\/feedback\/[^\]]*\]/.test(window.__t.termText(i)), 30000, await term()).catch(() => {});
+  check('Markierung in der Vorschau nennt den alten Stand', (await termText()).includes(`shows the older version ${firstShort} "New model created"]`), (await termText()).match(/\[Markup:[^\]]*\]/)?.[0]?.slice(0, 200) ?? '');
   check('Nach der Markierung läuft die Vorschau weiter', !!(await versions()).previewing && await ev(() => document.getElementById('viewer').classList.contains('preview')));
   await ev((i) => window.soma.term.write(i, '\x03'), await term()); // Zeile verwerfen
 
@@ -219,6 +236,18 @@ try {
   check(`Böse ZIP („../evil.txt", ${replaced} Einträge im Archiv) wird abgelehnt`, /Unsafe|invalid relative path/.test(evilToast), evilToast.slice(0, 70));
   check('Nichts außerhalb des Zielordners geschrieben, keine Reste', !fs.existsSync(path.join(ud, 'evil.txt')) && !fs.existsSync(path.join(ud, 'workspaces', 'evil.txt')) && !fs.readdirSync(path.join(ud, 'workspaces')).some((n) => n.startsWith('.tmp-')));
   check('Keine ZIP-Datei im Weg: Projekt bleibt offen und nutzbar', (await ev(() => window.__t.project().id)) === proj.id);
+  // E) ZIP öffnen (älteres Modell oder Export): Speichern fragt einmal nach dem Ort der .soma, die ZIP bleibt (E79)
+  const zipBytes = fs.readFileSync(exported);
+  await app.answers([exported, 0]); // Arbeitsordner ist neuer: behalten
+  await domClick('btn-open');
+  await waitFor('ZIP als Modelldatei', (f) => window.__t.saveState()?.zipPath === f, 30000, exported).catch(() => {});
+  check('ZIP öffnen: Modell offen, die ZIP ist vorerst seine Datei', (await ev(() => window.__t.project().id)) === proj.id && (await saveState()).zipPath === exported);
+  const somaFromZip = path.join(workDir, 'Weitergabe.soma');
+  await app.answers([somaFromZip]);
+  await domClick('btn-save');
+  await waitFor('als .soma gespeichert', (f) => window.__t.saveState()?.zipPath === f && !window.__t.saveState().unsaved, 60000, somaFromZip).catch(() => {});
+  check('Speichern nach dem Öffnen einer ZIP: neue .soma, ZIP unverändert', fs.existsSync(somaFromZip) && (await listZip(somaFromZip)).includes('model.py')
+    && zipBytes.equals(fs.readFileSync(exported)) && (await saveState()).zipPath === somaFromZip, JSON.stringify(await saveState()).slice(0, 160));
 
   // ---- 8) Absturz-Wiederherstellung: ungespeicherte Änderung überlebt ----
   fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nungespeichert vor dem Absturz\n');

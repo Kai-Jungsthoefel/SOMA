@@ -832,7 +832,7 @@ function renderSaveState(st: SaveState): void {
   else { dot.style.background = 'var(--ok)'; text = `Saved${st.savedAt ? ` · ${fmtWhen(st.savedAt)}` : ''}`; }
   const b = $('save-badge');
   b.replaceChildren(dot, text);
-  b.title = st.zipPath ? `ZIP: ${st.zipPath}` : 'Not saved as a ZIP yet. Ctrl+S saves.';
+  b.title = st.zipPath ? `File: ${st.zipPath}` : 'Not saved yet. Ctrl+S saves.';
   versions.setSaved(st.zipPath ? st.savedHead : null);
   document.title = `SOMA – ${project?.name ?? ''}${unsaved ? ' ●' : ''}`;
 }
@@ -843,7 +843,7 @@ async function refreshSaveState(): Promise<void> {
 
 /**
  * Strg+S im Editor und „Speichern und bauen“: geänderte Dateien schreiben. Gebaut wird nur, wenn darunter eine ist,
- * die das Modell betrifft (Python, inputs/). Keine ZIP, kein Snapshot, das macht „Speichern“ oben.
+ * die das Modell betrifft (Python, inputs/). Keine Modelldatei, kein Snapshot, das macht „Speichern“ oben.
  */
 async function saveCode(): Promise<void> {
   const r = await code.saveAll();
@@ -869,7 +869,7 @@ async function leaveEditor(title: string): Promise<boolean> {
 
 let saving = false;
 /**
- * Speichern kann dauern (ein laufender oder veralteter Build wird abgewartet, dann Snapshot und ZIP): Der Knopf zeigt das
+ * Speichern kann dauern (ein laufender oder veralteter Build wird abgewartet, dann Snapshot und .soma-Datei): Der Knopf zeigt das
  * sofort, weitere Klicks und Strg+S zählen solange nicht.
  */
 async function doSave(saveAs = false): Promise<void> {
@@ -881,7 +881,7 @@ async function doSave(saveAs = false): Promise<void> {
   btn.classList.add('busy');
   btn.replaceChildren(el('span', { className: 'spin' }, icon('spin', 14, 2.4)), 'Saving …');
   try {
-    // Erst die Eingaben im Editor, sonst fehlten sie in Snapshot und ZIP. Das Speichern baut danach, falls nötig.
+    // Erst die Eingaben im Editor, sonst fehlten sie in Snapshot und Datei. Das Speichern baut danach, falls nötig.
     const c = await code.saveAll();
     if (!c.ok) { toast('Not everything in the editor could be saved (see the note in the code). So the model is not saved.', 'error'); return; }
     const r = await api.project.save(saveAs);
@@ -925,7 +925,7 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   // Ohne offenes Modell (Startseite beim Start, E69) gibt es nur Neu und Öffnen
   if (!project && k !== 'n' && k !== 'o') return;
-  // Im Editor speichert Strg+S den Code und baut, sonst das ganze Modell als ZIP
+  // Im Editor speichert Strg+S den Code und baut, sonst das ganze Modell als .soma-Datei
   if (k === 's') { e.preventDefault(); if (!e.shiftKey && (e.target as HTMLElement | null)?.closest?.('#code-view')) void saveCode(); else void doSave(e.shiftKey); }
   else if (k === 'o' && !e.shiftKey) { e.preventDefault(); void doOpen().then((ok) => { if (ok) showStart(false); }); }
   else if (k === 'n' && !e.shiftKey) { e.preventDefault(); void doNew().then(() => showStart(false)); }
@@ -1026,6 +1026,22 @@ $('btn-sel-export').addEventListener('click', () => {
 $('exp-all').addEventListener('click', () => { exportScope = 'all'; renderExportScope(); });
 $('exp-sel').addEventListener('click', () => { exportScope = 'sel'; renderExportScope(); });
 document.querySelectorAll<HTMLButtonElement>('#menu-export [data-fmt]').forEach((b) => b.addEventListener('click', () => void doExport(b.dataset.fmt!, b.textContent!)));
+$('exp-zip').addEventListener('click', () => { menus.close(); void doExportZip(); });
+
+/**
+ * Das ganze Modell als ZIP (E79). Eingaben im Editor, die noch nicht gespeichert sind, fehlen darin wie in jedem Export:
+ * Die Meldung nennt sie, statt sie ungefragt zu speichern.
+ */
+async function doExportZip(): Promise<ExportResult> {
+  const r = await api.project.exportZip();
+  if (r.cancelled) return r;
+  const open = code.unsaved();
+  if (r.ok) {
+    const notes = [...(r.warnings ?? []), ...(open.length ? [`Not included (not saved in the editor): ${open.join(', ')}`] : [])];
+    toast([`Model exported as ZIP:\n${r.target ?? ''}`, ...notes].join('\n'), notes.length ? 'error' : 'ok');
+  } else toast(r.error ?? 'Export failed', 'error');
+  return r;
+}
 
 /** Exportieren: Der Hauptprozess fragt nach Datei (ein Bauteil) oder Ordner (alle Bauteile) und schreibt erst danach. */
 async function doExport(fmt: string, label: string): Promise<ExportResult> {
@@ -1402,6 +1418,8 @@ if (api.testMode) {
     settingsSave: () => settings.save(),
     /** Export wie über das Menü (`sel`: das ausgewählte Bauteil), liefert das Ergebnis. */
     exportAs: (fmt: string, scope: 'all' | 'sel') => { exportScope = scope; return doExport(fmt, fmt.toUpperCase()); },
+    /** „Everything as ZIP“ im Export-Menü (E79). */
+    exportZip: () => doExportZip(),
     showStart: (on: boolean) => showStart(on),
     setAgentCollapsed,
     fileRows: () => [...document.querySelectorAll('#tab-files .frow .fn')].map((x) => x.textContent),

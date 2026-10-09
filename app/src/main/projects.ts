@@ -50,12 +50,17 @@ interface Session {
 
 const POLL_MS = 2000;
 const safeFileName = (n: string) => n.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'Model';
+/** Modelle werden als .soma gespeichert (E79), innen eine ZIP. Geöffnet wird auch eine .zip. */
+const MODEL_EXT = '.soma';
+const isModelFile = (p: string) => p.toLowerCase().endsWith(MODEL_EXT);
+/** Pfad mit .soma: „x“ und „x.zip“ werden „x.soma“. */
+const modelPath = (p: string) => (isModelFile(p) ? p : `${p.replace(/\.zip$/i, '')}${MODEL_EXT}`);
 
 /**
  * Das offene Projekt und alles, was mit Speichern, Öffnen und Verlauf zu tun hat.
  *
  * Grundsätze: Speichern nur ausdrücklich (E21). Nichts wird still überschrieben oder gelöscht: ein Arbeitsordner, den eine
- * ZIP ersetzt, wandert in die Sicherungen. Der Agent committet selbst, die App legt nur beim Speichern einen Snapshot an (E8).
+ * Modelldatei (.soma oder .zip) ersetzt, wandert in die Sicherungen. Der Agent committet selbst, die App legt nur beim Speichern einen Snapshot an (E8).
  */
 export class ProjectController {
   session: Session | null = null;
@@ -105,7 +110,7 @@ export class ProjectController {
   }
 
   async open(id: string): Promise<ProjectInfo> {
-    // Dasselbe Modell neu öffnen (etwa „Arbeitsstand behalten“ beim Öffnen seiner ZIP) verwirft es nie
+    // Dasselbe Modell neu öffnen (etwa „Arbeitsstand behalten“ beim Öffnen seiner Datei) verwirft es nie
     if (this.session?.id === id) this.close(); else await this.leave();
     const dir = projectDir(id);
     const builds = new BuildManager(dir);
@@ -129,7 +134,7 @@ export class ProjectController {
     // Gilt der letzte Build noch (seit seinem Start nichts geändert), zeigt der Viewer ihn gleich, statt neu zu bauen. Sonst
     // erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
     const last = currentBuild(dir);
-    // Fehlen Pakete aus requirements.txt (ZIP von einem anderen Rechner), erst installieren, dann bauen
+    // Fehlen Pakete aus requirements.txt (Modell von einem anderen Rechner), erst installieren, dann bauen
     if (!this.installPackages(session, !last) && !last) builds.start('project opened');
     const info = this.info();
     this.send('project:changed', info);
@@ -206,7 +211,7 @@ export class ProjectController {
     return { zipPath: app.zipPath ?? null, savedHead: app.savedHead ?? null, head: st.head, dirtyFiles: st.changed, unsaved, hasRepo, savedAt: app.zipPath ? app.savedAt ?? null : null };
   }
 
-  /** ZIP im Dateimanager zeigen. Noch nicht gespeichert (oder ZIP verschwunden): den Arbeitsordner öffnen. */
+  /** Modelldatei im Dateimanager zeigen. Noch nicht gespeichert (oder Datei verschwunden): den Arbeitsordner öffnen. */
   async reveal(): Promise<void> {
     const s = this.need();
     const zip = getAppState(s.id).zipPath;
@@ -272,34 +277,94 @@ export class ProjectController {
     }
   }
 
-  /** Speichern: Snapshot im Verlauf, dann ZIP. Fragt beim ersten Mal nach dem Ort. */
+  /**
+   * Das ganze Modell als ZIP exportieren (E79), etwa für jemanden ohne SOMA: derselbe Inhalt wie die .soma-Datei (Code,
+   * Ergebnisse, Verlauf). Anders als Speichern ohne Snapshot und ohne die Modelldatei zu ändern, der Speicherstand bleibt.
+   * Änderungen seit dem letzten Commit stecken nur als Dateien darin, der Marker sagt das (`dirty`). Die App öffnet die
+   * ZIP wieder wie eine .soma.
+   */
+  async exportZip(): Promise<ExportResult> {
+    const s = this.need();
+    const app = getAppState(s.id);
+    const startDir = app.exportDir && fs.existsSync(app.exportDir) ? app.exportDir : documentsDir();
+    const pj = readProjectJson(s.id);
+    const target = await chooseExportTarget(this.getWin(), {
+      kind: 'file', title: 'Export the model as a ZIP', defaultPath: path.join(startDir, `${safeFileName(pj?.name ?? 'Model')}.zip`), ext: 'zip', label: 'ZIP',
+    });
+    if (!target) return { ok: false, files: [], cancelled: true };
+    const dest = /\.zip$/i.test(target) ? target : `${target}.zip`;
+    if (app.zipPath && fs.existsSync(dest) && samePath(dest, app.zipPath)) {
+      return { ok: false, files: [], error: 'This is the model’s own file. Choose another name for the ZIP.' };
+    }
+    if (dest !== target && fs.existsSync(dest)) {
+      const c = await choose(this.getWin(), { title: 'Export', message: `${path.basename(dest)} already exists. Replace it?`, detail: dest, buttons: ['Replace', 'Cancel'] });
+      if (c !== 0) return { ok: false, files: [], cancelled: true };
+    }
+    const warnings: string[] = [];
+    try {
+      // Wie beim Speichern: aktuelles Ergebnis, Verlauf gepackt
+      if (!s.builds.busy && buildIsStale(s.dir)) s.builds.start('before exporting');
+      await s.builds.whenIdle();
+      if (s.builds.status.state === 'error') warnings.push('The last build failed. The ZIP contains the last successful version of output/model.step.');
+      let dirty = false;
+      if (await s.git.isRepo()) {
+        try { await s.git.pack(); } catch { /* nur größer */ }
+        dirty = (await s.git.status()).dirty;
+      }
+      const info: ZipInfo = { savedAt: new Date().toISOString(), head: await s.git.head(), id: s.id, name: pj?.name ?? s.id, ...(dirty ? { dirty } : {}) };
+      await saveProjectZip(s.dir, dest, info);
+      patchAppState(s.id, { exportDir: path.dirname(dest) });
+      return { ok: true, files: [dest], target: dest, ...(warnings.length ? { warnings } : {}) };
+    } catch (e) {
+      return { ok: false, files: [], error: `Export failed: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+
+  /**
+   * Speichern: Snapshot im Verlauf, dann die Modelldatei (.soma, eine ZIP, E79). Fragt beim ersten Mal nach dem Ort. Ein
+   * Modell, das bisher in einer ZIP steckte (ältere Fassung, geöffnete ZIP), wird einmal mit Rückfrage als .soma daneben
+   * gespeichert. Die ZIP bleibt unverändert.
+   */
   async save(saveAs = false): Promise<SaveResult> {
     const s = this.need();
     const app = getAppState(s.id);
     let zipPath = saveAs ? undefined : app.zipPath;
     if (zipPath && !fs.existsSync(path.dirname(zipPath))) zipPath = undefined; // Zielordner weg (z. B. USB-Stick ab): neu fragen
+    const legacy = zipPath && !isModelFile(zipPath) ? zipPath : null;
+    if (legacy) zipPath = undefined;
     if (!zipPath) {
       const pj = readProjectJson(s.id);
-      const chosen = await choosePath(this.getWin(), 'save', `${safeFileName(pj?.name ?? 'Model')}.zip`);
+      const prev = legacy ?? app.zipPath;
+      const name = `${safeFileName(pj?.name ?? 'Model')}${MODEL_EXT}`;
+      // Vorschlag: neben der bisherigen Datei, sonst in Dokumente
+      const suggest = legacy ? modelPath(legacy) : prev && fs.existsSync(path.dirname(prev)) ? path.join(path.dirname(prev), name) : name;
+      const chosen = await choosePath(this.getWin(), 'save', suggest);
       if (!chosen) return { cancelled: true };
-      zipPath = /\.zip$/i.test(chosen) ? chosen : `${chosen}.zip`;
-      renameProject(s.id, path.basename(zipPath).replace(/\.zip$/i, '')); // der Modellname folgt dem Dateinamen
+      zipPath = modelPath(chosen);
+      // Den Namen mit .soma hat der Dialog nicht gesehen: eine vorhandene Datei nicht ohne Rückfrage ersetzen
+      if (zipPath !== chosen && fs.existsSync(zipPath)) {
+        const c = await choose(this.getWin(), {
+          title: 'Save model', message: `${path.basename(zipPath)} already exists. Replace it?`, detail: zipPath, buttons: ['Replace', 'Cancel'],
+        });
+        if (c !== 0) return { cancelled: true };
+      }
+      renameProject(s.id, path.basename(zipPath, path.extname(zipPath))); // der Modellname folgt dem Dateinamen
     }
     const warnings: string[] = [];
     try {
-      // Die ZIP soll das aktuelle Ergebnis enthalten: laufenden Build abwarten, veralteten vorher nachholen.
+      // Die Datei soll das aktuelle Ergebnis enthalten: laufenden Build abwarten, veralteten vorher nachholen.
       if (!s.builds.busy && buildIsStale(s.dir)) s.builds.start('before saving');
       await s.builds.whenIdle();
-      if (s.builds.status.state === 'error') warnings.push('The last build failed. The ZIP contains the last successful version of output/model.step.');
+      if (s.builds.status.state === 'error') warnings.push('The last build failed. The file contains the last successful version of output/model.step.');
 
       stampAppVersion(s.id); // mit welcher Version zuletzt gespeichert (E68), steht so auch im Snapshot
       let snapshot: string | null = null;
       if (await s.git.isRepo()) {
         try { snapshot = await s.git.snapshot('Automatic snapshot on save'); }
         catch (e) { warnings.push(`Could not add a snapshot to the history: ${e instanceof Error ? e.message : String(e)}`); }
-        // Ähnliche Fassungen (vor allem output/model.step) als Unterschied ablegen, das macht die ZIP deutlich kleiner (E75)
+        // Ähnliche Fassungen (vor allem output/model.step) als Unterschied ablegen, das macht die Datei deutlich kleiner (E75)
         try { await s.git.pack(); }
-        catch (e) { warnings.push(`Git could not pack the history, the ZIP is larger than necessary: ${e instanceof Error ? e.message : String(e)}`); }
+        catch (e) { warnings.push(`Git could not pack the history, the file is larger than necessary: ${e instanceof Error ? e.message : String(e)}`); }
       } else warnings.push('No Git history: no snapshot was created.');
 
       const head = await s.git.head();
@@ -324,13 +389,14 @@ export class ProjectController {
   }
 
   /**
-   * Öffnet eine ZIP als Projekt (E21). Existiert der Arbeitsordner schon, entscheidet der Nutzer bei Abweichungen:
-   * Arbeitsstand behalten oder ZIP laden. Beim Laden wandert der Arbeitsordner in die Sicherungen, nichts wird gelöscht.
+   * Öffnet eine Modelldatei (.soma oder .zip, E21, E79). Existiert der Arbeitsordner schon, entscheidet der Nutzer bei
+   * Abweichungen: Arbeitsstand behalten oder die Datei laden. Beim Laden wandert der Arbeitsordner in die Sicherungen,
+   * nichts wird gelöscht.
    */
   async openZipFile(zipPath: string): Promise<OpenResult> {
     let texts: Record<string, string | null>;
     try { texts = await readZipTexts(zipPath, ['.soma/project.json', ZIP_INFO_PATH]); }
-    catch (e) { return { cancelled: false, error: `Cannot read the ZIP: ${e instanceof Error ? e.message : String(e)}` }; }
+    catch (e) { return { cancelled: false, error: `Cannot read the file (not a .soma or ZIP file?): ${e instanceof Error ? e.message : String(e)}` }; }
     let id: string;
     let info: ZipInfo | null = null;
     try {
@@ -353,22 +419,24 @@ export class ProjectController {
     const git = new GitRepo(dir);
     const wsHead = (await git.isRepo()) ? await git.head() : null;
     const st = wsHead ? await git.status() : { dirty: false };
-    if (info?.head && info.head === wsHead && !st.dirty) { // identisch: nichts zu entscheiden, Chats und Arbeitsordner bleiben
+    // Identisch: nichts zu entscheiden, Chats und Arbeitsordner bleiben. Ein Export mit Änderungen seit dem Commit ist es nie
+    if (info?.head && info.head === wsHead && !st.dirty && !info.dirty) {
       remember();
       await this.open(id);
       return { cancelled: false, opened: true };
     }
     let why: string;
     if (st.dirty) why = 'The working folder has unsaved changes.';
-    else if (info?.head && wsHead && (await git.isAncestor(info.head, wsHead))) why = 'The working folder is newer than the ZIP.';
-    else if (info?.head && wsHead && (await git.isAncestor(wsHead, info.head))) why = 'The ZIP is newer than the working folder.';
-    else why = 'The working folder and the ZIP have different versions.';
+    else if (info?.dirty) why = 'The file has changes that are not in its history.';
+    else if (info?.head && wsHead && (await git.isAncestor(info.head, wsHead))) why = 'The working folder is newer than the file.';
+    else if (info?.head && wsHead && (await git.isAncestor(wsHead, info.head))) why = 'The file is newer than the working folder.';
+    else why = 'The working folder and the file have different versions.';
     const choice = await choose(this.getWin(), {
-      title: 'Working folder and ZIP differ',
+      title: 'Working folder and file differ',
       message: `${why} What do you want to open?`,
       detail: 'Keep current work: the model opens as it is on this computer.\n' +
-        'Load ZIP: the version from the ZIP opens. The previous working folder is backed up, nothing is deleted.',
-      buttons: ['Keep current work', 'Load ZIP', 'Cancel'],
+        'Load file: the version from the file opens. The previous working folder is backed up, nothing is deleted.',
+      buttons: ['Keep current work', 'Load file', 'Cancel'],
     });
     if (choice === 0) { patchAppState(id, { zipPath }); await this.open(id); return { cancelled: false, opened: true }; }
     if (choice !== 1) return { cancelled: true };
@@ -376,7 +444,7 @@ export class ProjectController {
       if (this.session?.id === id) this.close(); // offene Handles würden das Umbenennen blockieren
       await backupWorkspace(id);
       await extractProject(zipPath, id);
-    } catch (e) { return { cancelled: false, error: `Loading the ZIP failed: ${e instanceof Error ? e.message : String(e)}` }; }
+    } catch (e) { return { cancelled: false, error: `Loading the file failed: ${e instanceof Error ? e.message : String(e)}` }; }
     remember();
     await this.open(id);
     return { cancelled: false, opened: true };
@@ -706,7 +774,7 @@ export class ProjectController {
     const c = await choose(this.getWin(), {
       title: 'Quit SOMA',
       message: 'The model has unsaved changes.',
-      detail: `${inEditor}Your current work stays on this computer, the start page shows it among the recent models. The ZIP file is only updated when you save.`,
+      detail: `${inEditor}Your current work stays on this computer, the start page shows it among the recent models. The model file is only updated when you save.`,
       buttons: ['Save', 'Don’t save', 'Cancel'],
     });
     if (c === 2) return false;
@@ -721,7 +789,7 @@ export class ProjectController {
   /**
    * Modell von der Startseite entfernen (E69): Der Arbeitsordner kommt in den Papierkorb (dort lässt er sich wiederherstellen),
    * die Daten der App dazu werden gelöscht, Sicherungen bleiben. Die Rückfrage sagt, was dabei verloren geht: nichts, wenn
-   * der Stand in der ZIP-Datei steckt, sonst die Änderungen seit dem Speichern bzw. das ganze Modell. Ein unverändertes neues
+   * der Stand in der Modelldatei steckt, sonst die Änderungen seit dem Speichern bzw. das ganze Modell. Ein unverändertes neues
    * Modell geht ohne Rückfrage. Das gerade geöffnete Modell nicht (erst ein anderes öffnen).
    */
   async remove(id: string): Promise<RemoveResult> {
@@ -738,9 +806,9 @@ export class ProjectController {
       const where = 'The working folder on this computer goes to the Recycle Bin, where it can be restored.';
       const c = await choose(this.getWin(), {
         title: 'Remove model',
-        message: inZip ? `Remove “${name}” from this computer?` : zip ? `“${name}” has changes that are not in the ZIP file.` : `“${name}” was never saved.`,
-        detail: inZip ? `${where} The ZIP file stays (${zip}), opening it brings the model back.`
-          : zip ? `${where} The ZIP file (${zip}) stays, but it lacks the changes since the last save.`
+        message: inZip ? `Remove “${name}” from this computer?` : zip ? `“${name}” has changes that are not in the saved file.` : `“${name}” was never saved.`,
+        detail: inZip ? `${where} The model file stays (${zip}), opening it brings the model back.`
+          : zip ? `${where} The model file (${zip}) stays, but it lacks the changes since the last save.`
             : `${where} If it is deleted there, the model is lost.`,
         buttons: ['Remove', 'Cancel'],
       });

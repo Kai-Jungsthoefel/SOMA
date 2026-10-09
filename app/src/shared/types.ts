@@ -9,7 +9,7 @@ export interface ProjectInfo {
   autoBuild: boolean;
 }
 
-/** `saved`: Es gibt eine ZIP-Datei dazu (das Modell wurde mindestens einmal gespeichert). */
+/** `saved`: Es gibt eine Modelldatei dazu (das Modell wurde mindestens einmal gespeichert). */
 export interface ProjectListEntry { id: string; name: string; modified: number; saved?: boolean }
 /** Modell von der Startseite entfernen (E69). `cancelled`: Rückfrage abgebrochen, nichts geändert. */
 export interface RemoveResult { removed: boolean; cancelled?: boolean; error?: string }
@@ -67,7 +67,7 @@ export interface BuildStatus {
  * Export über einen Dateidialog. `files`: geschriebene Dateien mit absolutem Pfad, `target`: gewählte Datei oder gewählter
  * Ordner. `cancelled`: Dialog oder Rückfrage abgebrochen, nichts geschrieben.
  */
-export interface ExportResult { ok: boolean; files: string[]; target?: string; cancelled?: boolean; error?: string }
+export interface ExportResult { ok: boolean; files: string[]; target?: string; cancelled?: boolean; error?: string; warnings?: string[] }
 /** Dateien, die per Ziehen nach inputs/ kopiert wurden (E33). */
 export interface ImportResult { files: string[]; errors: string[] }
 /**
@@ -209,6 +209,7 @@ export type MeasureSource = 'live' | { preview: string };
 
 /** Stand der Speicherung: was ist gesichert, was nicht (E21). */
 export interface SaveState {
+  /** Modelldatei (.soma, bei älteren oder als ZIP geöffneten Modellen bis zum nächsten Speichern eine .zip, E79). */
   zipPath: string | null;
   savedHead: string | null;
   head: string | null;
@@ -290,9 +291,12 @@ export interface SomaApi {
     onChanged(cb: (p: ProjectInfo) => void): void;
     saveState(): Promise<SaveState>;
     save(saveAs?: boolean): Promise<SaveResult>;
+    /** Öffnet eine Modelldatei (.soma, auch .zip, E79). */
     openZip(): Promise<OpenResult>;
+    /** Das ganze Modell als ZIP exportieren (E79), ohne Snapshot. Die Modelldatei bleibt, wie sie ist. */
+    exportZip(): Promise<ExportResult>;
     onSaveState(cb: (s: SaveState) => void): void;
-    /** Zeigt die ZIP im Dateimanager (noch nicht gespeichert: den Arbeitsordner). */
+    /** Zeigt die Modelldatei im Dateimanager (noch nicht gespeichert: den Arbeitsordner). */
     reveal(): Promise<void>;
     /** Vorschaubild des offenen Modells für die Startseite (JPEG als Data-URL). */
     setThumb(dataUrl: string): Promise<void>;

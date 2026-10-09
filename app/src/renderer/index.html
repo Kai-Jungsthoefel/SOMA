@@ -31,7 +31,7 @@
       <button id="btn-lay-agent" aria-pressed="true" title="Expand or collapse the agent (Ctrl 3). Collapsed, it keeps running." aria-label="Agent"><i data-icon="panel" data-size="17" data-stroke="1.7"></i></button>
     </div>
     <button id="btn-export" class="btn" aria-haspopup="menu" aria-expanded="false"><i data-icon="export" data-size="15"></i>Export<i data-icon="down" data-size="13" data-stroke="2"></i></button>
-    <button id="btn-save" class="btn primary" title="Add a snapshot to the history and write the ZIP">Save <span class="kbd">Ctrl S</span></button>
+    <button id="btn-save" class="btn primary" title="Add a snapshot to the history and write the .soma file">Save <span class="kbd">Ctrl S</span></button>
   </header>
 
   <div id="body">
@@ -421,6 +421,9 @@
     <div class="chips"><button class="chip" data-fmt="dxf" title="Section through the middle of the part">DXF · Section</button><button class="chip" data-fmt="svg" title="Projection">SVG · View</button></div>
     <div class="msep"></div>
     <div class="mnote">One part: choose the location. All parts: choose a folder, each part becomes its own file. Reference and purchased parts are not included in “All parts”.</div>
+    <div class="msep"></div>
+    <div class="mh">WHOLE MODEL</div>
+    <button id="exp-zip" class="mi two" role="menuitem"><i data-icon="f-zip" data-size="15"></i><span class="t"><span>Everything as ZIP …</span><span class="sub">Code, results and history in one ZIP file, for example for someone without SOMA. The .soma file stays as it is.</span></span></button>
   </div>
 
   <div id="menu-agents" class="menu" role="menu" hidden>
@@ -464,10 +467,10 @@
       <div class="start-grid">
         <div>
           <h1>Models</h1>
-          <p class="c2 lead">A model is a ZIP file with code, result and history. You can move it and share it freely.</p>
+          <p class="c2 lead">A model is a .soma file with code, result and history. You can move it and share it freely.</p>
           <div class="bigcards">
             <button id="start-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="22" data-stroke="2.2"></i></span><b>New model</b><span class="c2">Template with an example part, plus a terminal in the model folder</span><span class="c3 small">Ctrl N</span></button>
-            <button id="start-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="22"></i></span><b>Open …</b><span class="c2">ZIP file from this or another computer</span><span class="c3 small">Ctrl O</span></button>
+            <button id="start-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="22"></i></span><b>Open …</b><span class="c2">.soma or ZIP file from this or another computer</span><span class="c3 small">Ctrl O</span></button>
           </div>
           <div class="cap">RECENT</div>
           <div id="start-recent" class="recent-grid"></div>

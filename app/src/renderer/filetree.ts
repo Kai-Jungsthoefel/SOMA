@@ -49,7 +49,7 @@ const FILE_ICONS: [RegExp, string][] = [
   [/\.(png|jpe?g|gif|webp|bmp|tiff?)$/i, 'f-image'],
   [/\.(mp4|webm|m4v|mov)$/i, 'f-video'],
   [/\.pdf$/i, 'f-pdf'],
-  [/\.(zip|7z|rar|tar|gz)$/i, 'f-zip'],
+  [/\.(zip|soma|7z|rar|tar|gz)$/i, 'f-zip'],
   [/^\.gitignore$/i, 'f-lock'],
 ];
 export const fileIcon = (name: string) => FILE_ICONS.find(([re]) => re.test(name))?.[1] ?? 'file';

@@ -18,7 +18,7 @@ const { check } = t;
 let app;
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-packages-'));
 const wheels = path.join(workDir, 'wheels');
-const zipPath = path.join(workDir, 'Paketmodell.zip');
+const zipPath = path.join(workDir, 'Paketmodell.soma');
 
 /** Ein Wheel ohne Build-Werkzeuge: Modul, METADATA, WHEEL und RECORD in einer ZIP. */
 function makeWheel(name, version, code, requires = []) {

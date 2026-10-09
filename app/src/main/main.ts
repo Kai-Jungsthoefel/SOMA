@@ -34,6 +34,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('project:saveState', () => ctl.saveState());
   ipcMain.handle('project:save', (_e, saveAs?: boolean) => ctl.save(!!saveAs));
   ipcMain.handle('project:openZip', () => ctl.openZip());
+  ipcMain.handle('project:exportZip', () => ctl.exportZip());
   ipcMain.handle('project:reveal', () => ctl.reveal());
   ipcMain.handle('project:setThumb', (_e, dataUrl: string) => {
     const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));

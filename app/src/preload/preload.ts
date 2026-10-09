@@ -14,6 +14,7 @@ const api: SomaApi = {
     saveState: () => ipcRenderer.invoke('project:saveState'),
     save: (saveAs) => ipcRenderer.invoke('project:save', saveAs),
     openZip: () => ipcRenderer.invoke('project:openZip'),
+    exportZip: () => ipcRenderer.invoke('project:exportZip'),
     onSaveState: (cb) => { ipcRenderer.on('save:state', (_e, st) => cb(st)); },
     reveal: () => ipcRenderer.invoke('project:reveal'),
     setThumb: (dataUrl) => ipcRenderer.invoke('project:setThumb', dataUrl),

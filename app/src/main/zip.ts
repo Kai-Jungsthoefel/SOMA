@@ -4,8 +4,12 @@ import { pipeline } from 'node:stream/promises';
 import yauzl from 'yauzl';
 import yazl from 'yazl';
 
-/** Marker, den die App beim Speichern in die ZIP legt. Damit erkennt sie beim Öffnen, ob der Arbeitsordner abweicht (E21). */
-export interface ZipInfo { savedAt: string; head: string | null; id: string; name: string }
+/**
+ * Marker, den die App beim Speichern in die Modelldatei legt (eine .soma ist eine ZIP, E79). Damit erkennt sie beim Öffnen,
+ * ob der Arbeitsordner abweicht (E21). `dirty`: Beim Export als ZIP gab es Änderungen seit dem letzten Commit, die Datei
+ * entspricht dann keinem Stand im Verlauf.
+ */
+export interface ZipInfo { savedAt: string; head: string | null; id: string; name: string; dirty?: boolean }
 export const ZIP_INFO_PATH = '.soma/zip-info.json';
 
 /** Wird nie gepackt: Umgebungen und Caches (Umgebung wird aus requirements.txt neu gebaut, Cache neu erzeugt). */
@@ -19,7 +23,7 @@ const SKIP_FILES = new Set(['.soma/model.glb', '.soma/model.map.json', '.soma/bu
  */
 const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/results', '.soma/drawings', '.soma/env', 'renders']);
 /** Schon gepackt (Git-Objekte sind zlib, Bilder und Videos komprimiert): nur ablegen, nochmal Deflate kostet nur Zeit. */
-const STORED = /^\.git\/objects\/|\.(png|jpe?g|webp|mp4|webm|zip|gz|7z|pack)$/i;
+const STORED = /^\.git\/objects\/|\.(png|jpe?g|webp|mp4|webm|zip|soma|gz|7z|pack)$/i;
 const MAX_UNPACKED = 2 * 1024 ** 3;
 
 function collect(root: string): string[] {
