@@ -14,6 +14,7 @@ import type { MarkdownConfig } from '@lezer/markdown';
 import { affectsBuild, readOnlyReason } from '../shared/editable';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
+import { DxfView, type DxfDeps } from './dxfview';
 import { PdfView, type PdfDeps } from './pdfview';
 import { el } from './ui';
 
@@ -75,17 +76,23 @@ interface Doc {
   previewScroll: number;
   /** PDF-Reiter (E54): Statt des Editors steht die PDF-Ansicht da, der Text bleibt leer und nur lesbar. */
   pdf?: PdfView;
+  /** DXF-Reiter (E80): wie PDF, statt des Editors die DXF-Ansicht. */
+  dxf?: DxfView;
 }
+
+/** Eigene Ansicht statt des Editors (PDF, DXF). */
+const paneOf = (d: Doc): PdfView | DxfView | undefined => d.pdf ?? d.dxf;
 
 const isMarkdown = (file: string) => /\.md$/i.test(file);
 export const isPdf = (file: string) => /\.pdf$/i.test(file);
+export const isDxf = (file: string) => /\.dxf$/i.test(file);
 
 interface Ui {
   tabs: HTMLElement; info: HTMLElement; banner: HTMLElement; view: HTMLElement; link: HTMLButtonElement;
   /** Umschalter „Ansicht / Bearbeiten“ für Markdown, Knöpfe `[data-mode]`. */
   mode: HTMLElement;
 }
-interface Deps extends PdfDeps {
+interface Deps extends PdfDeps, DxfDeps {
   /** Liest eine Datei frisch von der Platte (ohne Zwischenspeicher). */
   read(rel: string): Promise<string>;
   readBinary(rel: string): Promise<ArrayBuffer>;
@@ -248,6 +255,8 @@ export class CodePanel {
   async refresh(): Promise<void> {
     for (const d of [...this.docs.values()]) {
       if (d.pdf) { await this.refreshPdf(d); continue; }
+      // Nicht abwarten: Neu zeichnen dauert bei großen DXF Sekunden, die übrigen Reiter sollen nicht darauf warten
+      if (d.dxf) { void this.refreshDxf(d); continue; }
       if (d.writing) continue;
       let disk: string | null;
       try { disk = await this.deps.read(d.file); } catch { disk = null; }
@@ -277,7 +286,7 @@ export class CodePanel {
   forget(rel: string): void {
     const gone = this.openUnder(rel);
     if (!gone.length) return;
-    for (const f of gone) { const p = this.docs.get(f)?.pdf; p?.dispose(); p?.root.remove(); this.docs.delete(f); }
+    for (const f of gone) { const x = this.docs.get(f), p = x && paneOf(x); p?.dispose(); p?.root.remove(); this.docs.delete(f); }
     if (this.active && gone.includes(this.active)) {
       this.active = null;
       const next = [...this.docs.values()].pop();
@@ -317,7 +326,7 @@ export class CodePanel {
   }
 
   reset(): void {
-    for (const d of this.docs.values()) d.pdf?.dispose();
+    for (const d of this.docs.values()) { paneOf(d)?.dispose(); paneOf(d)?.root.remove(); }
     this.docs.clear();
     this.loading.clear();
     this.active = null;
@@ -350,6 +359,7 @@ export class CodePanel {
     if (!p) {
       p = (async () => {
         if (isPdf(file)) return this.loadPdf(file);
+        if (isDxf(file)) return this.loadDxf(file);
         let text: string;
         try { text = await this.deps.read(file); } catch (e) { this.deps.toast(`${file} cannot be read: ${errText(e)}`, 'error'); return null; }
         const locked = readOnlyReason(file)
@@ -377,6 +387,30 @@ export class CodePanel {
     this.docs.set(file, d);
     await pdf.load(data);
     return d;
+  }
+
+  /**
+   * DXF-Reiter: gleich da mit „Reading the DXF…“, gezeichnet wird im Hintergrund (Python, bei großen Dateien Sekunden).
+   * Gibt es die Datei nicht, geht der Reiter wieder zu.
+   */
+  private loadDxf(file: string): Doc {
+    const dxf = new DxfView(file, this.deps);
+    dxf.root.hidden = true;
+    this.ui.view.append(dxf.root);
+    const d: Doc = { file, base: '', eol: '\n', locked: 'DXF', dirty: false, writing: false, queue: Promise.resolve(), conflict: null, mark: null, scrollTop: 0,
+      preview: false, previewScroll: 0, dxf, state: EditorState.create({ doc: '', extensions: [EditorState.readOnly.of(true)] }) };
+    this.docs.set(file, d);
+    void dxf.load().then((r) => {
+      if (r !== 'gone' || this.docs.get(file) !== d) return;
+      this.deps.toast(`${file} cannot be read: it does not exist.`, 'error');
+      void this.close(file);
+    });
+    return d;
+  }
+
+  /** Geänderte DXF neu zeichnen (die Ansicht prüft selbst, ob sich die Datei geändert hat), gelöschte schließen. */
+  private async refreshDxf(d: Doc): Promise<void> {
+    if ((await d.dxf!.load()) === 'gone' && this.docs.get(d.file) === d) await this.close(d.file);
   }
 
   /** Geänderte PDF neu laden (etwa vom Agenten neu erzeugt), gelöschte schließen. */
@@ -449,8 +483,8 @@ export class CodePanel {
       if (choice === 'save') { if (!(await this.write(d))) return; if (affectsBuild(d.file)) this.deps.build(); }
       else if (!(await this.backup(d))) return;
     }
-    d.pdf?.dispose();
-    d.pdf?.root.remove();
+    paneOf(d)?.dispose();
+    paneOf(d)?.root.remove();
     this.docs.delete(file);
     if (this.active === file) {
       this.active = null;
@@ -571,15 +605,18 @@ export class CodePanel {
     const md = !!d && isMarkdown(d.file);
     this.ui.mode.hidden = !md;
     this.ui.mode.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.setAttribute('aria-checked', String((b.dataset.mode === 'view') === !!d?.preview)));
-    this.view.dom.hidden = !d || (md && d.preview) || !!d.pdf;
+    this.view.dom.hidden = !d || (md && d.preview) || !!paneOf(d);
     this.empty.hidden = !!d;
-    for (const x of this.docs.values()) if (x.pdf && x.pdf.root.hidden !== (x !== d)) { x.pdf.root.hidden = x !== d; if (x !== d) x.pdf.hidden(); else x.pdf.shown(); }
+    for (const x of this.docs.values()) {
+      const p = paneOf(x);
+      if (p && p.root.hidden !== (x !== d)) { p.root.hidden = x !== d; if (x !== d) p.hidden(); else p.shown(); }
+    }
     this.renderPreview(md && d.preview ? d : null);
     if (!d) { info.replaceChildren(); banner.hidden = true; return; }
 
-    const m = d.pdf ? null : d.mark;
+    const m = paneOf(d) ? null : d.mark;
     const left: (Node | string)[] = [];
-    if (d.pdf) { /* PDF: eigene Leiste in der Ansicht */ }
+    if (paneOf(d)) { /* PDF und DXF: eigene Leiste in der Ansicht */ }
     else if (d.locked) left.push(icon('lock', 13, 2), `Read only. ${d.locked}`);
     else if (m) {
       const sw = m.kind === 'er' ? el('span', { className: 'ci-err' }, icon('alert', 13, 2)) : el('span', { className: 'sw' });
@@ -594,7 +631,7 @@ export class CodePanel {
     const hint = !d.locked && d.dirty && !d.conflict ? el('span', { className: 'c3 ci-hint', textContent: 'Not saved · Ctrl+S' }) : '';
     if (left.length || pending) info.replaceChildren(el('span', { className: 'ci-main' }, ...left), el('span', { className: 'grow' }), hint, pending ? this.saveBtn : '');
     else info.replaceChildren();
-    info.classList.toggle('locked', !!d.locked && !d.pdf);
+    info.classList.toggle('locked', !!d.locked && !paneOf(d));
 
     banner.hidden = !d.conflict;
     if (d.conflict) {
@@ -653,7 +690,7 @@ export class CodePanel {
         const d = this.active ? this.docs.get(this.active) : undefined;
         return {
           file: this.active, files: [...this.docs.keys()], dirty: !!d?.dirty, conflict: d?.conflict ? (d.conflict.disk === null ? 'gone' : 'changed') : null,
-          locked: d?.locked ?? null, readOnly: this.view.state.readOnly, preview: !this.md.hidden, pdf: d?.pdf?.state() ?? null, line: this.view.state.doc.lineAt(this.view.state.selection.main.head).number,
+          locked: d?.locked ?? null, readOnly: this.view.state.readOnly, preview: !this.md.hidden, pdf: d?.pdf?.state() ?? null, dxf: d?.dxf?.state() ?? null, line: this.view.state.doc.lineAt(this.view.state.selection.main.head).number,
           rendered: this.md.hidden ? null : [...this.md.querySelectorAll<HTMLElement>('.md > *, .md li')].map((x) => `${x.tagName.toLowerCase()}:${(x.textContent ?? '').trim().slice(0, 60)}`), text: this.text(), focused: this.view.hasFocus, unsaved: this.unsaved(),
           marked: [...this.ui.view.querySelectorAll('.cm-line.cm-mark-hl, .cm-line.cm-mark-er')].map((x) => (x.classList.contains('cm-mark-er') ? 'er:' : 'hl:') + x.textContent),
         };
@@ -669,6 +706,11 @@ export class CodePanel {
       pdfSelect: (page: number, find: string) => (this.active ? this.docs.get(this.active)?.pdf?.select(page, find) ?? false : false),
       pdfQuote: () => (this.active ? this.docs.get(this.active)?.pdf?.sendQuote() : undefined),
       pdfMarkPage: (n?: number) => (this.active ? this.docs.get(this.active)?.pdf?.markPage(n) : undefined),
+      dxfLayers: (names: string[], on: boolean) => (this.active ? this.docs.get(this.active)?.dxf?.setLayers(names, on) : undefined),
+      dxfZoom: (f: number) => (this.active ? this.docs.get(this.active)?.dxf?.testZoom(f) : undefined),
+      dxfFit: () => (this.active ? this.docs.get(this.active)?.dxf?.fit() : undefined),
+      dxfMark: () => (this.active ? this.docs.get(this.active)?.dxf?.markView() : undefined),
+      dxfInked: () => (this.active ? this.docs.get(this.active)?.dxf?.inked() ?? 0 : 0),
       /** Lage des Editors im Panel: füllt er die Höhe, und lässt er sich scrollen? */
       layout: () => {
         const e = this.view.dom.getBoundingClientRect(), v = this.ui.view.getBoundingClientRect(), s = this.view.scrollDOM;

@@ -5,6 +5,7 @@ import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
 import { choose, chooseSkillFiles, setTestAnswers, trashItem } from './dialogs';
+import { viewDxf } from './dxf';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
@@ -119,6 +120,7 @@ function registerIpc(ctl: ProjectController): void {
     const b = fs.readFileSync(resolveInside(dir(), rel));
     return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
   });
+  ipcMain.handle('dxf:view', (_e, rel: unknown, known: unknown) => viewDxf(dir(), String(rel), known == null ? null : String(known)));
 
   ipcMain.handle('term:create', (_e, opts?: { command?: string }) => ctl.need().terminals.create(opts));
   ipcMain.on('term:write', (_e, id: number, data: string) => ctl.session?.terminals.write(id, data));

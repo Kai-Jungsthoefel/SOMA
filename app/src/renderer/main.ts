@@ -1,7 +1,7 @@
 import { affectsBuild } from '../shared/editable';
 import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
 import { SOMA_VERSION } from '../shared/version';
-import { CodePanel, codeRows, isPdf, type Mark } from './code';
+import { CodePanel, codeRows, isDxf, isPdf, type Mark } from './code';
 import { AnimTool } from './animtool';
 import { Busy } from './busy';
 import { DRAG_FILE, FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
@@ -127,6 +127,8 @@ const code = new CodePanel(
       insertToAgent(`[Quote: ${file} p. ${pages}: "${cut ? `${text.slice(0, MAX_QUOTE)} …` : text}"] `, cut ? `Quote shortened to ${MAX_QUOTE} characters.` : undefined);
     },
     markPage: (file, page, canvas) => void markSource(`${file} p. ${page}`, canvas, canvas.width, canvas.height),
+    dxf: (rel, known) => api.dxf.view(rel, known),
+    markDxf: (label, canvas) => void markSource(label, canvas, canvas.width, canvas.height),
   },
 );
 
@@ -143,7 +145,7 @@ function openLink(href: string): void {
     return;
   }
   if (/^[a-z][a-z0-9+.-]*:/i.test(href)) { toast(`For security reasons, this link is not opened: ${href.slice(0, 100)}`, 'error'); return; }
-  if (TEXT_EXT.test(href.split('/').pop() ?? '') || isPdf(href)) void openCode(href);
+  if (TEXT_EXT.test(href.split('/').pop() ?? '') || isPdf(href) || isDxf(href)) void openCode(href);
   else void openExternal(href);
 }
 
@@ -195,7 +197,7 @@ const paramsPanel = new ParamsPanel({ list: $('params-list'), foot: $('params-fo
 
 const files = new FileTree($('tab-files'), $('menu-ctx'), {
   open: (n) => {
-    if (TEXT_EXT.test(n.name) || isPdf(n.name)) void openCode(n.path);
+    if (TEXT_EXT.test(n.name) || isPdf(n.name) || isDxf(n.name)) void openCode(n.path);
     // Bilder (etwa Markierungen und Skizzen) öffnen auf der Zeichenfläche (E52), das Bildprogramm gibt es per Rechtsklick
     else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
     else if (VIDEO_EXT.test(n.name)) void videoView.open(n.path);

@@ -54,6 +54,7 @@ const api: SomaApi = {
       ipcRenderer.on('editor:req', async (_e, id: number, action: 'status' | 'save' | 'discard') => ipcRenderer.send('editor:res', id, await cb(action).catch(() => null)));
     },
   },
+  dxf: { view: (rel, known) => ipcRenderer.invoke('dxf:view', rel, known ?? null) },
   term: {
     create: (opts) => ipcRenderer.invoke('term:create', opts),
     write: (id, data) => ipcRenderer.send('term:write', id, data),

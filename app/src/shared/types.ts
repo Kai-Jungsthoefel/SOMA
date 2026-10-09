@@ -81,6 +81,35 @@ export interface FeedbackResult { ok: boolean; path?: string; error?: string }
 /** Anlegen, Umbenennen oder Löschen im Dateibaum. `path` relativ zum Projekt (neuer Pfad), `canceled`: Rückfrage abgelehnt. */
 export interface FileOpResult { ok: boolean; path?: string; error?: string; canceled?: boolean }
 
+/**
+ * DXF für die Ansicht im Code-Panel (E80), gezeichnet von `soma dxfview` mit ezdxf. Ein Stapel ist Geometrie gleicher Art,
+ * Layer, Farbe und Strichstärke. `ops`: Befehle 0 M, 1 L, 2 Q, 3 C, 4 Z, ihre Koordinaten der Reihe nach in `xy` (bei
+ * Punkten nur `xy`). Alle Koordinaten relativ zu `origin`, Strichstärke `lw` in mm.
+ */
+export interface DxfBatch { kind: 'line' | 'fill' | 'text' | 'point'; layer: number; color: string; lw: number; ops: Uint8Array; xy: Float32Array }
+/** `off`: in der Datei aus- oder eingefroren, die Ansicht blendet ihn zunächst aus. `count`: Objekte darauf im gezeigten Bereich. */
+export interface DxfLayer { name: string; color: string; off: boolean; count: number }
+export interface DxfDrawing {
+  /** Einheit aus $INSUNITS (z. B. 'mm'), null ohne Angabe. */
+  units: string | null;
+  /** Name des Papierbereichs, wenn der Modellbereich leer war und er stattdessen gezeigt wird. */
+  layout: string | null;
+  origin: [number, number];
+  /** Umgebendes Rechteck relativ zu `origin`, null wenn nichts zu zeichnen ist. */
+  box: [number, number, number, number] | null;
+  layers: DxfLayer[];
+  batches: DxfBatch[];
+  /** Nicht gezeichnete Objekte je Typ (z. B. 3DSOLID). */
+  skipped: Record<string, number>;
+  /** Probleme beim Lesen, die ezdxf umgangen hat. Die Datei bleibt, wie sie ist. */
+  issues: number;
+  /** Sehr große Zeichnung, nur ein Teil ist da. */
+  truncated: boolean;
+  entities: number;
+}
+/** `sig`: Fingerabdruck der Datei (Größe, Änderungszeit). `unchanged`: gleich dem bekannten, nichts mitgeschickt. `gone`: Datei weg. */
+export interface DxfResult { ok: boolean; sig?: string; unchanged?: boolean; gone?: boolean; error?: string; drawing?: DxfDrawing }
+
 export interface FileNode { name: string; path: string; dir: boolean; children?: FileNode[] }
 
 export interface AgentInfo { id: string; label: string; command: string; found: boolean }
@@ -350,6 +379,8 @@ export interface SomaApi {
     /** Anfragen des Hauptprozesses an den Editor beim Beenden: ungespeicherte Dateien nennen, speichern oder verwerfen. */
     onEditorRequest(cb: (action: 'status' | 'save' | 'discard') => Promise<{ dirty?: string[]; ok?: boolean }>): void;
   };
+  /** DXF-Ansicht im Code-Panel (E80). `known`: Fingerabdruck des gezeigten Stands, bei gleicher Datei kommt nur `unchanged`. */
+  dxf: { view(rel: string, known?: string | null): Promise<DxfResult> };
   term: {
     create(opts?: { command?: string; title?: string }): Promise<number>;
     write(id: number, data: string): void;
