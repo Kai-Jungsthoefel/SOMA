@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOMA Strukturbaum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Entwurf nach der Idee des Nutzers (2026-10-09, dritte Runde des Strukturbaums): Leiste in drei Gruppen,
+   Parameters und Files, dann Analysis und Animation, dann Skills, getrennt durch Striche. Der Reiter Parts und der
+   Umschalter oben links entfallen. Die Bauteile stehen als Strukturbaum ohne Hintergrund ganz oben links im Viewer:
+   oben der Name des Modells, darunter Baumstriche, und erst direkt vor jedem Namen Auge und Transparenz.
+   Der Baum ist in Modell, Analyse und Animation derselbe. Zurück zum Modell geht über das × in der Leiste unten im Bild.
+   Farben wie Entwurf 2 (design/ui-entwurf-2.html): Orange Aktion und Auswahl, Violett Vorschau, Grün/Gelb/Rot Status,
+   Blau (#5ea8ff) ist die Farbe des Lastfalls im Bild. Pinke Kreise sind Anmerkungen, kein Teil der Oberfläche. */
+:root{
+  --bg:#121417; --s1:#16181c; --s2:#1b1e23; --s3:#232830; --line:#262a31; --line2:#2d323a;
+  --tx:#e6e8eb; --tx2:#a3acb6; --tx3:#7f8994; --term:#0f1114;
+  --acc:#f29a38; --acc-tx:#f6b46a; --acc-tint:rgba(242,154,56,.14); --acc-line:rgba(242,154,56,.45);
+  --vio:#9aa6ff;
+  --ok:#5cc98b; --warn:#e8c547; --err:#f07470;
+  --bc:#5ea8ff;
+  --note:#e25bd6;
+  --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif; --mono:'IBM Plex Mono',Consolas,monospace;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+  --k:1;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#0b0c0e;color:var(--tx);font:13px/1.4 var(--sans)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+svg{display:block;flex-shrink:0}
+b{font-weight:600}
+code,.mono{font-family:var(--mono);font-size:.95em}
+
+/* ---- Präsentation (wie Entwurf 2) ---- */
+.deck-top{position:sticky;top:0;z-index:5;background:#0b0c0e;border-bottom:1px solid #1d2025}
+.deck-head{display:flex;align-items:center;gap:18px;padding:10px 24px}
+.deck-title{font-weight:600;font-size:14px;white-space:nowrap}
+.deck-tabs{display:flex;gap:2px;flex-wrap:wrap}
+.deck-tab{height:30px;padding:0 11px;border-radius:6px;color:var(--tx2);white-space:nowrap}
+.deck-tab .n{color:var(--tx3);margin-right:6px}
+.deck-tab[aria-selected=true]{background:var(--s3);color:var(--tx)}
+.deck-tab[aria-selected=true] .n{color:var(--acc-tx)}
+.deck-tools{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--tx3);font-size:12px;white-space:nowrap}
+.deck-tools label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--tx2)}
+.deck-tools input{accent-color:var(--note)}
+.deck-cap{display:flex;gap:28px;align-items:baseline;padding:4px 24px 12px}
+.deck-cap h2{margin:0;font-size:17px;font-weight:600;white-space:nowrap}
+.deck-cap ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px 24px;color:var(--tx2)}
+.deck-cap li{display:flex;gap:8px;align-items:flex-start;max-width:520px}
+.deck-cap li .bul{width:5px;height:5px;margin:7px 6px 0 6px;border-radius:50%;background:var(--tx3);flex-shrink:0}
+.stage{padding:16px 24px 40px;display:flex;justify-content:center}
+.frame{width:calc(1600px * var(--k));height:calc(900px * var(--k));flex-shrink:0}
+.screen{width:1600px;height:900px;transform:scale(var(--k));transform-origin:0 0;border-radius:10px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px #262a31}
+.pin{position:absolute;z-index:50;width:22px;height:22px;border-radius:50%;background:var(--note);color:#fff;font:600 12px/22px var(--sans);text-align:center;box-shadow:0 0 0 3px rgba(226,91,214,.28),0 4px 10px rgba(0,0,0,.5);pointer-events:none}
+.pin.s{position:static;display:inline-block;flex-shrink:0;width:20px;height:20px;font-size:11px;line-height:20px;box-shadow:none}
+body.nonotes .pin:not(.s){display:none}
+body.solo .deck-top{display:none}
+body.solo .stage{padding:0}
+body.solo .screen{border-radius:0;box-shadow:none}
+
+/* ---- App: Grundbausteine (aus Entwurf 2) ---- */
+.app{width:1600px;height:900px;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;position:relative}
+.top{height:44px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding-right:12px;background:var(--s1);border-bottom:1px solid var(--line)}
+.logo{width:56px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--acc);flex-shrink:0}
+.docname{display:flex;align-items:center;gap:6px;height:30px;padding:0 8px;margin-left:-6px;border-radius:6px;color:var(--tx2)}
+.docname b{font-size:14px;color:var(--tx)}
+.savestate{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--tx2);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.grow{flex-grow:1}
+.c2{color:var(--tx2)} .c3{color:var(--tx3)} .small{font-size:12px}
+.pill{display:flex;align-items:center;height:30px;border:1px solid var(--line2);border-radius:15px;background:var(--s2);white-space:nowrap}
+.pill .main{display:flex;align-items:center;gap:8px;height:28px;padding:0 12px}
+.pill .sep{width:1px;height:16px;background:var(--line2)}
+.pill .auto{display:flex;align-items:center;gap:6px;height:28px;padding:0 12px 0 10px;color:var(--tx2)}
+.btn{display:flex;align-items:center;gap:7px;height:30px;padding:0 10px;border:1px solid var(--line2);border-radius:6px;white-space:nowrap;flex-shrink:0}
+.btn.sm{height:28px;padding:0 9px;font-size:12px;gap:6px}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#1b1206;font-weight:600;gap:10px;padding:0 12px}
+.btn.primary .kbd{font-size:11px;font-weight:500;color:#5a3a12}
+.btn.acc{background:var(--acc-tint);border-color:var(--acc-line);color:var(--acc-tx);font-weight:500}
+.ibtn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:var(--tx2);flex-shrink:0}
+.ibtn.s{width:26px;height:26px}
+.layout{display:flex;align-items:center;gap:2px;padding:2px;border:1px solid var(--line2);border-radius:8px}
+.layout button{width:30px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--tx3)}
+.layout button.on{background:var(--s3);color:var(--tx)}
+.body{flex-grow:1;display:flex;min-height:0}
+.rail{width:56px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:var(--s1);border-right:1px solid var(--line)}
+.rail button{position:relative;width:48px;height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:8px;color:var(--tx2);text-align:center}
+.rail button span{font-size:10px}
+.rail button.on{background:var(--s3);color:var(--acc-tx)}
+.rail-sep{width:32px;height:1px;background:#3d444e;margin:8px 0;flex-shrink:0}
+.rail button .nd{position:absolute;top:7px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 2px var(--s1)}
+.rail button.on .nd{box-shadow:0 0 0 2px var(--s3)}
+.side{flex-shrink:0;display:flex;flex-direction:column;background:var(--s1);border-right:1px solid var(--line);min-height:0;position:relative}
+.side-hd{height:40px;flex-shrink:0;display:flex;align-items:center;gap:4px;padding:0 6px 0 18px;border-bottom:1px solid var(--line)}
+.side-hd b{font-size:13px}
+.side-hd .cnt{color:var(--tx3);margin-left:6px}
+.side-hd .back{display:flex;align-items:center;gap:5px;height:28px;padding:0 8px 0 4px;margin-left:-10px;border-radius:6px;color:var(--tx2)}
+.side-hd .back .cnt{margin-left:2px}
+.center{flex-grow:1;min-width:0;display:flex;flex-direction:column}
+.vp{flex-grow:1;position:relative;overflow:hidden;background:radial-gradient(ellipse at 46% 48%,#272c34 0%,#1b1e23 62%,#16181c 100%)}
+.vstage{position:absolute;left:0;top:0}
+.float{background:rgba(24,27,31,.96);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--shadow)}
+.vtop{position:absolute;left:12px;right:12px;top:12px;display:flex;align-items:flex-start;gap:12px;z-index:3}
+.vtop .cubespace{width:100px;flex-shrink:0}
+.tools{display:flex;align-items:center;gap:2px;padding:3px;height:42px}
+.tools button{display:flex;align-items:center;gap:7px;height:34px;padding:0 11px;border-radius:7px;white-space:nowrap;color:var(--tx)}
+.tools.compact button{padding:0 9px}
+.vsep{width:1px;height:20px;background:var(--line2);margin:0 4px;flex-shrink:0}
+.cubebox{position:absolute;top:8px;right:12px;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:3}
+.vbar{display:flex;flex-direction:column;gap:2px;padding:3px}
+.vbar button{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;color:#c9ced4}
+.seg{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden;flex-shrink:0}
+.seg button{height:28px;padding:0 10px;font-size:12px;color:var(--tx2);display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
+.seg button + button{border-left:1px solid var(--line2)}
+.seg button.on{background:var(--acc-tint);color:var(--acc-tx);font-weight:500}
+.tl{height:44px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--s1);border-top:1px solid var(--line)}
+.tl .lbl{display:flex;align-items:center;gap:7px;color:var(--tx2);font-size:12px;font-weight:500;flex-shrink:0}
+.track{position:relative;height:44px;flex-grow:1}
+.track .line{position:absolute;left:8px;right:64px;top:21px;height:2px;background:var(--line2);border-radius:1px}
+.vd{position:absolute;top:15px;width:14px;height:14px;margin-left:-7px;display:flex;align-items:center;justify-content:center}
+.vd i{width:8px;height:8px;border-radius:50%;background:var(--tx2)}
+.vd.app i{background:var(--s1);box-shadow:inset 0 0 0 2px var(--tx2)}
+.now{position:absolute;top:13px;right:0;height:18px;display:flex;align-items:center;gap:8px}
+.now i{width:14px;height:14px;border-radius:50%;background:var(--bg);box-shadow:inset 0 0 0 2px var(--acc);display:flex;align-items:center;justify-content:center}
+.now i::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--acc)}
+.now span{font-size:12px;font-weight:500;color:var(--acc-tx)}
+.agent{flex-shrink:0;display:flex;flex-direction:column;background:var(--term);border-left:1px solid var(--line);position:relative;min-width:0}
+.tabs{height:40px;flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:0 6px 0 8px;background:var(--s1);border-bottom:1px solid var(--line)}
+.tab{height:33px;display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;border-radius:7px 7px 0 0;color:var(--tx2);border:1px solid transparent;white-space:nowrap}
+.tab.on{background:var(--term);border-color:var(--line);border-bottom-color:var(--term);margin-bottom:-1px;color:var(--tx);font-weight:500}
+.tab .x{color:var(--tx3);display:flex}
+.term{flex-grow:1;min-height:0;display:flex;flex-direction:column;padding:12px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.6;color:#c9ced4;overflow:hidden}
+.term .l{white-space:pre-wrap}
+.term .gap{height:12px;flex-shrink:0}
+.term .u{color:var(--tx)} .term .p{color:var(--acc-tx)} .term .cmd{color:#7fb4ff} .term .mut{color:var(--tx3)}
+.term .bul{color:var(--ok)}
+.term .inbox{margin-top:auto;border-top:1px solid #2b3038;border-bottom:1px solid #2b3038;padding:6px 0;color:var(--tx)}
+.cursor{display:inline-block;width:7px;height:15px;margin-left:2px;background:var(--tx);vertical-align:-3px}
+.menu{position:absolute;z-index:6;width:220px;padding:6px;background:var(--s2);border:1px solid var(--line2);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+.mh{padding:6px 10px 6px;font-size:12px;color:var(--tx3)}
+.mi{display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border-radius:6px;width:100%;white-space:nowrap}
+.mi .ico{color:var(--tx2);display:flex}
+.mi.on{background:var(--s3)}
+.msep{height:1px;background:var(--line);margin:6px 4px}
+.tag{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;font-size:11px;font-weight:500;vertical-align:1px}
+.tag.acc{background:var(--acc-tint);color:var(--acc-tx)}
+
+/* ---- Strukturbaum ganz oben links im Viewer ----
+   Ohne Hintergrund wie in CATIA: nur Schrift, Striche und Symbole, mit dunklem Rand, damit sie über jedem Teil und
+   jeder Ergebnisfarbe lesbar bleiben. Nur die Zeile unter der Maus hellt leicht auf.
+   Je Zeile erst die Baumstriche, dann Pfeil (Gruppe), Auge und Halbkreis, dann der Name. */
+.tree{--trl:rgba(230,232,235,.3);position:absolute;left:12px;top:12px;z-index:4;display:flex;flex-direction:column;font-size:12.5px;color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap;text-shadow:0 0 1px #0a0b0d,0 0 2px #0a0b0d,0 0 4px rgba(10,11,13,.9),0 0 8px rgba(10,11,13,.6)}
+.tree svg{filter:drop-shadow(0 0 1px #0a0b0d) drop-shadow(0 0 2px #0a0b0d) drop-shadow(0 0 5px rgba(10,11,13,.7))}
+.tree.open{width:252px}
+.tr-hd{display:flex;align-items:center;gap:6px;height:28px;padding:0 4px}
+.tr-hd .chev{width:14px;display:flex;justify-content:center;color:var(--tx2)}
+.tr-hd .ico{display:flex;color:var(--tx2)}
+.tr-hd b{font-weight:500}
+.tr-hd .n{color:var(--tx2);font-size:12px}
+.tr-hd .sp{flex:1}
+.tr-hd .hb{width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--tx2)}
+.tr-search{display:flex;align-items:center;gap:7px;height:30px;margin:0 0 4px;padding:0 3px 0 8px;border:1px solid var(--acc-line);border-radius:6px;background:var(--bg);color:var(--tx3);text-shadow:none}
+.tr-search svg{filter:none}
+.tr-search span{color:var(--tx)}
+.tr-search .caret{display:inline-block;width:1px;height:14px;margin-left:1px;background:var(--tx);vertical-align:-2px}
+.tr-search .hb{width:24px;height:24px;display:flex;align-items:center;justify-content:center}
+.tr-rows{padding:0 0 2px}
+.tr-row{display:flex;align-items:center;height:24px;border-radius:5px;padding:0 8px 0 4px}
+/* Baumstriche je Ebene: v läuft weiter, t zweigt ab, l zweigt als letzter ab, h führt bei Teilen bis zu den Knöpfen */
+.tr-row .br{display:flex;align-self:stretch;flex-shrink:0}
+.tr-row .br i{position:relative;width:14px}
+.tr-row .br i::before,.tr-row .br i::after{box-shadow:0 0 0 1px rgba(10,11,13,.35)}
+.tr-row .br i.v::before,.tr-row .br i.t::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:1px;background:var(--trl)}
+.tr-row .br i.l::before{content:'';position:absolute;left:6px;top:0;height:12px;width:1px;background:var(--trl)}
+.tr-row .br i.t::after,.tr-row .br i.l::after{content:'';position:absolute;left:6px;right:0;top:12px;height:1px;background:var(--trl)}
+.tr-row .br i.h::after{content:'';position:absolute;left:0;right:3px;top:12px;height:1px;background:var(--trl)}
+.tr-row .chev{width:14px;display:flex;justify-content:center;color:var(--tx2);flex-shrink:0}
+.tr-row .tg{width:20px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:5px;color:var(--tx2);opacity:.6;flex-shrink:0}
+.tr-row .tg.gh{margin-right:5px}
+.tr-row .tg.eye.on{opacity:1;color:var(--tx)}
+.tr-row .tg.gh.on{opacity:1;color:var(--acc-tx)}
+.tr-row .tg.gh.partly{opacity:.8;color:var(--acc-tx)}
+.tr-row .nm{overflow:hidden;text-overflow:ellipsis}
+.tr-row .cnt{margin-left:6px;color:var(--tx2);font-size:12px}
+.tr-row.off .nm{color:var(--tx3)}
+.tr-row.sel .nm{color:var(--acc-tx);font-weight:500}
+.tr-row.hov{background:rgba(255,255,255,.09)} .tr-row.hov .tg{opacity:1}
+.tr-ft{display:flex;align-items:center;gap:6px;height:26px;padding:0 4px;font-size:12px;color:var(--tx2)}
+.tr-ft button{margin-left:auto;height:22px;padding:0 8px;border-radius:5px;color:var(--acc-tx)}
+
+/* ---- Bericht (Analyse) und Ablauf (Animation) in der Seitenleiste, ruhig wie in Runde 2 ---- */
+.cx{font-variant-numeric:tabular-nums}
+.cx-scroll{flex:1;min-height:0;overflow:hidden;position:relative}
+.cx-head{padding:16px 18px 0}
+.cx-title{margin:0;font-size:14px;line-height:1.35;font-weight:600;color:var(--tx)}
+.cx-meta{margin-top:3px;font-size:12px;color:var(--tx3)}
+.cx-meta .w{color:var(--warn)}
+.cx-sum{padding:18px 18px 16px}
+.cx-num{display:flex;align-items:center;gap:12px}
+.cx-num .n{font-size:30px;line-height:1;font-weight:500;color:var(--tx);letter-spacing:-.01em}
+.cx-num .n small{font-size:14px;color:var(--tx2);margin-left:3px;font-weight:400;letter-spacing:0}
+.cx-num .t{font-size:12.5px;line-height:1.35;color:var(--tx2)}
+.cx-dim .cx-num,.cx-dim .cx-st,.cx-dim .cx-pr{opacity:.45}
+.cx-num .t span{color:var(--tx3)}
+.cx-st{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--tx)}
+.cx-st svg.bad{color:var(--err)} .cx-st svg.ok{color:var(--ok)}
+.cx-pr{display:flex;align-items:center;gap:9px;height:28px;margin:0 -8px 0 -8px;padding:0 4px 0 30px;border-radius:6px;font-size:12.5px;color:var(--tx2)}
+.cx-pr .dot{width:6px;height:6px}
+.cx-pr .a{color:var(--tx3);margin-left:auto}
+.cx-pr .v{color:var(--tx);width:36px;text-align:right}
+.cx-pr .go{width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:var(--tx3);visibility:hidden}
+.cx-pr.hov{background:var(--s3)} .cx-pr.hov .go{visibility:visible;color:var(--tx)}
+.cx-warn{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12px;line-height:1.4;color:var(--tx2)}
+.cx-warn svg{color:var(--warn);margin-top:1px}
+.cx-warn u{text-decoration:none;color:var(--tx3);border-bottom:1px dotted var(--tx3);white-space:nowrap}
+.cx-line{display:flex;gap:8px;align-items:center;margin:14px 18px 0;font-size:12px;color:var(--tx2)}
+.cx-line svg{color:var(--warn)}
+.cx-line button{margin-left:auto;color:var(--acc-tx);font-size:12px}
+.cx-prog{position:relative;height:2px;margin:14px 18px 0;background:var(--s3);border-radius:1px;overflow:hidden}
+.cx-prog i{position:absolute;left:20%;width:35%;top:0;bottom:0;background:var(--acc)}
+.cx-sec{border-top:1px solid var(--line);padding:4px 0 8px}
+.cx-sh{display:flex;align-items:center;gap:6px;height:32px;padding:0 14px 0 18px;font-size:11px;letter-spacing:.07em;color:var(--tx3)}
+.cx-sh .r{margin-left:auto;letter-spacing:0;font-size:12px;display:flex;align-items:center;gap:4px;color:var(--tx3)}
+.cx-sh .cnt{letter-spacing:0}
+.cx-row{display:grid;grid-template-columns:64px 1fr 14px;align-items:center;gap:10px;min-height:30px;margin:0 6px;padding:0 8px 0 12px;border-radius:6px;font-size:13px}
+.cx-row .l{color:var(--tx3);font-size:12.5px}
+.cx-row .v{color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cx-row .v span{color:var(--tx3)}
+.cx-row .ch{color:var(--tx3);display:flex;transition:transform .1s}
+.cx-row.hov{background:var(--s3)}
+.cx-row.open .ch{transform:rotate(90deg)}
+.cx-det{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;margin:2px 18px 10px 92px;font-size:12px;color:var(--tx2)}
+.cx-det dt{color:var(--tx3)} .cx-det dd{margin:0}
+.cx-det .okc{color:var(--ok)} .cx-det .wc{color:var(--warn)}
+.cx-det .sub{grid-column:1 / -1;color:var(--tx);margin-top:4px}
+.cx-det .sub span{color:var(--tx3)}
+.cx-tbl{width:calc(100% - 36px);margin:0 18px;border-collapse:collapse;font-size:12.5px}
+.cx-tbl th{font-weight:400;font-size:11.5px;color:var(--tx3);text-align:right;padding:0 0 6px 8px;white-space:nowrap}
+.cx-tbl th.l{text-align:left;padding-left:0}
+.cx-tbl td{height:28px;padding:0 0 0 8px;text-align:right;color:var(--tx2);white-space:nowrap}
+.cx-tbl td.nm{text-align:left;padding-left:0;color:var(--tx);max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.cx-tbl td.nm .dot{width:6px;height:6px;margin-right:8px;vertical-align:1px}
+.cx-fold{display:flex;align-items:center;gap:6px;height:36px;padding:0 14px 0 18px;border-top:1px solid var(--line);font-size:11px;letter-spacing:.07em;color:var(--tx3)}
+.cx-fold .chev{display:flex}
+.cx-fold .r{margin-left:auto;letter-spacing:0;font-size:12px}
+.cx-p{display:flex;gap:9px;margin:2px 18px 10px;font-size:12px;line-height:1.45;color:var(--tx2)}
+.cx-p svg{margin-top:2px}
+.cx-p.w svg{color:var(--warn)} .cx-p.i svg{color:var(--tx3)}
+.cx-foot{border-top:1px solid var(--line);flex-shrink:0;background:var(--s1)}
+.cx-acts{display:flex;gap:8px;padding:12px}
+.cx-acts .btn{flex:1;justify-content:center}
+.cx-seq{display:grid;grid-template-columns:38px 1fr;align-items:center;gap:10px;height:30px;margin:0 6px;padding:0 10px 0 12px;border-radius:6px;font-size:13px;color:var(--tx2)}
+.cx-seq .t{font-size:12px;color:var(--tx3)}
+.cx-seq.cur{background:var(--acc-tint);color:var(--tx)} .cx-seq.cur .t{color:var(--acc-tx)}
+.cx-file{display:grid;grid-template-columns:16px 1fr auto;align-items:center;gap:10px;height:30px;margin:0 6px;padding:0 10px 0 12px;border-radius:6px;font-size:13px;color:var(--tx)}
+.cx-file svg{color:var(--tx3)} .cx-file .s{font-size:12px;color:var(--tx3)}
+
+/* Listen in den Reitern Analysis und Animation */
+.al{padding:6px 0}
+.al-sh{display:flex;align-items:center;gap:6px;height:30px;padding:6px 14px 0 18px;font-size:11px;letter-spacing:.07em;color:var(--tx3)}
+.al-sh .r{margin-left:auto;letter-spacing:0;font-family:var(--mono);font-size:11px}
+.al-row{display:grid;grid-template-columns:8px 1fr auto;align-items:start;gap:0 12px;margin:0 6px;padding:9px 10px 9px 12px;border-radius:7px}
+.al-row .dot{width:7px;height:7px;margin-top:6px}
+.al-row .ic{color:var(--tx3);margin-top:2px;margin-left:-4px}
+.al-row .t{font-size:13px;line-height:1.35;color:var(--tx)}
+.al-row .m{font-size:12px;color:var(--tx3);margin-top:2px}
+.al-row .m .w{color:var(--warn)}
+.al-row .v{text-align:right;font-size:13px;color:var(--tx);white-space:nowrap}
+.al-row .v span{display:block;font-size:12px;color:var(--tx3);margin-top:2px}
+.al-row.cur{background:var(--acc-tint)}
+.al-row.ic3{grid-template-columns:16px 1fr auto}
+.al-note{margin:10px 18px 0;padding-top:12px;border-top:1px solid var(--line);font-size:12px;line-height:1.45;color:var(--tx3)}
+
+/* Im Bild: Legende, Darstellung, Beschriftungen, Abspielleiste */
+.lg{position:absolute;right:14px;top:222px;width:140px;padding:11px 12px 12px;z-index:3}
+.lg-hd{font-weight:500;font-size:12.5px}
+.lg-sub{display:flex;align-items:center;gap:4px;height:22px;margin:4px 0 12px;padding:0 6px 0 8px;border:1px solid var(--line2);border-radius:5px;font-size:11.5px;color:var(--tx2);justify-content:space-between}
+.lg-body{position:relative;height:200px}
+.lg-bar{position:absolute;left:0;top:0;width:14px;height:100%;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.lg-t{position:absolute;left:24px;transform:translateY(-50%);font-size:11.5px;color:var(--tx2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.lg-thr{position:absolute;left:-4px;right:0;height:0}
+.lg-thr i{position:absolute;left:0;top:-1px;width:22px;height:2px;border-radius:1px;background:#f4f5f6;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+.lg-thr span{position:absolute;left:28px;top:-9px;font-size:12px;color:var(--tx);white-space:nowrap}
+.lg-thr span em{font-style:normal;color:var(--tx3);margin-left:4px}
+.lg-ft{margin-top:12px;font-size:11.5px;color:var(--tx3)}
+.dbar{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:5px 6px 5px 8px;white-space:nowrap;z-index:3}
+.dbar .dl{font-size:12px;color:var(--tx3);margin-left:2px}
+.tg{display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:7px;font-size:12px;color:var(--tx2);border:1px solid var(--line2)}
+.tg.on{background:var(--acc-tint);color:var(--acc-tx);border-color:var(--acc-line);font-weight:500}
+.c3d{position:absolute;display:flex;align-items:center;gap:6px;height:24px;padding:0 9px 0 8px;border-radius:12px;background:rgba(18,20,23,.92);border:1px solid var(--line2);font-size:12px;color:var(--tx2);white-space:nowrap;transform:translate(-50%,-50%);z-index:2;font-variant-numeric:tabular-nums}
+.c3d b{font-weight:500;color:var(--tx)}
+.c3d svg{color:var(--bc)}
+.tbar{position:absolute;left:16px;right:16px;bottom:14px;display:flex;align-items:center;gap:10px;padding:5px 8px 5px 5px;z-index:3;font-variant-numeric:tabular-nums}
+.tbar .play{width:32px;height:32px;border-radius:7px;background:var(--s3);color:var(--tx);display:flex;align-items:center;justify-content:center}
+.tbar .tm{font-size:12px;color:var(--tx2);white-space:nowrap}
+.tbar .scrub{position:relative;flex:1;height:24px;min-width:120px}
+.tbar .scrub .ln{position:absolute;left:0;right:0;top:11px;height:3px;border-radius:2px;background:var(--line2)}
+.tbar .scrub .done{position:absolute;left:0;top:11px;height:3px;border-radius:2px;background:var(--acc)}
+.tbar .scrub .cm{position:absolute;top:7px;width:2px;height:11px;margin-left:-1px;border-radius:1px;background:#5d6671}
+.tbar .scrub .knob{position:absolute;top:6px;width:13px;height:13px;margin-left:-6px;border-radius:50%;background:#f4f5f6;box-shadow:0 0 0 3px rgba(242,154,56,.3)}
+.tbar .sel{display:flex;align-items:center;gap:4px;height:28px;padding:0 6px 0 8px;border:1px solid var(--line2);border-radius:6px;font-size:12px;color:var(--tx2)}
+.capt{position:absolute;left:50%;bottom:78px;transform:translateX(-50%);padding:6px 14px;border-radius:6px;background:rgba(0,0,0,.62);font-size:15px;color:#fff;white-space:nowrap;z-index:2}
+
+/* Blätter */
+.sheet{width:1600px;height:900px;background:#101215;position:relative;overflow:hidden}
+.sh-t{position:absolute;font-size:11px;letter-spacing:.07em;color:var(--tx3);font-weight:500}
+.panel{position:absolute;width:352px;background:var(--s1);border:1px solid var(--line2);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.mini{position:absolute;border-radius:10px;overflow:hidden;background:radial-gradient(ellipse at 50% 46%,#272c34 0%,#1b1e23 62%,#16181c 100%);box-shadow:0 0 0 1px #262a31}
+.st-l{position:absolute;font-size:12px;color:var(--tx2)}
+.rules{display:flex;flex-direction:column;gap:14px}
+.rules div{font-size:12.5px;line-height:1.5;color:var(--tx2)}
+.rules div b{display:block;color:var(--tx);font-size:13px;margin-bottom:2px}
+.anat{display:flex;flex-direction:column;gap:8px}
+.anat div{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:var(--tx2)}
+.anat div b{color:var(--tx);font-weight:500}
+.flow{display:flex;flex-direction:column;gap:10px}
+.flow .way{display:flex;gap:12px;align-items:flex-start;padding:11px 14px;border:1px solid var(--line2);border-radius:9px;background:var(--s1);font-size:12.5px;line-height:1.45;color:var(--tx2)}
+.flow .way b{display:block;color:var(--tx);font-size:13px;margin-bottom:2px}
+.flow .way svg{color:var(--tx2);margin-top:2px}
+.gone{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.gone li{display:flex;gap:10px;font-size:12.5px;line-height:1.45;color:var(--tx2)}
+.gone li s{color:var(--tx3);text-decoration-color:var(--tx3)}
+.gone li svg{color:var(--tx3);margin-top:2px}
+</style>
+</head>
+<body>
+<div class="deck-top">
+  <div class="deck-head">
+    <span class="deck-title">SOMA · Entwurf Strukturbaum im Viewer (Runde 3)</span>
+    <nav class="deck-tabs" id="tabs" aria-label="Ansichten"></nav>
+    <span class="deck-tools"><span>Pfeiltasten blättern</span><label><input type="checkbox" id="notes" checked>Anmerkungen</label><button class="btn sm" id="zoom">Originalgröße</button></span>
+  </div>
+  <div class="deck-cap"><h2 id="cap-title"></h2><ul id="cap-list"></ul></div>
+</div>
+<div class="stage"><div class="frame"><div class="screen" id="screen"></div></div></div>
+
+<script>
+// ================================================================================================================
+// Symbole (wie app/src/renderer/icons.ts)
+// ================================================================================================================
+const I = {
+  cube:'<path d="M12 2.5 20.5 7.2v9.6L12 21.5l-8.5-4.7V7.2z"/><path d="M3.5 7.2 12 12l8.5-4.8M12 12v9.5"/>',
+  logo:'<path d="M12 2.6 19.9 7.1 12 11.6 4.1 7.1z" fill="currentColor"/><path d="M12 2.6 19.9 7.1v9L12 20.6l-4.3-2.45-5.3 3.2 1.7-7.5V7.1z"/><path d="M4.1 7.1 12 11.6l7.9-4.5M12 11.6v9"/>',
+  down:'<path d="m6 9 6 6 6-6"/>', right:'<path d="m9 6 6 6-6 6"/>', left:'<path d="m15 6-6 6 6 6"/>',
+  refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/>',
+  export:'<path d="M12 15V4M7 9l5-5 5 5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  code:'<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+  book:'<path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"/><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
+  sliders:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  cog:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  eye:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff:'<path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/>',
+  ghost:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" fill-opacity=".45"/>',
+  tree:'<rect x="3" y="3" width="7" height="5" rx="1"/><rect x="13" y="10.5" width="8" height="4.5" rx="1"/><rect x="13" y="17" width="8" height="4.5" rx="1"/><path d="M6.5 8v11.2H13M6.5 12.7H13"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  ruler:'<path d="M3 17 17 3l4 4L7 21z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>',
+  section:'<path d="M5 9 12 5l7 4v8l-7 4-7-4z"/><path d="M2 13h20"/>',
+  explode:'<rect x="9" y="9" width="6" height="6" rx="1"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><path d="m10 4.5 2-2 2 2M10 19.5l2 2 2-2M4.5 10l-2 2 2 2M19.5 10l2 2-2 2"/>',
+  camera:'<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/>',
+  gauge:'<path d="M3.5 16.5a8.5 8.5 0 1 1 17 0"/><path d="m12 16.5 4.2-5"/><circle cx="12" cy="16.5" r="1.2" fill="currentColor"/>',
+  anim:'<circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/>',
+  pause:'<path d="M8 5v14M16 5v14"/>',
+  loop:'<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9a3 3 0 0 1 3-3h14M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v2a3 3 0 0 1-3 3h-14"/>',
+  text:'<path d="M5 6h14M12 6v13M9 19h6"/>', video:'<rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>',
+  fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', home:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>', plus:'<path d="M12 5v14M5 12h14"/>', send:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+  history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  sideL:'<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M9 4.5v15"/>',
+  sideR:'<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M15 4.5v15"/>',
+  target:'<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3.5M12 17.5V21M3 12h3.5M17.5 12H21"/>',
+  alert:'<path d="M12 4 2 20h20z"/><path d="M12 10v4M12 17v.01"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>',
+  more:'<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
+  force:'<path d="M12 20.5V4.5M6.5 10 12 4.5l5.5 5.5"/>',
+  okcirc:'<circle cx="12" cy="12" r="9"/><path d="m8 12.4 2.8 2.8L16.2 9.6"/>',
+  xcirc:'<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/>',
+  mouse:'<rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 3v6"/><path d="M12 3a6 6 0 0 1 6 6h-6z" fill="currentColor"/>',
+  key:'<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>',
+  sparkle:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="2.2"/>',
+};
+const ic = (n, s = 16, sw = 1.8) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[n]}</svg>`;
+const pinAt = (n, pos = 'tr') => n ? ` data-pin="${n}" data-pin-pos="${pos}"` : '';
+
+// ================================================================================================================
+// Farbskala wie app/src/renderer/overlay.ts (resultColor): Sicherheit, kritisch unter dem Grenzwert
+// ================================================================================================================
+const C_OK = [0x5c, 0xc9, 0x8b], C_WARN = [0xe8, 0xc5, 0x47], C_ERR = [0xf0, 0x74, 0x70], C_DEEP = [0xa8, 0x2c, 0x2c], C_FAR = [0x9a, 0xa4, 0xae];
+const mix = (a, b, t) => { t = Math.max(0, Math.min(1, t)); return a.map((v, i) => v + (b[i] - v) * t); };
+function rcol(v, thr, lo, hi, bad = 'low') {
+  const good = bad === 'low' ? v - thr : thr - v;
+  const spanGood = Math.max(1e-9, bad === 'low' ? hi - thr : thr - lo), spanBad = Math.max(1e-9, bad === 'low' ? thr - lo : hi - thr);
+  if (good < 0) return mix(C_ERR, C_DEEP, -good / spanBad);
+  const f = good / spanGood;
+  return f < 0.15 ? mix(C_WARN, C_OK, f / 0.15) : mix(C_OK, C_FAR, (f - 0.15) / 0.85);
+}
+const rgb = (c, k = 1) => `rgb(${c.map((v) => Math.round(Math.min(255, v * k))).join(',')})`;
+// Spanne der Auswertung wie soma.fem: 0 bis max(2·s, s+1, min(4·kleinste, 10·s)) = 0 bis 5.64
+const SF = { lo: 0, hi: 5.64, thr: 2 };
+const sfCol = (v) => rcol(v, SF.thr, SF.lo, SF.hi);
+const RED = rgb(C_ERR);
+
+// Farben der Teile im Modell (wie die Farbfelder im Baum), Auswahl orange
+const MC = { plate: [0x6b, 0x73, 0x7d], mid: [0x82, 0x8a, 0x95], arm: [0x55, 0x5c, 0x66], sel: [0xe8, 0x8e, 0x32] };
+const hex = (c) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+const modelPaint = (sel) => (n) => n === sel ? MC.sel : n === 'Mittelplatte' ? MC.mid : n.startsWith('Arm') ? MC.arm : MC.plate;
+
+// ================================================================================================================
+// Kleiner 3D-Zeichner: Rahmen eines 5-Zoll-Quadcopters (Bodenplatte, vier Arme, Mittelplatte). Werte je Stelle als
+// Feld mit den Zahlen der Analyse, oder einfarbig je Teil (Modell, Animation). Ausgeblendete Teile fehlen,
+// transparente sind durchscheinend.
+// ================================================================================================================
+const DEG = Math.PI / 180;
+const AZ = 34 * DEG, EL = 36 * DEG;
+const CA = Math.cos(AZ), SA = Math.sin(AZ), CE = Math.cos(EL), SE = Math.sin(EL);
+const VW = [SA * CE, CA * CE, SE];
+const LGT = (() => { const l = [-0.35, 0.45, 1], n = Math.hypot(...l); return l.map((x) => x / n); })();
+const P = ([x, y, z]) => { const y1 = x * SA + y * CA; return [x * CA - y * SA, y1 * SE - z * CE]; };
+const fp = (p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`;
+
+function rrect(w, h, r, seg = 6) {
+  const pts = [];
+  for (const [cx, cy, a0] of [[w / 2 - r, h / 2 - r, 0], [-(w / 2 - r), h / 2 - r, 90], [-(w / 2 - r), -(h / 2 - r), 180], [w / 2 - r, -(h / 2 - r), 270]])
+    for (let i = 0; i <= seg; i++) { const a = (a0 + 90 * i / seg) * DEG; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+  return pts;
+}
+function armShape(root, tip, hw, R, seg = 30) {
+  const dx = tip[0] - root[0], dy = tip[1] - root[1], L = Math.hypot(dx, dy), a = [dx / L, dy / L], n = [-a[1], a[0]];
+  const k = Math.sqrt(R * R - hw * hw), t0 = Math.atan2(-hw, -k), t1 = Math.atan2(hw, -k);
+  const loc = [[0, -hw], [L - k, -hw]];
+  for (let i = 1; i < seg; i++) { const t = t0 + (t1 - t0) * i / seg; loc.push([L + R * Math.cos(t), R * Math.sin(t)]); }
+  loc.push([L - k, hw], [0, hw]);
+  return { poly: loc.map(([u, v]) => [root[0] + a[0] * u + n[0] * v, root[1] + a[1] * u + n[1] * v]), root, tip, a, n, L, R };
+}
+function resample(pts, step) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let k = 0; k < n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+  }
+  return out;
+}
+function inside(p, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c;
+}
+
+function drone(o) {
+  const FL = armShape([-6, 22], [-80, 88], 6.5, 14), FR = armShape([6, 22], [80, 88], 6.5, 14);
+  const RL = armShape([-6, -22], [-80, -88], 6.5, 14), RR = armShape([6, -22], [80, -88], 6.5, 14);
+  const along = (A, x, y) => (x - A.root[0]) * A.a[0] + (y - A.root[1]) * A.a[1];
+  // Verformung 10-fach überhöht: 1.387 mm an der Spitze des Arms vorn links
+  const flW = o.deform === false ? null : (x, y) => { const u = along(FL, x, y); return u > 21 ? 13.9 * ((u - 21) / (FL.L + FL.R - 21)) ** 2 : 0; };
+  // Spannung (MPa) je Stelle: Spitze, Hof und Grundlast; Sicherheit = Festigkeit / Spannung, höchstens 99
+  const plate = (H, peak) => (x, y) => { const d2 = (x - H[0]) ** 2 + (y - H[1]) ** 2; return Math.min(99, 190 / ((peak - 34) * Math.exp(-d2 / 128) + 30 * Math.exp(-d2 / 1152) + 4)); };
+  const armF = (A, peak) => (x, y) => {
+    const u = along(A, x, y), end = A.L + A.R;
+    const s = (u < 21 ? (peak - 2) * Math.max(0, (u - 13) / 8) : (peak - 2) * Math.max(0, 1 - (u - 21) / (end - 21))) + 2;
+    return Math.min(99, 500 / s);
+  };
+  const motorHoles = (A) => [[A.tip[0], A.tip[1], 3.2], ...[45, 135, 225, 315].map((d) => [A.tip[0] + 8.5 * Math.cos(d * DEG), A.tip[1] + 8.5 * Math.sin(d * DEG), 1.3])];
+  const arm = (name, A, peak, w) => ({ name, poly: A.poly, z0: 2.5, z1: 7.5, sf: armF(A, peak), w, holes: motorHoles(A), depth: A.tip[0] * VW[0] + A.tip[1] * VW[1] });
+  const stack = [[-15.25, -15.25], [15.25, -15.25], [-15.25, 15.25], [15.25, 15.25]].map(([x, y]) => [x, y, 1.6]);
+  const arms = [arm('Arm vorn links', FL, 122.6, flW), arm('Arm vorn rechts', FR, 15.7), arm('Arm hinten links', RL, 17.0), arm('Arm hinten rechts', RR, 5.6)].sort((p, q) => p.depth - q.depth);
+  const parts = [
+    { name: 'Bodenplatte', poly: rrect(46, 130, 8), z0: 0, z1: 2.5, sf: plate([-21.5, 39], 129.1) },
+    ...arms,
+    { name: 'Mittelplatte', poly: rrect(40, 100, 6), z0: 7.5, z1: 9.5, sf: plate([-18.5, 36], 134.5), holes: [...stack, [0, 41, 2.2], [0, -41, 2.2], [-12, -41, 1.4], [12, -41, 1.4]] },
+  ];
+  for (const p of parts) { const dz = o.lift?.[p.name] || 0; p.z0 += dz; p.z1 += dz; }
+  const hidden = new Set(o.hidden || []), ghost = new Set(o.ghost || []);
+  const tipZ = 2.5 + (flW ? flW(...FL.tip) : 0), arrowLen = 40, showArrow = o.arrow !== false && !hidden.has('Arm vorn links');
+  // Einpassen: Ausgeblendete Teile zählen mit, die Kamera springt beim Ausblenden nicht
+  const all = [];
+  for (const p of parts) for (const q of p.poly) { const w = p.w ? p.w(...q) : 0; all.push(P([q[0], q[1], p.z0 + w]), P([q[0], q[1], p.z1 + w])); }
+  if (o.arrow !== false) all.push(P([FL.tip[0], FL.tip[1], tipZ - arrowLen - 8]));
+  const x0 = Math.min(...all.map((p) => p[0])), x1 = Math.max(...all.map((p) => p[0])), y0 = Math.min(...all.map((p) => p[1])), y1 = Math.max(...all.map((p) => p[1]));
+  const bw = o.W - o.pad.l - o.pad.r, bh = o.H - o.pad.t - o.pad.b, k = Math.min(bw / (x1 - x0), bh / (y1 - y0));
+  const ox = o.pad.l + (bw - (x1 - x0) * k) / 2 - x0 * k, oy = o.pad.t + (bh - (y1 - y0) * k) / 2 - y0 * k;
+  const S = (q) => { const p = P(q); return [ox + p[0] * k, oy + p[1] * k]; };
+  let svg = '', uid = 0;
+  for (const part of parts) {
+    if (hidden.has(part.name)) continue;
+    const w = part.w || (() => 0);
+    const colorAt = o.paint ? () => o.paint(part.name) : (x, y) => sfCol(part.sf(x, y));
+    const pts = resample(part.poly, 2.5);
+    const walls = [];
+    let edges = '';
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, n = [(b[1] - a[1]) / L, -(b[0] - a[0]) / L];
+      if (n[0] * VW[0] + n[1] * VW[1] <= 0) continue;
+      const wa = w(...a), wb = w(...b);
+      const q = [[a[0], a[1], part.z0 + wa], [b[0], b[1], part.z0 + wb], [b[0], b[1], part.z1 + wb], [a[0], a[1], part.z1 + wa]].map(S);
+      const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const c = rgb(colorAt(...m), 0.5 + 0.42 * Math.max(0, n[0] * LGT[0] + n[1] * LGT[1]));
+      walls.push([m[0] * VW[0] + m[1] * VW[1], `<path d="M${q.map(fp).join('L')}Z" fill="${c}" stroke="${c}" stroke-width=".7"/>`]);
+      edges += `M${fp(q[0])}L${fp(q[1])}`;
+    }
+    walls.sort((p, q) => p[0] - q[0]);
+    const top = pts.map(([x, y]) => S([x, y, part.z1 + w(x, y)]));
+    let cells = '';
+    if (o.paint) cells = `<path d="M${top.map(fp).join('L')}Z" fill="${rgb(o.paint(part.name), 0.92)}"/>`;
+    else {
+      const xs = part.poly.map((p) => p[0]), ys = part.poly.map((p) => p[1]), cs = 2;
+      for (let x = Math.min(...xs) - cs; x < Math.max(...xs) + cs; x += cs) for (let y = Math.min(...ys) - cs; y < Math.max(...ys) + cs; y += cs) {
+        const cn = [[x, y], [x + cs, y], [x + cs, y + cs], [x, y + cs]];
+        if (!inside([x + cs / 2, y + cs / 2], part.poly) && !cn.some((p) => inside(p, part.poly))) continue;
+        const c = rgb(colorAt(x + cs / 2, y + cs / 2), 0.92);
+        cells += `<path d="M${cn.map(([px, py]) => fp(S([px, py, part.z1 + w(px, py)]))).join('L')}Z" fill="${c}" stroke="${c}" stroke-width=".7"/>`;
+      }
+    }
+    let holes = '';
+    for (const [hx, hy, hr] of part.holes || []) {
+      const ring = Array.from({ length: 22 }, (_, i) => { const t = i / 22 * 2 * Math.PI, x = hx + hr * Math.cos(t), y = hy + hr * Math.sin(t); return S([x, y, part.z1 + w(x, y)]); });
+      holes += `<path d="M${ring.map(fp).join('L')}Z" fill="#111316" stroke="#0b0c0e" stroke-width=".8"/>`;
+    }
+    const id = `cp${o.id || 'm'}${uid++}`;
+    // Transparent wie viewer.setGhosted: das Teil bleibt als Hauch mit Kanten stehen
+    const g = ghost.has(part.name) ? ' opacity=".2"' : '';
+    svg += `<g${g}>${walls.map((x) => x[1]).join('')}<path d="${edges}" fill="none" stroke="#15171b" stroke-width="1.1"/>
+      <clipPath id="${id}"><path d="M${top.map(fp).join('L')}Z"/></clipPath><g clip-path="url(#${id})">${cells}</g>${holes}
+      <path d="M${top.map(fp).join('L')}Z" fill="none" stroke="#15171b" stroke-width="1.1" stroke-linejoin="round"/></g>`;
+    if (g) svg += `<path d="M${top.map(fp).join('L')}Z" fill="none" stroke="rgba(230,232,235,.35)" stroke-width="1" stroke-linejoin="round"/>`;
+  }
+  const A = {};
+  if (showArrow) {
+    const head = S([FL.tip[0], FL.tip[1], tipZ]), tail = S([FL.tip[0], FL.tip[1], tipZ - arrowLen]), hl = 0.26 * arrowLen * k * CE;
+    svg += `<g opacity=".96"><rect x="${(head[0] - 2.2).toFixed(1)}" y="${(head[1] + hl - 1).toFixed(1)}" width="4.4" height="${(tail[1] - head[1] - hl + 1).toFixed(1)}" fill="#5ea8ff"/>
+      <path d="M${fp(head)}L${fp([head[0] - 7.5, head[1] + hl])}L${fp([head[0] + 7.5, head[1] + hl])}Z" fill="#5ea8ff"/></g>`;
+    A.tail = tail;
+  }
+  A.min = S([-18.5, 36, 9.5 + (o.lift?.Mittelplatte || 0)]);
+  A.bmin = S([-21.5, 39, 2.5]);
+  A.mid = S([8, -12, 9.5 + (o.lift?.Mittelplatte || 0)]);
+  A.k = k;
+  return { svg: `<svg width="${o.W}" height="${o.H}" viewBox="0 0 ${o.W} ${o.H}">${svg}${o.extra ? o.extra(A) : ''}</svg>`, A };
+}
+
+// ================================================================================================================
+// Strukturbaum: oben der Name des Modells, darunter Gruppen und Teile mit Baumstrichen.
+// Auge und Transparenz stehen direkt vor dem Namen und rücken mit ihm ein.
+// ================================================================================================================
+const T_MODEL = [
+  { g: 'Rahmen', open: true, items: ['Bodenplatte', 'Mittelplatte', 'Deckplatte'] },
+  { g: 'Arme', open: true, items: ['Arm vorn links', 'Arm vorn rechts', 'Arm hinten links', 'Arm hinten rechts'] },
+  { g: 'Abstandsbolzen', n: 4 },
+  { g: 'Schrauben', n: 24 },
+  { g: 'References', n: 7 },
+];
+// In der Analyse stehen im Baum die Körper, die sie gerechnet hat, gegliedert wie im Modell
+const T_FEM = [
+  { g: 'Rahmen', open: true, items: ['Bodenplatte', 'Mittelplatte'] },
+  { g: 'Arme', open: true, items: ['Arm vorn links', 'Arm vorn rechts', 'Arm hinten links', 'Arm hinten rechts'] },
+];
+function tree(o = {}) {
+  const hid = new Set(o.hidden || []), gh = new Set(o.ghost || []);
+  const nHidden = o.nHidden ?? hid.size;
+  const pins = o.pins || {};
+  // Eingeklappt sagt die Zeile, ob etwas ausgeblendet ist. Aufgeklappt steht es im Fuß
+  const sub = !o.open && nHidden ? `· ${nHidden} hidden` : '';
+  const head = o.search
+    ? `<div class="tr-search">${ic('search', 14, 1.9)}<span>${o.search}<i class="caret"></i></span><span style="flex:1"></span><span class="c3" style="font-size:12px">4 of 42</span><span class="hb">${ic('x', 13, 2)}</span></div>`
+    : `<div class="tr-hd"><span class="chev">${ic(o.open ? 'down' : 'right', 13, 2)}</span><span class="ico">${ic('tree', 15, 1.8)}</span><b${pinAt(pins.root, pins.rootPos || 'tr')}>Quad 5 inch</b>${sub ? `<span class="n">${sub}</span>` : ''}${o.open ? `<span class="sp"></span><span class="hb">${ic('search', 14, 1.9)}</span>` : ''}</div>`;
+  const cls = `tree ${o.open ? 'open' : ''}`;
+  if (!o.open) return `<div class="${cls}" style="${o.style || ''}"${pinAt(pins.box, pins.boxPos || 'tr')}>${head}</div>`;
+  const row = (name, r) => {
+    const c = ['tr-row', r.hidden ? 'off' : '', o.sel === name ? 'sel' : '', o.hov === name ? 'hov' : ''].join(' ');
+    const p = (k) => pinAt(pins[`${name}:${k}`], pins[`${name}:${k}:pos`] || 'tl');
+    const br = r.anc.map((v) => `<i class="${v ? 'v' : ''}"></i>`).join('') + `<i class="${r.last ? 'l' : 't'}"></i>` + (r.group ? '' : '<i class="h"></i>');
+    return `<div class="${c}"${p('row')}><span class="br"${p('br')}>${br}</span>`
+      + (r.group ? `<span class="chev"${p('chev')}>${ic(r.open ? 'down' : 'right', 12, 2)}</span>` : '')
+      + `<span class="tg eye ${r.hidden ? 'on' : ''}"${p('eye')}>${ic(r.hidden ? 'eyeoff' : 'eye', 14, 1.8)}</span><span class="tg gh ${r.ghost ? 'on' : r.partly ? 'partly' : ''}"${p('gh')}>${ic('ghost', 14, 1.8)}</span>`
+      + `<span class="nm"${p('nm')}>${name}</span>${r.count ? `<span class="cnt">${r.count}</span>` : ''}</div>`;
+  };
+  const items = o.items || T_MODEL;
+  let rows = '';
+  items.forEach((it, i) => {
+    const last = i === items.length - 1, names = it.items || [];
+    const ghosts = names.filter((n) => gh.has(n)).length;
+    rows += row(it.g, { group: true, open: it.open, anc: [], last, count: it.n || names.length, hidden: names.length > 0 && names.every((n) => hid.has(n)), ghost: names.length > 0 && ghosts === names.length, partly: ghosts > 0 && ghosts < names.length });
+    if (it.open) names.forEach((n, j) => { rows += row(n, { anc: [!last], last: j === names.length - 1, hidden: hid.has(n), ghost: gh.has(n) }); });
+  });
+  const foot = nHidden && o.foot !== false ? `<div class="tr-ft"${pinAt(pins.foot, 'r')}>${ic('eyeoff', 13, 1.8)}${nHidden} hidden<button>Show all</button></div>` : '';
+  return `<div class="${cls}" style="${o.style || ''}"${pinAt(pins.box, pins.boxPos || 'tr')}>${head}<div class="tr-rows">${rows}</div>${foot}</div>`;
+}
+// Menü beim Rechtsklick auf eine Zeile: das von heute (main.ts openPartMenu)
+const partMenu = (name, style, pin) => `<div class="menu" style="${style}"${pinAt(pin, 'tr')}>
+  <div class="mh">${name}</div>
+  <div class="mi on"><span class="ico">${ic('target', 15)}</span>Isolate</div>
+  <div class="mi"><span class="ico">${ic('eye', 15)}</span>Show all</div>
+  <div class="mi"><span class="ico">${ic('eyeoff', 15)}</span>Hide</div>
+  <div class="mi"><span class="ico">${ic('ghost', 15)}</span>Transparent</div>
+  <div class="mi"><span class="ico">${ic('fit', 15)}</span>Zoom to part</div>
+  <div class="msep"></div>
+  <div class="mi"><span class="ico">${ic('code', 15)}</span>Show code</div>
+  <div class="mi"><span class="ico">${ic('send', 15)}</span>Send to agent</div>
+  <div class="mi"><span class="ico">${ic('export', 15)}</span>Export …</div>
+</div>`;
+const cursorAt = (x, y) => `<svg style="position:absolute;left:${x}px;top:${y}px;z-index:7" width="18" height="22" viewBox="0 0 18 22"><path d="M1 1v17l4.5-4 3 6.5 2.6-1.2-3-6.3H14z" fill="#fff" stroke="#111" stroke-width="1.2"/></svg>`;
+
+// ================================================================================================================
+// Bausteine der App
+// ================================================================================================================
+function topbar(o = {}) {
+  return `<header class="top">
+    <span class="logo">${ic('logo', 22, 1.6)}</span>
+    <button class="docname"><b>Quad 5 inch</b>${ic('down', 14, 2)}</button>
+    <span class="savestate"><span class="dot" style="width:7px;height:7px;background:var(--warn)"></span>Not saved yet</span>
+    <span class="grow"></span>
+    <div class="pill"><span class="main"><span class="dot" style="background:var(--ok)"></span><span style="font-weight:500">Built</span><span class="c2">42 parts · 5.8 s</span></span><span class="sep"></span><span class="auto">${ic('refresh', 14, 2)}Auto on</span></div>
+    <span class="grow"></span>
+    <div class="layout"><button class="${o.side ? 'on' : ''}">${ic('sideL', 17, 1.7)}</button><button>${ic('code', 16, 1.9)}</button><button class="on">${ic('sideR', 17, 1.7)}</button></div>
+    <button class="btn">${ic('export', 15)}Export${ic('down', 13, 2)}</button>
+    <button class="btn primary">Save <span class="kbd">Ctrl S</span></button>
+  </header>`;
+}
+// Reiter in drei Gruppen: Arbeit am Modell, Ergebnisse des Agenten, Regeln für den Agenten.
+// Der Punkt heißt: Neues vom Agenten, noch nicht angesehen
+function rail(o = {}) {
+  const pins = o.pins || {};
+  const b = ([k, i, l]) => `<button class="${k === o.active ? 'on' : ''}"${pinAt(pins[k], 'tr')}>${ic(i, 20, 1.7)}<span>${l}</span>${(o.dots || []).includes(k) ? '<i class="nd"></i>' : ''}</button>`;
+  const sep = '<span class="rail-sep"></span>';
+  return `<nav class="rail">${[['params', 'sliders', 'Parameters'], ['files', 'folder', 'Files']].map(b).join('')}${sep}
+    ${[['analysis', 'gauge', 'Analysis'], ['anim', 'anim', 'Animation']].map(b).join('')}${sep}${b(['skills', 'book', 'Skills'])}
+    <span class="grow"></span><button>${ic('help', 20, 1.7)}<span>Help</span></button><button>${ic('cog', 20, 1.6)}<span>Settings</span></button></nav>`;
+}
+const timeline = () => `<div class="tl"><span class="lbl">${ic('history', 15)}History</span>
+  <div class="track"><div class="line"></div>
+    <div class="vd" style="left:8px"><i></i></div><div class="vd" style="left:30%"><i></i></div><div class="vd app" style="left:52%"><i></i></div><div class="vd" style="left:71%"><i></i></div>
+    <div class="now"><i></i><span>Now</span></div></div><span class="c3" style="font-size:12px">5 versions</span></div>`;
+const cubebox = () => `<div class="cubebox">
+  <svg width="92" height="92" viewBox="0 0 92 92"><path d="M46 14 74 28v32L46 76 18 60V28z" fill="#2a2f37" stroke="#4a525d"/><path d="M18 28 46 42l28-14M46 42v34" fill="none" stroke="#4a525d"/>
+  <path d="M46 42 74 28v32L46 76z" fill="#323842"/><text x="60" y="56" fill="#c9ced4" font-size="9" font-family="IBM Plex Sans" font-weight="600" text-anchor="middle">RIGHT</text></svg>
+  <div class="vbar float"><button>${ic('fit', 16)}</button><button>${ic('home', 16)}</button><button>${ic('layers', 16)}</button></div></div>`;
+// Werkzeuge in der Mitte wie heute. Wird es neben dem Baum eng, nur Symbole (heute ab 720 px Viewerbreite)
+const toolsDock = (compact) => compact
+  ? `<div class="tools compact float"><button>${ic('ruler', 16)}</button><button>${ic('section', 16)}</button><button>${ic('explode', 16)}</button><span class="vsep"></span><button>${ic('camera', 16)}</button></div>`
+  : `<div class="tools float"><button>${ic('ruler', 16)}Measure</button><button>${ic('section', 16)}Section</button><button>${ic('explode', 16)}Explode</button><span class="vsep"></span><button>${ic('camera', 16)}Mark up</button></div>`;
+const vtop = (space, compact) => `<div class="vtop"><span style="width:${space}px;flex-shrink:0"></span><span class="grow"></span>${toolsDock(compact)}<span class="grow"></span><span class="cubespace"></span></div>`;
+
+function agent(lines) {
+  return `<aside class="agent" style="width:400px">
+    <div class="tabs"><span class="tab on"><span class="dot" style="width:7px;height:7px;background:var(--ok)"></span>Claude Code<span class="x">${ic('x', 13, 2)}</span></span>
+      <span class="ibtn" style="align-self:center;width:44px;gap:2px">${ic('plus', 15, 2)}${ic('down', 12, 2)}</span></div>
+    <div class="term">${lines}
+      <div class="inbox l"><span class="p">&gt;</span> <span class="cursor"></span></div>
+      <div class="l mut" style="padding-top:4px"><span style="color:var(--acc-tx)">⏵⏵</span> auto mode on <span class="mut">(shift+tab to cycle)</span></div>
+    </div>
+  </aside>`;
+}
+const agentFem = () => agent(`
+  <div class="l"><span class="p">&gt;</span> <span class="u">Hält der Rahmen einen Aufschlag von unten auf den Motor vorn links aus?</span></div><div class="gap"></div>
+  <div class="l"><span class="bul">●</span> <span class="u">Write</span>(analyses/aufschlag_unten.py)</div><div class="l mut">  ⎿  Study: 300 N from below on the motor</div>
+  <div class="l"><span class="bul">●</span> <span class="u">Bash</span>(<span class="cmd">soma analyze fem analyses/aufschlag_unten.py</span>)</div>
+  <div class="l mut">  ⎿  lowest safety factor 1.41 (Mittelplatte), required 2</div><div class="gap"></div>
+  <div class="l"><span class="bul" style="color:var(--tx)">●</span> Die Arme halten (Sicherheit 4,08), die Körperplatten nicht: Mittelplatte 1,41 und Bodenplatte 1,47, beide dort, wo der Arm vorn links austritt.</div><div class="gap"></div>
+  <div class="l">  Das Ergebnis steht links im Reiter Analysis. Soll ich an der Innenkante einen Radius von 2 mm ergänzen und neu rechnen?</div>`);
+const agentAnim = () => agent(`
+  <div class="l"><span class="p">&gt;</span> <span class="u">Zeig mir als Animation, in welcher Reihenfolge der Rahmen zusammengebaut wird.</span></div><div class="gap"></div>
+  <div class="l"><span class="bul">●</span> <span class="u">Write</span>(animations/montage.py)</div><div class="l mut">  ⎿  5 steps, 12.0 s</div>
+  <div class="l"><span class="bul">●</span> <span class="u">Bash</span>(<span class="cmd">soma anim check animations/montage.py</span>)</div>
+  <div class="l mut">  ⎿  no collisions</div><div class="gap"></div>
+  <div class="l"><span class="bul" style="color:var(--tx)">●</span> Die Animation „Montage“ steht links im Reiter Animation. Sie zeigt die fünf Schritte von der Bodenplatte bis zur Deckplatte, mit Untertiteln.</div>`);
+
+// ================================================================================================================
+// Bericht (Analyse), wie Runde 2. Ohne Augen: Ein- und Ausblenden geht nur noch über den Baum
+// ================================================================================================================
+const PARTS = [
+  ['Mittelplatte', 1.41, '134.5', '0.048'], ['Bodenplatte', 1.47, '129.1', '0.048'], ['Arm vorn links', 4.08, '122.6', '1.387'],
+  ['Arm hinten links', 29.45, '17.0', '0.005'], ['Arm vorn rechts', 31.82, '15.7', '0.010'], ['Arm hinten rechts', 88.84, '5.6', '0.002'],
+];
+const chev = () => `<span class="ch">${ic('right', 13, 2)}</span>`;
+const cxHead = (title, meta) => `<div class="cx-head"><h3 class="cx-title">${title}</h3><div class="cx-meta">${meta}</div></div>`;
+function cxSummary(o = {}) {
+  const ok = !!o.ok;
+  const rows = o.rows ?? [['Mittelplatte', '1.41'], ['Bodenplatte', '1.47']];
+  return `<div class="cx-sum ${o.dim ? 'cx-dim' : ''}">
+    <div class="cx-num"><span class="n">${o.n || '1.41'}${o.unit ? `<small>${o.unit}</small>` : ''}</span><span class="t">${o.what || 'lowest safety factor'}<br><span>${o.req || 'required 2.0'}</span></span></div>
+    <div class="cx-st">${ic(ok ? 'okcirc' : 'xcirc', 16, 2).replace('<svg', `<svg class="${ok ? 'ok' : 'bad'}"`)}${o.status || (ok ? 'Holds the required safety' : 'Below the required safety in 2 parts')}</div>
+    ${rows.map(([n, v, a], i) => `<div class="cx-pr ${o.hov === i ? 'hov' : ''}"><span class="dot" style="background:${RED}"></span>${n}<span class="a">${a || ''}</span><span class="v">${v}</span><span class="go" title="Show the spot">${ic('target', 14, 1.9)}</span></div>`).join('')}
+    ${o.warn === false ? '' : `<div class="cx-warn">${ic('alert', 14, 2)}<span>${o.warn || 'The peak in Mittelplatte depends on the mesh.'} <u>Details</u></span></div>`}
+  </div>`;
+}
+// Annahmen: je eine Zeile, Klick klappt die Einzelheiten auf
+function cxInputs(o = {}) {
+  const open = o.open || [];
+  const row = (k, label, value, det) => `<div class="cx-row ${open.includes(k) ? 'open' : ''} ${o.hov === k ? 'hov' : ''}"><span class="l">${label}</span><span class="v">${value}</span>${chev()}</div>${open.includes(k) ? det : ''}`;
+  return `<section class="cx-sec"${o.top === false ? ' style="border-top:0"' : ''}>
+    <div class="cx-sh">INPUTS</div>
+    ${row('force', 'Force', '300 N upward <span>· Arm vorn links</span>', `<dl class="cx-det"><dt>Vector</dt><dd>(0, 0, 300) N</dd><dt>Faces</dt><dd>bottom of the motor mount, 154 mm²</dd><dt>Selector</dt><dd><code>&lt;Z near (-80, 88, 2.5)</code></dd></dl>`)}
+    ${row('fix', 'Support', 'Fixed <span>· Bodenplatte, bottom</span>', `<dl class="cx-det"><dt>Directions</dt><dd>all</dd><dt>Faces</dt><dd>5,412 mm²</dd><dt>Reaction</dt><dd>300 N downward</dd><dt>Balance</dt><dd><span class="okc">in equilibrium</span></dd></dl>`)}
+    ${row('mat', 'Material', 'Carbon plate 3K <span>· Carbon arm UD</span>', `<dl class="cx-det">
+      <dd class="sub">Carbon plate 3K <span>· Mittelplatte, Bodenplatte</span></dd>
+      <dt>E modulus</dt><dd>55 GPa</dd><dt>Strength</dt><dd>190 MPa, allowable 95 MPa</dd><dt>Poisson ν</dt><dd>0.10</dd><dt>Density</dt><dd>1.55 g/cm³</dd>
+      <dd class="sub">Carbon arm UD <span>· 4 arms</span></dd>
+      <dt>E modulus</dt><dd>70 GPa</dd><dt>Strength</dt><dd>500 MPa, allowable 250 MPa</dd><dt>Poisson ν</dt><dd>0.10</dd><dt>Density</dt><dd>1.58 g/cm³</dd></dl>`)}
+    ${row('mesh', 'Mesh', '2.0 mm <span>· 96,412 elements</span>', `<dl class="cx-det"><dt>Element size</dt><dd>2.0 mm, set in the study</dd><dt>Elements</dt><dd>96,412 tetrahedra, 10 nodes</dd><dt>Nodes</dt><dd>152,873</dd><dt>Check</dt><dd>coarser mesh 3.2 mm: <span class="wc">Mittelplatte +20 %</span>, others ≤ 6 %</dd></dl>`)}
+  </section>`;
+}
+function cxCalc(o = {}) {
+  const hd = `<div class="cx-fold"><span class="chev">${ic(o.open ? 'down' : 'right', 13, 2)}</span>CALCULATION<span class="r">48.2 s · pyamg</span></div>`;
+  if (!o.open) return hd;
+  return `${hd}<dl class="cx-det" style="margin-left:36px">
+      <dt>Duration</dt><dd>48.2 s, finished today 9:38</dd><dt>Unknowns</dt><dd>458,619</dd><dt>Solver</dt><dd>pyamg, 47 iterations</dd>
+      <dt>Equilibrium</dt><dd>deviation 0.00 %</dd><dt>Model</dt><dd>linear elastic, small deformations, parts bonded</dd><dt>Study</dt><dd><code>analyses/aufschlag_unten.py</code></dd></dl>`;
+}
+function cxNotes(o = {}) {
+  const hd = `<div class="cx-fold"><span class="chev">${ic(o.open ? 'down' : 'right', 13, 2)}</span>NOTES<span class="r">2</span></div>`;
+  if (!o.open) return hd;
+  return `${hd}<div class="cx-p w">${ic('alert', 14, 2)}<span>Mittelplatte: The peak stress depends on the mesh (112.0 MPa coarse, 134.5 MPa fine), probably at a sharp inner edge. Add a radius or judge the spot from a little distance.</span></div>
+    <div class="cx-p i">${ic('info', 14, 2)}<span>Carbon plate 3K: calculated as a uniform material, a real laminate depends on the fiber direction.</span></div>`;
+}
+function sideAnalysis(o = {}) {
+  const rows = PARTS.map(([n, sf, st, d]) => `<tr><td class="nm"><span class="dot" style="background:${sf < 2 ? RED : 'transparent'}"></span>${n}</td><td>${sf.toFixed(2)}</td><td>${st}</td><td>${d}</td></tr>`).join('');
+  return `<aside class="side cx" style="width:352px">
+    <div class="side-hd"><button class="back"${pinAt(o.backPin, 'tr')}>${ic('left', 15, 2)}Analyses<span class="cnt">4</span></button><span class="grow"></span>
+      <span class="ibtn s" title="Open the study file">${ic('code', 15, 1.9)}</span><span class="ibtn s">${ic('more', 16)}</span><span class="ibtn s">${ic('x', 15, 2)}</span></div>
+    <div class="cx-scroll">
+      ${cxHead('Aufschlag von unten auf Motor vorn links', 'FEM · 48.2 s · 2.0 mm mesh · today 9:38')}
+      ${cxSummary()}
+      ${cxInputs()}
+      <section class="cx-sec"><div class="cx-sh">PARTS <span class="cnt">6</span><span class="r">by safety${ic('down', 12, 2)}</span></div>
+        <table class="cx-tbl"><thead><tr><th class="l">Part</th><th>Safety</th><th>MPa</th><th>mm</th></tr></thead><tbody>${rows}</tbody></table>
+      </section>
+      ${cxCalc()}${cxNotes()}
+    </div>
+    <div class="cx-foot"><div class="cx-acts"><button class="btn sm">${ic('refresh', 14, 1.9)}Recalculate</button><button class="btn sm acc">${ic('send', 14, 1.9)}Send to agent</button></div></div>
+  </aside>`;
+}
+
+// ---- Im Bild ----
+function legendV(o) {
+  const H = 200, y = (v) => ((o.hi - v) / (o.hi - o.lo)) * H;
+  const stops = Array.from({ length: 31 }, (_, i) => { const v = o.hi - (o.hi - o.lo) * i / 30; return `${rgb(o.col(v))} ${(i / 30 * 100).toFixed(1)}%`; });
+  return `<div class="lg float"${pinAt(o.pin, 'tl')} style="${o.style || ''}">
+    <div class="lg-hd">${o.title}</div>
+    <div class="lg-sub">Auto scale${ic('down', 12, 2)}</div>
+    <div class="lg-body"><div class="lg-bar" style="background:linear-gradient(to bottom, ${stops.join(', ')})"></div>
+      ${o.ticks.map(([v, t]) => `<span class="lg-t" style="top:${y(v).toFixed(1)}px">${t}</span>`).join('')}
+      <div class="lg-thr" style="top:${y(o.thr).toFixed(1)}px"><i></i><span>${o.thrLabel}<em>${o.thrWord || 'required'}</em></span></div>
+    </div>
+    <div class="lg-ft">${o.foot}</div>
+  </div>`;
+}
+const legendSF = () => legendV({ title: 'Safety factor', lo: SF.lo, hi: SF.hi, col: sfCol, thr: 2, thrLabel: '2.0', ticks: [[5.64, '5.6+'], [4, '4'], [3, '3'], [1, '1'], [0, '0']], foot: 'Red: below required<br>Deformation 10×' });
+const dbar = (pin) => `<div class="dbar float">
+  <div class="seg"><button class="on">Safety factor</button><button>Stress</button><button>Displacement</button></div>
+  <span class="vsep"></span><span class="dl">Deformation</span>
+  <div class="seg"><button>Off</button><button>1×</button><button class="on">10×</button></div>
+  <span class="vsep"></span><button class="tg on">${ic('force', 14, 2)}Load case</button>
+  <span class="vsep"></span><button class="ibtn s" title="Close the analysis and show the model"${pinAt(pin, 'tr')}>${ic('x', 15, 2)}</button>
+</div>`;
+
+function viewerModel(o = {}) {
+  const W = o.W || 1144, H = 812;
+  const m = drone({ W, H, pad: o.pad || { l: 200, r: 200, t: 110, b: 120 }, id: o.id || 'mm', paint: modelPaint(o.sel), arrow: false, deform: false, hidden: o.hidden, ghost: o.ghost });
+  return `<main class="center"><section class="vp">
+    <div class="vstage" style="width:${W}px;height:${H}px">${m.svg}</div>
+    ${tree(o.tree)}
+    ${vtop(o.space ?? 150, o.compact)}
+    ${cubebox()}${o.over || ''}
+  </section>${timeline()}</main>`;
+}
+function viewerFem(o = {}) {
+  const W = 792, H = 812, minShown = !(o.hidden || []).includes('Mittelplatte');
+  const m = drone({
+    W, H, pad: o.pad || { l: 60, r: 160, t: 100, b: 120 }, id: o.id || 'v', hidden: o.hidden, ghost: o.ghost,
+    extra: (A) => !minShown ? '' : `<path d="M${fp(A.min)}L${fp([A.min[0] - 40, A.min[1] - 46])}" stroke="rgba(255,255,255,.45)" stroke-width="1"/>
+      <circle cx="${A.min[0].toFixed(1)}" cy="${A.min[1].toFixed(1)}" r="6" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="${A.min[0].toFixed(1)}" cy="${A.min[1].toFixed(1)}" r="2" fill="#fff"/>`,
+  });
+  const A = m.A;
+  const chips = `${A.tail ? `<div class="c3d" style="left:${A.tail[0].toFixed(0)}px;top:${(A.tail[1] + 16).toFixed(0)}px">${ic('force', 13, 2.2)}<b>300 N</b></div>` : ''}
+    ${minShown ? `<div class="c3d" style="left:${(A.min[0] - 40).toFixed(0)}px;top:${(A.min[1] - 58).toFixed(0)}px"><span class="dot" style="width:6px;height:6px;background:${RED}"></span>Min <b>1.41</b></div>` : ''}`;
+  return `<main class="center"><section class="vp">
+    <div class="vstage" style="width:${W}px;height:${H}px">${m.svg}${chips}${o.over ? o.over(A) : ''}</div>
+    ${tree(o.tree)}
+    ${vtop(o.space ?? 252, true)}
+    ${cubebox()}${legendSF()}${dbar(o.closePin)}
+  </section>${timeline()}</main>`;
+}
+const app = (o) => `<div class="app">${topbar({ side: !!o.side })}<div class="body">${rail(o.rail)}${o.side || ''}${o.viewer}${o.agent || agentFem()}</div></div>`;
+
+// ================================================================================================================
+// Animation: eigener Reiter, Schritte in der Seitenleiste, Abspielleiste am Bild
+// ================================================================================================================
+const SEQ = [['0.0', 'Die Bodenplatte liegt unten'], ['2.0', 'Die vier Arme einlegen'], ['5.0', 'Mittelplatte aufsetzen'], ['8.0', 'Abstandsbolzen einschrauben'], ['10.0', 'Deckplatte aufsetzen']];
+function sideAnim(o = {}) {
+  const seq = SEQ.map(([t, s], i) => `<div class="cx-seq ${i === 2 ? 'cur' : ''}"><span class="t">${t} s</span><span>${s}</span></div>`).join('');
+  return `<aside class="side cx" style="width:352px">
+    <div class="side-hd"><button class="back">${ic('left', 15, 2)}Animations<span class="cnt">2</span></button><span class="grow"></span>
+      <span class="ibtn s" title="Open the animation file">${ic('code', 15, 1.9)}</span><span class="ibtn s">${ic('more', 16)}</span><span class="ibtn s">${ic('x', 15, 2)}</span></div>
+    <div class="cx-scroll">
+      ${cxHead('Montage', 'Animation · 12.0 s · 9 parts move · today 10:41')}
+      <div style="height:14px"></div>
+      <section class="cx-sec"${pinAt(o.stepsPin, 'tr')}><div class="cx-sh">STEPS<span class="r">from the subtitles</span></div>${seq}</section>
+      <section class="cx-sec"><div class="cx-sh">VIDEOS <span class="cnt">1</span><span class="r">renders/</span></div>
+        <div class="cx-file">${ic('video', 15)}<span>montage.mp4</span><span class="s">12.0 s · 1080p</span></div></section>
+    </div>
+    <div class="cx-foot"><div class="cx-acts"><button class="btn sm">${ic('video', 14, 1.9)}Make video</button><button class="btn sm acc">${ic('send', 14, 1.9)}Send to agent</button></div></div>
+  </aside>`;
+}
+function viewerAnim(o = {}) {
+  const W = 792, H = 812;
+  const paint = (n) => n === 'Mittelplatte' ? [0x7b, 0x83, 0x8e] : n.startsWith('Arm') ? [0x6a, 0x72, 0x7c] : [0x5c, 0x63, 0x6c];
+  const m = drone({
+    W, H, pad: { l: 70, r: 70, t: 110, b: 150 }, id: 'a', paint, arrow: false, deform: false, lift: { Mittelplatte: 34 },
+    extra: (A) => `<path d="M${fp(A.mid)}L${fp([A.mid[0], A.mid[1] + 34 * CE * A.k])}" stroke="rgba(255,255,255,.22)" stroke-width="1.2" stroke-dasharray="3 4"/>`,
+  });
+  const ticks = SEQ.map(([t]) => `<span class="cm" style="left:${(+t / 12 * 100).toFixed(1)}%"></span>`).join('');
+  return `<main class="center"><section class="vp">
+    <div class="vstage" style="width:${W}px;height:${H}px">${m.svg}</div>
+    ${tree(o.tree)}
+    ${vtop(o.space ?? 150, false)}
+    ${cubebox()}
+    <div class="capt">Mittelplatte aufsetzen</div>
+    <div class="tbar float"${pinAt(o.barPin, 'tl')}>
+      <button class="play">${ic('pause', 16, 2.2)}</button><span class="tm">6.2 s</span>
+      <div class="scrub"><span class="ln"></span><span class="done" style="width:${(6.2 / 12 * 100).toFixed(1)}%"></span>${ticks}<span class="knob" style="left:${(6.2 / 12 * 100).toFixed(1)}%"></span></div>
+      <span class="tm">12.0 s</span><span class="vsep"></span>
+      <span class="sel">1×${ic('down', 12, 2)}</span>
+      <button class="tg on">${ic('camera', 14, 1.9)}Camera</button><button class="tg">${ic('loop', 14, 1.9)}Loop</button><button class="tg on">${ic('text', 14, 1.9)}Texts</button><span class="vsep"></span><button class="ibtn s" title="Close the animation and show the model"${pinAt(o.closePin, 'tr')}>${ic('x', 15, 2)}</button>
+    </div>
+  </section>${timeline()}</main>`;
+}
+
+// ---- Listen der Reiter ----
+function listAnalyses() {
+  const r = (dot, t, m, v, vs, cls = '', tag = '') => `<div class="al-row ${cls}"><span class="dot" style="background:${dot}"></span><div><div class="t">${t}</div><div class="m">${m}${tag}</div></div><div class="v">${v}<span>${vs}</span></div></div>`;
+  return `<div class="panel cx" style="position:static;height:100%;border-radius:0;border:0">
+    <div class="side-hd"><b>Analyses</b><span class="cnt">4</span><span class="grow"></span><span class="ibtn s">${ic('info', 15, 1.9)}</span><span class="ibtn s">${ic('x', 15, 2)}</span></div>
+    <div class="al">
+      ${r('var(--ok)', 'Aufschlag von unten, Radius 2 mm', 'FEM · today 10:12', '2.31', 'required 2.0', '', ' <span class="tag acc">new</span>')}
+      ${r(RED, 'Aufschlag von unten auf Motor vorn links', 'FEM · today 9:38', '1.41', 'required 2.0', 'cur')}
+      ${r(RED, 'Wall thickness', 'Analysis · today 9:12', '0.04 mm', 'limit 1.2 mm')}
+      ${r('var(--tx3)', 'Durchbiegung Arm unter Schub', 'FEM · yesterday · <span class="w">older than the code</span>', '0.62 mm', 'limit 1.0 mm')}
+      <div class="al-note">The agent creates analyses with <code>soma analyze</code> (skill “Analysis”). They are kept in <code>.soma/results/</code>.</div>
+    </div>
+  </div>`;
+}
+function listAnims() {
+  const r = (icn, t, m, v, cls = '', tag = '') => `<div class="al-row ic3 ${cls}"><span class="ic">${ic(icn, 16)}</span><div><div class="t">${t}</div><div class="m">${m}${tag}</div></div><div class="v"><span style="margin:0">${v}</span></div></div>`;
+  return `<div class="panel cx" style="position:static;height:100%;border-radius:0;border:0">
+    <div class="side-hd"><b>Animations</b><span class="cnt">2</span><span class="grow"></span><span class="ibtn s">${ic('info', 15, 1.9)}</span><span class="ibtn s">${ic('x', 15, 2)}</span></div>
+    <div class="al">
+      ${r('anim', 'Montage', '5 steps · today 10:41', '12.0 s', 'cur', ' <span class="tag acc">new</span>')}
+      ${r('anim', 'Propeller drehen', 'loop · yesterday', '4.0 s')}
+      <div class="al-sh">VIDEOS <span class="cnt" style="letter-spacing:0">1</span><span class="r">renders/</span></div>
+      ${r('video', 'montage.mp4', '1920 × 1080 · today 10:52', '12.0 s')}
+      <div class="al-note">The agent creates animations in <code>animations/</code> and videos with <code>soma render</code> (skill “Animation and video”). A video opens in the player.</div>
+    </div>
+  </div>`;
+}
+
+// ================================================================================================================
+// Bildschirme
+// ================================================================================================================
+const S = {};
+
+// ---- 0: Modell, Baum eingeklappt ----
+S[0] = () => app({
+  rail: { dots: ['analysis'], pins: { analysis: '1' } },
+  viewer: viewerModel({ tree: { pins: { box: '2', boxPos: 'r' } } }),
+});
+
+// ---- 1: Baum aufgeklappt ----
+S[1] = () => app({
+  rail: { dots: ['analysis'] },
+  viewer: viewerModel({
+    id: 'm1', sel: 'Arm vorn rechts', ghost: ['Mittelplatte'], hidden: ['Deckplatte'], space: 252, pad: { l: 20, r: 200, t: 40, b: 170 },
+    tree: {
+      open: true, sel: 'Arm vorn rechts', ghost: ['Mittelplatte'], hidden: ['Deckplatte'],
+      pins: { root: '1', rootPos: 'r', 'Rahmen:row': '2', 'Rahmen:row:pos': 'r', 'Mittelplatte:row': '3', 'Mittelplatte:row:pos': 'r', 'Deckplatte:row': '4', 'Deckplatte:row:pos': 'r', 'Arm vorn rechts:row': '5', 'Arm vorn rechts:row:pos': 'r', foot: '6', 'References:row': '7', 'References:row:pos': 'r' },
+    },
+  }),
+});
+
+// ---- 2: Analyse ----
+S[2] = () => app({
+  rail: { active: 'analysis', pins: { analysis: '1' } },
+  side: sideAnalysis({ backPin: '5' }),
+  viewer: viewerFem({
+    id: 'f2', ghost: ['Arm vorn links'], hidden: ['Mittelplatte'], pad: { l: 40, r: 170, t: 190, b: 110 }, closePin: '2',
+    tree: { open: true, items: T_FEM, ghost: ['Arm vorn links'], hidden: ['Mittelplatte'],
+      pins: { 'Rahmen:row': '3', 'Rahmen:row:pos': 'r', 'Arm vorn links:row': '4', 'Arm vorn links:row:pos': 'r' } },
+    over: (A) => `<div class="c3d" style="left:${(A.bmin[0] + 70).toFixed(0)}px;top:${(A.bmin[1] - 48).toFixed(0)}px"><span class="dot" style="width:6px;height:6px;background:${RED}"></span>Bodenplatte <b>1.47</b></div>`,
+  }),
+});
+
+// ---- 3: Animation ----
+S[3] = () => app({
+  rail: { active: 'anim', pins: { anim: '1' } },
+  side: sideAnim({ stepsPin: '3' }),
+  viewer: viewerAnim({ space: 210, tree: { nHidden: 1, pins: { box: '2', boxPos: 'r' } }, closePin: '4' }),
+  agent: agentAnim(),
+});
+
+// ---- 4: Der Baum im Detail ----
+S[4] = () => {
+  // Hinter der Zeile ein Teil oder ein Ergebnisfeld: zeigt, dass die Schrift ohne Fläche lesbar bleibt
+  const armBg = `<svg style="position:absolute;left:0;top:0" width="400" height="54"><path d="M-10 52 L420 4 L420 34 L-10 82Z" fill="#646c76"/><path d="M-10 52 L420 4" stroke="#868f9a" stroke-width="1.2"/></svg>`;
+  const femBg = `<svg style="position:absolute;left:0;top:0" width="400" height="54"><defs><linearGradient id="fg4" x1="0" x2="1"><stop offset="0" stop-color="${rgb(C_FAR)}"/><stop offset=".4" stop-color="${rgb(C_OK)}"/><stop offset=".65" stop-color="${rgb(C_WARN)}"/><stop offset="1" stop-color="${rgb(C_ERR)}"/></linearGradient></defs><path d="M-10 6 L420 -24 L420 44 L-10 74Z" fill="url(#fg4)"/></svg>`;
+  const strip = (y, label, t, bg = '') => `<div class="st-l" style="left:32px;top:${y}px">${label}</div>
+    <div class="mini" style="left:32px;top:${y + 20}px;width:400px;height:54px">${bg}${tree({ ...t, style: 'left:10px;top:13px' })}</div>`;
+  const m = drone({ W: 470, H: 520, pad: { l: 10, r: 90, t: 110, b: 40 }, id: 'd4', paint: modelPaint(null), arrow: false, deform: false, ghost: ['Mittelplatte'], hidden: ['Deckplatte'] });
+  const sd = drone({ W: 470, H: 252, pad: { l: 250, r: 10, t: 30, b: 20 }, id: 'd5', paint: modelPaint(null), arrow: false, deform: false });
+  return `<div class="sheet">
+    <div class="sh-t" style="left:32px;top:24px">EINGEKLAPPT: EINE ZEILE OHNE HINTERGRUND</div>
+    ${strip(48, 'Modell (Standard)', {})}
+    ${strip(136, 'Etwas ist ausgeblendet', { nHidden: 2 })}
+    ${strip(224, 'Über einem Teil', {}, armBg)}
+    ${strip(312, 'Über einem Ergebnis', { nHidden: 1 }, femBg)}
+
+    <div class="sh-t" style="left:32px;top:424px">REGELN</div>
+    <div class="rules" style="position:absolute;left:32px;top:448px;width:400px">
+      <div><b>Kein Hintergrund</b>Nur Schrift und Symbole, mit einem dunklen Rand, damit sie auf jedem Teil und jeder Ergebnisfarbe lesbar bleiben. Das Modell bleibt überall zu sehen. Nur die Zeile unter der Maus hellt leicht auf.</div>
+      <div><b>Ganz oben links</b>Wo bisher der Umschalter stand. Was das Bild zeigt, sagen der Reiter links und die Leiste unten im Bild.</div>
+      <div><b>Startet eingeklappt</b>Klick auf die Zeile klappt auf, noch ein Klick zu. Der Baum bleibt so, wie man ihn verlassen hat, auch beim Wechsel zwischen Modell, Analyse und Animation.</div>
+      <div><b>Höchstens halb so hoch wie das Bild</b>Danach scrollt er. Die Lupe sucht, Gruppen klappen beim Suchen auf.</div>
+    </div>
+
+    <div class="sh-t" style="left:470px;top:24px">AUFGEKLAPPT ÜBER DEM MODELL, RECHTSKLICK AUF EINE ZEILE</div>
+    <div class="mini" style="left:470px;top:48px;width:470px;height:520px">${m.svg}
+      ${tree({ open: true, hov: 'Arm vorn rechts', ghost: ['Mittelplatte'], hidden: ['Deckplatte'], style: 'left:12px;top:14px' })}
+      ${partMenu('Arm vorn rechts', 'left:214px;top:196px', '1')}
+      ${cursorAt(206, 190)}
+    </div>
+    <div class="sh-t" style="left:470px;top:592px">SUCHEN</div>
+    <div class="mini" style="left:470px;top:616px;width:470px;height:252px">${sd.svg}
+      ${tree({ open: true, search: 'arm', items: [T_MODEL[1]], style: 'left:12px;top:14px' })}
+    </div>
+
+    <div class="sh-t" style="left:980px;top:24px">EINE ZEILE</div>
+    <div style="position:absolute;left:980px;top:62px;width:252px;transform:scale(1.7);transform-origin:0 0">
+      ${tree({ open: true, style: 'position:static', items: [{ g: 'Rahmen', open: true, items: ['Mittelplatte', 'Deckplatte'] }], ghost: ['Mittelplatte'], hidden: ['Deckplatte'], foot: false,
+        pins: { 'Deckplatte:br': 'A', 'Deckplatte:br:pos': 'bc', 'Rahmen:chev': 'B', 'Rahmen:chev:pos': 'tc', 'Rahmen:eye': 'C', 'Rahmen:eye:pos': 'tc', 'Rahmen:gh': 'D', 'Rahmen:gh:pos': 'tc', 'Rahmen:nm': 'E', 'Rahmen:nm:pos': 'tc' } }).replace('<div class="tr-hd"', '<div class="tr-hd" style="display:none"')}
+    </div>
+    <div class="anat" style="position:absolute;left:980px;top:236px;width:588px">
+      <div><span class="pin s">A</span><span><b>Baumstriche.</b> Zeigen, was zu welcher Gruppe gehört. Ganz oben steht der Name des Modells, ein Klick dort klappt den Baum auf und zu.</span></div>
+      <div><span class="pin s">B</span><span><b>Pfeil.</b> Gruppe auf- und zuklappen.</span></div>
+      <div><span class="pin s">C</span><span><b>Auge.</b> Blendet aus und wieder ein. Aus: durchgestrichen, der Name grau.</span></div>
+      <div><span class="pin s">D</span><span><b>Halbkreis.</b> Macht transparent. An: orange, wie heute in der Bauteilliste. Bei einer Gruppe gelten Auge und Halbkreis für alle Teile darin.</span></div>
+      <div><span class="pin s">E</span><span><b>Name.</b> Klick wählt das Teil (Name und Teil im Bild orange), Rechtsklick öffnet das Menü von heute, Ziehen in den Agenten wie heute.</span></div>
+    </div>
+    <div class="sh-t" style="left:980px;top:464px">SO LIEST MAN DEN BAUM</div>
+    <div class="rules" style="position:absolute;left:980px;top:488px;width:560px">
+      <div><b>Knöpfe direkt vor dem Namen</b>Sie rücken mit dem Namen ein und gehören so sichtbar zu ihrem Teil oder ihrer Gruppe.</div>
+      <div><b>Immer zu sehen, aber leise</b>Ausgeschaltet sind sie gedämpft. Nur was gerade wirkt, ist hell: ein ausgeblendetes Teil oder ein transparentes (orange). So sieht man auf einen Blick, was im Bild fehlt.</div>
+      <div><b>Ein Zustand für alles</b>Was im Modell ausgeblendet ist, bleibt es in Analyse und Animation. Show all im Fuß des Baums holt alles zurück.</div>
+      <div><b>Taste (Vorschlag)</b>F3 klappt den Baum auf und zu, wie in CATIA. Nur wenn der Fokus nicht im Code oder im Terminal steht.</div>
+    </div>
+  </div>`;
+};
+
+// ---- 5: Reiter Analysis und Animation ----
+S[5] = () => `<div class="sheet">
+  <div class="sh-t" style="left:32px;top:24px">REITER ANALYSIS: LISTE</div>
+  <div class="panel" style="left:32px;top:48px;height:400px">${listAnalyses()}</div>
+  <div class="sh-t" style="left:32px;top:472px">REITER ANIMATION: LISTE</div>
+  <div class="panel" style="left:32px;top:496px;height:372px">${listAnims()}</div>
+
+  <div class="sh-t" style="left:420px;top:24px">LEISTE</div>
+  <div style="position:absolute;left:420px;top:48px;height:520px;display:flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden">${rail({ active: 'analysis', dots: ['anim'] })}</div>
+
+  <div class="sh-t" style="left:520px;top:24px">WAS DER VIEWER ZEIGT</div>
+  <div class="flow" style="position:absolute;left:520px;top:48px;width:500px">
+    <div class="way">${ic('gauge', 18)}<span><b>Reiter öffnen zeigt das Ergebnis</b>Klick auf Analysis öffnet den Bericht des zuletzt gezeigten Ergebnisses, und das Bild zeigt es. Beim ersten Mal das neueste. „‹ Analyses“ führt zur Liste, ein Klick dort wechselt.</span></div>
+    <div class="way">${ic('sideL', 18)}<span><b>Das Ergebnis bleibt im Bild</b>Seitenleiste zu oder Parameters, Files, Skills öffnen: Das Bild zeigt weiter die Analyse. Legende und Leiste unten im Bild zeigen, dass es ein Ergebnis ist.</span></div>
+    <div class="way">${ic('x', 18)}<span><b>Zurück zum Modell</b>× rechts in der Leiste unten im Bild, bei der Analyse wie bei der Animation.</span></div>
+    <div class="way">${ic('sparkle', 18)}<span><b>Neues vom Agenten</b>Punkt am Reiter und „new“ in der Liste, bis man es angesehen hat.</span></div>
+    <div class="way">${ic('video', 18)}<span><b>Videos</b>Stehen unter den Animationen, aus denen sie entstanden sind. Ein Klick öffnet den Player wie heute.</span></div>
+  </div>
+
+  <div class="sh-t" style="left:1060px;top:24px">WAS WEGFÄLLT</div>
+  <ul class="gone" style="position:absolute;left:1060px;top:48px;width:508px">
+    <li>${ic('x', 15, 2)}<span><s>Reiter Parts</s>: Die Bauteile stehen im Baum oben links im Viewer.</span></li>
+    <li>${ic('x', 15, 2)}<span><s>Umschalter oben links</s>: Gewählt wird in den Reitern, zurück zum Modell über das × unten im Bild. Eine ältere Version hat schon heute ihr eigenes Band mit „Back to now“.</span></li>
+    <li>${ic('x', 15, 2)}<span><s>Aus den Runden davor</s>: Kontext-Reiter, Rechtsklick ins Bild, Augen im Bericht und in den Bauteilen der Animation, „hidden“-Leiste, Baum mit Fläche, Knöpfe in fester Spalte.</span></li>
+  </ul>
+  <div class="sh-t" style="left:1060px;top:248px">BLEIBT</div>
+  <ul class="gone" style="position:absolute;left:1060px;top:272px;width:508px">
+    <li>${ic('right', 15, 2)}<span>Der ruhige Bericht: eine Zahl groß, Annahmen je eine Zeile, Einzelheiten zum Aufklappen (Folie 6).</span></li>
+    <li>${ic('right', 15, 2)}<span>Legende senkrecht am Rand, Darstellung unten am Bild, Kraft und Minimum als Beschriftung im Bild.</span></li>
+    <li>${ic('right', 15, 2)}<span>Schritte der Animation aus den Untertiteln, Abspielleiste unten am Bild.</span></li>
+  </ul>
+</div>`;
+
+// ---- 6: Bericht im Detail (aus Runde 2) ----
+S[6] = () => `<div class="sheet cx">
+  <div class="sh-t" style="left:32px;top:24px">ANNAHMEN AUFGEKLAPPT</div>
+  <div class="panel" style="left:32px;top:48px">${cxInputs({ open: ['force', 'mat'], hov: 'fix', top: false })}</div>
+  <div class="sh-t" style="left:408px;top:24px">BERECHNUNG UND HINWEISE AUFGEKLAPPT</div>
+  <div class="panel" style="left:408px;top:48px">${cxSummary({ hov: 0 })}${cxCalc({ open: true })}${cxNotes({ open: true })}<div style="height:8px"></div></div>
+
+  <div class="sh-t" style="left:784px;top:24px">HÄLT</div>
+  <div class="panel" style="left:784px;top:48px">${cxHead('Aufschlag von unten, Radius 2 mm', 'FEM · 51.0 s · 2.0 mm mesh · today 10:12')}${cxSummary({ ok: true, n: '2.31', rows: [], warn: false, req: 'required 2.0 · Mittelplatte' })}</div>
+  <div class="sh-t" style="left:784px;top:268px">ÄLTER ALS DER CODE</div>
+  <div class="panel" style="left:784px;top:292px">${cxHead('Aufschlag von unten auf Motor vorn links', 'FEM · 48.2 s · 2.0 mm mesh · <span class="w">older than the code</span>')}
+    <div class="cx-line">${ic('alert', 14, 2)}Values belong to the model as it was at 9:38.<button>Recalculate</button></div>
+    ${cxSummary({ warn: false, rows: [] })}</div>
+  <div class="sh-t" style="left:784px;top:560px">RECHNET</div>
+  <div class="panel" style="left:784px;top:584px">${cxHead('Aufschlag von unten auf Motor vorn links', 'FEM · recalculating … meshing, 12 s')}<div class="cx-prog"><i></i></div>${cxSummary({ dim: true, warn: false, rows: [] })}</div>
+
+  <div class="sh-t" style="left:1160px;top:24px">WANDSTÄRKE, GLEICHE GLIEDERUNG</div>
+  <div class="panel" style="left:1160px;top:48px">
+    ${cxHead('Wall thickness', 'Analysis · 3.1 s · 48,210 sample points · today 9:12')}
+    ${cxSummary({ n: '0.04', unit: 'mm', what: 'smallest wall thickness', req: 'limit 1.2 mm', status: '2 spots below the limit', rows: [['Gegengewicht', '0.04', '0.03 cm²'], ['Deckplatte', '0.13', '0.42 cm²']], warn: false })}
+    <section class="cx-sec"><div class="cx-sh">INPUTS</div>
+      <div class="cx-row"><span class="l">Limit</span><span class="v">1.2 mm <span>· critical below</span></span>${chev()}</div>
+      <div class="cx-row"><span class="l">Parts</span><span class="v">all own parts <span>· 26</span></span>${chev()}</div>
+      <div class="cx-row"><span class="l">Accuracy</span><span class="v">±0.01 mm</span>${chev()}</div></section>
+    <div class="cx-fold"><span class="chev">${ic('right', 13, 2)}</span>PARTS<span class="r">26</span></div>
+  </div>
+  <div class="sh-t" style="left:1160px;top:510px">LEGENDE FÜR DIE SPANNUNG</div>
+  <div style="position:absolute;left:1160px;top:534px;width:160px;height:340px">
+    ${legendV({ style: 'position:absolute;left:0;top:0;right:auto', title: 'Stress (MPa)', lo: 0, hi: 190, col: (v) => rcol(v, 95, 0, 190, 'high'), thr: 95, thrLabel: '95', thrWord: 'allowable', ticks: [[190, '190'], [150, '150'], [50, '50'], [0, '0']], foot: 'Red: above allowable<br>weakest material' })}
+  </div>
+</div>`;
+
+// ================================================================================================================
+// Präsentation
+// ================================================================================================================
+const META = {
+  0: ['Modell', [
+    ['1', 'Leiste in drei Gruppen mit Strichen: Parameters, Files | Analysis, Animation | Skills. Der Punkt: neues Ergebnis vom Agenten'],
+    ['2', 'Der Baum steht ganz oben links, wo bisher der Umschalter war. Eingeklappt nur der Name des Modells'],
+  ]],
+  1: ['Baum aufgeklappt', [
+    ['1', 'Oben der Name des Modells'],
+    ['2', 'Je Zeile erst die Baumstriche, dann Pfeil, Auge und Halbkreis direkt vor dem Namen. Bei einer Gruppe gilt beides für alle Teile darin'],
+    ['3', 'Halbkreis: transparent, an ist orange'],
+    ['4', 'Auge: ausblenden, dann durchgestrichen und der Name grau'],
+    ['5', 'Klick auf den Namen wählt das Teil, Name und Teil im Bild orange'],
+    ['6', 'Was ausgeblendet ist, steht im Fuß, mit Show all'],
+    ['7', 'Kein Hintergrund: Der Arm darunter bleibt sichtbar, Schrift und Striche haben einen dunklen Rand'],
+  ]],
+  2: ['Analyse', [
+    ['1', 'Reiter Analysis: der ruhige Bericht'],
+    ['2', 'Kein Umschalter mehr: × rechts in der Leiste unten beendet die Analyse, das Bild zeigt wieder das Modell'],
+    ['3', 'Derselbe Baum mit denselben Knöpfen, hier mit den Körpern der Analyse'],
+    ['4', 'Mittelplatte ausgeblendet, Arm vorn links transparent: Darunter liegt die kritische Stelle der Bodenplatte'],
+    ['5', 'Zur Liste aller Analysen (Folie 5)'],
+  ]],
+  3: ['Animation', [
+    ['1', 'Reiter Animation, gleich aufgebaut'],
+    ['2', 'Baum eingeklappt: zeigt, dass ein Teil ausgeblendet ist. Aufklappen wie im Modell'],
+    ['3', 'Schritte aus den Untertiteln, Klick springt hin'],
+    ['4', 'Abspielen unten am Bild, × rechts beendet die Animation'],
+  ]],
+  4: ['Der Baum im Detail', [
+    ['', 'Eingeklappt über Teil und Ergebnis, aufgeklappt mit Menü, Suche, Aufbau einer Zeile'],
+    ['1', 'Rechtsklick auf eine Zeile: das Menü von heute, in Modell, Analyse und Animation'],
+  ]],
+  5: ['Reiter Analysis und Animation', [
+    ['', 'Listen der beiden Reiter, wann das Bild wechselt, was wegfällt und was bleibt'],
+  ]],
+  6: ['Bericht im Detail', [
+    ['', 'Aus Runde 2 übernommen: aufgeklappte Annahmen und Berechnung, Zustände, Wandstärke mit derselben Gliederung, Legende für die Spannung'],
+  ]],
+};
+const N = Object.keys(META).length;
+let cur = Math.min(N - 1, Math.max(0, parseInt(location.hash.slice(1), 10) || 0)), actual = false;
+const tabs = document.getElementById('tabs'), screenEl = document.getElementById('screen');
+tabs.innerHTML = Object.keys(META).map((n) => `<button class="deck-tab" data-go="${n}" role="tab"><span class="n">${n}</span>${META[n][0]}</button>`).join('');
+if (new URLSearchParams(location.search).has('nur')) document.body.classList.add('solo');
+function fit() {
+  const solo = document.body.classList.contains('solo'), head = solo ? 0 : document.querySelector('.deck-top').offsetHeight;
+  const k = (actual || solo) ? 1 : Math.min(1, (innerWidth - 48) / 1600, (innerHeight - head - 40) / 900);
+  document.documentElement.style.setProperty('--k', Math.max(0.3, k));
+}
+function placePins() {
+  const root = screenEl.firstElementChild; if (!root) return;
+  const k = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k')) || 1, r0 = root.getBoundingClientRect();
+  root.querySelectorAll('.pin:not(.s)').forEach((p) => p.remove());
+  root.querySelectorAll('[data-pin]').forEach((el) => {
+    const r = el.getBoundingClientRect(), pos = el.dataset.pinPos || 'tr';
+    let x, y;
+    if (pos === 'l' || pos === 'r') { x = pos === 'l' ? r.left - 14 * k : r.right + 14 * k; y = (r.top + r.bottom) / 2; }
+    else if (pos === 'tc' || pos === 'bc') { x = (r.left + r.right) / 2; y = pos === 'tc' ? r.top - 5 * k : r.bottom + 5 * k; }
+    else { x = pos.includes('r') ? r.right : r.left; y = pos.includes('b') ? r.bottom : r.top; }
+    x = (x - r0.left) / k; y = (y - r0.top) / k;
+    const p = document.createElement('span'); p.className = 'pin'; p.textContent = el.dataset.pin;
+    p.style.left = `${Math.round(Math.min(1600 - 26, Math.max(4, x - 11)))}px`; p.style.top = `${Math.round(Math.min(900 - 26, Math.max(4, y - 11)))}px`;
+    root.appendChild(p);
+  });
+}
+function show(n) {
+  cur = n;
+  screenEl.innerHTML = S[n]();
+  document.getElementById('cap-title').textContent = `${n} · ${META[n][0]}`;
+  document.getElementById('cap-list').innerHTML = META[n][1].map(([p, t]) => `<li>${p ? `<span class="pin s">${p}</span>` : '<span class="bul"></span>'}<span>${t}</span></li>`).join('');
+  tabs.querySelectorAll('.deck-tab').forEach((t) => t.setAttribute('aria-selected', String(+t.dataset.go === n)));
+  if (location.hash !== '#' + n) history.replaceState(null, '', location.pathname + location.search + '#' + n);
+  fit(); placePins();
+}
+document.addEventListener('click', (e) => { const el = e.target.closest('[data-go]'); if (el) show(+el.dataset.go); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') show((cur + 1) % N);
+  if (e.key === 'ArrowLeft') show((cur + N - 1) % N);
+});
+document.getElementById('notes').addEventListener('change', (e) => document.body.classList.toggle('nonotes', !e.target.checked));
+document.getElementById('zoom').addEventListener('click', (e) => { actual = !actual; e.target.textContent = actual ? 'Einpassen' : 'Originalgröße'; fit(); placePins(); });
+addEventListener('resize', () => { fit(); placePins(); });
+show(cur);
+if (document.fonts) document.fonts.ready.then(placePins);
+</script>
+</body>
+</html>
