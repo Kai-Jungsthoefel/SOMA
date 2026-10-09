@@ -46,6 +46,8 @@ const TEXT_PAD: Pt = [5, 3];
 const SEL_PAD = 6, ROT_GAP = 24, GRAB = 9, TOL = 6;
 /** Rasterweite in CSS-Pixeln, jede fünfte Linie kräftiger. */
 const GRID = 20, GRID_MAJOR = 5;
+/** Größte Vergrößerung über das Einpassen hinaus. */
+const ZOOM_MAX = 8;
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const clone = <T>(v: T): T => structuredClone(v);
 const turn = (a: number, u: number, v: number): Pt => [u * Math.cos(a) - v * Math.sin(a), u * Math.sin(a) + v * Math.cos(a)];
@@ -75,12 +77,24 @@ export class Markup {
   private grid = false;
   private scale = 1;
   private size: Pt = [0, 0];
+  /**
+   * Ansicht: Die Zeichenfläche wird in den Viewer eingepasst und lässt sich darüber hinaus vergrößern und verschieben.
+   * `k` sind Bildschirmpixel je Pixel der Zeichenfläche, `off` ihre linke obere Ecke im Viewer. Die Formen bleiben in
+   * den Pixeln der Zeichenfläche, Ansicht und Bild für den Agenten hängen also nicht voneinander ab.
+   */
+  private zoom = 1;
+  private pan: Pt = [0, 0];
+  private k = 1;
+  private off: Pt = [0, 0];
+  private panning: { id: number; x: number; y: number; pan: Pt } | null = null;
   private takenAt = Date.now();
   private sourceFile: string | null = null;
   /** Offenes Textfeld: neuer Text an `p` (oben links) oder ein vorhandener Text (`id`). */
   private editing: { id: number | null; p: Pt; color: string } | null = null;
   private escUntil = 0;
   private lastPress: { id: number; t: number } | null = null;
+  /** Lage des offenen Textfelds in Pixeln der Zeichenfläche, damit es beim Zoomen mitwandert. */
+  private input: { p: Pt; transform: string } | null = null;
 
   constructor(private ui: Ui) {
     this.color = css('--mk-orange') || '#f29a38';
@@ -112,7 +126,10 @@ export class Markup {
       else if (e.ctrlKey && !e.altKey && k === 'z') { e.preventDefault(); this.undo(); }
       else if ((k === 'Delete' || k === 'Backspace') && this.selected != null) { e.preventDefault(); this.removeSelected(); }
       else if (k.startsWith('Arrow') && this.selected != null && !e.ctrlKey && !e.altKey) { e.preventDefault(); this.nudge(k, e.shiftKey ? 10 : 1); }
+      else if (e.ctrlKey && !e.altKey && k === '0') { e.preventDefault(); this.fit(); }
     });
+    // Wird der Viewer größer (z. B. weil die PDF daneben geschlossen wird), wächst die Zeichenfläche mit
+    new ResizeObserver(() => { if (this.active) this.layout(); }).observe(ui.layer);
   }
 
   get active(): boolean { return !this.ui.layer.hidden; }
@@ -138,9 +155,10 @@ export class Markup {
     // Feste Größe für die ganze Sitzung: Ändert sich das Fenster, bleibt das Bild, wie es aufgenommen wurde
     c.width = this.bg ? this.bg.width : Math.round(w * this.scale);
     c.height = this.bg ? this.bg.height : Math.round(h * this.scale);
-    c.style.width = `${w}px`;
-    c.style.height = `${h}px`;
+    this.zoom = 1;
+    this.pan = [0, 0];
     this.ui.layer.hidden = false;
+    this.layout();
     this.ui.viewer.classList.add('marking');
     this.ui.blank.disabled = !this.bg;
     this.renderUi();
@@ -167,7 +185,44 @@ export class Markup {
     this.editing = null;
     this.lastPress = null;
     this.escUntil = 0;
+    this.panning = null;
+    this.input = null;
     this.ui.text.hidden = true;
+  }
+
+  // ---- Ansicht --------------------------------------------------------------------------------------------------
+
+  /** Zeichenfläche einpassen und Zoom und Verschiebung anwenden. Ist sie kleiner als der Viewer, steht sie mittig. */
+  private layout(): void {
+    const W = this.ui.layer.clientWidth, H = this.ui.layer.clientHeight, [w, h] = this.size;
+    if (!W || !H || !w || !h) return;
+    this.k = Math.min(W / w, H / h) * this.zoom;
+    const dw = w * this.k, dh = h * this.k;
+    const place = (free: number, pan: number) => free >= 0 ? free / 2 : Math.max(free, Math.min(0, free / 2 + pan));
+    this.off = [place(W - dw, this.pan[0]), place(H - dh, this.pan[1])];
+    // Verschiebung auf das tatsächlich Mögliche zurückführen, sonst müsste man erst „zurückschieben“, bevor sich etwas tut
+    this.pan = [W - dw >= 0 ? 0 : this.off[0] - (W - dw) / 2, H - dh >= 0 ? 0 : this.off[1] - (H - dh) / 2];
+    Object.assign(this.ui.canvas.style, { left: `${this.off[0]}px`, top: `${this.off[1]}px`, width: `${dw}px`, height: `${dh}px` });
+    this.placeInput();
+  }
+
+  /** Zoom um einen Punkt im Viewer (CSS-Pixel relativ zur Ebene): Der Punkt unter dem Mauszeiger bleibt stehen. */
+  private zoomAt(factor: number, mx: number, my: number): void {
+    const z = Math.max(1, Math.min(ZOOM_MAX, this.zoom * factor));
+    if (z === this.zoom) return;
+    const q: Pt = [(mx - this.off[0]) / this.k, (my - this.off[1]) / this.k];
+    const W = this.ui.layer.clientWidth, H = this.ui.layer.clientHeight, [w, h] = this.size;
+    const k = Math.min(W / w, H / h) * z;
+    this.zoom = z;
+    this.pan = [mx - q[0] * k - (W - w * k) / 2, my - q[1] * k - (H - h * k) / 2];
+    this.layout();
+  }
+
+  /** Zurück auf eingepasst. */
+  private fit(): void {
+    this.zoom = 1;
+    this.pan = [0, 0];
+    this.layout();
   }
 
   undo(): void {
@@ -302,9 +357,9 @@ export class Markup {
       return u / s.sx >= x0 && u / s.sx <= x1 && v / s.sy >= y0 && v / s.sy <= y1;
     }
     // Rechteck und Ellipse sind hohl: Getroffen wird die Linie, damit Formen darunter erreichbar bleiben
-    const o = this.outline(s);
-    if (o.length === 1) return dist(p, o[0]) <= TOL;
-    for (let i = 1; i < o.length; i++) if (segDist(p, o[i - 1], o[i]) <= TOL) return true;
+    const o = this.outline(s), tol = TOL / this.k;
+    if (o.length === 1) return dist(p, o[0]) <= tol;
+    for (let i = 1; i < o.length; i++) if (segDist(p, o[i - 1], o[i]) <= tol) return true;
     return false;
   }
 
@@ -316,8 +371,10 @@ export class Markup {
 
   private handleAt(s: Shape, p: Pt): Handle | null {
     const f = this.frame(s);
-    if (dist(p, f.rotate) <= GRAB) return { kind: 'rotate' };
-    const i = f.corners.findIndex((q) => dist(p, q) <= GRAB);
+    // Fangradien gelten auf dem Bildschirm, beim Zoomen bleiben die Griffe so gleich gut zu treffen
+    const grab = GRAB / this.k;
+    if (dist(p, f.rotate) <= grab) return { kind: 'rotate' };
+    const i = f.corners.findIndex((q) => dist(p, q) <= grab);
     if (i >= 0) return { kind: 'scale', corner: i };
     const [u, v] = turn(-s.rot, p[0] - s.x, p[1] - s.y);
     const [a, c, b, d] = f.rect;
@@ -348,13 +405,39 @@ export class Markup {
 
   private at(e: PointerEvent): Pt {
     const r = this.ui.canvas.getBoundingClientRect();
-    return [Math.max(0, Math.min(this.size[0], e.clientX - r.left)), Math.max(0, Math.min(this.size[1], e.clientY - r.top))];
+    const x = ((e.clientX - r.left) / (r.width || 1)) * this.size[0], y = ((e.clientY - r.top) / (r.height || 1)) * this.size[1];
+    return [Math.max(0, Math.min(this.size[0], x)), Math.max(0, Math.min(this.size[1], y))];
   }
 
   private installPointer(): void {
-    const c = this.ui.canvas;
+    const c = this.ui.canvas, layer = this.ui.layer;
+    const onUi = (e: Event) => !!(e.target as HTMLElement).closest('.float, .mk-actions, .mk-text');
+    // Mausrad zoomt, mittlere oder rechte Taste verschiebt. Auf der Ebene, damit es auch neben der Zeichenfläche geht.
+    layer.addEventListener('wheel', (e) => {
+      if (onUi(e)) return;
+      e.preventDefault();
+      const r = layer.getBoundingClientRect();
+      this.zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+    layer.addEventListener('pointerdown', (e) => {
+      if ((e.button !== 1 && e.button !== 2) || onUi(e)) return;
+      e.preventDefault();
+      this.panning = { id: e.pointerId, x: e.clientX, y: e.clientY, pan: [...this.pan] };
+      try { layer.setPointerCapture(e.pointerId); } catch { /* synthetische Ereignisse (Tests) haben keinen aktiven Zeiger */ }
+      layer.style.cursor = 'grabbing';
+    });
+    layer.addEventListener('pointermove', (e) => {
+      const p = this.panning;
+      if (!p || p.id !== e.pointerId) return;
+      this.pan = [p.pan[0] + e.clientX - p.x, p.pan[1] + e.clientY - p.y];
+      this.layout();
+    });
+    const endPan = (e: PointerEvent) => { if (this.panning?.id === e.pointerId) { this.panning = null; layer.style.cursor = ''; } };
+    layer.addEventListener('pointerup', endPan);
+    layer.addEventListener('pointercancel', endPan);
+    layer.addEventListener('contextmenu', (e) => { if (!onUi(e)) e.preventDefault(); });
     c.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || this.panning) return;
       e.preventDefault(); // kein Fokuswechsel, sonst schlösse sich ein gerade geöffnetes Textfeld sofort wieder
       this.commitText();
       const p = this.at(e);
@@ -368,6 +451,7 @@ export class Markup {
       this.draw();
     });
     c.addEventListener('pointermove', (e) => {
+      if (this.panning) return;
       const p = this.at(e);
       if (!this.drag) { if (this.tool === 'select') c.style.cursor = this.cursorAt(p); return; }
       this.dragTo(p, e.shiftKey, e.altKey);
@@ -486,16 +570,28 @@ export class Markup {
   private showInput(value: string, p: Pt, transform: string, size: number): void {
     const t = this.ui.text;
     t.value = value;
-    Object.assign(t.style, { left: `${p[0]}px`, top: `${p[1]}px`, transform, fontSize: `${size}px`, color: this.editing!.color });
+    Object.assign(t.style, { fontSize: `${size}px`, color: this.editing!.color });
+    this.input = { p, transform };
+    this.placeInput();
     t.hidden = false;
     // Erst nach dem Mausklick fokussieren, der sonst den Fokus wieder mitnimmt. Schreibmarke ans Ende.
     setTimeout(() => { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }, 0);
+  }
+
+  /** Textfeld über die Stelle der Zeichenfläche legen, in derselben Vergrößerung wie die Fläche. */
+  private placeInput(): void {
+    const i = this.input;
+    if (!i) return;
+    Object.assign(this.ui.text.style, {
+      left: `${this.off[0] + i.p[0] * this.k}px`, top: `${this.off[1] + i.p[1] * this.k}px`, transformOrigin: '0 0', transform: `scale(${this.k}) ${i.transform}`,
+    });
   }
 
   private commitText(): void {
     const ed = this.editing;
     if (!ed) return;
     this.editing = null;
+    this.input = null;
     const text = this.ui.text.value.trim();
     this.ui.text.hidden = true;
     if (ed.id != null) {
@@ -516,6 +612,7 @@ export class Markup {
 
   private cancelText(): void {
     this.editing = null;
+    this.input = null;
     this.ui.text.hidden = true;
     this.draw();
   }
@@ -641,7 +738,7 @@ export class Markup {
     const what = this.blankBg ? 'Blank canvas. The image is saved in '
       : this.sourceFile ? `Image ${this.sourceFile}. The markup is saved as a new file in ` : `Viewer image from ${fmtWhen(this.takenAt)}. It is saved in `;
     u.hint.replaceChildren(what,
-      el('code', { textContent: '.soma/feedback/' }), ', and its path goes into the agent’s input.');
+      el('code', { textContent: '.soma/feedback/' }), ', and its path goes into the agent’s input. Scroll to zoom, drag with the right mouse button to pan, Ctrl 0 fits.');
   }
 
   // ---- Prüfhilfen (nur für Tests) -------------------------------------------------------------------------------
@@ -649,12 +746,15 @@ export class Markup {
   state() {
     const r = (v: number, n = 2) => +v.toFixed(n);
     return {
-      active: this.active, source: this.source, tool: this.tool, color: this.color, blank: this.blankBg, grid: this.grid, size: this.size, pixels: [this.ui.canvas.width, this.ui.canvas.height],
+      active: this.active, source: this.source, zoom: +this.zoom.toFixed(3), view: [+this.k.toFixed(3), +this.off[0].toFixed(1), +this.off[1].toFixed(1)], tool: this.tool, color: this.color, blank: this.blankBg, grid: this.grid, size: this.size, pixels: [this.ui.canvas.width, this.ui.canvas.height],
       shapes: this.shapes.map((s) => s.tool),
       items: this.shapes.map((s) => ({ tool: s.tool, color: s.color, text: s.text ?? null, x: r(s.x), y: r(s.y), rot: r(s.rot, 4), sx: r(s.sx, 3), sy: r(s.sy, 3) })),
       selected: this.shapes.findIndex((s) => s.id === this.selected), editing: !!this.editing, undo: this.history.length, redo: this.future.length,
     };
   }
+
+  /** Neu einpassen wie nach einer Größenänderung. Unsichtbare Testfenster zeichnen nicht, dort meldet sich der ResizeObserver nicht. */
+  relayout(): void { if (this.active) this.layout(); }
 
   /** Griffe der ausgewählten Form in CSS-Pixeln der Zeichenfläche. */
   handles() {

@@ -236,6 +236,37 @@ try {
   await domClick('btn-mark-grid');
   check('Raster wieder aus: Bild ohne Raster', !(await mk()).grid && (await ev(() => window.__t.markPixel(600, 10))).slice(0, 3).join() === gridOff.slice(0, 3).join());
 
+  // Ansicht: Die Fläche passt sich dem Viewer an (z. B. wenn die PDF daneben schließt), Mausrad zoomt um den Zeiger, Ctrl+0 passt ein
+  const layerSize = () => ev(() => { const l = document.getElementById('markup'); return [l.clientWidth, l.clientHeight]; });
+  const [lw] = await layerSize();
+  await ev(() => { document.getElementById('markup').style.right = '50%'; window.__t.markRelayout(); });
+  await sleep(150);
+  const half = await mk();
+  await ev(() => { document.getElementById('markup').style.right = ''; window.__t.markRelayout(); });
+  await sleep(150);
+  check('Kleinerer Viewer: Zeichenfläche wird eingepasst und mittig gestellt, größerer wieder voll', Math.abs(half.view[0] - 0.5) < 0.02 && (await mk()).view[0] === 1,
+    `${half.view.join(',')} bei ${lw}px`);
+  const fireWheel = (x, y, dy) => ev(([x, y, dy]) => {
+    const l = document.getElementById('markup'), r = l.getBoundingClientRect();
+    l.dispatchEvent(new WheelEvent('wheel', { clientX: r.left + x, clientY: r.top + y, deltaY: dy, bubbles: true, cancelable: true }));
+  }, [x, y, dy]);
+  await fireWheel(140, 200, -462); // Faktor 2
+  st = await mk();
+  const zoomed = st.view;
+  await tool('pen');
+  await ev(() => {
+    const c = document.getElementById('mark-canvas'), l = document.getElementById('markup').getBoundingClientRect();
+    const fire = (type) => c.dispatchEvent(new PointerEvent(type, { clientX: l.left + 140, clientY: l.top + 200, bubbles: true, cancelable: true, button: 0, pointerId: 1, isPrimary: true }));
+    fire('pointerdown'); fire('pointerup');
+  });
+  st = await mk();
+  const dot = st.items[st.items.length - 1];
+  check('Mausrad zoomt um den Zeiger, gezeichnet wird an der richtigen Stelle der Fläche', Math.abs(zoomed[0] - 2) < 0.01 && Math.abs(dot.x - 140) < 0.6 && Math.abs(dot.y - 200) < 0.6,
+    `k ${zoomed[0]}, Punkt ${dot.x},${dot.y}`);
+  await domClick('btn-mark-undo');
+  await key('0', { ctrlKey: true });
+  check('Ctrl+0 passt wieder ein', JSON.stringify((await mk()).view) === '[1,0,0]', (await mk()).view.join(','));
+
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   check('Escape mit Zeichnung verwirft nicht sofort (erst beim zweiten Mal)', (await ev(() => window.__t.markup())).active && (await ev(() => window.__t.toast())).text.includes('Press Escape again'));
   const px = (await ev(() => window.__t.markup())).pixels;

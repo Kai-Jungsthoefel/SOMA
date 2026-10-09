@@ -799,7 +799,7 @@ code { font-family:var(--mono); font-size:.95em; }
 
 /* ---- Markierung (E16) ----------------------------------------------------------------------------------------- */
 #viewer.marking > .float, #viewer.marking > .cube, #viewer.marking > .vtop, #viewer.marking > .cards, #viewer.marking > #viewer-msg { display:none; }
-.markup { position:absolute; inset:0; z-index:8; background:var(--s2); }
+.markup { position:absolute; inset:0; z-index:8; background:var(--s2); overflow:hidden; }
 .markup canvas { position:absolute; left:0; top:0; display:block; touch-action:none; }
 .mk-frame { position:absolute; inset:6px; border:2px dashed var(--acc-line); border-radius:8px; pointer-events:none; }
 .mk-tools { left:12px; top:12px; }

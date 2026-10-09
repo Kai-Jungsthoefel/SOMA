@@ -1583,6 +1583,7 @@ if (api.testMode) {
     pick: () => selection?.pick ?? null,
     markPixel: (x: number, y: number) => markup.pixel(x, y),
     markHandles: () => markup.handles(),
+    markRelayout: () => markup.relayout(),
     markImage: (rel: string) => markImage(rel),
     insert: (text: string) => insertToAgent(text),
     showPanel: (p: PanelName | 'code' | null) => (p === 'code' ? showCode(true) : showPanel(p)),
