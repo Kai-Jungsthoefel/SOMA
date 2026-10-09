@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+## [0.3.0] - 2026-10-09
+
+Technische Zeichnungen, eigene Skills, das Dateiformat `.soma` und die DXF-Ansicht.
+
 ### Neu
 
 - DXF-Ansicht: DXF-Dateien öffnen per Klick im Dateibaum im Code-Panel, gezeichnet wie die technischen Zeichnungen (Linientypen, Schraffuren, Maße, Texte). Zoomen mit dem Mausrad, Verschieben durch Ziehen, Layer ein- und ausblenden, Größe und Koordinaten unter dem Zeiger. „Mark up view“ gibt den sichtbaren Ausschnitt mit seinen Koordinaten an den Agenten. Ändert der Agent die Datei, zeichnet die Ansicht neu und behält den Ausschnitt. Was sich nicht zeichnen lässt (etwa 3D-Körper), nennt ein Hinweis (E80).
@@ -64,6 +68,7 @@ Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
 - Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
 - Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.2.0...HEAD
+[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Kai-Jungsthoefel/SOMA/releases/tag/v0.1.0
