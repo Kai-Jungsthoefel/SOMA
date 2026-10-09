@@ -250,7 +250,8 @@ def cmd_drawing(args):
                     return _fail(f"{args.name} does not exist")
             res = drawrun.build_all(root, target, args.dpi)
             if args.json:
-                print(json.dumps(dict(built=res["built"], errors=res["errors"], orphans=res["orphans"]), ensure_ascii=False))
+                print(json.dumps(dict(built=res["built"], errors=res["errors"], orphans=res["orphans"], set=res["set"]),
+                                 ensure_ascii=False))
             else:
                 for b in res["built"]:
                     print(f"Drawing ok: \"{b['name']}\" ({b['size']}, {b['scale']}, {len(b['views'])} view(s), "
@@ -265,6 +266,12 @@ def cmd_drawing(args):
                     print(f"Drawing ERROR ({where}): {e['message']}", file=sys.stderr)
                     if e.get("traceback"):
                         print(e["traceback"], file=sys.stderr)
+                st = res["set"]
+                if st and st.get("skipped"):
+                    print(f"Note: {st['pdf']} (all sheets in one file) is not updated while a drawing has errors.")
+                elif st:
+                    print(f"All sheets in one file: {st['pdf']} ({st['sheets']} sheet(s))"
+                          + (f", missing (no DXF): {', '.join(st['missing'])}" if st["missing"] else ""))
                 for p in res["orphans"]:
                     print(f"Note: {p} belongs to no sheet anymore (renamed or removed). Delete it if it is not needed.")
                 if not res["built"] and not res["errors"]:

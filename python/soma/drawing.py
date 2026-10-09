@@ -23,7 +23,7 @@ import cadquery as cq
 import ezdxf
 import numpy as np
 from ezdxf.enums import TextEntityAlignment
-from OCP.BRepAdaptor import BRepAdaptor_Curve
+from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
 from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
 from OCP.BRepLib import BRepLib
@@ -81,6 +81,8 @@ LINETYPES = {
 }
 TEXT_HEIGHT = 3.5     # Maßzahlen und Texte (ISO 3098, mindestens 2.5)
 LABEL_HEIGHT = 5.0    # Bezeichnungen von Ansichten, Schnitten, Einzelheiten
+LINE_SPACING = 1.6    # Abstand der Grundlinien mehrzeiliger Texte in Schrifthoehen
+BREAK_GAP = 6.0       # Luecke einer unterbrochenen Ansicht auf dem Blatt (mm)
 FONT = "DejaVuSans.ttf"  # liegt matplotlib bei, damit die PDF auf jedem Rechner gleich aussieht
 
 TITLE_LABELS = {
@@ -166,8 +168,35 @@ def fmt_scale(v):
 
 def num(v, dec=2):
     """Zahl wie auf der Zeichnung: 120.00 -> "120", 12.50 -> "12.5", Punkt als Dezimalzeichen."""
-    s = f"{v:.{dec}f}".rstrip("0").rstrip(".")
+    s = f"{float(v):.{max(0, int(dec))}f}"
+    if "." in s:  # Nullen nur hinter dem Komma streichen, sonst wird aus 130 mit dec=0 "13"
+        s = s.rstrip("0").rstrip(".")
     return "0" if s in ("-0", "") else s
+
+
+_FONTS_READY = False
+
+
+def setup_fonts():
+    """Die Schrift der Zeichnungen liegt matplotlib bei, ezdxf kennt den Ordner aber nicht von sich aus. Muss vor dem
+    ersten Messen eines Texts laufen: ezdxf behaelt die Ersatzschrift sonst fuer den ganzen Lauf, auch beim Zeichnen."""
+    global _FONTS_READY
+    if _FONTS_READY:
+        return
+    import matplotlib
+    from ezdxf.fonts import fonts
+    try:
+        fonts.font_manager.scan_folder(Path(matplotlib.get_data_path(), "fonts", "ttf"))
+    except Exception:  # ohne sie nimmt ezdxf eine Ersatzschrift
+        pass
+    _FONTS_READY = True
+
+
+def _no_prefix(text, prefix):
+    """Ø vor dem Durchmesser und R vor dem Radius setzt ezdxf selbst: "Ø<> H7" ergaebe sonst "ØØ8 H7"."""
+    if not isinstance(text, str):
+        return text
+    return re.sub(rf"(?:{prefix})\s*<>", "<>", text)
 
 
 def _layer(name):
@@ -294,8 +323,8 @@ def _common(shape, disc):
     return op.Shape()
 
 
-def _sample(edge, defl):
-    """Punkte (u, v) entlang einer Kante in ihrer Richtung im Draht."""
+def _sample(edge, defl, xyz=False):
+    """Punkte (u, v) entlang einer Kante in ihrer Richtung im Draht, mit xyz=True die Punkte im Raum."""
     c = BRepAdaptor_Curve(edge)
     u1, u2 = c.FirstParameter(), c.LastParameter()
     if c.GetType() == GeomAbs_Line:
@@ -306,8 +335,17 @@ def _sample(edge, defl):
             pts = [d.Value(i) for i in range(1, d.NbPoints() + 1)]
         else:
             pts = [c.Value(u1 + (u2 - u1) * k / 48) for k in range(49)]
-    arr = np.array([(p.X(), p.Y()) for p in pts], dtype=float)
+    arr = np.array([(p.X(), p.Y(), p.Z()) if xyz else (p.X(), p.Y()) for p in pts], dtype=float)
     return arr[::-1] if edge.Orientation() == TopAbs_REVERSED else arr
+
+
+def _seg_dist(p, a, b):
+    """Abstand der Punkte p (N x 2) zur naechsten der Strecken a[i] -> b[i] (M x 2)."""
+    d = b - a
+    L = (d * d).sum(axis=1)
+    t = ((p[:, None, :] - a[None]) * d[None]).sum(axis=2) / np.where(L > 1e-18, L, 1)[None]
+    q = a[None] + d[None] * np.where(L > 1e-18, t, 0.0).clip(0, 1)[..., None]
+    return np.sqrt(((q - p[:, None, :]) ** 2).sum(axis=2)).min(axis=1)
 
 
 def _straight(pts, tol=1e-4):
@@ -346,15 +384,24 @@ class _Geometry:
     """Projizierte Geometrie einer Ansicht in Ansichtskoordinaten (mm im Modell, unabhaengig vom Maßstab).
     Einzelheiten schneiden daraus nur einen Kreis aus, statt neu zu projizieren."""
 
-    def __init__(self, n, x, y, edges, hatch, shapes, center):
+    def __init__(self, n, x, y, edges, hatch, shapes, center, bounds):
         self.n, self.x, self.y = n, x, y
         self.edges = edges        # {"visible": [TopoDS_Edge], "hidden": [...], "tangent": [...]}
         self.hatch = hatch        # [(TopoDS_Face in Ansichtskoordinaten, Stil)]
         self.shapes = shapes      # gezeigte Formen im Modell (fuer circles())
         self.center = center      # Mitte der Begrenzung im Modell, Standard fuer origin
+        self.bounds = bounds      # die 8 Ecken der Begrenzung im Modell (Ausdehnung einer unterbrochenen Ansicht)
 
     def clip(self, cu, cv, r):
-        disc = cq.Face.makeFromWires(cq.Wire.makeCircle(r, cq.Vector(cu, cv, 0), cq.Vector(0, 0, 1))).wrapped
+        """Nur was im Kreis um (cu, cv) liegt (Einzelheit)."""
+        return self._clip(cq.Face.makeFromWires(cq.Wire.makeCircle(r, cq.Vector(cu, cv, 0), cq.Vector(0, 0, 1))).wrapped)
+
+    def clip_box(self, u0, u1, v0, v1):
+        """Nur was im Rechteck liegt (ein Stueck einer unterbrochenen Ansicht)."""
+        pts = [cq.Vector(u0, v0, 0), cq.Vector(u1, v0, 0), cq.Vector(u1, v1, 0), cq.Vector(u0, v1, 0)]
+        return self._clip(cq.Face.makeFromWires(cq.Wire.makePolygon(pts, close=True)).wrapped)
+
+    def _clip(self, disc):
         edges = {}
         for k, es in self.edges.items():
             if not es:
@@ -367,12 +414,56 @@ class _Geometry:
             res = _common(face, disc)
             if res is not None and not res.IsNull():
                 hatch += [(f.wrapped, style) for f in cq.Shape.cast(res).Faces()]
-        return _Geometry(self.n, self.x, self.y, edges, hatch, self.shapes, self.center)
+        return _Geometry(self.n, self.x, self.y, edges, hatch, self.shapes, self.center, self.bounds)
 
 
-def _project(items, n, x, y, hidden, tangent, region=None, unhatched=(), hatch=None):
-    """items: [(Name, Form)]. region: Koerper, der weggeschnitten wird (Schnitt), sonst None."""
-    shapes, faces = [], []
+def _on_region(region, face):
+    """Liegt die Flaeche ganz auf dem Rand des weggeschnittenen Koerpers, ist also durch den Schnitt entstanden?"""
+    return all(region.distance(v) <= 1e-6 for v in face.Vertices())
+
+
+def _edge_on(face, n):
+    """Sieht der Betrachter die Flaeche nur als Linie (eben parallel zur Blickrichtung, Zylinder mit Achse entlang)?"""
+    gt = face.geomType()
+    if gt == "PLANE":
+        nrm = face.normalAt(face.Center())
+        return abs(float(np.dot((nrm.x, nrm.y, nrm.z), n))) < 1e-6
+    if gt == "CYLINDER":
+        ax = BRepAdaptor_Surface(face.wrapped).Cylinder().Axis().Direction()
+        return abs(abs(ax.X() * n[0] + ax.Y() * n[1] + ax.Z() * n[2]) - 1) < 1e-6
+    return False
+
+
+def _drop_borders(edges, faces, x, y):
+    """Kanten weglassen, die nur Schnittflaechen von der Seite zeigen: Stufen eines Schnittverlaufs, die Grenze eines
+    Halbschnitts, der Rand eines Ausbruchs. Dort steht nach ISO 128-44 keine Kante, sondern nichts, eine Mittellinie oder
+    eine Freihandlinie."""
+    tol, defl = 5e-3, 1e-3
+    a, b = [], []
+    for f in faces:
+        for e in f.Edges():
+            p = _sample(e.wrapped, defl, xyz=True)
+            uv = np.column_stack([p @ x, p @ y])
+            a.append(uv[:-1] if len(uv) > 1 else uv)
+            b.append(uv[1:] if len(uv) > 1 else uv)
+    if not a:
+        return edges
+    a, b = np.concatenate(a), np.concatenate(b)
+    out = {}
+    for k, es in edges.items():
+        keep = []
+        for e in es:
+            pts = _sample(e, defl)
+            if not (len(pts) and float(_seg_dist(pts, a, b).max()) <= tol):
+                keep.append(e)
+        out[k] = keep
+    return out
+
+
+def _project(items, n, x, y, hidden, tangent, region=None, unhatched=(), hatch=None, borders=False):
+    """items: [(Name, Form)]. region: Koerper, der weggeschnitten wird (Schnitt), sonst None. borders: Kanten von
+    Schnittflaechen, die der Betrachter nur von der Seite sieht, weglassen (Schnittverlauf, Halbschnitt, Ausbruch)."""
+    shapes, faces, edge_on = [], [], []
     styles = _hatch_styles(hatch, [nm for nm, _s in items if nm not in unhatched])
     k = 0
     for nm, s in items:
@@ -385,10 +476,11 @@ def _project(items, n, x, y, hidden, tangent, region=None, unhatched=(), hatch=N
         shapes.append(cut)
         style = styles[k] if nm not in unhatched else None
         k += 1
-        if style is None:
-            continue
         for f in cut.Faces():
-            if f.geomType() != "PLANE":
+            if borders and _edge_on(f, n) and _on_region(region, f):
+                edge_on.append(f)
+                continue
+            if style is None or f.geomType() != "PLANE":
                 continue
             c = f.Center()
             nrm = f.normalAt(c)
@@ -402,9 +494,12 @@ def _project(items, n, x, y, hidden, tangent, region=None, unhatched=(), hatch=N
         raise ValueError("Nothing left to show: the section removes everything")
     comp = shapes[0] if len(shapes) == 1 else cq.Compound.makeCompound(shapes)
     edges = _hlr(comp, n, x, hidden, tangent)
+    if edge_on:
+        edges = _drop_borders(edges, edge_on, x, y)
     bb = _bbox([s for _n, s in items])
     center = np.array([(bb.xmin + bb.xmax) / 2, (bb.ymin + bb.ymax) / 2, (bb.zmin + bb.zmax) / 2])
-    return _Geometry(n, x, y, edges, faces, shapes, center)
+    bounds = np.array([(a, b, c) for a in (bb.xmin, bb.xmax) for b in (bb.ymin, bb.ymax) for c in (bb.zmin, bb.zmax)])
+    return _Geometry(n, x, y, edges, faces, shapes, center, bounds)
 
 
 def _hatch_styles(hatch, names):
@@ -434,24 +529,133 @@ def _hatch_styles(hatch, names):
     return out
 
 
+def _short(t, n=30):
+    t = " ".join(str(t).split())
+    return t if len(t) <= n else t[:n - 3] + "..."
+
+
+def _breaks(spec, x, y):
+    """breaks=[(p1, p2), ...] -> [(0 = waagerecht / 1 = senkrecht auf dem Blatt, von, bis)] in Ansichtskoordinaten."""
+    if spec is None or (hasattr(spec, "__len__") and len(spec) == 0):
+        return []
+    msg = f"breaks must be a list of model point pairs [((x, y, z), (x, y, z)), ...], not {spec!r}"
+    if isinstance(spec, (str, bytes)) or not hasattr(spec, "__iter__"):
+        raise ValueError(msg)
+    spec = list(spec)
+    # Ein einzelnes Paar ohne die Liste darum
+    if len(spec) == 2 and all(hasattr(q, "__len__") and len(q) == 3 for q in spec) \
+            and all(isinstance(c, (int, float, np.number)) for c in spec[0]):
+        spec = [spec]
+    out = []
+    for item in spec:
+        if isinstance(item, (str, bytes)) or not hasattr(item, "__len__") or len(item) != 2:
+            raise ValueError(msg)
+        a, b = _vec(item[0], "break point"), _vec(item[1], "break point")
+        du, dv = float(np.dot(b - a, x)), float(np.dot(b - a, y))
+        ax = 0 if abs(du) >= abs(dv) else 1
+        if max(abs(du), abs(dv)) < 1e-9:
+            raise ValueError(f"The two points of the break {item!r} coincide in this view")
+        axis = (x, y)[ax]
+        out.append((ax, *sorted((float(np.dot(a, axis)), float(np.dot(b, axis))))))
+    for ax in (0, 1):
+        bs = sorted(b for b in out if b[0] == ax)
+        for b1, b2 in zip(bs, bs[1:]):
+            if b2[1] < b1[2]:
+                raise ValueError("Breaks must not overlap")
+    return out
+
+
+def _check_parent(parent, n):
+    if not isinstance(parent, View):
+        raise ValueError("parent must be a view of this sheet")
+    if abs(float(np.dot(np.array(parent._geo.n), n))) > 1e-6:
+        raise ValueError("The cutting plane must be seen edge-on in the parent view (section direction "
+                         "perpendicular to the parent's viewing direction)")
+
+
+def _exit(p, d, box):
+    """Wie weit von p in Richtung d bis zum Rand des Rechtecks? 0, wenn p schon draussen liegt."""
+    x0, y0, x1, y1 = box
+    if not (x0 < p[0] < x1 and y0 < p[1] < y1):
+        return 0.0
+    ts = []
+    for k, (lo, hi) in enumerate(((x0, x1), (y0, y1))):
+        if d[k] > 1e-12:
+            ts.append((hi - p[k]) / d[k])
+        elif d[k] < -1e-12:
+            ts.append((lo - p[k]) / d[k])
+    return min(ts) if ts else 0.0
+
+
+def _path_region(items, parent, n, pts):
+    """Koerper, den ein Schnittverlauf wegschneidet: alles auf der Seite des Betrachters der Linie durch pts, gesehen
+    in der Ausgangsansicht und durch die ganze Tiefe."""
+    g = parent._geo
+    q = []
+    for p in pts:
+        uv = np.array([float(np.dot(p, g.x)), float(np.dot(p, g.y))])
+        if not q or np.linalg.norm(uv - q[-1]) > 1e-9:
+            q.append(uv)
+    if len(q) < 2:
+        raise ValueError("The points of path coincide in the parent view")
+    q = np.array(q)
+    n2 = np.array([float(np.dot(n, g.x)), float(np.dot(n, g.y))])
+    n2 = n2 / np.linalg.norm(n2)
+    bb = _bbox([s for _n, s in items])
+    corners = np.array([(a, b, c) for a in (bb.xmin, bb.xmax) for b in (bb.ymin, bb.ymax) for c in (bb.zmin, bb.zmax)])
+    uv = corners @ np.column_stack([g.x, g.y])
+    big = 2 * (float(np.abs(uv).max()) + float(np.abs(q).max())) + 10
+    d0 = (q[0] - q[1]) / np.linalg.norm(q[0] - q[1])
+    d1 = (q[-1] - q[-2]) / np.linalg.norm(q[-1] - q[-2])
+    poly = [q[0] + d0 * big, *q, q[-1] + d1 * big, q[-1] + d1 * big + n2 * big, q[0] + d0 * big + n2 * big]
+    depth = corners @ np.array(g.n)
+    w0, w1 = float(depth.min()) - 1, float(depth.max()) + 1
+    pn = np.array(g.n)
+    try:
+        wire = cq.Wire.makePolygon([cq.Vector(*(u * g.x + v * g.y + w0 * pn)) for u, v in poly], close=True)
+        region = cq.Solid.extrudeLinear(cq.Face.makeFromWires(wire), cq.Vector(*(pn * (w1 - w0))))
+        ok = region.isValid() and region.Volume() > 0
+    except Exception:
+        ok = False
+    if not ok:
+        raise ValueError("The cutting line of path crosses itself or turns back: give its points in order along the line")
+    return region
+
+
 # ---- Ansicht --------------------------------------------------------------------------------------------------------
 
 class View:
     """One view on the sheet. Created with Sheet.view(), Sheet.section() or Sheet.detail(). Converts model points to
     the sheet (pt) and places dimensions, center lines and leaders at model points, the values come from the geometry."""
 
-    def __init__(self, sheet, geo, kind, name, at, scale, origin, clip, layer, file, line):
+    def __init__(self, sheet, geo, kind, name, at, scale, origin, clip, layer, file, line, breaks=(), auto_origin=False):
         self.sheet, self._geo, self.kind, self.name = sheet, geo, kind, name
         self.phantom = layer == "PHANTOM"
         self.at, self.scale = np.array(at, dtype=float), scale
         self.origin = np.array(origin, dtype=float)
-        self._o = np.array([float(np.dot(self.origin, geo.x)), float(np.dot(self.origin, geo.y))])
         self.clip = clip  # (u, v, r) in Ansichtskoordinaten oder None
         self.file, self.line = file, line
+        # Unterbrechungen [(0 = waagerecht / 1 = senkrecht auf dem Blatt, von, bis)] in Ansichtskoordinaten (mm im Modell)
+        self.breaks = sorted(breaks)
+        self._gap = BREAK_GAP / scale
+        for _ax, lo, hi in self.breaks:
+            if hi - lo <= self._gap:
+                raise ValueError(f"A break must leave out more than the gap of {num(BREAK_GAP)} mm on the sheet, that is "
+                                 f"more than {num(self._gap)} mm of the model at this scale")
+        if self.breaks and auto_origin:
+            # Mitte der verkuerzten Ansicht, damit Ansichten mit gleichen Unterbrechungen fluchten
+            uv = geo.bounds @ np.column_stack([geo.x, geo.y])
+            self._o = np.array([(self._bshift(uv[:, k].min(), k) + self._bshift(uv[:, k].max(), k)) / 2 for k in (0, 1)])
+        else:
+            self._o = np.array([self._bshift(float(np.dot(self.origin, geo.x)), 0),
+                                self._bshift(float(np.dot(self.origin, geo.y)), 1)])
+        self._off = np.zeros(2)  # Versatz des gerade gezeichneten Stuecks einer unterbrochenen Ansicht
         self._lines = []  # [(Punkte auf dem Blatt, "visible" | "hidden" | "tangent")] fuer die Pruefung
+        self._refs = []   # Mittenkreuze und Mittellinien des Agenten (Punkte auf dem Blatt): gueltige Bezugspunkte für Maße
         self._emit(layer)
         pts = np.concatenate([p for p, _k in self._lines]) if self._lines else self.at.reshape(1, 2)
         self.bbox = (float(pts[:, 0].min()), float(pts[:, 1].min()), float(pts[:, 0].max()), float(pts[:, 1].max()))
+        self._break_lines()
 
     # -- Umrechnung
 
@@ -462,40 +666,103 @@ class View:
 
     def pt(self, p):
         """Model point (x, y, z) -> point on the sheet (x, y) in mm."""
-        p = _vec(p, "point")
-        u, v = float(np.dot(p, self._geo.x)), float(np.dot(p, self._geo.y))
+        u, v = self._model_uv(p)
+        u, v = self._bshift(u, 0), self._bshift(v, 1)
         return (float(self.at[0] + self.scale * (u - self._o[0])), float(self.at[1] + self.scale * (v - self._o[1])))
 
+    def _model_uv(self, p):
+        p = _vec(p, "point")
+        return float(np.dot(p, self._geo.x)), float(np.dot(p, self._geo.y))
+
+    def _bshift(self, c, axis):
+        """Ansichtskoordinate nach dem Herausnehmen der Unterbrechungen. Punkte in einer Luecke landen an ihrem Anfang."""
+        s = 0.0
+        for ax, lo, hi in self.breaks:
+            if ax != axis:
+                continue
+            if c >= hi:
+                s -= (hi - lo) - self._gap
+            elif c > lo:
+                return lo + s
+        return c + s
+
     def _uv(self, u, v):
-        return (self.at[0] + self.scale * (u - self._o[0]), self.at[1] + self.scale * (v - self._o[1]))
+        return (self.at[0] + self.scale * (u + self._off[0] - self._o[0]),
+                self.at[1] + self.scale * (v + self._off[1] - self._o[1]))
 
     def _sheet_pts(self, arr):
-        return np.column_stack([self.at[0] + self.scale * (arr[:, 0] - self._o[0]),
-                                self.at[1] + self.scale * (arr[:, 1] - self._o[1])])
+        return np.column_stack([self.at[0] + self.scale * (arr[:, 0] + self._off[0] - self._o[0]),
+                                self.at[1] + self.scale * (arr[:, 1] + self._off[1] - self._o[1])])
 
     # -- Geometrie zeichnen
+
+    def _pieces(self):
+        """Stuecke einer unterbrochenen Ansicht: (Geometrie, Versatz in Ansichtskoordinaten)."""
+        if not self.breaks:
+            return [(self._geo, (0.0, 0.0))]
+        uv = self._geo.bounds @ np.column_stack([self._geo.x, self._geo.y])
+        m = float(np.ptp(uv)) + 10.0
+        lo, hi = uv.min(axis=0) - m, uv.max(axis=0) + m
+
+        def intervals(axis):
+            out, start, s = [], -math.inf, 0.0
+            for ax, b0, b1 in self.breaks:
+                if ax == axis:
+                    out.append((start, b0, s))
+                    s -= (b1 - b0) - self._gap
+                    start = b1
+            return out + [(start, math.inf, s)]
+
+        out = []
+        for u0, u1, su in intervals(0):
+            for v0, v1, sv in intervals(1):
+                u0c, u1c, v0c, v1c = max(u0, lo[0]), min(u1, hi[0]), max(v0, lo[1]), min(v1, hi[1])
+                if u1c - u0c > 1e-9 and v1c - v0c > 1e-9:
+                    out.append((self._geo.clip_box(u0c, u1c, v0c, v1c), (su, sv)))
+        return out
 
     def _emit(self, layer):
         msp = self.sheet.msp
         defl = 0.01 / self.scale  # 0.01 mm auf dem Blatt
-        for face, style in self._geo.hatch:
-            loops = _loops(face, defl)
-            if not loops:
-                continue
-            h = msp.add_hatch(color=256, dxfattribs={"layer": "HATCH"})
-            for lp in loops:
-                h.paths.add_polyline_path([tuple(p) for p in self._sheet_pts(lp)], is_closed=True)
-            if style["pattern"] == "SOLID":
-                h.set_solid_fill(color=256)
-            else:
-                # ANSI31 hat 3.175 mm Abstand bei 45 Grad
-                h.set_pattern_fill(style["pattern"], color=256, scale=style["spacing"] / 3.175, angle=style["angle"] - 45)
         layers = {"visible": layer or "VISIBLE", "hidden": "HIDDEN", "tangent": "TANGENT"}
-        for kind, edges in self._geo.edges.items():
-            for e in edges:
-                pts = self._edge(msp, e, layers[kind], defl)
-                if pts is not None:
-                    self._lines.append((pts, kind))
+        for geo, off in self._pieces():
+            self._off = np.array(off)
+            for face, style in geo.hatch:
+                loops = _loops(face, defl)
+                if not loops:
+                    continue
+                h = msp.add_hatch(color=256, dxfattribs={"layer": "HATCH"})
+                for lp in loops:
+                    h.paths.add_polyline_path([tuple(p) for p in self._sheet_pts(lp)], is_closed=True)
+                if style["pattern"] == "SOLID":
+                    h.set_solid_fill(color=256)
+                else:
+                    # ANSI31 hat 3.175 mm Abstand bei 45 Grad
+                    h.set_pattern_fill(style["pattern"], color=256, scale=style["spacing"] / 3.175, angle=style["angle"] - 45)
+            for kind, edges in geo.edges.items():
+                for e in edges:
+                    pts = self._edge(msp, e, layers[kind], defl)
+                    if pts is not None:
+                        self._lines.append((pts, kind))
+        self._off = np.zeros(2)
+
+    def _break_lines(self):
+        """Bruchlinien nach ISO 128-2 (schmale Zickzacklinie) an beiden Seiten jeder Luecke, so lang wie die Kanten,
+        die dort enden, und 2 mm darueber hinaus."""
+        for ax, lo, _hi in self.breaks:
+            p0 = self.at[ax] + self.scale * (self._bshift(lo, ax) - self._o[ax])
+            for p in (p0, p0 + BREAK_GAP):
+                across = [pts[np.abs(pts[:, ax] - p) < 0.02, 1 - ax] for pts, _k in self._lines]
+                across = np.concatenate(across) if across else np.zeros(0)
+                if len(across):
+                    q0, q1 = float(across.min()), float(across.max())
+                else:
+                    q0, q1 = (self.bbox[1], self.bbox[3]) if ax == 0 else (self.bbox[0], self.bbox[2])
+                m = (q0 + q1) / 2
+                zig = [(0, q0 - 2), (0, m - 2), (1.6, m - 0.8), (-1.6, m + 0.8), (0, m + 2), (0, q1 + 2)]
+                pts = [(p + o, t) if ax == 0 else (t, p + o) for o, t in zig]
+                self.sheet.msp.add_lwpolyline(pts, dxfattribs={"layer": "THIN"})
+                self.sheet._annotate([np.array(pts)], ("break",), "a break line")
 
     def _edge(self, msp, e, layer, defl):
         """Eine projizierte Kante als LINE, ARC, CIRCLE, ELLIPSE oder LWPOLYLINE. Liefert die Punkte auf dem Blatt."""
@@ -569,6 +836,8 @@ class View:
                 u, v = float(np.dot(p, self._geo.x)), float(np.dot(p, self._geo.y))
                 if self.clip and math.hypot(u - self.clip[0], v - self.clip[1]) > self.clip[2] + 1e-9:
                     continue
+                if any(lo + 1e-9 < (u, v)[ax] < hi - 1e-9 for ax, lo, hi in self.breaks):
+                    continue  # in der Luecke einer unterbrochenen Ansicht
                 key = (round(u, 4), round(v, 4), round(r, 4), full)
                 item = (tuple(round(float(x), 6) + 0.0 for x in p), round(r, 6), full)
                 # Gleiche Mitte in der Ansicht (Ober- und Unterkante einer Bohrung): die Lage naeher am Betrachter
@@ -595,46 +864,57 @@ class View:
                    or right (vertical), negative: below or left. For "aligned": positive is left of p1 -> p2
         direction  "h" horizontal, "v" vertical or "aligned" on the sheet. Default: "h" if the points are further
                    apart horizontally than vertically, else "v"
-        text       None: the measured value. "<>" stands for it, e.g. "Ø<> H7", "<> ±0.1", "2x <>"
+        text       None: the measured value. "<>" stands for it, e.g. "Ø<> H7" (diameter seen from the side),
+                   "<> ±0.1", "2x <>"
         tol        0.1 for ±0.1 or (0.1, -0.05) for +0.1/-0.05 in small text after the value
-        text_at    optional point on the sheet for the text instead of the middle"""
+        text_at    optional point on the sheet for the text instead of the middle
+
+        Across a break of the view the dimension shows the full length of the model."""
         file, line = _where()
         a, b = np.array(self.pt(p1)), np.array(self.pt(p2))
+        (u1, v1), (u2, v2) = self._model_uv(p1), self._model_uv(p2)
         d = b - a
         if direction is None:
             direction = "h" if abs(d[0]) >= abs(d[1]) else "v"
         offset = float(offset)
         msp = self.sheet.msp
         if direction == "h":
+            measured, shown = abs(u2 - u1), abs(d[0]) / self.scale
+            dimargs = self._dimargs(text, measured, shown)
             y = (max(a[1], b[1]) + offset) if offset >= 0 else (min(a[1], b[1]) + offset)
-            dim = msp.add_linear_dim(base=((a[0] + b[0]) / 2, y), p1=tuple(a), p2=tuple(b), angle=0, **self._dimargs(text))
-            measured = abs(d[0]) / self.scale
+            dim = msp.add_linear_dim(base=((a[0] + b[0]) / 2, y), p1=tuple(a), p2=tuple(b), angle=0, **dimargs)
         elif direction == "v":
+            measured, shown = abs(v2 - v1), abs(d[1]) / self.scale
+            dimargs = self._dimargs(text, measured, shown)
             x = (max(a[0], b[0]) + offset) if offset >= 0 else (min(a[0], b[0]) + offset)
-            dim = msp.add_linear_dim(base=(x, (a[1] + b[1]) / 2), p1=tuple(a), p2=tuple(b), angle=90, **self._dimargs(text))
-            measured = abs(d[1]) / self.scale
+            dim = msp.add_linear_dim(base=(x, (a[1] + b[1]) / 2), p1=tuple(a), p2=tuple(b), angle=90, **dimargs)
         elif direction == "aligned":
             if np.linalg.norm(d) < 1e-9:
                 raise ValueError("The two points coincide in this view")
-            dim = msp.add_aligned_dim(p1=tuple(a), p2=tuple(b), distance=offset, **self._dimargs(text))
-            measured = float(np.linalg.norm(d)) / self.scale
+            measured, shown = math.hypot(u2 - u1, v2 - v1), float(np.linalg.norm(d)) / self.scale
+            dim = msp.add_aligned_dim(p1=tuple(a), p2=tuple(b), distance=offset, **self._dimargs(text, measured, shown))
         else:
             raise ValueError(f"direction must be \"h\", \"v\" or \"aligned\", not {direction!r}")
         return self._finish(dim, "linear", measured, text, tol, text_at, [p1, p2], file, line)
 
     def diameter(self, center, radius, angle=45, text=None, tol=None, text_at=None):
         """Diameter dimension of a circle seen as a circle in this view (center in the model, radius in mm).
-        angle: direction of the dimension line on the sheet in degrees. Ø is added automatically."""
+        angle: direction on the sheet in degrees from the center towards the text (0 right, 90 up). Ø is added
+        automatically: text="<> H7" gives "Ø8 H7", a Ø typed before <> is not doubled."""
         file, line = _where()
         r = float(radius)
-        dim = self.sheet.msp.add_diameter_dim(center=self.pt(center), radius=r * self.scale, angle=float(angle),
+        text = _no_prefix(text, r"Ø|ø|⌀|%%[cC]")
+        # ezdxf legt den Text ans Ende gegenueber von angle
+        dim = self.sheet.msp.add_diameter_dim(center=self.pt(center), radius=r * self.scale, angle=float(angle) + 180,
                                               **self._dimargs(text))
         return self._finish(dim, "diameter", 2 * r, text, tol, text_at, [center], file, line, radius=r)
 
     def radius(self, center, radius, angle=45, text=None, tol=None, text_at=None):
-        """Radius dimension of an arc seen as an arc in this view. R is added automatically."""
+        """Radius dimension of an arc seen as an arc in this view. angle: direction on the sheet in degrees from the
+        center towards the text. R is added automatically: text="<>" gives "R4", a typed R before <> is not doubled."""
         file, line = _where()
         r = float(radius)
+        text = _no_prefix(text, r"R")
         dim = self.sheet.msp.add_radius_dim(center=self.pt(center), radius=r * self.scale, angle=float(angle),
                                             **self._dimargs(text))
         return self._finish(dim, "radius", r, text, tol, text_at, [center], file, line, radius=r)
@@ -656,11 +936,14 @@ class View:
         measured = math.degrees(math.acos(max(-1.0, min(1.0, cosv))))
         return self._finish(dim, "angle", measured, text, None, text_at, [vertex, p1, p2], file, line)
 
-    def _dimargs(self, text):
+    def _dimargs(self, text, measured=None, shown=None):
         if text is not None and not isinstance(text, str):
-            raise ValueError(f"text must be a text like \"Ø<> H7\", not {text!r}")
-        return dict(text="<>" if text is None else text, dimstyle="ISO",
-                    override={"dimlfac": 1.0 / self.scale}, dxfattribs={"layer": "DIM"})
+            raise ValueError(f"text must be a text like \"<> H7\", not {text!r}")
+        text = "<>" if text is None else text
+        if measured is not None and abs(measured - shown) > 1e-6:
+            # Ueber eine Unterbrechung misst ezdxf die verkuerzte Strecke, deshalb der Wert aus dem Modell
+            text = text.replace("<>", num(measured))
+        return dict(text=text, dimstyle="ISO", override={"dimlfac": 1.0 / self.scale}, dxfattribs={"layer": "DIM"})
 
     def _finish(self, dim, kind, measured, text, tol, text_at, points, file, line, radius=None):
         if tol is not None:
@@ -684,13 +967,17 @@ class View:
 
     def center_mark(self, center, radius, extend=2.5):
         """Center lines across a circle seen in this view (center in the model, radius in mm), extend mm beyond it.
-        Small circles (under 5 mm on the sheet) get thin continuous lines as in ISO 128."""
+        Small circles (under 5 mm on the sheet) get thin continuous lines as in ISO 128. Also marks positions that are
+        not in the model (screws, holes drilled on assembly): dimensions to the center are fine."""
         cx, cy = self.pt(center)
         r = float(radius) * self.scale + float(extend)
         layer = "CENTER" if float(radius) * self.scale >= 2.5 else "THIN"
         msp = self.sheet.msp
-        msp.add_line((cx - r, cy), (cx + r, cy), dxfattribs={"layer": layer})
-        msp.add_line((cx, cy - r), (cx, cy + r), dxfattribs={"layer": layer})
+        lines = [np.array([(cx - r, cy), (cx + r, cy)]), np.array([(cx, cy - r), (cx, cy + r)])]
+        for ln in lines:
+            msp.add_line(tuple(ln[0]), tuple(ln[1]), dxfattribs={"layer": layer})
+        self._refs.append(np.array([(cx, cy)]))
+        self.sheet._annotate(lines, ("center",), f"a center mark (line {_where()[1]})")
 
     def center_marks(self, diameter=None, extend=2.5):
         """center_mark() for every circle of circles(diameter)."""
@@ -698,14 +985,18 @@ class View:
             self.center_mark(c, r, extend)
 
     def centerline(self, p1, p2, extend=2.5):
-        """Axis or symmetry line from model point p1 to p2, extend mm beyond both ends on the sheet."""
+        """Axis or symmetry line from model point p1 to p2, extend mm beyond both ends on the sheet. Dimensions may
+        end on it (distance from an edge to the axis)."""
         a, b = np.array(self.pt(p1)), np.array(self.pt(p2))
         d = b - a
         n = float(np.linalg.norm(d))
         if n < 1e-9:
             raise ValueError("The two points of the center line coincide in this view")
         d = d / n * float(extend)
-        self.sheet.msp.add_line(tuple(a - d), tuple(b + d), dxfattribs={"layer": "CENTER"})
+        ln = np.array([a - d, b + d])
+        self.sheet.msp.add_line(tuple(ln[0]), tuple(ln[1]), dxfattribs={"layer": "CENTER"})
+        self._refs.append(ln)
+        self.sheet._annotate([ln], ("center",), f"a center line (line {_where()[1]})")
 
     def leader(self, point, text, at, end="arrow", height=TEXT_HEIGHT):
         """Leader from a model point to a text at the sheet point `at`. end: "arrow" (ends on an edge), "dot" (ends
@@ -717,7 +1008,8 @@ class View:
 
 class Sheet:
     """A drawing sheet with frame and title block (ISO 5457 and ISO 7200). Every Sheet(...) in drawings/*.py becomes
-    output/drawings/<name>.pdf and .dxf plus a picture .soma/drawings/<name>.png.
+    output/drawings/<name>.pdf and .dxf plus a picture .soma/drawings/<name>.png. output/drawings.pdf holds all sheets
+    of the model in one file.
 
     name        unique name, also the file name
     size        "A4" (portrait), "A3", "A2", "A1", "A0" (landscape) or (width, height) in mm
@@ -737,6 +1029,7 @@ class Sheet:
                  author=None, date=None, tolerance=None, owner=None, revision=None, sheet="1/1", projection="first",
                  language="en", titleblock=True, frame=True):
         self.file, self.line = _where()
+        setup_fonts()
         if not isinstance(name, str) or not name.strip():
             raise ValueError("The sheet needs a name, e.g. Sheet(\"Bracket\")")
         self.name = name.strip()
@@ -764,6 +1057,10 @@ class Sheet:
             raise ValueError(f"language must be one of {', '.join(TITLE_LABELS)}, not {language!r}")
         self.projection = projection
         self._dims, self.views, self._labels = [], [], []
+        # Fuer die Pruefung: Linien der Beschriftung (Hinweislinien, Schnittverlauf, Mittellinien ...), Tabellen und
+        # Felder des Schriftfelds
+        self._annot, self._tables, self._fields = [], [], []
+        self._owners = 0
         self._new_doc()
         left = 20.0 if frame else 0.0
         m = 10.0 if frame else 0.0
@@ -845,7 +1142,9 @@ class Sheet:
                     val = f.get(key)
                     if val is not None and str(val) != "":
                         th = 5.0 if key == "title" else TEXT_HEIGHT
-                        self.text(str(val), (x + 1.5, y + 1.6), height=th, layer="TITLE", _check=False)
+                        e = self.text(str(val), (x + 1.5, y + 1.6), height=th, layer="TITLE", _check=False)
+                        self._fields.append(dict(key=key, caption=lab[key], text=str(val), entities=e if isinstance(e, list) else [e],
+                                                 cell=(x, y, x + cw, y + h - 3.2)))
                 x += cw
             y += h
         msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y), (x0, y)], close=True,
@@ -882,7 +1181,7 @@ class Sheet:
         return shapes[0] if len(shapes) == 1 else cq.Compound.makeCompound(shapes)
 
     def view(self, what, direction="front", at=None, scale=None, *, origin=None, up=None, hidden=None, tangent=False,
-             style=None, label=None):
+             style=None, label=None, label_at=None, breaks=None):
         """Projects parts onto the sheet with visible (and hidden) edges.
 
         what       part name, group ("Housing", "Housing/Screws"), "*" (all parts without references), a list of
@@ -897,7 +1196,9 @@ class Sheet:
         hidden     hidden edges dashed (default: in the six standard views, not in iso and other directions)
         tangent    thin lines where fillets meet faces (default False)
         style      None, or "phantom" for adjacent parts and extreme positions (thin, dash-double-dot)
-        label      text above the view, e.g. "View X"
+        label      text above the view, e.g. "View X"; label_at: sheet point for the middle of the label instead
+        breaks     shortened view of a long part: [(p1, p2), ...] model points, the part between them (horizontally or
+                   vertically on the sheet) is left out and break lines are drawn. Dimensions across show the full length
 
         Returns a View: view.pt(), view.dim() ..."""
         file, line = _where()
@@ -906,21 +1207,32 @@ class Sheet:
         if hidden is None:
             hidden = isinstance(direction, str) and direction in STANDARD_VIEWS
         geo = _project(items, n, x, y, bool(hidden), bool(tangent))
-        return self._add_view(geo, "view", direction, at, scale, origin, None, style, label, file, line)
+        return self._add_view(geo, "view", direction, at, scale, origin, None, style, label, file, line,
+                              label_at=label_at, breaks=_breaks(breaks, x, y))
 
-    def section(self, what, direction="front", through=(0, 0, 0), at=None, scale=None, *, region=None, origin=None,
-                up=None, name=None, parent=None, unhatched=(), hatch=None, hidden=False, label=True):
+    def section(self, what, direction="front", through=(0, 0, 0), at=None, scale=None, *, region=None, path=None,
+                origin=None, up=None, name=None, parent=None, unhatched=(), hatch=None, hidden=False, label=True,
+                label_at=None, letters_at=None, breaks=None):
         """Section view: like view(), but the material between the viewer and a plane through `through`
         (perpendicular to the viewing direction) is removed. Cut faces are hatched.
 
-        region     instead of the plane: any solid that is removed (half section, local break-out). Flat faces of the
-                   cut that face the viewer are hatched
+        path       stepped section or half section: model points of the cutting line in the parent view, e.g.
+                   [(-60, 0, 0), (0, 0, 0), (0, 20, 0), (60, 20, 0)]. Everything on the viewer's side of the line is
+                   removed, the line with thick ends and bends, arrows and letters is drawn in `parent`
+        region     instead of plane or path: any solid that is removed (local break-out). With parent= also give path=
+                   for the cutting line. Flat faces of the cut that face the viewer are hatched
         name       letter of the section, e.g. "A": label "A-A" above the view
-        parent     view in which the cutting plane is drawn (chain line, thick ends, arrows, letters)
+        parent     view in which the cutting line is drawn (chain line, thick ends, arrows, letters)
         unhatched  parts that are not cut (screws, shafts, pins, rolling elements, ribs in ISO 128-40)
         hatch      None (45/135 degrees alternating per part, 2.5 mm), "solid" (thin walls), False, dict(angle=,
                    spacing=, pattern=) for all, or {part: one of these}
-        label      True: "A-A" (plus the scale if it differs from the sheet), a text, or False"""
+        label      True: "A-A" (plus the scale if it differs from the sheet), a text, or False
+        label_at   sheet point for the middle of the label instead of above the view
+        letters_at two sheet points for the letters at the ends of the cutting line instead of beside the arrows
+        breaks     shortened section, as in view()
+
+        With path= or region=, cuts seen edge-on (the steps, the middle of a half section, the border of a
+        break-out) get no edge: draw a center line or a thin freehand line there yourself (ISO 128-44)."""
         file, line = _where()
         items = _resolve(what)
         n, x, y = _basis(direction, up)
@@ -928,36 +1240,55 @@ class Sheet:
         for u in unhatched:
             if all(nm != u for nm, _s in items):
                 raise ValueError(f"unhatched: {u!r} is not among the parts of this section")
-        if parent is not None and region is not None:
-            raise ValueError("parent= draws a straight cutting plane. With region= draw the cutting line yourself "
-                             "(sh.msp, layer CUT)")
-        if region is None:
+        if parent is not None:
+            _check_parent(parent, n)
+            if not name:
+                raise ValueError("parent= draws the cutting line with its letter: give the section a name, e.g. name=\"A\"")
+        elif letters_at is not None:
+            raise ValueError("letters_at= places the letters of the cutting line: it needs parent=")
+        pts = None
+        if path is not None:
+            if parent is None:
+                raise ValueError("path= is the cutting line in a view: give that view as parent= too")
+            if isinstance(path, (str, bytes)) or not hasattr(path, "__iter__"):
+                raise ValueError(f"path must be a list of model points, not {path!r}")
+            pts = [_vec(q, "path point") for q in path]
+            if len(pts) < 2:
+                raise ValueError("path needs at least two points")
+        elif region is not None and parent is not None:
+            raise ValueError("With region= give the cutting line in the parent view as path=[point, point, ...], or "
+                             "leave out parent= (a break-out needs no cutting line)")
+        custom = region is not None
+        if custom:
+            region = registry.to_shape(region)
+        elif pts is not None:
+            region = _path_region(items, parent, n, pts)
+        else:
             p = _vec(through, "through")
             bb = _bbox([s for _n, s in items])
             size = 4 * max(bb.DiagonalLength, 1.0)
             face = cq.Face.makePlane(size, size, basePnt=cq.Vector(*p), dir=cq.Vector(*n))
             region = cq.Solid.extrudeLinear(face, cq.Vector(*(n * size)))
-        else:
-            region = registry.to_shape(region)
-        geo = _project(items, n, x, y, bool(hidden), False, region, unhatched, hatch)
+        geo = _project(items, n, x, y, bool(hidden), False, region, unhatched, hatch, borders=custom or pts is not None)
         lab = None
         if label is True and name:
             sc = parse_scale(scale) if scale is not None else self.scale
             lab = f"{name}-{name}" + (f" ({fmt_scale(sc)})" if abs(sc - self.scale) > 1e-9 else "")
         elif isinstance(label, str):
             lab = label
-        v = self._add_view(geo, "section", direction, at, scale, origin, None, None, lab, file, line)
+        v = self._add_view(geo, "section", direction, at, scale, origin, None, None, lab, file, line,
+                           label_at=label_at, breaks=_breaks(breaks, x, y))
         v.name = f"{name}-{name}" if name else v.name
         if parent is not None:
-            if not name:
-                raise ValueError("parent= draws the cutting plane with its letter: give the section a name, e.g. name=\"A\"")
-            self._cutting_line(parent, n, _vec(through, "through"), name)
+            self._cutting_line(parent, n, _vec(through, "through") if pts is None else None, pts, name, letters_at)
         return v
 
-    def detail(self, parent, center, radius, at, scale, *, name=None, label=True, border=True):
+    def detail(self, parent, center, radius, at, scale, *, name=None, label=True, border=True, label_at=None,
+               letter_at=None):
         """Detail view: a circle of `radius` (model mm) around the model point `center` of view `parent`, enlarged to
         `scale` (e.g. "5:1"), placed with its center at `at`. Draws the thin circle and the letter in the parent view,
-        "B (5:1)" above the detail and (border=True) a thin circle around it."""
+        "B (5:1)" above the detail and (border=True) a thin circle around it. label_at and letter_at: sheet points for
+        the middle of the label and of the letter in the parent view instead of the default places."""
         file, line = _where()
         if not isinstance(parent, View):
             raise ValueError("parent must be a view of this sheet")
@@ -973,6 +1304,10 @@ class Sheet:
             lab = f"{name} ({fmt_scale(sc)})"
         elif isinstance(label, str):
             lab = label
+        if label_at is not None and not lab:
+            raise ValueError("label_at= places the label: give the detail a name or a label")
+        if letter_at is not None and not name:
+            raise ValueError("letter_at= places the letter of the detail: give it a name")
         v = View(self, geo, "detail", name or f"detail {len(self.views) + 1}", _pt2(at, "at"), sc, c,
                  (cu, cv, r), None, file, line)
         self.views.append(v)
@@ -980,17 +1315,26 @@ class Sheet:
             self.msp.add_circle(tuple(v.at), r * sc, dxfattribs={"layer": "THIN"})
             v.bbox = (v.at[0] - r * sc, v.at[1] - r * sc, v.at[0] + r * sc, v.at[1] + r * sc)
         if lab:
-            self._view_label(v, lab, file, line)
+            self._view_label(v, lab, label_at)
         # Kreis und Buchstabe in der Ausgangsansicht
         px, py = parent.pt(c)
         rr = r * parent.scale
         self.msp.add_circle((px, py), rr, dxfattribs={"layer": "THIN"})
+        owner = self._new_owner("detail")
+        t = np.linspace(0, 2 * math.pi, 73)
+        self._annotate([np.column_stack([px + rr * np.cos(t), py + rr * np.sin(t)])], owner,
+                       f"the circle of detail {v.name}")
         if name:
             d = math.sqrt(0.5)
-            self.text(name, (px + (rr + 1.5) * d, py + (rr + 1.5) * d), height=LABEL_HEIGHT, layer="TEXT")
+            if letter_at is None:
+                pos, align = (px + (rr + 1.5) * d, py + (rr + 1.5) * d), "left"
+            else:
+                pos, align = _pt2(letter_at, "letter_at"), "middle"
+            self.text(name, pos, height=LABEL_HEIGHT, align=align, layer="TEXT", _owner=owner,
+                      _what=f"Letter \"{name}\" of detail {name}", _hint="the letter with letter_at=(x, y)")
         return v
 
-    def _add_view(self, geo, kind, direction, at, scale, origin, clip, style, label, file, line):
+    def _add_view(self, geo, kind, direction, at, scale, origin, clip, style, label, file, line, label_at=None, breaks=()):
         if at is None:
             raise ValueError("at=(x, y) is missing: where on the sheet (mm) the view goes")
         at = _pt2(at, "at")
@@ -998,59 +1342,116 @@ class Sheet:
         org = _vec(origin, "origin") if origin is not None else geo.center
         if style not in (None, "phantom"):
             raise ValueError(f"style must be None or \"phantom\", not {style!r}")
+        if label_at is not None and not label:
+            raise ValueError("label_at= places the label: give the view a label")
         name = direction if isinstance(direction, str) else "view"
         if any(w.name == name for w in self.views):
             name = f"{name} {sum(1 for w in self.views if w.name.split(' ')[0] == name) + 1}"
         v = View(self, geo, kind, name, at, sc, org, clip,
-                 "PHANTOM" if style == "phantom" else None, file, line)
+                 "PHANTOM" if style == "phantom" else None, file, line, breaks=breaks, auto_origin=origin is None)
         self.views.append(v)
         if label:
-            self._view_label(v, label, file, line)
+            self._view_label(v, label, label_at)
         return v
 
-    def _view_label(self, v, text, file, line):
+    def _view_label(self, v, text, at=None):
         x0, _y0, x1, y1 = v.bbox
-        self.text(str(text), ((x0 + x1) / 2, y1 + 5), height=LABEL_HEIGHT, align="center", layer="TEXT")
+        if at is None:
+            pos, align = ((x0 + x1) / 2, y1 + 5), "center"
+        else:
+            pos, align = _pt2(at, "label_at"), "middle"
+        self.text(str(text), pos, height=LABEL_HEIGHT, align=align, layer="TEXT", _what=f"Label \"{text}\"",
+                  _hint="the label with label_at=(x, y)")
 
-    def _cutting_line(self, parent, n, through, name):
-        """Schnittverlauf in der Ausgangsansicht nach ISO 128-44: duenne Strichpunktlinie, dicke Enden, Pfeile in
-        Blickrichtung, Buchstaben."""
-        if not isinstance(parent, View):
-            raise ValueError("parent must be a view of this sheet")
-        pn = np.array(parent._geo.n)
-        if abs(float(np.dot(pn, n))) > 1e-6:
-            raise ValueError("The cutting plane must be seen edge-on in the parent view (section direction "
-                             "perpendicular to the parent's viewing direction)")
-        d3 = np.cross(n, pn)
-        d = np.array([float(np.dot(d3, parent._geo.x)), float(np.dot(d3, parent._geo.y))])
-        d = d / np.linalg.norm(d)
+    def _cutting_line(self, parent, n, through, path, name, letters_at):
+        """Schnittverlauf in der Ausgangsansicht nach ISO 128-44: duenne Strichpunktlinie, dick an den Enden und an
+        Knicken, Pfeile in Blickrichtung, Buchstaben neben den Pfeilen."""
         look = -np.array([float(np.dot(n, parent._geo.x)), float(np.dot(n, parent._geo.y))])
         look = look / np.linalg.norm(look)
-        p = np.array(parent.pt(through))
         x0, y0, x1, y1 = parent.bbox
-        ts = [float(np.dot(np.array(c) - p, d)) for c in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
-        a, b = p + d * (min(ts) - 4), p + d * (max(ts) + 4)
+        if path is None:
+            pn = np.array(parent._geo.n)
+            d3 = np.cross(n, pn)
+            d = np.array([float(np.dot(d3, parent._geo.x)), float(np.dot(d3, parent._geo.y))])
+            d = d / np.linalg.norm(d)
+            p = np.array(parent.pt(through))
+            ts = [float(np.dot(np.array(c) - p, d)) for c in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
+            pts = [p + d * (min(ts) - 4), p + d * (max(ts) + 4)]
+        else:
+            pts = []
+            for q in path:
+                q = np.array(parent.pt(q))
+                if not pts or np.linalg.norm(q - pts[-1]) > 1e-6:
+                    pts.append(q)
+            if len(pts) < 2:
+                raise ValueError("The points of path coincide in the parent view")
+            # Enden, die in der Ansicht liegen, bis 4 mm darueber hinaus verlaengern
+            box = (x0 - 4, y0 - 4, x1 + 4, y1 + 4)
+            for i, j in ((0, 1), (-1, -2)):
+                dd = (pts[i] - pts[j]) / np.linalg.norm(pts[i] - pts[j])
+                pts[i] = pts[i] + dd * _exit(pts[i], dd, box)
+        pts = np.array(pts)
+        owner = self._new_owner("cut")
         msp = self.msp
-        msp.add_line(tuple(a), tuple(b), dxfattribs={"layer": "CUT"})
-        for end, out in ((a, -d), (b, d)):
-            inner = end - out * 6
-            msp.add_line(tuple(end), tuple(inner), dxfattribs={"layer": "CUT", "linetype": "Continuous", "lineweight": 70})
+        thick = {"layer": "CUT", "linetype": "Continuous", "lineweight": 70}
+        msp.add_lwpolyline([tuple(q) for q in pts], dxfattribs={"layer": "CUT"})
+        lines = [pts]
+        # Dick an Knicken, je 3 mm in beide Richtungen
+        for i in range(1, len(pts) - 1):
+            a, b = pts[i - 1] - pts[i], pts[i + 1] - pts[i]
+            a = pts[i] + a / np.linalg.norm(a) * min(3.0, float(np.linalg.norm(a)))
+            b = pts[i] + b / np.linalg.norm(b) * min(3.0, float(np.linalg.norm(b)))
+            msp.add_lwpolyline([tuple(a), tuple(pts[i]), tuple(b)], dxfattribs=thick)
+        ends = []
+        for end, nxt in ((pts[0], pts[1]), (pts[-1], pts[-2])):
+            out = (end - nxt) / np.linalg.norm(end - nxt)
+            inner = end - out * min(6.0, float(np.linalg.norm(end - nxt)))
+            msp.add_line(tuple(end), tuple(inner), dxfattribs=thick)
             tail = end - out * 2.5
             tip = tail + look * 7
             side = np.array([-look[1], look[0]])
             msp.add_line(tuple(tail), tuple(tip - look * 3), dxfattribs={"layer": "THIN"})
             msp.add_solid([tuple(tip), tuple(tip - look * 3 + side * 0.9), tuple(tip - look * 3 - side * 0.9)],
                           dxfattribs={"layer": "THIN"})
-            self.text(name, tuple(tail + look * 4 + out * 4), height=LABEL_HEIGHT, align="middle", layer="TEXT")
+            lines.append(np.array([tail, tip]))
+            ends.append(tail + look * 4 + out * 4)
+        if letters_at is not None:
+            if isinstance(letters_at, (str, bytes)) or not hasattr(letters_at, "__iter__") or len(list(letters_at)) != 2:
+                raise ValueError(f"letters_at must be two sheet points [(x, y), (x, y)], not {letters_at!r}")
+            given = [_pt2(q, "letters_at") for q in letters_at]
+            # Jeder Buchstabe an das naehere Ende, die Reihenfolge ist egal
+            straight = np.linalg.norm(given[0] - ends[0]) + np.linalg.norm(given[1] - ends[1])
+            crossed = np.linalg.norm(given[0] - ends[1]) + np.linalg.norm(given[1] - ends[0])
+            ends = given if straight <= crossed else given[::-1]
+        self._annotate(lines, owner, f"the cutting line of section {name}-{name}")
+        for pos in ends:
+            self.text(name, tuple(pos), height=LABEL_HEIGHT, align="middle", layer="TEXT", _owner=owner,
+                      _what=f"Letter \"{name}\" of the cutting line", _hint="the letters with letters_at=[(x, y), (x, y)]")
+
+    def _new_owner(self, kind):
+        """Kennung einer Beschriftung: ihre eigenen Texte duerfen auf ihren Linien liegen."""
+        self._owners += 1
+        return (kind, self._owners)
+
+    def _annotate(self, lines, owner, desc):
+        """Linien der Beschriftung fuer die Pruefung merken: Texte sollen nicht darauf liegen."""
+        lines = [np.asarray(ln, dtype=float) for ln in lines if len(ln) >= 2]
+        if lines:
+            file, line = _where()
+            self._annot.append(dict(a=np.concatenate([ln[:-1] for ln in lines]), b=np.concatenate([ln[1:] for ln in lines]),
+                                    owner=owner, desc=desc, file=file, line=line))
 
     # -- Text, Hinweise, Tabellen
 
-    def text(self, text, at, height=TEXT_HEIGHT, align="left", rotation=0, layer="TEXT", _check=True):
+    def text(self, text, at, height=TEXT_HEIGHT, align="left", rotation=0, layer="TEXT", _check=True, _owner=None,
+             _what=None, _hint=None):
         """Text at the sheet point `at` (mm). align: "left", "center", "right" (on the baseline) or "middle" (centered
-        both ways). Several lines with "\\n". Returns the ezdxf entity."""
+        both ways). Several lines with "\\n": the first line at `at`, the next ones below it ("middle": the whole block
+        centered), spaces at the start of a line indent it. Returns the ezdxf entity, a list of them for several
+        lines."""
         if not isinstance(text, str):
             text = str(text)
-        at = tuple(_pt2(at, "at"))
+        at = _pt2(at, "at")
         h = float(height)
         if not h > 0:
             raise ValueError("height must be greater than 0")
@@ -1059,35 +1460,50 @@ class Sheet:
         if align not in aligns:
             raise ValueError(f"align must be one of {', '.join(aligns)}, not {align!r}")
         att = {"layer": _layer(layer), "style": "ISO"}
-        if "\n" in text:
-            attach = {"left": 7, "center": 8, "right": 9, "middle": 5}[align]  # unten links/mitte/rechts, Mitte
-            e = self.msp.add_mtext(text.replace("\n", "\\P"), dxfattribs={**att, "char_height": h})
-            e.set_location(at, rotation=float(rotation), attachment_point=attach)
-        else:
-            e = self.msp.add_text(text, height=h, rotation=float(rotation), dxfattribs=att)
-            e.set_placement(at, align=aligns[align])
-        if _check:
-            f, ln = _where()
-            self._labels.append(dict(entity=e, text=text, height=h, file=f, line=ln))
-        return e
+        rot = float(rotation)
+        # Eine TEXT-Zeile je Zeile statt MTEXT: MTEXT verschluckt Einrueckungen, und ezdxf misst es mit Umbruechen,
+        # die beim Zeichnen nicht entstehen
+        lines = text.expandtabs(4).split("\n")
+        down = np.array([math.sin(math.radians(rot)), -math.cos(math.radians(rot))]) * LINE_SPACING * h
+        first = at - down * (len(lines) - 1) / 2 if align == "middle" else at
+        f, ln = _where() if _check else (None, None)
+        out = []
+        for i, t in enumerate(lines):
+            if not t.strip():
+                continue
+            e = self.msp.add_text(t, height=h, rotation=rot, dxfattribs=att)
+            e.set_placement(tuple(first + down * i), align=aligns[align])
+            out.append(e)
+            if _check:
+                self._labels.append(dict(entity=e, text=t, height=h, file=f, line=ln, owner=_owner,
+                                         what=_what or f"Text \"{_short(t)}\"", hint=_hint))
+        return out if len(lines) > 1 else (out[0] if out else None)
 
     def leader(self, point, text, at, end="arrow", height=TEXT_HEIGHT):
         """Leader from the sheet point `point` to a text at `at` (both in mm on the sheet). end: "arrow", "dot" or
-        "none". View.leader() takes a model point instead."""
+        "none". View.leader() takes a model point instead. Several lines stack above the short horizontal line."""
         p, a = _pt2(point, "point"), _pt2(at, "at")
         if end not in ("arrow", "dot", "none"):
             raise ValueError(f"end must be \"arrow\", \"dot\" or \"none\", not {end!r}")
+        if not isinstance(text, str):
+            text = str(text)
         msp = self.msp
+        owner = self._new_owner("leader")
         left = a[0] < p[0]
-        e = self.text(text, (a[0] - 1 if left else a[0] + 1, a[1] + 1), height=height, align="right" if left else "left")
-        try:
-            from ezdxf.tools.text_size import text_size
-            width = text_size(e).width
-        except Exception:  # Schrift nicht messbar: ungefaehre Breite
-            width = 0.6 * height * len(text)
+        up = (text.count("\n")) * LINE_SPACING * float(height)  # die letzte Zeile steht auf der Linie
+        e = self.text(text, (a[0] - 1 if left else a[0] + 1, a[1] + 1 + up), height=height,
+                      align="right" if left else "left", _owner=owner)
+        width = 0.0
+        for x in (e if isinstance(e, list) else [e] if e is not None else []):
+            try:
+                from ezdxf.tools.text_size import text_size
+                width = max(width, text_size(x).width)
+            except Exception:  # Schrift nicht messbar: ungefaehre Breite
+                width = max(width, 0.6 * float(height) * len(x.dxf.text))
         shoulder = a + np.array([-(width + 2) if left else width + 2, 0])
         msp.add_line(tuple(p), tuple(a), dxfattribs={"layer": "THIN"})
         msp.add_line(tuple(a), tuple(shoulder), dxfattribs={"layer": "THIN"})
+        self._annotate([np.array([p, a, shoulder])], owner, f"the leader of line {_where()[1]}")
         d = a - p
         if np.linalg.norm(d) > 1e-9 and end == "arrow":
             d = d / np.linalg.norm(d)
@@ -1101,9 +1517,13 @@ class Sheet:
 
     def table(self, rows, at, widths, row_height=7.0, text_height=TEXT_HEIGHT):
         """Table, e.g. a parts list: rows is a list of rows (lists of texts), at the top left corner on the sheet,
-        widths the column widths in mm. Returns the bounding box (x0, y0, x1, y1)."""
+        widths the column widths in mm. Returns the bounding box (x0, y0, x1, y1). Nothing else may lie on it, and its
+        texts must fit their cells (the check reports both)."""
         x0, y_top = _pt2(at, "at")
         widths = [float(w) for w in widths]
+        owner = self._new_owner("table")
+        file, line = _where()
+        cells = []
         y = y_top
         for row in rows:
             if len(row) > len(widths):
@@ -1113,7 +1533,12 @@ class Sheet:
                 self.msp.add_lwpolyline([(x, y - row_height), (x + w, y - row_height), (x + w, y), (x, y)], close=True,
                                         dxfattribs={"layer": "TITLE"})
                 if cell is not None and str(cell) != "":
-                    self.text(str(cell), (x + 1.5, y - row_height + (row_height - text_height) / 2), height=text_height)
+                    e = self.text(str(cell), (x + 1.5, y - row_height + (row_height - text_height) / 2),
+                                  height=text_height, _owner=owner)
+                    cells.append(dict(text=str(cell), entities=e if isinstance(e, list) else [e] if e is not None else [],
+                                      cell=(x, y - row_height, x + w, y)))
                 x += w
             y -= row_height
-        return (x0, y, x0 + sum(widths), y_top)
+        box = (x0, y, x0 + sum(widths), y_top)
+        self._tables.append(dict(box=box, owner=owner, cells=cells, file=file, line=line))
+        return box

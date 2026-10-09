@@ -21,6 +21,7 @@ from . import build, drawing
 
 DRAW_DIR = "drawings"
 OUT_DIR = Path("output") / "drawings"
+SET_PDF = Path("output") / "drawings.pdf"  # alle Blaetter in einer Datei
 CACHE_DIR = Path(".soma") / "drawings"
 DPI = 200
 MAX_PX = 7000  # laengste Seite des Bildes, A0 mit 200 dpi waeren 9400 px und 250 MB im Speicher
@@ -108,6 +109,75 @@ def _overlap(a, b, shrink=0.0):
     return (min(a[2], b[2]) - max(a[0], b[0]) > 2 * shrink) and (min(a[3], b[3]) - max(a[1], b[1]) > 2 * shrink)
 
 
+class _Rect:
+    """Rechteck auf dem Blatt, gedreht wie sein Text: Mitte c, Achsen ex und ey, halbe Breite hx und Hoehe hy."""
+
+    def __init__(self, c, ex, hx, hy):
+        self.c, self.ex = np.asarray(c, dtype=float), np.asarray(ex, dtype=float)
+        self.ey = np.array([-self.ex[1], self.ex[0]])
+        self.hx, self.hy = float(hx), float(hy)
+
+    @classmethod
+    def box(cls, b):
+        return cls(((b[0] + b[2]) / 2, (b[1] + b[3]) / 2), (1, 0), (b[2] - b[0]) / 2, (b[3] - b[1]) / 2)
+
+    def corners(self):
+        return np.array([self.c + sx * self.hx * self.ex + sy * self.hy * self.ey for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+
+    def aabb(self):
+        k = self.corners()
+        return (float(k[:, 0].min()), float(k[:, 1].min()), float(k[:, 0].max()), float(k[:, 1].max()))
+
+    def hits(self, a, b, shrink=0.0):
+        """Welche Strecken a[i] -> b[i] liegen auf dem (um shrink verkleinerten) Rechteck?"""
+        hx, hy = self.hx - shrink, self.hy - shrink
+        if hx <= 0 or hy <= 0 or not len(a):
+            return np.zeros(len(a), dtype=bool)
+        m = np.column_stack([self.ex, self.ey])
+        return _crosses_box((a - self.c) @ m, (b - self.c) @ m, (-hx, -hy, hx, hy))
+
+    def overlaps(self, other, shrink=0.0):
+        """Trennende Achsen: zwei gedrehte Rechtecke, beide um shrink verkleinert."""
+        for axis in (self.ex, self.ey, other.ex, other.ey):
+            ra = (self.hx - shrink) * abs(float(self.ex @ axis)) + (self.hy - shrink) * abs(float(self.ey @ axis))
+            rb = (other.hx - shrink) * abs(float(other.ex @ axis)) + (other.hy - shrink) * abs(float(other.ey @ axis))
+            if abs(float((other.c - self.c) @ axis)) >= ra + rb:
+                return False
+        return True
+
+
+def _text_rect(e):
+    """Rechteck eines Texts (TEXT oder MTEXT), mitgedreht. Gedrehte Maßzahlen haetten als achsparalleles Rechteck viel
+    Platz um sich, auf dem dann scheinbar Kanten liegen."""
+    t = e.dxftype()
+    if t == "TEXT":
+        rot = float(e.dxf.get("rotation", 0.0))
+    elif t == "MTEXT":
+        rot = float(e.get_rotation())
+    else:
+        return None
+    rad = math.radians(rot)
+    ex = np.array([math.cos(rad), math.sin(rad)])
+    if abs(ex[1]) < 1e-9 and ex[0] > 0:
+        b = _box(e)
+        return _Rect.box(b) if b else None
+    from ezdxf.math import Matrix44
+    piv = np.array([e.dxf.insert.x, e.dxf.insert.y])
+    try:
+        c = e.copy()
+        c.transform(Matrix44.chain(Matrix44.translate(-piv[0], -piv[1], 0), Matrix44.z_rotate(-rad),
+                                   Matrix44.translate(piv[0], piv[1], 0)))
+    except Exception:
+        b = _box(e)
+        return _Rect.box(b) if b else None
+    b = _box(c)
+    if not b:
+        return None
+    mid = np.array([(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]) - piv
+    ey = np.array([-ex[1], ex[0]])
+    return _Rect(piv + mid[0] * ex + mid[1] * ey, ex, (b[2] - b[0]) / 2, (b[3] - b[1]) / 2)
+
+
 def _segments(views):
     """Alle Kanten der Ansichten als Strecken (a, b) auf dem Blatt, mit Ansicht und Art."""
     out = []
@@ -146,6 +216,41 @@ def _dist_to_lines(p, segs):
     return best
 
 
+def _dim_parts(d):
+    """Linien (Strecken a, b) und Texte (Rechtecke) eines Maßes, wie ezdxf es zeichnet."""
+    try:
+        parts = list(d["entity"].virtual_entities())
+    except Exception:
+        parts = []
+    a, b, rects = [], [], []
+    for e in parts:
+        t = e.dxftype()
+        if t == "LINE":
+            a.append((e.dxf.start.x, e.dxf.start.y))
+            b.append((e.dxf.end.x, e.dxf.end.y))
+        elif t == "ARC":
+            pts = [(p.x, p.y) for p in e.flattening(0.05)]
+            a += pts[:-1]
+            b += pts[1:]
+        elif t in ("MTEXT", "TEXT"):
+            r = _text_rect(e)
+            if r:
+                rects.append(r)
+    return np.array(a, dtype=float).reshape(-1, 2), np.array(b, dtype=float).reshape(-1, 2), rects
+
+
+def _fits(entities, cell):
+    """Breite des Texts und Platz in der Zelle (x0, y0, x1, y1), wenn er nicht hineinpasst, sonst None."""
+    boxes = [b for b in (_box(e) for e in entities) if b]
+    if not boxes:
+        return None
+    bx0, by0 = min(b[0] for b in boxes), min(b[1] for b in boxes)
+    bx1, by1 = max(b[2] for b in boxes), max(b[3] for b in boxes)
+    if bx1 <= cell[2] - 0.3 and by0 >= cell[1] - 0.05 and by1 <= cell[3] + 0.05:
+        return None
+    return bx1 - bx0, cell[2] - 0.3 - bx0, by0 < cell[1] - 0.05 or by1 > cell[3] + 0.05
+
+
 def check(sheet):
     """Hinweise zum Blatt: nur melden, nichts aendern. Liefert [dict(message, file, line)]."""
     _fonts()  # Texte mit der Schrift messen, mit der sie gezeichnet werden
@@ -159,59 +264,95 @@ def check(sheet):
     if not sheet.views and not sheet._dims and not sheet._labels:
         add("The sheet is empty: no view, dimension or text.", sheet.file, sheet.line)
 
-    def place(what, box, file, line):
-        if box is None:
+    # Flaechen, auf denen nichts anderes liegen darf: Schriftfeld und Tabellen (Stueckliste)
+    blocked = ([(_Rect.box(tb), "the title block", None)] if tb else []) + \
+        [(_Rect.box(t["box"]), f"the table of line {t['line']}", t["owner"]) for t in sheet._tables]
+
+    def place(what, file, line, rects=(), a=None, b=None, owner=None):
+        pts = [r.corners() for r in rects] + ([a, b] if a is not None and len(a) else [])
+        if not pts:
             return
-        out = max(x0 - box[0], y0 - box[1], box[2] - x1, box[3] - y1)
+        pts = np.concatenate(pts)
+        out = max(x0 - pts[:, 0].min(), y0 - pts[:, 1].min(), pts[:, 0].max() - x1, pts[:, 1].max() - y1)
         if out > 0.05:
             add(f"{what} reaches {out:.1f} mm beyond the frame.", file, line)
-        if tb and _overlap(box, tb, 0.05):
-            add(f"{what} overlaps the title block.", file, line)
+        for r, desc, own in blocked:
+            if own is not None and own == owner:
+                continue
+            if any(q.overlaps(r, 0.05) for q in rects) or (a is not None and r.hits(a, b, 0.05).any()):
+                add(f"{what} overlaps {desc}.", file, line)
 
     for v in sheet.views:
-        place(f"View {v.name}", v.bbox, v.file, v.line)
+        place(f"View {v.name}", v.file, v.line, [_Rect.box(v.bbox)])
     for i, v in enumerate(sheet.views):
         for w in sheet.views[i + 1:]:
             if v.phantom or w.phantom:
                 continue  # Nachbarteile liegen absichtlich ueber einer anderen Ansicht
             if _overlap(v.bbox, w.bbox, 0.5):
                 add(f"View {v.name} (line {v.line}) and view {w.name} (line {w.line}) overlap.", w.file, w.line)
+    for t in sheet._tables:
+        place("The table", t["file"], t["line"], [_Rect.box(t["box"])], owner=t["owner"])
+    for an in sheet._annot:
+        if an["owner"][0] == "leader":
+            place("The leader", an["file"], an["line"], a=an["a"], b=an["b"], owner=an["owner"])
 
-    texts = []  # (Rechteck, Beschreibung, Datei, Zeile)
+    # Texte: (Rechteck, Beschreibung, Datei, Zeile, Besitzer, Hinweis zum Verschieben)
+    texts = []
     for t in sheet._labels:
-        box = _box(t["entity"])
-        what = f"Text \"{_short(t['text'])}\""
-        place(what, box, t["file"], t["line"])
-        if box:
-            texts.append((box, what, t["file"], t["line"]))
+        r = _text_rect(t["entity"])
+        if r:
+            place(t["what"], t["file"], t["line"], [r], owner=t.get("owner"))
+            texts.append((r, t["what"], t["file"], t["line"], t.get("owner"), t.get("hint")))
         if t["height"] < 2.5:
-            add(f"{what} is {t['height']:g} mm high, use at least 2.5 mm (ISO 3098).", t["file"], t["line"])
-    for d in sheet._dims:
+            add(f"{t['what']} is {t['height']:g} mm high, use at least 2.5 mm (ISO 3098).", t["file"], t["line"])
+    dim_lines = []  # (a, b, Besitzer, Beschreibung)
+    for i, d in enumerate(sheet._dims):
         what = f"Dimension {_dim_label(d)}"
-        place(what, _box(d["entity"]), d["file"], d["line"])
-        try:
-            parts = list(d["entity"].virtual_entities())
-        except Exception:
-            parts = []
-        for e in parts:
-            if e.dxftype() in ("MTEXT", "TEXT"):
-                box = _box(e)
-                if box:
-                    texts.append((box, what, d["file"], d["line"]))
+        a, b, rects = _dim_parts(d)
+        place(what, d["file"], d["line"], rects, a, b)
+        owner = ("dim", i)
+        dim_lines.append((a, b, owner, f"dimension {_dim_label(d)} (line {d['line']})"))
+        for r in rects:
+            texts.append((r, what, d["file"], d["line"], owner, "the dimension text with text_at=(x, y) or another offset"))
 
-    # Texte uebereinander und Texte auf Kanten der Ansichten
-    for i, (a, wa, fa, la) in enumerate(texts):
-        for b, wb, fb, lb in texts[i + 1:]:
-            if _overlap(a, b, 0.2):
-                add(f"{wb} overlaps {wa} (line {la}).", fb, lb)
+    def moves(*hints):
+        hs = [h for h in dict.fromkeys(hints) if h]
+        return f" Move {' or '.join(hs)}." if hs else ""
+
+    # Texte uebereinander
+    for i, (ra, wa, fa, la, oa, ha) in enumerate(texts):
+        for rb, wb, fb, lb, ob, hb in texts[i + 1:]:
+            if oa is not None and oa == ob and oa[0] in ("dim", "table"):
+                continue  # Maßzahl und Toleranz eines Maßes, Zellen einer Tabelle (dort meldet die Zellenpruefung)
+            if ra.overlaps(rb, 0.2):
+                add(f"{wb} overlaps {wa} (line {la}).{moves(hb, ha)}", fb, lb)
+
+    # Texte auf Kanten der Ansichten und auf Linien der Beschriftung
     segs = _segments(sheet.views)
-    for box, what, f, ln in texts:
-        shrunk = (box[0] + 0.3, box[1] + 0.3, box[2] - 0.3, box[3] - 0.3)
-        if shrunk[0] >= shrunk[2] or shrunk[1] >= shrunk[3]:
-            continue
-        hit = {v.name for a, b, v, kind in segs if kind != "tangent" and _crosses_box(a, b, shrunk).any()}
+    lines = dim_lines + [(an["a"], an["b"], an["owner"], an["desc"]) for an in sheet._annot]
+    for r, what, f, ln, owner, hint in texts:
+        views = sorted({v.name for a, b, v, kind in segs if kind != "tangent" and r.hits(a, b, 0.3).any()})
+        hit = [f"edges of view {', '.join(views)}"] if views else []
+        hit += list(dict.fromkeys(desc for a, b, own, desc in lines if own != owner and r.hits(a, b, 0.3).any()))
         if hit:
-            add(f"{what} lies on edges of view {', '.join(sorted(hit))}.", f, ln)
+            add(f"{what} lies on {' and on '.join(hit)}.{moves(hint)}", f, ln)
+
+    # Texte in Tabellen und im Schriftfeld muessen in ihre Zelle passen
+    for t in sheet._tables:
+        for c in t["cells"]:
+            res = _fits(c["entities"], c["cell"])
+            if res:
+                w, room, tall = res
+                add(f"Text \"{drawing._short(c['text'])}\" does not fit its cell of the table: "
+                    + ("too high for the row." if tall else f"{w:.1f} mm long, room for {max(room, 0):.1f} mm."),
+                    t["file"], t["line"])
+    for fd in sheet._fields:
+        res = _fits(fd["entities"], fd["cell"])
+        if res:
+            w, room, tall = res
+            add(f"Title block: \"{drawing._short(fd['text'])}\" does not fit the field {fd['caption']}: "
+                + ("too high." if tall else f"{w:.1f} mm long, room for {max(room, 0):.1f} mm.")
+                + " Shorten it, or draw your own title block (titleblock=False).", sheet.file, sheet.line)
 
     # Maße: Punkte auf Kanten, Kreise vorhanden, feste Zahlen wie gemessen
     for d in sheet._dims:
@@ -232,10 +373,14 @@ def check(sheet):
                 dist = _dist_to_lines(q, vsegs)
                 if dist["visible"] <= ON_EDGE:
                     continue
-                # Mitten von Bohrungen und Bögen sind uebliche Bezugspunkte, auch ohne Kante
+                # Mitten von Bohrungen und Bögen sind uebliche Bezugspunkte, auch ohne Kante, ebenso Mittenkreuze und
+                # Mittellinien des Agenten (Positionen, die nicht im Modell sind, Symmetrieachsen)
                 if centers is None:
                     centers = [np.array(v.pt(c)) for c, _r in v.circles(arcs=True)]
                 if any(float(np.linalg.norm(q - c)) <= ON_EDGE for c in centers):
+                    continue
+                if any(float(drawing._seg_dist(q[None], ref[:-1], ref[1:])[0] if len(ref) > 1
+                             else np.linalg.norm(q - ref[0])) <= ON_EDGE for ref in v._refs):
                     continue
                 if dist["hidden"] <= ON_EDGE:
                     add(f"{what}: the point {_p3(p)} lies only on a hidden edge (dimension visible edges, ISO 129).",
@@ -243,7 +388,8 @@ def check(sheet):
                 else:
                     add(f"{what}: the point {_p3(p)} lies on no edge of view {v.name} "
                         f"({min(dist.values()):.2f} mm away on the sheet). A rounded or chamfered corner? Then take a "
-                        "point on the straight edge.", d["file"], d["line"])
+                        "point on the straight edge. A position that is not in the model? Mark it with "
+                        "view.center_mark() or view.centerline() first.", d["file"], d["line"])
         t = d["text"]
         if t is not None and "<>" not in t:
             nums = [float(x.replace(",", ".")) for x in re.findall(r"\d+(?:[.,]\d+)?", t)]
@@ -260,11 +406,6 @@ def check(sheet):
     return warn
 
 
-def _short(t, n=30):
-    t = " ".join(str(t).split())
-    return t if len(t) <= n else t[:n - 3] + "..."
-
-
 def _dim_label(d):
     val = drawing.num(d["value"])
     if d["kind"] == "diameter":
@@ -274,7 +415,7 @@ def _dim_label(d):
     elif d["kind"] == "angle":
         val += "°"
     if d["text"] is not None:
-        return f"\"{_short(d['text'].replace('<>', val))}\""
+        return f"\"{drawing._short(d['text'].replace('<>', val))}\""
     return val
 
 
@@ -284,25 +425,23 @@ def _p3(p):
 
 # ---- Ausgabe --------------------------------------------------------------------------------------------------------
 
-_FONTS_READY = False
-
-
 def _fonts():
-    """Die Schrift der Zeichnungen liegt matplotlib bei, ezdxf kennt den Ordner aber nicht von sich aus."""
-    global _FONTS_READY
-    if _FONTS_READY:
-        return
-    import matplotlib
-    from ezdxf.fonts import fonts
-    try:
-        fonts.font_manager.scan_folder(Path(matplotlib.get_data_path(), "fonts", "ttf"))
-    except Exception:  # ohne sie nimmt ezdxf eine Ersatzschrift
-        pass
-    _FONTS_READY = True
+    drawing.setup_fonts()
 
 
 def render(sheet, pdf_path, png_path, dpi):
-    """PDF und PNG aus derselben DXF (Zeichenmodul von ezdxf mit matplotlib), Papier exakt im Format des Blatts."""
+    """PDF und PNG aus derselben DXF (Zeichenmodul von ezdxf mit matplotlib), Papier exakt im Format des Blatts.
+    Liefert die Groesse des Bilds in Pixeln und die Seite fuer output/drawings.pdf."""
+    fig = _figure(sheet.doc, sheet.width, sheet.height)
+    w, h = sheet.width, sheet.height
+    dpi = min(float(dpi), MAX_PX / (max(w, h) / 25.4))
+    _atomic(pdf_path, lambda p: fig.savefig(p, format="pdf", metadata={"CreationDate": None}))
+    _atomic(png_path, lambda p: fig.savefig(p, format="png", dpi=dpi, facecolor="white"))
+    return (round(w / 25.4 * dpi), round(h / 25.4 * dpi)), fig
+
+
+def _figure(doc, w, h):
+    """Das Blatt als matplotlib-Figur von w x h mm."""
     from ezdxf.addons.drawing import Frontend, RenderContext
     from ezdxf.addons.drawing import config as dcfg
     from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
@@ -327,7 +466,6 @@ def render(sheet, pdf_path, png_path, dpi):
             self.ax.add_patch(patch)
 
     _fonts()
-    w, h = sheet.width, sheet.height
     fig = Figure(figsize=(w / 25.4, h / 25.4))
     FigureCanvasAgg(fig)
     ax = fig.add_axes((0, 0, 1, 1))
@@ -336,7 +474,7 @@ def render(sheet, pdf_path, png_path, dpi):
                              lineweight_policy=dcfg.LineweightPolicy.ABSOLUTE, line_policy=dcfg.LinePolicy.ACCURATE,
                              lineweight_scaling=72 / 25.4, min_lineweight=0.13 * 72 / 25.4)
     be = Backend(ax)
-    fe = Frontend(RenderContext(sheet.doc), be, config=cfg)
+    fe = Frontend(RenderContext(doc), be, config=cfg)
     draw_text = fe.pipeline.draw_text
 
     def text(*a, **k):
@@ -352,16 +490,40 @@ def render(sheet, pdf_path, png_path, dpi):
     state = random.getstate()
     random.seed(76)
     try:
-        fe.draw_layout(sheet.msp, finalize=False)
+        fe.draw_layout(doc.modelspace(), finalize=False)
     finally:
         random.setstate(state)
     ax.set_xlim(0, w)
     ax.set_ylim(0, h)
     ax.set_aspect("equal")
-    dpi = min(float(dpi), MAX_PX / (max(w, h) / 25.4))
-    _atomic(pdf_path, lambda p: fig.savefig(p, format="pdf", metadata={"CreationDate": None}))
-    _atomic(png_path, lambda p: fig.savefig(p, format="png", dpi=dpi, facecolor="white"))
-    return (round(w / 25.4 * dpi), round(h / 25.4 * dpi))
+    return fig
+
+
+def write_set(root, drawings, figs):
+    """Alle Blaetter in einer PDF (output/drawings.pdf), in der Reihenfolge des Index (Datei, dann Zeile). Blaetter, die
+    in diesem Lauf nicht gebaut wurden, kommen aus ihrer DXF. Liefert dict(pdf, sheets, missing) oder None."""
+    import ezdxf
+    from matplotlib.backends.backend_pdf import PdfPages
+    pages, missing = [], []
+    for x in drawings:
+        fig = figs.get(x["id"])
+        if fig is None:
+            try:
+                fig = _figure(ezdxf.readfile(Path(root) / x["dxf"]), x["width"], x["height"])
+            except (OSError, ezdxf.DXFError):
+                missing.append(x["name"])
+                continue
+        pages.append(fig)
+    if not pages:
+        return None
+
+    def write(p):
+        with PdfPages(p, metadata={"CreationDate": None}) as pdf:
+            for fig in pages:
+                pdf.savefig(fig)
+
+    _atomic(Path(root) / SET_PDF, write)
+    return dict(pdf=SET_PDF.as_posix(), sheets=len(pages), missing=missing)
 
 
 def _atomic(path, write):
@@ -433,7 +595,7 @@ def build_all(root, only=None, dpi=DPI):
     old_errors = [x for x in old.get("errors", []) if x.get("file") not in done_files and (root / x.get("file", "")).is_file()]
     errors = []
     taken = {x["id"]: x["file"] for x in keep}
-    built = []
+    built, figs = [], {}
     try:
         for f in files:
             rel = _rel(f, root)
@@ -450,7 +612,7 @@ def build_all(root, only=None, dpi=DPI):
                     taken[sh.id] = rel
                     warnings = check(sh)
                     save_dxf(sh, root / OUT_DIR / f"{sh.id}.dxf")
-                    px = render(sh, root / OUT_DIR / f"{sh.id}.pdf", root / CACHE_DIR / f"{sh.id}.png", dpi)
+                    px, figs[sh.id] = render(sh, root / OUT_DIR / f"{sh.id}.pdf", root / CACHE_DIR / f"{sh.id}.png", dpi)
                     built.append(_entry(root, sh, warnings, px))
                 except build.BuildError as e:
                     errors.append(dict(file=e.file or rel, line=e.line, message=e.message, traceback=e.tb))
@@ -474,7 +636,15 @@ def build_all(root, only=None, dpi=DPI):
     index = dict(version=1, drawings=sorted(keep + built, key=lambda x: (x["file"] or "", x["line"] or 0)), errors=old_errors + errors)
     (root / CACHE_DIR).mkdir(parents=True, exist_ok=True)
     (root / CACHE_DIR / "index.json").write_text(json.dumps(index, indent=1, ensure_ascii=False), encoding="utf-8")
-    return dict(built=built, errors=errors, orphans=orphans, index=index)
+    # Alle Blaetter in einer PDF, aber nur vollstaendig: Mit Fehlern bliebe ein Blatt still weg
+    pdf_set = None
+    if index["errors"]:
+        pdf_set = dict(pdf=SET_PDF.as_posix(), skipped=True)
+    elif index["drawings"]:
+        pdf_set = write_set(root, index["drawings"], figs)
+    elif (root / SET_PDF).is_file():
+        orphans.append(SET_PDF.as_posix())
+    return dict(built=built, errors=errors, orphans=orphans, index=index, set=pdf_set)
 
 
 def find(root, name):
