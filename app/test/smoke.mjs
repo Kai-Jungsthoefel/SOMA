@@ -106,6 +106,9 @@ try {
   // 3) Terminal: echte Shell im Projektordner, soma im PATH
   const tid = await ev(() => window.__t.terminals.activeId);
   check('Ein Terminal wurde automatisch geöffnet', await ev(() => window.__t.terminals.count) === 1);
+  // Ohne echten fetten Schnitt rechnet Chromium das Fett nach, runde Zeichen sitzen dann einen Pixel tiefer
+  check('Terminalschrift: fett ist der echte Schnitt 700, vor dem Terminal geladen', await ev((id) => window.__t.terminals.tabs.get(id).term.options.fontWeightBold === '700'
+    && [...document.fonts].some((f) => f.family.includes('IBM Plex Mono') && f.weight === '700' && f.status === 'loaded'), tid));
   await ev((id) => window.soma.term.write(id, 'soma --version\r'), tid);
   const gotVersion = await waitFor('soma --version im Terminal', (id) => /^soma \d/m.test(window.__t.termText(id)), 20000, tid).catch(() => false);
   check('Im Terminal läuft `soma` (PATH der Basisumgebung)', !!gotVersion);

@@ -35,7 +35,7 @@ fs.copyFileSync(path.join('node_modules', 'pdfjs-dist', 'LICENSE'), 'dist/render
 // Schriften liegen lokal bei (die Content-Security-Policy erlaubt nur eigene Dateien, offline muss es auch gehen).
 // IBM Plex steht unter der SIL Open Font License.
 fs.mkdirSync('dist/renderer/fonts', { recursive: true });
-for (const [pkg, weights] of [['ibm-plex-sans', [400, 500, 600]], ['ibm-plex-mono', [400, 500]]]) {
+for (const [pkg, weights] of [['ibm-plex-sans', [400, 500, 600]], ['ibm-plex-mono', [400, 500, 700]]]) {
   for (const w of weights) {
     for (const subset of ['latin', 'latin-ext']) {
       const file = `${pkg}-${subset}-${w}-normal.woff2`;

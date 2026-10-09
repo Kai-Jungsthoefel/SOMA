@@ -7,6 +7,13 @@ import { el } from './ui';
 interface Tab { id: number; term: Terminal; fit: FitAddon; pane: HTMLElement; tab: HTMLElement; title: string; agent: boolean; exited: boolean }
 
 /**
+ * Normaler und fetter Schnitt der Terminalschrift, vorab geladen (beide Teilmengen, deshalb „aā“). Ohne echten fetten
+ * Schnitt rechnet Chromium das Fett nach, im DOM-Renderer sitzen runde Zeichen dann einen Pixel tiefer als gerade.
+ * WebGL legt Zeichen beim ersten Zeichnen in seinen Glyphen-Speicher, ein erst dann geladener Schnitt käme zu spät.
+ */
+const fontsReady = Promise.all(['400', '700'].map((w) => document.fonts.load(`${w} 13px "IBM Plex Mono"`, 'aā').catch(() => [])));
+
+/**
  * Terminal-Tabs (xterm.js). Jedes Terminal ist eine normale Shell im Projektordner (E19), Agenten laufen darin.
  * Eingeklappt zeigt der Bereich nur eine schmale Leiste mit den Tabs, die Terminals laufen weiter.
  */
@@ -32,9 +39,12 @@ export class TerminalTabs {
   }
 
   async add(opts: { command?: string; title?: string } = {}): Promise<number> {
+    // Vor dem Anlegen der Shell warten: Danach darf bis zum Eintrag in `tabs` nichts mehr warten, sonst gehen Ausgaben verloren
+    await fontsReady;
     const id = await window.soma.term.create({ command: opts.command });
     const term = new Terminal({
       fontFamily: '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace', fontSize: 13, lineHeight: 1, cursorBlink: true, scrollback: 5000,
+      fontWeight: '400', fontWeightBold: '700',
       theme: { background: '#0f1114', foreground: '#c9ced4', cursor: '#e6e8eb', selectionBackground: 'rgba(242,154,56,0.30)', black: '#1b1e23', brightBlack: '#7f8994' },
     });
     const fit = new FitAddon();
