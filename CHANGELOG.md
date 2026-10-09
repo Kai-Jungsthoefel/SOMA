@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Behoben
+
+- Markup: Die Zeichenfläche passt sich dem Viewer an. Wird er größer, etwa weil die PDF daneben geschlossen wird, wächst sie mit, statt klein in der Ecke zu bleiben. Mausrad zoomt um den Zeiger (bis 8-fach), Ziehen mit der rechten oder mittleren Maustaste verschiebt, Ctrl+0 passt wieder ein. Das Bild für den Agenten bleibt dabei in voller Auflösung.
+
 ## [0.4.0] - 2026-10-09
 
 Strukturbaum im Viewer, Reiter Analysis und Animation mit ruhigem Bericht, Mehrfachauswahl und Tasten, Einstellungen Viewer, Shortcuts, Storage und About.
