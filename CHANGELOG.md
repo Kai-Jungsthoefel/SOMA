@@ -8,12 +8,19 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ### Neu
 
+- Strukturbaum im Viewer: Die Bauteile stehen ganz oben links im Bild wie in CATIA, ohne Hintergrund. Eingeklappt nur der Name des Modells (mit „· 2 hidden“, wenn etwas ausgeblendet ist), aufgeklappt eine Ebene der Gruppen (die nächste klappt man bei Bedarf auf) mit Baumstrichen, Auge und Halbkreis direkt vor jedem Namen, Referenzen als Gruppe am Ende, Suche, „Show all“ im Fuß. F3 klappt ihn auf und zu. Ein Klick ins Modell markiert das Teil im Baum, in einer zugeklappten Gruppe die Gruppe. Derselbe Baum gilt im Modell, in der Analyse (nur die gerechneten Körper) und in der Animation (E82).
+- Mehrfachauswahl im Viewer und im Baum: Strg+Klick und Shift+Klick, im Baum Bereiche mit Shift, im Viewer Rahmenauswahl mit Alt + Ziehen (links nach rechts ganz darin, rechts nach links angeschnitten). Über die Augen im Baum ziehen blendet mehrere Teile auf einmal aus. Tasten H (ausblenden), Shift+H (alles einblenden), I (isolieren), T (transparent), Esc (Auswahl aufheben). Rechtsklick geht jetzt auch im Bild, für ein Teil oder die ganze Auswahl. Neuer Reiter „Shortcuts“ in den Einstellungen listet alle Tasten (E82).
+- Reiter „Analysis“ und „Animation“ in der linken Leiste, ein Punkt meldet Neues vom Agenten. Analysis zeigt die Liste der Ergebnisse und einen ruhigen Bericht: eine Zahl groß, ob es hält, die kritischen Teile mit Sprung zur Stelle, die Annahmen je eine Zeile zum Aufklappen (Lager, Kräfte, Werkstoff, Netz), die Teile als Tabelle, Berechnung und Hinweise. Animation zeigt Animationen und Videos, die Schritte aus den Untertiteln (Klick springt hin) und die Videos der Animation (E82).
+- Analyse im Bild: schmale Legende unten rechts, die Skala stellt der Knopf „Auto ▾“ darin ein, Darstellung in einer Leiste unten (Sicherheit, Spannung und neu die Verschiebung, Überhöhung, Lastfall), Kraft und kleinster Wert als Beschriftung an ihrer Stelle. Animation: Abspielleiste unten mit Marken der Schritte. Das × in der Leiste führt zurück zum Modell (E82).
+
 - Einstellungen, Reiter „Viewer“: Mausbelegung wie in SolidWorks, Fusion 360 und Inventor, Onshape, Creo, NX und Blender oder Rhino, mit Legende. Zoomrichtung umkehrbar. Orthografische Ansicht ohne Fluchtpunkte, beim Umschalten bleibt das Bild stehen. Darstellung beim Öffnen eines Modells (Kanten, Drahtgitter, Transparent). Nachkommastellen beim Messen (0 bis 4), der Text für den Agenten behält drei. Alles gilt sofort (E81).
 - Einstellungen, Reiter „Storage“: wie viel Platz SOMA auf dem Rechner belegt, aufgeteilt in Modelle, Sicherungen, Vorschau-Cache, Bilder der Startseite und eigene Skills, mit Knopf zum Öffnen des Ordners. Der Vorschau-Cache lässt sich leeren (E81).
 - Einstellungen, Reiter „About“: Versionen von SOMA, soma, Python, CadQuery, OCP, Electron und Git, gefundene Agenten, Ordner und alle Komponenten mit Lizenz. „Copy system info“ legt die Angaben für eine Fehlermeldung in die Zwischenablage (E81).
 
 ### Geändert
 
+- Der Reiter „Parts“ und der Umschalter oben links im Viewer sind weg: Bauteile stehen im Strukturbaum, Analysen und Animationen in ihren Reitern. Die Seitenleiste ist beim ersten Start zu (E82).
+- `soma analyze fem` schreibt je Werkstoff auch Querdehnzahl und Dichte ins Ergebnis und ob die Netzgröße automatisch gewählt wurde, für den Bericht.
 - Im Viewer wählt nur noch ein Klick mit der linken Maustaste aus, nicht mehr auch mit der rechten oder mittleren. So wählt kurzes Drehen oder Verschieben mit diesen Tasten nichts aus.
 
 ## [0.3.0] - 2026-10-09
