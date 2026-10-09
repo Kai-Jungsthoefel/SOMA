@@ -53,7 +53,7 @@ Any CLI agent that can read files and run commands works: Claude Code, OpenCode,
 - Skills: optional rule sets per model (3D printing, CNC, sheet metal, tolerances, joints, FEM …), switched on always or on demand. Edit them or add your own in the settings
 
 **Project**
-- A model is a single ZIP file with code, result and history
+- A model is a single `.soma` file (a ZIP archive) with code, result and history. ZIP files open too, and the export menu writes the whole model as a ZIP
 - Every commit of the agent shows up on a timeline below the view, old states can be previewed and restored
 - Export to STEP, STL, 3MF, glTF, DXF, SVG and more
 - Technical drawings as PDF and DXF: the agent writes them in Python with views, sections, details and dimensions measured from the model, and checks the result as an image

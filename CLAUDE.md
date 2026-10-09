@@ -4,7 +4,7 @@ Anweisungen für Claude Code bei der Entwicklung von SOMA (*Solid Object Modelin
 
 ## Worum es geht
 
-Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten seiner Wahl (Claude Code, OpenCode …) 3D-Modelle in CadQuery entwirft. Wir bauen **keinen eigenen Harness**. Die App liefert Terminal, 3D-Viewer, Projektformat (ZIP mit Git) und die Hilfsbibliothek `soma`.
+Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten seiner Wahl (Claude Code, OpenCode …) 3D-Modelle in CadQuery entwirft. Wir bauen **keinen eigenen Harness**. Die App liefert Terminal, 3D-Viewer, Projektformat (`.soma`, eine ZIP mit Git, E79) und die Hilfsbibliothek `soma`.
 
 - `PLAN.md` ist der gültige Plan mit Phasenstand (Abschnitt 10) und offenen Punkten (Abschnitt 11). Er geht vor `IDEA.md`.
 - `DECISIONS.md` ist das Entscheidungslog. `(E12)` in Plan und Code verweist darauf. Neue Entscheidungen des Nutzers kommen als neue Zeile ans Ende, alte Zeilen werden nicht umgeschrieben.

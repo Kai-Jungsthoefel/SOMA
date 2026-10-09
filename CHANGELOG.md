@@ -14,6 +14,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ### Geändert
 
+- Modelle werden als `.soma`-Datei gespeichert statt als `.zip`. ZIP-Dateien öffnet die App weiter. Ein Modell aus einer ZIP wird beim nächsten Speichern als `.soma` daneben abgelegt, die ZIP bleibt. Wer das ganze Modell als ZIP braucht, findet „Everything as ZIP“ im Export-Menü (E79).
 - Der Dateibaum zeigt die Kopien der Skills aus `.soma/skills/` als eigene Gruppe „Skills“, eingeklappt und nur zum Lesen. Ein- und ausgeschaltet werden sie weiter im Panel „Skills“.
 - Jede Zeile im Panel „Parameters“ zeigt den Bereich, den der Agent gesetzt hat, ohne Aufklappen („30–200 mm“, „3 options“), rot, wenn der Wert außerhalb liegt (E74).
 - Kleinere ZIP beim Speichern: Bilder und Videos aus `renders/` kommen nicht mehr mit, und die Versionsgeschichte wird vorher gepackt, sodass ähnliche Fassungen des Modells kaum zusätzlichen Platz brauchen. Am Modellmotor schrumpft der Verlauf von 81 auf 35 MB (E75).
