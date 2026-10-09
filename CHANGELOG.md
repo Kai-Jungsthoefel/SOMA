@@ -19,6 +19,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ### Behoben
 
+- Fetter Text im Terminal (etwa Überschriften des Agenten) wirkte wackelig, runde Buchstaben saßen einen Pixel tiefer als gerade. Die App bringt jetzt den echten fetten Schnitt der Terminalschrift mit, statt das Fett nachrechnen zu lassen.
 - Skills und andere Markdown-Dateien mit einem Kopf zwischen zwei `---` (Front Matter) zeigten diesen Kopf in der Dokumentansicht als riesige Überschrift. Er steht jetzt klein als Quelltext oben.
 - Nach dem Ändern eines Parameters hielten `soma anim` und `soma render --result` Animationen und Ergebnisse noch für aktuell. Jetzt zählt `parameters.json` wie in der App zum Modell (E74).
 
