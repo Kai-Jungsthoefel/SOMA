@@ -1,7 +1,9 @@
 // Test für technische Zeichnungen (soma.drawing, E76): Der Codeblock des Skills „Technical drawings“ baut ohne Hinweise,
 // Ansichten, Schnitt, Einzelheit und Maße landen als DXF, PDF und PNG, gleicher Inhalt gibt gleiche Dateien, die Prüfung
 // meldet getippte Zahlen, Punkte neben Kanten, verdeckte Kanten, Text außerhalb und übereinander, Fehler nennen Datei und
-// Zeile. Dann in der echten App: die PDF öffnet im Code-Panel, Bild und PDF zählen nicht als ungespeicherte Änderung.
+// Zeile. Die Rückmeldungen des ersten Agent-Tests (Blatt „Feedback“): Zahlen, Ø, Lage des Durchmessertexts, mehrzeiliger
+// Text, Schriftfeld, Stückliste, verschiebbare Beschriftung, Stufenschnitt, unterbrochene Ansicht, Gesamt-PDF.
+// Dann in der echten App: die PDF öffnet im Code-Panel, Bild und PDF zählen nicht als ungespeicherte Änderung.
 // Aufruf: npm run test:drawing (baut vorher). SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 legt ein Bild ab.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -42,6 +44,26 @@ sh.text("one again", (41, 40.5))
 sh.text("tiny", (40, 60), height=1.5)
 cut = sh.section(["Bracket", "Pin"], "front", through=(0, 0, 0), at=(150, 120), name="A", unhatched=["Pin"])
 b = sh.detail(front, (60, 0, 12), 5, at=(320, 120), scale="5:1", name="B")
+sh.view("Bracket", "top", at=(330, 230), label="Top", label_at=(150, 188))
+`;
+
+// Rückmeldungen aus dem ersten Agent-Test: Zahlen ohne Nachkommastellen, kein doppeltes Ø, Text des Durchmessers in
+// Richtung angle, eingerückter mehrzeiliger Text, Schriftfeld zu schmal, verschobene Beschriftung, Stufenschnitt mit
+// Schnittverlauf, unterbrochene Ansicht, Maß auf ein Mittenkreuz ohne Bohrung, Positionsnummer in der Stückliste
+const FEEDBACK = `from soma.drawing import Sheet, num
+assert (num(130, 0), num(-0.0, 0), num(12.5)) == ("130", "0", "12.5"), num(130, 0)
+sh = Sheet("Feedback", size="A3", scale="1:1", material="Birke Multiplex 18 mm")
+top = sh.view("Bracket", "top", at=(100, 200), origin=(0, 0, 12))
+top.diameter((0, 0, 12), 5, angle=90, text="Ø<> H7")
+top.center_mark((20, -20, 12), 2.5)
+top.dim((-60, -30, 12), (20, -20, 12), offset=-12)
+sh.text("Notes:\\n  1. Deburr all edges, break sharp edges 0.3 x 45 degrees\\n  2. Anodize", (30, 280))
+front = sh.view("Bracket", "front", at=(300, 230), breaks=[((-30, 0, 0), (30, 0, 0))], label="Shortened", label_at=(300, 255))
+front.dim((-60, -30, 0), (60, -30, 0), offset=-10)
+a = sh.section("Bracket", "front", path=[(-70, 17.5, 0), (-20, 17.5, 0), (-20, 0, 0), (70, 0, 0)], parent=top, name="A",
+               at=(100, 110), letters_at=[(25, 225), (175, 225)])
+sh.table([["1", "Bracket", "1"]], at=(230, 70), widths=[10, 40, 10])
+top.leader((0, 0, 12), "1", at=(235, 65), end="dot")
 `;
 
 const BROKEN = `from soma.drawing import Sheet
@@ -62,12 +84,15 @@ try {
   fs.writeFileSync(path.join(dir, 'drawings', 'skill.py'), block + '\n');
   fs.writeFileSync(path.join(dir, 'drawings', 'checks.py'), CHECKS);
   fs.writeFileSync(path.join(dir, 'drawings', 'broken.py'), BROKEN);
+  fs.writeFileSync(path.join(dir, 'drawings', 'feedback.py'), FEEDBACK);
 
   const b1 = soma(dir, 'drawing', 'build', '--json');
   let res = null;
   try { res = JSON.parse(b1.stdout); } catch { /* unten gemeldet */ }
-  check('soma drawing build --json: zwei Blätter gebaut, ein Fehler, Rückgabe 1', !!res && res.built.length === 2 && res.errors.length === 1 && b1.status === 1,
+  check('soma drawing build --json: drei Blätter gebaut, ein Fehler, Rückgabe 1', !!res && res.built.length === 3 && res.errors.length === 1 && b1.status === 1,
     (b1.stderr || b1.stdout).slice(-200));
+  check('Gesamt-PDF wird bei einem Fehler nicht geschrieben (es fehlte ein Blatt)', res?.set?.skipped === true && !fs.existsSync(path.join(dir, 'output', 'drawings.pdf')),
+    JSON.stringify(res?.set));
   const by = Object.fromEntries((res?.built ?? []).map((x) => [x.name, x]));
   const br = by.Bracket;
   check('Skill-Codeblock: Blatt "Bracket" mit 4 Ansichten (Vorder-, Draufsicht, Schnitt A-A, Einzelheit B) und ohne Hinweise',
@@ -91,6 +116,43 @@ try {
     && has(10, 'at least 2.5 mm') && has(2, 'Scale 1:3'), w.join(' | ').slice(0, 200));
   check('Keine Hinweise ohne Grund (Schnitt, Einzelheit, Gesamtmaß 120 an echten Kanten)', !w.some((m) => /^(3|11|12): /.test(m)),
     w.filter((m) => /^(3|11|12): /.test(m)).join(' | '));
+  check('Prüfung: Ansichtstitel auf einem Maß, mit Hinweis auf label_at', has(13, 'Label "Top" lies on dimension') && has(13, 'label_at=(x, y)'),
+    w.filter((m) => m.startsWith('13:')).join(' | '));
+
+  const fb = by.Feedback;
+  const fw = (fb?.warnings ?? []).map((x) => `${x.line}: ${x.message}`);
+  const fhas = (line, part) => fw.some((m) => m.startsWith(`${line}: `) && m.includes(part));
+  check('Schriftfeld: zu langer Werkstoff wird gemeldet', fhas(3, 'Title block: "Birke Multiplex 18 mm" does not fit the field Material'), fw.join(' | ').slice(0, 300));
+  check('Positionsnummer in der Stückliste wird gemeldet (Text und Hinweislinie)', fhas(14, 'Text "1" overlaps the table of line 13') && fhas(14, 'The leader overlaps the table'),
+    fw.join(' | ').slice(0, 300));
+  check('Sonst keine Hinweise: Ø-Text frei, Maß auf das Mittenkreuz, mehrzeiliger Text im Rahmen, Stufenschnitt, unterbrochene Ansicht',
+    !fw.some((m) => /^([4-9]|1[0-2]): /.test(m)), fw.filter((m) => /^([4-9]|1[0-2]): /.test(m)).join(' | '));
+  check('Maße: Ø nicht doppelt ("Ø10 H7"), 80 bis zum Mittenkreuz, 120 über die Unterbrechung', ['"Ø10 H7"', '80', '120'].every((l) => fb?.dims.some((d) => d.label === l)),
+    fb?.dims.map((d) => d.label).join(' '));
+  const fbCheck = py(['-c', String.raw`
+import json, sys, math, ezdxf
+doc = ezdxf.readfile(sys.argv[1])
+msp = doc.modelspace()
+texts = [(t.dxf.text, tuple(round(v, 2) for v in t.dxf.align_point)[:2]) for t in msp.query("TEXT")]
+dia = [d for d in msp.query("DIMENSION") if "H7" in d.dxf.text]
+mt = [e for d in dia for e in d.virtual_entities() if e.dxftype() == "MTEXT"]
+step = [l for l in msp.query("LINE[layer=='VISIBLE']") if abs(l.dxf.start.x - 80) < 0.01 and abs(l.dxf.end.x - 80) < 0.01 and 95 < l.dxf.start.y < 125]
+print(json.dumps(dict(
+    indent=any(t.startswith("  1. Deburr") for t, _p in texts), mtext=len(msp.query("MTEXT")),
+    dimtext=[d.dxf.text for d in dia], ø=[e.plain_text() for e in mt], up=[round(e.dxf.insert.y - 200, 2) for e in mt],
+    letters=sorted(p for t, p in texts if t == "A"), label=[p for t, p in texts if t == "Shortened"],
+    breaks=len([p for p in msp.query("LWPOLYLINE[layer=='THIN']") if len(p) == 6]),
+    cut=[len(p) for p in msp.query("LWPOLYLINE[layer=='CUT']")], step=len(step))))
+`, path.join(dir, 'output', 'drawings', 'Feedback.dxf')]);
+  let fx = null;
+  try { fx = JSON.parse(fbCheck.stdout); } catch { /* unten */ }
+  check('Mehrzeiliger Text als Zeilen (kein MTEXT), Einrückung bleibt', fx?.indent === true && fx.mtext === 0, (fbCheck.stderr || fbCheck.stdout).slice(-200));
+  check('Durchmesser: "Ø<> H7" wird "Ø10 H7", der Text steht in Richtung angle=90 (über der Mitte)', fx?.dimtext?.[0] === '<> H7' && fx.ø[0] === 'Ø10 H7' && fx.up[0] > 5,
+    JSON.stringify(fx && { dimtext: fx.dimtext, ø: fx.ø, up: fx.up }));
+  check('Buchstaben des Schnittverlaufs an letters_at, Titel an label_at', JSON.stringify(fx?.letters) === '[[25,225],[175,225]]' && JSON.stringify(fx?.label) === '[[300,255]]',
+    JSON.stringify(fx && { letters: fx.letters, label: fx.label }));
+  check('Stufenschnitt: Schnittverlauf mit 4 Punkten und zwei dicken Knicken, keine Kante an der Stufe; zwei Bruchlinien', JSON.stringify(fx?.cut) === '[4,3,3]' && fx.step === 0 && fx.breaks === 2,
+    JSON.stringify(fx && { cut: fx.cut, step: fx.step, breaks: fx.breaks }));
   const err = res?.errors[0];
   check('Fehler: Datei, Zeile und die vorhandenen Bauteile', err?.file === 'drawings/broken.py' && err.line === 3 && err.message.includes("'Brackett' does not exist")
     && err.message.includes("'Bracket'"), JSON.stringify(err)?.slice(0, 160));
@@ -137,6 +199,17 @@ print(json.dumps(dict(errors=len(aud.errors), types=types, layers=layers, detail
   const b3 = soma(dir, 'drawing', 'build');
   check('Gelöschtes Blatt: PDF und DXF bleiben, die Ausgabe nennt sie, das Bild geht', b3.stdout.includes('Note: output/drawings/Checks.pdf belongs to no sheet anymore')
     && fs.existsSync(path.join(dir, 'output', 'drawings', 'Checks.pdf')) && !fs.existsSync(path.join(dir, '.soma', 'drawings', 'Checks.png')), b3.stdout.slice(-300));
+  // Ohne Fehler: alle Blätter in output/drawings.pdf, nach Datei geordnet. Ein Teilbau holt die übrigen Blätter aus der DXF
+  fs.rmSync(path.join(dir, 'drawings', 'broken.py'));
+  const b5 = soma(dir, 'drawing', 'build');
+  const setPdf = path.join(dir, 'output', 'drawings.pdf');
+  const pages = (buf) => (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+  const set1 = fs.existsSync(setPdf) ? fs.readFileSync(setPdf) : Buffer.alloc(0);
+  check('Gesamt-PDF output/drawings.pdf mit beiden Blättern', b5.status === 0 && b5.stdout.includes('All sheets in one file: output/drawings.pdf (2 sheet(s))')
+    && pages(set1) === 2, `${pages(set1)} Seiten; ${b5.stdout.slice(-200)}`);
+  soma(dir, 'drawing', 'build', 'drawings/skill.py');
+  check('Gesamt-PDF bytegleich nach Teilbau (Blatt aus der DXF gleich dem frisch gebauten)', fs.existsSync(setPdf) && set1.equals(fs.readFileSync(setPdf)));
+
   fs.appendFileSync(path.join(dir, 'model.py'), 'raise ValueError("kaputt")\n');
   const b4 = soma(dir, 'drawing', 'build');
   check('Modell baut nicht: Meldung mit Ort, keine Zeichnung', b4.status === 1 && b4.stderr.includes('The model does not build, so no drawing does either')

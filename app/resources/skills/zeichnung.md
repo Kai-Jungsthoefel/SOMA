@@ -65,14 +65,23 @@ sh.text("Deburr all edges", (30, 30))
 - `direction` can be a vector from the part to the viewer (auxiliary view of an inclined face), `up=` turns the view.
 - `style="phantom"`: adjacent parts and extreme positions as thin dash-double-dot lines. Give it the same `origin=`
   (a model point) and `at=` as the view it belongs to.
+- Long parts (shafts, profiles, rails): `breaks=[(p1, p2)]` leaves out the part between two model points and draws
+  break lines. Dimensions across the break show the full length. Give views in a row the same breaks.
+- Labels soma places itself (view label, "A-A", the letters of a cutting line or detail) move with `label_at=`,
+  `letters_at=[(x, y), (x, y)]` and `letter_at=` (sheet points) when they get in the way of dimensions.
 
 ## Sections and details
 
 - Section where inner shape matters: bores, pockets, walls. `sh.section(what, direction, through=point, ...)` removes
   everything between the viewer and the plane through `point`. `name="A"` with `parent=front` draws the cutting line,
   arrows and letters, and "A-A" above the section.
-- Half section of a symmetric part or a local break-out: `region=` a solid that is removed (a box over one quarter).
-  Draw the border yourself: center line for a half section, thin freehand line for a break-out.
+- Stepped section through features that do not lie in one plane: `path=[p1, p2, p3, ...]` (model points, seen in
+  `parent`) instead of `through`. Everything on the viewer's side of the path is removed, the cutting line gets thick
+  ends and bends. Half section: a path from outside to the axis and then towards the viewer, e.g.
+  `path=[(-50, 0, 0), (0, 0, 0), (0, -50, 0)]`.
+- Local break-out: `region=` a solid that is removed, without `parent`. Where a cut is seen edge-on (steps, the middle of
+  a half section, the border of a break-out) soma draws no edge: add a center line (half section) or a thin freehand
+  line (break-out) yourself.
 - Not cut along their axis (ISO 128-40): screws, nuts, washers, pins, shafts, keys, rolling elements, ribs. List them
   in `unhatched=`.
 - Hatching is 45° and alternates between neighbouring parts. Thin walls (under 2 mm on the sheet): `hatch="solid"`.
@@ -81,8 +90,10 @@ sh.text("Deburr all edges", (30, 30))
 
 ## Dimensions
 
-- Never type a value: give model points, soma measures. `"<>"` in `text` is the measured value: `"Ø<> H7"`,
-  `"<> ±0.1"`, `"4x <>"`, `"(<>)"` for an auxiliary dimension. Typed numbers that differ from the model are reported.
+- Never type a value: give model points, soma measures. `"<>"` in `text` is the measured value: `"<> ±0.1"`,
+  `"4x <>"`, `"(<>)"` for an auxiliary dimension. Typed numbers that differ from the model are reported.
+  `view.diameter()` and `view.radius()` add Ø and R themselves (`text="<> H7"` gives "Ø8 H7"), `"Ø<>"` is for a
+  diameter dimensioned from the side with `view.dim()`.
 - Every feature is dimensioned once, in the view where it shows best. Dimension visible edges, not hidden ones. Points
   lie on an edge or on a circle center of that view: on rounded or chamfered corners take a point on the straight
   edge, not the virtual corner.
@@ -91,8 +102,11 @@ sh.text("Deburr all edges", (30, 30))
 - Small dimensions near the part, bigger ones outside: first line about 10 mm from the edge, then 7 to 8 mm steps
   (`offset`). Dimension lines do not cross each other, texts never sit on edges.
 - Diameters with `view.diameter(center, r)` where the hole is a circle, on a side view a linear dimension with
-  `"Ø<>"`. Radii with `view.radius(center, r)`. Patterns: one dimension `"4x <>"`, positions from a datum or the
+  `"Ø<>"`. Radii with `view.radius(center, r)`. `angle=` is the direction from the center to the text (0 right, 90 up),
+  pointing away from other dimensions and edges. Patterns: one dimension `"4x <>"`, positions from a datum or the
   pattern center, `view.center_marks()`.
+- Positions that are not in the model (screws fitted later, holes drilled on assembly): mark them with
+  `view.center_mark(point, r)` and dimension to its center. Dimensions may also end on a `view.centerline()`.
 - Threads: `"M5"` or `"M5 - 10 deep"` on the hole. soma models threads without the helix (tap drill or core), so
   always name the thread. Through holes: `"Ø<> THRU"` or a leader.
 - Angles: `view.angle(vertex, p1, p2)` in views where both lines lie in the paper plane.
@@ -113,8 +127,8 @@ sh.text("Deburr all edges", (30, 30))
 
 - Views of the assembly, often a section along the main axis with the screws unhatched. Only overall, connecting and
   fitting dimensions.
-- Item numbers with `view.leader(point_on_part, "1", at=..., end="dot")`, lined up in a row or column, the same part
-  always gets the same number.
+- Item numbers with `view.leader(point_on_part, "1", at=..., end="dot")`, lined up in a row or column next to the
+  views and off the parts list, the same part always gets the same number.
 - Parts list with `sh.table(rows, at, widths)` on the title block: item, name, quantity, material or designation (for
   standard parts the designation of `soma.fasteners`, e.g. "ISO 4762 M5x16").
 
@@ -124,20 +138,23 @@ sh.text("Deburr all edges", (30, 30))
   VISIBLE (0.5 mm), THIN, CENTER, HIDDEN, PHANTOM, HATCH, CUT, DIM, TEXT, text style and dimension style "ISO". Own
   ezdxf dimensions in a view need `override={"dimlfac": 1 / view.scale}`.
 - `view.pt((x, y, z))` is the sheet point of a model point. Draw what soma does not offer yourself: surface and weld
-  symbols, datum triangles, break lines, a different title block.
-- `sh.text(text, at, height=3.5, align=, rotation=)`, several lines with `\n`. Heights: 3.5 mm, view names 5 mm,
-  never under 2.5 mm.
+  symbols, datum triangles, a different title block.
+- `sh.text(text, at, height=3.5, align=, rotation=)`. Several lines with `\n`: the first line at `at`, the others below,
+  leading spaces indent. Heights: 3.5 mm, view names 5 mm, never under 2.5 mm.
 
 ## Build and check
 
 1. `soma drawing build` (or `soma drawing build drawings/x.py`). Errors name file and line. Warnings report texts on
-   edges or on each other, things outside the frame or on the title block, points on no edge, typed numbers that
-   differ from the model and uncommon scales. Fix them, or tell the user why one is fine.
+   edges, on dimension, leader or cutting lines or on each other, things outside the frame or on the title block or a
+   table, texts too long for their cell or title block field, points on no edge, typed numbers that differ from the
+   model and uncommon scales. Fix them, or tell the user why one is fine.
 2. **Open the picture `.soma/drawings/<name>.png` and look at it.** It is large and gets scaled down when you open it:
    crop parts of it (Pillow is installed) to read small texts and check every dimension and hatching.
 3. `soma drawing info "Name"`: views with their place on the sheet, circles, every dimension with its value. Compare
    with your plan: every feature dimensioned once, nothing crowded.
-4. PDF and DXF are in `output/drawings/`. After model changes build the drawings again before you commit.
+4. PDF and DXF are in `output/drawings/`, all sheets in one PDF in `output/drawings.pdf` (ordered by file name, then
+   by their order in the file; written only when no drawing has errors). After model changes build the drawings again
+   before you commit.
 
 ## Feedback
 
