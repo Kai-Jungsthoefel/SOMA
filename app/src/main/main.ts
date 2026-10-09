@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import { aboutInfo, aboutText } from './about';
 import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
@@ -10,10 +11,12 @@ import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntr
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
 import { appIcon, editBackupsDir, libraryBackupsDir, skillDirs, thumbnailsDir, userSkillsDir } from './paths';
+import { readSettings, writeSettings } from './settings';
+import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, saveLibrarySkill } from './skilllibrary';
 import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
-import type { FileOpResult, LibraryResult } from '../shared/types';
+import type { FileOpResult, LibraryResult, StorageClear } from '../shared/types';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -24,6 +27,8 @@ else if (process.platform === 'win32' && process.env.LOCALAPPDATA) app.setPath('
 let win: BrowserWindow | null = null;
 /** Für Anfragen aus den Terminals (bridge.ts): das Projekt des Fensters. */
 let controller: ProjectController | null = null;
+/** Im Testmodus landet Kopiertes hier statt in der echten Zwischenablage des Nutzers. */
+let testClipboard = '';
 
 function registerIpc(ctl: ProjectController): void {
   const dir = () => ctl.need().dir;
@@ -127,7 +132,8 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.on('term:resize', (_e, id: number, cols: number, rows: number) => ctl.session?.terminals.resize(id, cols, rows));
   ipcMain.on('term:kill', (_e, id: number) => ctl.session?.terminals.kill(id));
 
-  ipcMain.handle('agents:detect', () => detectAgents(ctl.session ? terminalEnv(dir()) : process.env));
+  const agents = () => detectAgents(ctl.session ? terminalEnv(dir()) : process.env);
+  ipcMain.handle('agents:detect', () => agents());
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('measure:start', () => ctl.measureStart());
   ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));
@@ -187,6 +193,42 @@ function registerIpc(ctl: ProjectController): void {
     fs.mkdirSync(userSkillsDir(), { recursive: true });
     await shell.openPath(userSkillsDir());
   });
+
+  // Einstellungen der App (E81)
+  ipcMain.handle('settings:get', () => readSettings());
+  ipcMain.handle('settings:set', (_e, patch: unknown) => {
+    try { return writeSettings(patch); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e), ...readSettings() }; }
+  });
+  ipcMain.handle('storage:stats', () => storageStats());
+  ipcMain.handle('storage:open', async (_e, area: unknown): Promise<FileOpResult> => {
+    if (!isStorageArea(area)) return { ok: false, error: 'Unknown folder.' };
+    const p = areaDir(area);
+    try { fs.mkdirSync(p, { recursive: true }); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+    if (process.env.SOMA_TEST === '1') return { ok: true, path: p };
+    const err = await shell.openPath(p);
+    return err ? { ok: false, error: err } : { ok: true, path: p };
+  });
+  ipcMain.handle('storage:clearPreviews', async (): Promise<StorageClear> => {
+    const keep = ctl.session?.id ?? null;
+    const c = await choose(win, {
+      title: 'Clear preview cache',
+      message: 'Clear the preview cache?',
+      detail: `Previews of older versions are created again when you open them in the history. ${keep ? 'Those of the open model stay. ' : ''}Your models and their history are not affected.`,
+      buttons: ['Clear', 'Cancel'],
+    });
+    if (c !== 0) return { ok: false, canceled: true };
+    try {
+      const r = await clearPreviews(keep);
+      return { ok: !r.failed, freed: r.freed, kept: r.kept, stats: await storageStats(), ...(r.failed ? { error: `${r.failed} folder${r.failed === 1 ? '' : 's'} could not be removed (still in use).` } : {}) };
+    } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  });
+  ipcMain.handle('about:info', () => aboutInfo(agents));
+  ipcMain.handle('about:copy', async (): Promise<FileOpResult> => {
+    const text = aboutText(await aboutInfo(agents));
+    if (process.env.SOMA_TEST === '1') testClipboard = text; else clipboard.writeText(text);
+    return { ok: true };
+  });
+
   ipcMain.handle('anim:list', () => ctl.animList());
   ipcMain.handle('anim:build', (_e, file: unknown) => ctl.animBuild(file));
   ipcMain.handle('results:list', () => ctl.results());
@@ -204,6 +246,7 @@ function registerIpc(ctl: ProjectController): void {
     ipcMain.handle('test:answers', (_e, a: unknown[]) => setTestAnswers(a));
     // Adresse und Schlüssel für soma render, damit Tests es auch außerhalb eines Terminals aufrufen können
     ipcMain.handle('test:bridge', () => bridgeEnv());
+    ipcMain.handle('test:clipboard', () => testClipboard);
     // Fenster schließen wie mit dem Kreuz (mit Rückfrage und Verlassen des Modells). window.close() der Seite umgeht das
     ipcMain.handle('test:close', (e) => { BrowserWindow.fromWebContents(e.sender)?.close(); });
     // Screenshot auch aus unsichtbaren Fenstern (CDP liefert dort kein Bild)

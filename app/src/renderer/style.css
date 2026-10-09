@@ -866,3 +866,55 @@ code { font-family:var(--mono); font-size:.95em; }
 .st-name-in:focus { outline:2px solid var(--acc); outline-offset:0; border-color:transparent; }
 .st-name-file { font-family:var(--mono); font-size:11.5px; }
 .st-name-actions { display:flex; justify-content:flex-end; gap:6px; padding:4px 10px 6px; }
+
+/* Einstellungen, Reiter Viewer, Speicher und Info (E81) */
+.st-sec.st-page { display:block; overflow:auto; }
+.st-pg { max-width:800px; padding:22px 32px 40px; }
+.st-h2 { margin:0; font-size:16px; font-weight:600; color:var(--tx); }
+.st-lead { margin:4px 0 0; color:var(--tx3); font-size:12.5px; line-height:1.5; }
+.st-group { margin-top:26px; }
+.st-gh { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); padding-bottom:6px; border-bottom:1px solid var(--line); }
+.st-field { display:flex; align-items:flex-start; gap:28px; padding:12px 0; border-bottom:1px solid var(--line); }
+.st-fl { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.st-fl b { font-weight:500; color:var(--tx); }
+.st-fl > span { font-size:12px; color:var(--tx3); line-height:1.5; }
+.st-fc { flex-shrink:0; display:flex; align-items:center; min-height:28px; }
+.sk-select.st-select { max-width:none; min-width:190px; height:28px; padding:0 6px; }
+.sk-select.st-select.narrow { min-width:64px; }
+.st-seg { margin:0; }
+.st-seg button { width:auto; height:24px; padding:0 12px; }
+.st-legend { display:grid; grid-template-columns:auto 1fr; gap:4px 16px; margin-top:8px; padding:8px 12px; border:1px solid var(--line); border-radius:7px; background:var(--s2); font-size:12px; }
+.st-lg-row { display:contents; }
+.st-lg-k { color:var(--tx3); }
+.st-lg-v { color:var(--tx); }
+.st-problem { display:flex; gap:8px; align-items:flex-start; margin-top:14px; padding:8px 12px; border:1px solid rgba(232,197,71,.35); border-radius:7px; color:var(--warn); font-size:12px; line-height:1.5; }
+.st-problem svg { margin-top:2px; }
+.st-wait { margin-top:20px; color:var(--tx3); }
+.st-total { display:flex; align-items:center; gap:8px; margin-top:20px; padding:12px 14px; border:1px solid var(--line2); border-radius:9px; background:var(--s2); }
+.st-path { font-family:var(--mono); font-size:11.5px; word-break:break-all; }
+.st-stores { margin-top:10px; display:flex; flex-direction:column; transition:opacity .15s; }
+.st-stores.loading { opacity:.55; }
+.st-store { display:flex; align-items:flex-start; gap:12px; padding:12px 2px; border-bottom:1px solid var(--line); }
+.st-store-ico { color:var(--tx2); margin-top:1px; }
+.st-size { flex-shrink:0; min-width:76px; text-align:right; font-family:var(--mono); font-size:12.5px; color:var(--tx); margin-top:1px; }
+.st-store-act { flex-shrink:0; display:flex; gap:6px; align-items:center; justify-content:flex-end; min-width:116px; margin-top:-4px; }
+.st-about-hd { display:flex; align-items:center; gap:14px; }
+.st-logo { width:56px; height:56px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:var(--s3); color:var(--acc); flex-shrink:0; }
+.st-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.st-license { margin:20px 0 0; font-size:12.5px; color:var(--tx2); line-height:1.55; }
+.st-kv { display:grid; grid-template-columns:190px 1fr; gap:6px 16px; padding-top:10px; font-size:12.5px; }
+.st-kv .k { color:var(--tx3); }
+.st-kv .v { min-width:0; color:var(--tx); font-family:var(--mono); font-size:12px; word-break:break-all; }
+.st-kv .v.path { display:flex; align-items:center; gap:6px; }
+.st-kv .v.path .ibtn { margin:-4px 0; }
+.st-agents { display:flex; flex-direction:column; gap:6px; padding-top:10px; font-size:12.5px; }
+.st-agent { display:flex; align-items:center; gap:8px; }
+.st-agent b { font-weight:500; min-width:120px; }
+.st-agent.ok .st-agent-ico { color:var(--ok); }
+.st-agent.no .st-agent-ico { color:var(--tx3); }
+.st-comps { margin-top:14px; }
+.st-comps-h { font-weight:500; color:var(--tx2); margin-bottom:6px; }
+.st-comp-grid { display:grid; grid-template-columns:minmax(160px, 1.4fr) minmax(70px, .6fr) 1fr; gap:3px 14px; font-size:12px; }
+.st-comp-grid .n { color:var(--tx); }
+.st-comp-grid .ver { font-family:var(--mono); color:var(--tx2); }
+.st-comp-grid .lic { color:var(--tx3); }

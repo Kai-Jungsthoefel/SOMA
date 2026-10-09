@@ -29,11 +29,14 @@ const KIND: Record<string, string> = { face: 'Face', edge: 'Edge', vertex: 'Poin
 /** „Face · plane“, „Edge · circle“, beim Eckpunkt nur „Point“. Im Fließtext (`inline`) „face (plane)“. */
 const what = (i: { kind: string; type: string }, inline = false) => (i.kind === 'vertex' ? (inline ? 'point' : 'Point')
   : inline ? `${KIND[i.kind].toLowerCase()} (${typeName(i.type)})` : `${KIND[i.kind]} · ${typeName(i.type)}`);
+/** Nachkommastellen der Werte in der Karte und an der Messlinie (Einstellung, E81). Der Text für den Agenten hat immer drei. */
+let digits = 2;
+const fix = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 /** Lage eines Punkts: „X 20.00 · Y −15.00 · Z 5.00“. */
-const coords = (p: number[]) => p.map((v, k) => `${'XYZ'[k]} ${minus((Math.abs(v) < 5e-4 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`).join(' · ');
+const coords = (p: number[]) => p.map((v, k) => `${'XYZ'[k]} ${minus(fix(Math.abs(v) < 5e-4 ? 0 : v))}`).join(' · ');
 const typeName = (t: string) => TYPE[t] ?? t.toLowerCase();
-const mm = (v: number) => `${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} mm`;
-const mm2 = (v: number) => `${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} mm²`;
+const mm = (v: number) => `${fix(v)} mm`;
+const mm2 = (v: number) => `${fix(v)} mm²`;
 const deg = (v: number) => `${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}°`;
 const minus = (s: string) => s.replace(/^-/, '−');
 /** Für den Agenten: Punkt als Dezimalzeichen, drei Stellen, kein „-0“. */
@@ -95,6 +98,14 @@ export class MeasureTool {
   }
 
   get isActive(): boolean { return this.active; }
+
+  /** Nachkommastellen der angezeigten Werte (E81). Eine offene Messung zeigt sie gleich so. */
+  setDecimals(n: number): void {
+    if (n === digits) return;
+    digits = n;
+    this.render();
+    if (this.result) this.drawMarks();
+  }
 
   setActive(on: boolean): void {
     this.active = on;
@@ -265,7 +276,7 @@ export class MeasureTool {
         // Bei zwei Punkten ist der Abstand schon die Hauptangabe, die Anteile je Achse gehören trotzdem dazu
         if (main.span !== p.points) rows.push(this.row('Point to point', mm(p.points.value)));
         const d = p.points.delta ?? [0, 0, 0];
-        rows.push(el('div', { className: 'mc-sub', textContent: d.map((v, k) => `Δ${'XYZ'[k]} ${minus(v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}`).join(' · ') }));
+        rows.push(el('div', { className: 'mc-sub', textContent: d.map((v, k) => `Δ${'XYZ'[k]} ${minus(fix(v))}`).join(' · ') }));
       }
       if (p.angle != null) rows.push(this.row('Angle', p.angle < 1e-6 ? '0° (parallel)' : deg(p.angle)));
       rows.push(el('div', { className: 'mc-sep' }));
@@ -315,7 +326,7 @@ export class MeasureTool {
     const bb = withPart ? this.deps.part(i.part)?.bbox : undefined;
     if (bb) {
       const d = [0, 1, 2].map((k) => bb[1][k] - bb[0][k]);
-      rows.push(el('div', { className: 'mc-sep' }), this.row('Part (X × Y × Z)', d.map((v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })).join(' × ') + ' mm'));
+      rows.push(el('div', { className: 'mc-sep' }), this.row('Part (X × Y × Z)', d.map((v) => fix(v)).join(' × ') + ' mm'));
     }
     return rows;
   }

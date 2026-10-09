@@ -367,7 +367,10 @@ try {
   await ev(() => window.__t.showPanel('skills'));
   check('Knopf „Settings“ in der Leiste ist aktiv', await ev(() => !document.getElementById('btn-settings').disabled && document.getElementById('btn-settings').textContent === 'Settings'));
   await domClick('btn-settings');
-  await waitFor('Einstellungen offen', () => window.__t.settings().open && window.__t.settings().skills.length >= 17, 10000);
+  // Beim ersten Öffnen steht das Fenster im Reiter Viewer (E81), die Skills sind ein Reiter daneben
+  await waitFor('Einstellungen offen', () => window.__t.settings().open && window.__t.settings().section === 'viewer', 10000);
+  await ev(() => document.querySelector('#st-nav [data-sec="skills"]').click());
+  await waitFor('Reiter Skills', () => window.__t.settings().section === 'skills' && window.__t.settings().skills.length >= 17, 10000);
   let us = await ust();
   check('Einstellungen: alle mitgelieferten Skills nach Kategorien, keiner gewählt, Hintergrund gesperrt', us.skills.length === 17 && us.skills.every((s) => s.source === 'builtin') && us.selected === null
     && us.list.includes('3D printing (FDM)') && /way of working/i.test(us.list) && await ev(() => {

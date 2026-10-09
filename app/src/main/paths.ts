@@ -12,6 +12,8 @@ export const workspacesDir = () => path.join(userDataDir(), 'workspaces');
 /** Zweite Kopie des Projektzustands ausserhalb des Arbeitsordners (E27). */
 export const projectStateDir = () => path.join(userDataDir(), 'projects');
 export const appStateFile = () => path.join(userDataDir(), 'state.json');
+/** Einstellungen des Nutzers (E81), getrennt vom Zustand der App in state.json. */
+export const settingsFile = () => path.join(userDataDir(), 'settings.json');
 /** Gesicherte Arbeitsordner (wenn eine ZIP den Arbeitsstand ersetzt). */
 export const backupsDir = () => path.join(userDataDir(), 'workspace-backups');
 /** Sicherungen aus dem Editor (Fassungen, die bei einem Konflikt ersetzt wurden), je Projekt. */

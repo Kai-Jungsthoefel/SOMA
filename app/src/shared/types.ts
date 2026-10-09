@@ -1,4 +1,5 @@
 // Von Hauptprozess, Preload und Renderer gemeinsam genutzte Typen (IPC-Vertrag).
+import type { SettingsPatch, SettingsResult, SettingsState } from './settings';
 
 export interface ProjectInfo {
   id: string;
@@ -233,6 +234,27 @@ export interface LibraryResult {
   imported?: string[];
   library: LibraryState;
 }
+/** Bereich der App-Daten in den Einstellungen (E81). Der Renderer nennt nur die Kennung, den Ordner kennt der Hauptprozess. */
+export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills';
+/** Größe eines Bereichs. `other`: alles Übrige in den App-Daten. `models`: Zahl der Arbeitsordner. */
+export interface StorageEntry { id: StorageArea | 'other'; path: string | null; bytes: number; files: number; models?: number }
+export interface StorageStats { dir: string; total: number; areas: StorageEntry[] }
+/** Vorschau-Cache leeren. `kept`: Die Vorschauen des offenen Modells blieben. `canceled`: Rückfrage abgelehnt. */
+export interface StorageClear { ok: boolean; canceled?: boolean; freed?: number; kept?: boolean; error?: string; stats?: StorageStats }
+
+/** Eine mitgelieferte Komponente: npm-Paket der App oder Python-Paket, das soma voraussetzt. Lizenz wie in ihren Metadaten. */
+export interface ComponentInfo { name: string; version: string; license: string }
+/** Angaben für „About“ in den Einstellungen (E81). */
+export interface AboutInfo {
+  version: string; electron: string; chrome: string; node: string; os: string;
+  /** Version des mitgelieferten Git (dugite), null wenn es nicht antwortet. */
+  git: string | null;
+  python: { exe: string; version?: string; packages: ComponentInfo[]; error?: string };
+  agents: AgentInfo[];
+  paths: { label: string; path: string }[];
+  components: ComponentInfo[];
+}
+
 /** Was vermessen wird: der aktuelle Stand oder die Vorschau eines alten Stands. */
 export type MeasureSource = 'live' | { preview: string };
 
@@ -340,7 +362,11 @@ export interface SomaApi {
     onChanged(cb: () => void): void;
   };
   /** Nur im Testmodus (SOMA_TEST=1) vorhanden. */
-  test?: { answers(a: unknown[]): Promise<void>; screenshot(file: string): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>>; close(): Promise<void> };
+  test?: {
+    answers(a: unknown[]): Promise<void>; screenshot(file: string): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>>; close(): Promise<void>;
+    /** Was die App in die Zwischenablage legen wollte (im Test bleibt die echte unberührt). */
+    clipboard(): Promise<string>;
+  };
   build: {
     run(): Promise<void>;
     cancel(): Promise<void>;
@@ -433,6 +459,18 @@ export interface SomaApi {
     /** Datei eines eigenen Skills (oder ohne Kennung den Ordner) im Explorer zeigen. */
     reveal(id?: string): Promise<void>;
   };
+  /** Einstellungen der App (E81), in settings.json. `set` ändert nur die genannten Werte. */
+  settings: { get(): Promise<SettingsState>; set(patch: SettingsPatch): Promise<SettingsResult> };
+  /** Speicherplatz der App-Daten (E81). */
+  storage: {
+    stats(): Promise<StorageStats>;
+    /** Ordner eines Bereichs im Explorer öffnen (wird angelegt, falls er fehlt). */
+    open(area: StorageArea): Promise<FileOpResult>;
+    /** Vorschau-Cache leeren, nach Rückfrage. Die Vorschauen des offenen Modells bleiben. */
+    clearPreviews(): Promise<StorageClear>;
+  };
+  /** Angaben für „About“ (E81). `copy` legt sie als Text in die Zwischenablage. */
+  about: { info(): Promise<AboutInfo>; copy(): Promise<FileOpResult> };
   /** Animationen (E58): Liste aus .soma/anim/index.json, bauen über `soma anim build`. */
   anim: {
     list(): Promise<AnimList>;

@@ -487,6 +487,30 @@ try {
   check('Beim Bauen eingesetzt (define), Vergleich zahlenweise (0.10.0 neuer als 0.9.9)', SOMA_VERSION === '0.4.2' && isNewerVersion('0.4.3') && isNewerVersion('1.0.0')
     && !isNewerVersion('0.4.2') && !isNewerVersion('0.3.9') && isNewerVersion('0.10.0', '0.9.9'));
   check('Unlesbare Nummern gelten nicht als neuer', !isNewerVersion('9.x') && !isNewerVersion(undefined) && !isNewerVersion(42) && parseVersion(' 1.2.3 ')?.join() === '1,2,3');
+
+  // Einstellungen der App (E81): Prüfung gelesener Werte, Änderungen, Mausbelegungen
+  const sOut = path.join(tmp, 'settings.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'shared', 'settings.ts')], outfile: sOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const S = await import(pathToFileURL(sOut).href);
+  const c1 = S.cleanSettings({ viewer: { navigation: 'creo', decimals: 7, edges: 'ja', invertZoom: true }, extra: 1 });
+  check('Gelesene Einstellungen: Gültiges gilt, Ungültiges bekommt die Vorgabe und wird genannt, Unbekanntes fällt weg',
+    c1.settings.viewer.navigation === 'creo' && c1.settings.viewer.invertZoom === true && c1.settings.viewer.decimals === 2 && c1.settings.viewer.edges === true
+    && c1.ignored.join() === 'viewer.edges,viewer.decimals' && !('extra' in c1.settings), c1.ignored.join());
+  check('Ohne Datei oder mit Unsinn: Vorgaben', JSON.stringify(S.cleanSettings(null).settings) === JSON.stringify(S.DEFAULT_SETTINGS)
+    && S.cleanSettings({ viewer: [1] }).ignored.join() === 'viewer' && S.cleanSettings('x').ignored.length === 0);
+  const p1 = S.applyPatch(S.DEFAULT_SETTINGS, { viewer: { projection: 'orthographic', decimals: 4 } });
+  check('Änderung: nur die genannten Werte, die Vorgaben bleiben unverändert', p1.settings?.viewer.projection === 'orthographic' && p1.settings.viewer.decimals === 4
+    && p1.settings.viewer.navigation === 'soma' && S.DEFAULT_SETTINGS.viewer.projection === 'perspective');
+  check('Änderung abgelehnt: ungültiger Wert, unbekannter Schlüssel, kein Objekt', /decimals/.test(S.applyPatch(S.DEFAULT_SETTINGS, { viewer: { decimals: 1.5 } }).error ?? '')
+    && /viewer\.speed/.test(S.applyPatch(S.DEFAULT_SETTINGS, { viewer: { speed: 2 } }).error ?? '') && /theme/.test(S.applyPatch(S.DEFAULT_SETTINGS, { theme: 'light' }).error ?? '')
+    && !!S.applyPatch(S.DEFAULT_SETTINGS, null).error);
+  check('Belegungen: SOMA tauscht mit Umschalt/Strg wie OrbitControls, SolidWorks lässt links frei, Rhino zoomt mit Strg + rechts',
+    S.navAction('soma', 'left', '') === 'rotate' && S.navAction('soma', 'left', 'ctrl') === 'pan' && S.navAction('soma', 'right', 'shift') === 'rotate'
+    && S.navAction('solidworks', 'left', '') === null && S.navAction('solidworks', 'middle', 'ctrl') === 'pan' && S.navAction('rhino', 'right', 'ctrl') === 'zoom'
+    && S.NAV_PRESETS.every((p) => p.bindings.every((b) => p.bindings.filter((x) => x.button === b.button && x.mod === b.mod).length === 1)));
+  const lg = Object.fromEntries(S.navLegend('soma').map((l) => [l.action, l.how]));
+  check('Legende: erst ohne Taste, dann mit, Umschalt und Strg zusammengefasst, Zoom mit Mausrad vorn', lg.pan === 'right drag, Shift or Ctrl + left drag'
+    && lg.zoom === 'wheel, middle drag, Shift or Ctrl + middle drag' && S.navLegend('fusion').find((l) => l.action === 'zoom').how === 'wheel', JSON.stringify(lg));
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

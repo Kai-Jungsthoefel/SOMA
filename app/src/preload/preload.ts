@@ -91,6 +91,19 @@ const api: SomaApi = {
     setDefault: (id, mode) => ipcRenderer.invoke('library:setDefault', id, mode),
     reveal: (id) => ipcRenderer.invoke('library:reveal', id),
   },
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    set: (patch) => ipcRenderer.invoke('settings:set', patch),
+  },
+  storage: {
+    stats: () => ipcRenderer.invoke('storage:stats'),
+    open: (area) => ipcRenderer.invoke('storage:open', area),
+    clearPreviews: () => ipcRenderer.invoke('storage:clearPreviews'),
+  },
+  about: {
+    info: () => ipcRenderer.invoke('about:info'),
+    copy: () => ipcRenderer.invoke('about:copy'),
+  },
   anim: {
     list: () => ipcRenderer.invoke('anim:list'),
     build: (file) => ipcRenderer.invoke('anim:build', file ?? null),
@@ -109,7 +122,10 @@ const api: SomaApi = {
   openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'
-    ? { answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f), bridge: () => ipcRenderer.invoke('test:bridge'), close: () => ipcRenderer.invoke('test:close') }
+    ? {
+      answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f), bridge: () => ipcRenderer.invoke('test:bridge'),
+      close: () => ipcRenderer.invoke('test:close'), clipboard: () => ipcRenderer.invoke('test:clipboard'),
+    }
     : undefined,
 };
 

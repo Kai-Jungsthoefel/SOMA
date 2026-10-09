@@ -60,7 +60,9 @@ const PATHS: Record<string, string> = {
   openext: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
-  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>', spin: '<path d="M12 3a9 9 0 1 1-9 9"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>',
+  // Speicherplatz in den Einstellungen (E81): Festplatte
+  disk: '<path d="M3 14 6 5h12l3 9"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 17h.01M11 17h6"/>', spin: '<path d="M12 3a9 9 0 1 1-9 9"/>',
   play: '<path d="M7 5v14l11-7z"/>',
   // Animation, Analyse und Video (E58)
   pause: '<path d="M8 5v14M16 5v14"/>',

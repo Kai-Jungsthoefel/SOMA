@@ -5,6 +5,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { MeshBVH } from 'three-mesh-bvh';
+import { navAction, type NavButton, type NavPreset, type Projection } from '../shared/settings';
 import { ViewCube } from './viewcube';
 
 // CAD-Konvention: Z ist oben, Einheit mm. Muss vor dem Anlegen von Kamera und Objekten gesetzt sein.
@@ -120,12 +121,25 @@ const CONTOUR_ORDER = 100000;
 const CONTOUR_COLOR = 0x0d0f12;
 /** Deckel der Netze einer Ebene: neutrales Grau, die Farben dort gehören den Werten des Ergebnisses. */
 const LAYER_CAP = new THREE.Color(0x6c727a);
+const NAV_BUTTON: Record<number, NavButton> = { 0: 'left', 1: 'middle', 2: 'right' };
+const NAV_KEY: Record<NavButton, 'LEFT' | 'MIDDLE' | 'RIGHT'> = { left: 'LEFT', middle: 'MIDDLE', right: 'RIGHT' };
+/** Keine Bewegung für eine Taste (OrbitControls kennt dafür keinen eigenen Wert, alles außer den drei Aktionen gilt als nichts). */
+const NAV_NONE = -1 as THREE.MOUSE;
 
 export class Viewer {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(35, 1, 0.5, 20000);
+  /**
+   * Zwei Kameras (E81): perspektivisch wie bisher und orthografisch. `camera` ist die gerade benutzte. Die orthografische
+   * zeigt bei gleichem „Abstand“ dieselbe Höhe in der Ebene des Drehpunkts wie die perspektivische (siehe placeAt), so
+   * springt das Bild beim Umschalten nicht. Ihr Abstand zum Drehpunkt bestimmt nur, dass das Modell vor ihr liegt (fitClip).
+   */
+  private persp = new THREE.PerspectiveCamera(35, 1, 0.5, 20000);
+  private ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 20000);
+  private camera: THREE.PerspectiveCamera | THREE.OrthographicCamera = this.persp;
   private controls: OrbitControls;
+  /** Mausbelegung (E81), umgesetzt beim Drücken einer Taste (routeButton). */
+  private nav: NavPreset = 'soma';
   private model: THREE.Object3D | null = null;
   private parts = new Map<string, PartEntry>();
   private highlight = new THREE.Group();
@@ -206,7 +220,8 @@ export class Viewer {
     // Liegt über dem Bild (#viewer > canvas zieht sie auf volle Größe), Klicks gehen durch auf die 3D-Ansicht
     this.paint.style.pointerEvents = 'none';
     container.appendChild(this.paint);
-    this.camera.up.set(0, 0, 1);
+    this.persp.up.set(0, 0, 1);
+    this.ortho.up.set(0, 0, 1);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(80, -120, 200);
@@ -222,6 +237,8 @@ export class Viewer {
     this.controls.addEventListener('change', () => { this.fitClip(); this.requestRender(); });
     this.controls.addEventListener('start', () => { this.anim?.stop(); this.showPivot(true); });
     this.controls.addEventListener('end', () => this.showPivot(false, 350));
+    // Vor OrbitControls (Einfangphase am Container): Welche Bewegung eine Taste startet, legt die Belegung fest
+    container.addEventListener('pointerdown', (e) => this.routeButton(e), true);
     const pg = new THREE.BufferGeometry();
     pg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
     this.pivot = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xe6e8eb, size: 11, sizeAttenuation: false, map: Viewer.dot(), transparent: true, alphaTest: 0.2, depthTest: false }));
@@ -513,13 +530,81 @@ export class Viewer {
       right: new THREE.Vector3(1, 0, 0), left: new THREE.Vector3(-1, 0, 0),
       fit: this.camera.position.clone().sub(this.controls.target),
     }[name].clone().normalize();
-    const dist = radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2)) * 1.05;
+    const dist = radius / Math.sin(THREE.MathUtils.degToRad(this.persp.fov / 2)) * 1.05;
     this.anim?.stop();
-    this.controls.target.copy(center);
-    this.camera.position.copy(center).addScaledVector(dir, dist);
+    this.placeAt(center, dir, dist);
     this.controls.update();
     this.fitClip();
     this.requestRender();
+  }
+
+  // ---- Kamera, Projektion und Maus (E81) -------------------------------------------------------------------------
+
+  /** tan des halben Bildwinkels: Höhe in der Ebene des Drehpunkts je Abstand. */
+  private get halfTan(): number { return Math.tan(THREE.MathUtils.degToRad(this.persp.fov / 2)); }
+
+  /**
+   * Kamera auf `target` aus Richtung `dir` (Einheitsvektor, vom Ziel zur Kamera) mit dem Abstand `dist`. Orthografisch wird
+   * daraus der Maßstab: dieselbe Bildhöhe in der Ebene des Ziels wie perspektivisch aus diesem Abstand.
+   */
+  private placeAt(target: THREE.Vector3, dir: THREE.Vector3, dist: number): void {
+    this.controls.target.copy(target);
+    this.camera.position.copy(target).addScaledVector(dir, dist);
+    if (this.camera === this.ortho) {
+      this.ortho.zoom = this.ortho.top / Math.max(dist * this.halfTan, 1e-6);
+      this.ortho.updateProjectionMatrix();
+    }
+  }
+
+  /** Abstand, der dem Bild entspricht: perspektivisch der echte, orthografisch der aus dem Maßstab (siehe placeAt). */
+  private viewDist(): number {
+    if (this.camera === this.ortho) return this.ortho.top / this.ortho.zoom / this.halfTan;
+    return this.camera.position.distanceTo(this.controls.target);
+  }
+
+  get projection(): Projection { return this.camera === this.ortho ? 'orthographic' : 'perspective'; }
+
+  /** Projektion umschalten. Drehpunkt, Blickrichtung und Bildgröße in der Ebene des Drehpunkts bleiben. */
+  setProjection(p: Projection): void {
+    if (p === this.projection) return;
+    this.anim?.stop();
+    const target = this.controls.target.clone();
+    const off = this.camera.position.clone().sub(target);
+    // Vor dem ersten Modell stehen Kamera und Drehpunkt noch am selben Ort: dann aus der Richtung der Standardansicht
+    const dir = off.lengthSq() > 1e-18 ? off.normalize() : new THREE.Vector3(0.8, -1.2, 0.9).normalize();
+    const dist = this.viewDist() || 100;
+    this.camera = p === 'orthographic' ? this.ortho : this.persp;
+    this.controls.object = this.camera;
+    this.placeAt(target, dir, dist);
+    this.controls.update();
+    this.resize();
+    this.fitClip();
+    this.requestRender();
+  }
+
+  /** Mausbelegung und Zoomrichtung (E81). Negativ gerechnet zoomt OrbitControls beim Rad und beim Ziehen andersherum. */
+  setNavigation(preset: NavPreset, invertZoom: boolean): void {
+    this.nav = preset;
+    this.controls.zoomSpeed = invertZoom ? -1 : 1;
+  }
+
+  /**
+   * Beim Drücken einer Maustaste die Bewegung dieser Taste setzen. OrbitControls tauscht von sich aus Drehen und Verschieben,
+   * solange Umschalt oder Strg gehalten wird. Deshalb bekommt es mit gehaltener Taste das Gegenstück dessen, was die
+   * Belegung will, dann kommt genau das heraus.
+   */
+  private routeButton(e: PointerEvent): void {
+    if (e.pointerType === 'touch' || e.target !== this.renderer.domElement) return;
+    const button = NAV_BUTTON[e.button];
+    if (!button) return;
+    const held = e.ctrlKey || e.metaKey || e.shiftKey;
+    const action = navAction(this.nav, button, e.ctrlKey || e.metaKey ? 'ctrl' : e.shiftKey ? 'shift' : '');
+    const mouse = action === 'zoom' ? THREE.MOUSE.DOLLY
+      : action === 'rotate' ? (held ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE)
+        : action === 'pan' ? (held ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN) : NAV_NONE;
+    this.controls.mouseButtons = { LEFT: NAV_NONE, MIDDLE: NAV_NONE, RIGHT: NAV_NONE, [NAV_KEY[button]]: mouse };
+    // Mittlere Taste: kein automatisches Blättern von Chromium
+    if (e.button === 1) e.preventDefault();
   }
 
   // ---- Ansichtswürfel und Drehpunkt -----------------------------------------------------------------------------
@@ -527,7 +612,7 @@ export class Viewer {
   /** Den Ansichtswürfel in diesem Element anzeigen. Er dreht sich mit der Kamera und dreht sie auf Klick oder Ziehen. */
   attachCube(el: HTMLElement): void {
     this.cube = new ViewCube(el, {
-      camera: this.camera,
+      camera: () => this.camera,
       target: () => this.controls.target,
       orient: (d) => this.orient(d),
       orbit: (t, p) => this.orbit(t, p),
@@ -614,6 +699,7 @@ export class Viewer {
    * Ecke weg, die man ansehen will. Die hintere reicht über das ganze Modell.
    */
   private fitClip(): void {
+    if (this.camera === this.ortho) { this.fitOrtho(); return; }
     const dist = Math.max(this.camera.position.distanceTo(this.controls.target), 1e-3);
     const near = Math.max(dist / 200, 1e-3);
     const far = Math.max(this.camera.position.distanceTo(this.center) + this.radius * 2, near * 100);
@@ -621,6 +707,24 @@ export class Viewer {
       this.camera.near = near;
       this.camera.far = far;
       this.camera.updateProjectionMatrix();
+    }
+  }
+
+  /**
+   * Orthografisch: Das ganze Modell muss vor der Kamera liegen, sonst schneidet die vordere Ebene es an und Strahlen zum
+   * Auswählen beginnen mitten darin. Die Kamera rückt dafür auf der Blickrichtung zurück, das Bild ändert sich nicht.
+   */
+  private fitOrtho(): void {
+    const target = this.controls.target;
+    const need = target.distanceTo(this.center) + this.radius * 2 + 1;
+    const off = this.ortho.position.clone().sub(target);
+    if (off.lengthSq() < 1e-18) off.set(0.8, -1.2, 0.9);
+    if (off.length() < need) this.ortho.position.copy(target).addScaledVector(off.normalize(), need);
+    const far = this.ortho.position.distanceTo(this.center) + this.radius * 2;
+    if (this.ortho.near !== 0 || Math.abs(far - this.ortho.far) > far * 0.02) {
+      this.ortho.near = 0;
+      this.ortho.far = far;
+      this.ortho.updateProjectionMatrix();
     }
   }
 
@@ -694,9 +798,10 @@ export class Viewer {
   private installPicking(): void {
     const el = this.renderer.domElement;
     let down: [number, number] | null = null;
-    el.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
+    // Ausgewählt wird nur mit der linken Taste: Mitte und rechts drehen oder verschieben je nach Belegung (E81)
+    el.addEventListener('pointerdown', (e) => { down = e.button === 0 ? [e.clientX, e.clientY] : null; });
     el.addEventListener('pointerup', (e) => {
-      if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return; // Ziehen ist kein Klick
+      if (!down || e.button !== 0 || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return; // Ziehen ist kein Klick
       if (this.planePick) { const cb = this.planePick; this.pickPlane(null); cb(this.planeAt(e.clientX, e.clientY)); return; }
       if (this.mode === 'measure') {
         const h = this.probeAt(e.clientX, e.clientY);
@@ -786,8 +891,14 @@ export class Viewer {
 
   /** Liegt der Weltpunkt hinter einer Fläche oder einer Schnittfläche? Toleranz für die Vernetzung, sonst verdeckte die eigene Fläche ihre Kanten. */
   private occluded(p: THREE.Vector3, occluders: THREE.Mesh[]): boolean {
-    const eye = this.camera.position;
-    const dist = eye.distanceTo(p);
+    let eye = this.camera.position;
+    let dist = eye.distanceTo(p);
+    if (this.camera === this.ortho) {
+      // Orthografisch laufen die Sehstrahlen parallel: vom Punkt in der Bildebene der Kamera, der vor `p` liegt
+      const fwd = this.ortho.getWorldDirection(new THREE.Vector3());
+      dist = fwd.dot(p.clone().sub(eye));
+      eye = p.clone().addScaledVector(fwd, -dist);
+    }
     this.raycaster.set(eye, p.clone().sub(eye).normalize());
     const first = this.visibleHit(occluders);
     return !!first && first.distance < dist - Math.max(0.5, dist * 0.002);
@@ -1060,8 +1171,11 @@ export class Viewer {
     this.paint.width = Math.round(w * dpr);
     this.paint.height = Math.round(h * dpr);
     for (const m of this.lineMats) m.resolution.set(w, h);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    this.persp.aspect = w / h;
+    this.persp.updateProjectionMatrix();
+    this.ortho.left = -w / h;
+    this.ortho.right = w / h;
+    this.ortho.updateProjectionMatrix();
     this.requestRender();
   }
 
@@ -1676,8 +1790,9 @@ export class Viewer {
   /** Kamera an diese Stelle, Blick auf `target` (Drehpunkt), Z bleibt oben. */
   setCamera(position: THREE.Vector3, target: THREE.Vector3): void {
     this.anim?.stop();
-    this.controls.target.copy(target);
-    this.camera.position.copy(position);
+    const off = position.clone().sub(target);
+    const dist = off.length();
+    this.placeAt(target, dist > 1e-9 ? off.divideScalar(dist) : new THREE.Vector3(0, -1, 0), dist);
     this.controls.update();
     this.fitClip();
     this.requestRender();
@@ -1844,8 +1959,10 @@ export class Viewer {
   /** Kamera, Drehpunkt und Schnittebenen, für Tests. */
   viewState() {
     const d = this.camera.position.clone().sub(this.controls.target);
-    return { target: this.controls.target.toArray(), dir: d.clone().normalize().toArray(), dist: d.length(), near: this.camera.near, far: this.camera.far,
-      zoomToCursor: this.controls.zoomToCursor, animating: !!this.anim };
+    const b = this.controls.mouseButtons;
+    return { target: this.controls.target.toArray(), dir: d.clone().normalize().toArray(), dist: this.viewDist(), near: this.camera.near, far: this.camera.far,
+      zoomToCursor: this.controls.zoomToCursor, animating: !!this.anim, projection: this.projection, navigation: this.nav, zoomSpeed: this.controls.zoomSpeed,
+      buttons: [b.LEFT, b.MIDDLE, b.RIGHT] };
   }
 
   /** Stand des Schnitts, für Tests: Ebene, Bauteile mit Deckel, Segmente und Ausdehnung der Kontur, geschnittene Materialien. */

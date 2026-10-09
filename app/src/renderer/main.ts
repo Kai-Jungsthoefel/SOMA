@@ -1,4 +1,5 @@
 import { affectsBuild } from '../shared/editable';
+import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
 import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
 import { SOMA_VERSION } from '../shared/version';
 import { CodePanel, codeRows, isDxf, isPdf, type Mark } from './code';
@@ -12,6 +13,7 @@ import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
 import { SettingsDialog } from './settings';
+import { AboutPage, StoragePage, ViewerPage } from './settingspages';
 import { SkillsPanel } from './skills';
 import { ParamsPanel } from './params';
 import { DRAG_PART, PartsCard } from './parts';
@@ -166,9 +168,48 @@ const skills = new SkillsPanel({ list: $('skills-list'), sum: $('skills-sum'), d
   changed: () => { filesDirty = true; textCache.clear(); void refreshSaveState(); void code.refresh(); },
 });
 
-// Einstellungen (E78): Bibliothek der Skills, auch von der Startseite aus. Änderungen dort zeigt das Panel „Skills“ sofort
+// ---- Einstellungen (E78, E81) ---------------------------------------------------------------------------------------
+
+/** Einstellungen der App aus settings.json. Bis sie geladen sind, gelten die Vorgaben. */
+let appSettings: SettingsState = { settings: DEFAULT_SETTINGS };
+
+/** Viewer und Messen nach den Einstellungen (sofort, auch bei offenem Modell). */
+function applySettings(): void {
+  const v = appSettings.settings.viewer;
+  viewer.setNavigation(v.navigation, v.invertZoom);
+  viewer.setProjection(v.projection);
+  measureTool.setDecimals(v.decimals);
+}
+
+/** Darstellung beim Öffnen eines Modells (Menü „Display“). Danach gilt bis zum nächsten Modell, was der Nutzer dort umstellt. */
+function applyDisplayDefaults(): void {
+  const v = appSettings.settings.viewer;
+  const want: Record<string, boolean> = { edges: v.edges, wire: v.wireframe, ghost: v.transparent };
+  document.querySelectorAll<HTMLButtonElement>('[data-display]').forEach((b) => b.setAttribute('aria-checked', String(want[b.dataset.display!])));
+  viewer.setEdges(v.edges);
+  viewer.setWireframe(v.wireframe);
+  viewer.setGhost(v.transparent);
+}
+
+async function changeSettings(patch: SettingsPatch): Promise<SettingsResult> {
+  const r = await api.settings.set(patch);
+  appSettings = { settings: r.settings, ...(r.problem ? { problem: r.problem } : {}) };
+  if (r.ok) applySettings();
+  return r;
+}
+
+const viewerPage = new ViewerPage($('st-viewer'), { current: () => appSettings, set: (patch) => changeSettings(patch), toast });
+const storagePage = new StoragePage($('st-storage'), { api: api.storage, toast });
+const aboutPage = new AboutPage($('st-about'), {
+  api: api.about, toast,
+  openUrl: (url) => void api.openUrl(url).then((r) => { if (!r.ok) toast(r.error ?? `${url} could not be opened.`, 'error'); }),
+  openFolder: (area) => void api.storage.open(area).then((r) => { if (!r.ok) toast(`The folder could not be opened: ${r.error ?? 'unknown error'}`, 'error'); }),
+});
+
+// Einstellungen (E78, E81): Reiter Viewer, Skills, Speicher und Info, auch von der Startseite aus. Änderungen an den
+// Skills zeigt das Panel „Skills“ sofort
 const settings = new SettingsDialog({
-  root: $('settings'), list: $('st-list'), editor: $('st-editor'), popover: $('menu-skill-name'), newBtn: $('btn-st-new'), importBtn: $('btn-st-import'),
+  root: $('settings'), nav: $('st-nav'), list: $('st-list'), editor: $('st-editor'), popover: $('menu-skill-name'), newBtn: $('btn-st-new'), importBtn: $('btn-st-import'),
   // Gesperrt wird, was dahinter liegt. Nicht #app: Es umschließt auch Menüs, Meldungen und die Einstellungen selbst
   folderBtn: $('btn-st-folder'), close: $('btn-st-close'), background: [$('topbar'), $('body'), $('start')],
 }, {
@@ -181,6 +222,7 @@ const settings = new SettingsDialog({
   },
   changed: () => { if (project && skills.isLoaded) void skills.refresh(); },
   modelMode: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id)?.mode ?? 'off' : null),
+  pages: { viewer: viewerPage, storage: storagePage, about: aboutPage },
 });
 $('btn-settings').addEventListener('click', () => void settings.open());
 $('btn-start-settings').addEventListener('click', () => void settings.open());
@@ -790,6 +832,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   if (panel === 'params') void paramsPanel.refresh();
   if (codeOpen) void code.open('model.py'); // die Code-Spalte bleibt offen, dann nicht leer
   resetViewLists();
+  applyDisplayDefaults();
   selection = null;
   void renderSelection();
   partsCard.message('Building the model …');
@@ -1354,6 +1397,9 @@ window.addEventListener('focus', () => scheduleViewLists());
 api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (Startseite, Menü, im Testmodus öffnet es der Hauptprozess beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
+// Einstellungen der App (E81): Ein Modell, das schon offen ist, bekommt auch die Darstellung beim Öffnen
+void api.settings.get().then((st) => { appSettings = st; applySettings(); applyDisplayDefaults(); }).catch(() => { /* es gelten die Vorgaben */ });
+
 if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
 // Seitenleiste wie beim letzten Mal, beim ersten Start mit den Bauteilen
 {
@@ -1418,6 +1464,11 @@ if (api.testMode) {
     settingsSelect: (id: string | null) => settings.select(id),
     settingsType: (text: string) => settings.type(text),
     settingsSave: () => settings.save(),
+    settingsShow: (sec: 'viewer' | 'skills' | 'storage' | 'about') => settings.open(undefined, sec),
+    settingsPages: () => ({ viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state() }),
+    appSettings: () => appSettings,
+    storageRefresh: () => storagePage.refresh(),
+    display: () => Object.fromEntries([...document.querySelectorAll<HTMLElement>('[data-display]')].map((b) => [b.dataset.display, b.getAttribute('aria-checked') === 'true'])),
     /** Export wie über das Menü (`sel`: das ausgewählte Bauteil), liefert das Ergebnis. */
     exportAs: (fmt: string, scope: 'all' | 'sel') => { exportScope = scope; return doExport(fmt, fmt.toUpperCase()); },
     /** „Everything as ZIP“ im Export-Menü (E79). */

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 
 /** Was der Würfel vom Viewer braucht. */
 export interface CubeHost {
-  camera: THREE.PerspectiveCamera;
+  /** Die gerade benutzte Kamera des Viewers (perspektivisch oder orthografisch, E81). */
+  camera(): THREE.Camera;
   target(): THREE.Vector3;
   /** Ansicht aus dieser Richtung (vom Drehpunkt zur Kamera), animiert, Abstand und Drehpunkt bleiben. */
   orient(dir: THREE.Vector3): void;
@@ -113,10 +114,11 @@ export class ViewCube {
 
   /** Nach jedem Bild des Viewers: dieselbe Blickrichtung wie die Hauptkamera. */
   render(): void {
-    const dir = this.host.camera.position.clone().sub(this.host.target());
+    const cam = this.host.camera();
+    const dir = cam.position.clone().sub(this.host.target());
     if (dir.lengthSq() < 1e-18) return;
     this.cam.position.copy(dir.normalize().multiplyScalar(6));
-    this.cam.up.copy(this.host.camera.up);
+    this.cam.up.copy(cam.up);
     this.cam.lookAt(0, 0, 0);
     this.renderer.render(this.scene, this.cam);
   }

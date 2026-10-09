@@ -19,6 +19,17 @@ await Promise.all([
   // Worker von pdf.js als klassisches Skript: Module aus file:// lädt Chromium nicht (E54)
   build({ ...common, sourcemap: false, entryPoints: ['node_modules/pdfjs-dist/build/pdf.worker.mjs'], outfile: 'dist/renderer/pdf.worker.js', platform: 'browser', format: 'iife' }),
 ]);
+// Komponenten für „About“ in den Einstellungen (E81): Name, Version und Lizenz der npm-Pakete, die die App mitbringt,
+// gelesen aus ihren package.json. Electron selbst nennt die App zur Laufzeit.
+const { dependencies = {} } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const components = Object.keys(dependencies).sort().map((name) => {
+  try {
+    const p = JSON.parse(fs.readFileSync(path.join('node_modules', name, 'package.json'), 'utf8'));
+    return { name, version: p.version ?? '', license: typeof p.license === 'string' ? p.license : p.license?.type ?? '' };
+  } catch { return { name, version: '', license: '' }; }
+});
+fs.writeFileSync('dist/main/components.json', `${JSON.stringify(components, null, 2)}\n`);
+
 fs.mkdirSync('dist/renderer', { recursive: true });
 fs.copyFileSync('src/renderer/index.html', 'dist/renderer/index.html');
 fs.copyFileSync('src/renderer/render.html', 'dist/renderer/render.html');

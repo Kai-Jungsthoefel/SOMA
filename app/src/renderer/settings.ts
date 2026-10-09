@@ -12,6 +12,12 @@ import { renderMarkdown } from './markdown';
 import { CATEGORY_ICON } from './skills';
 import { el, menus } from './ui';
 
+/** Reiter der Einstellungen (E78, E81). */
+export type SettingsSection = 'viewer' | 'skills' | 'storage' | 'about';
+export const SECTIONS: SettingsSection[] = ['viewer', 'skills', 'storage', 'about'];
+/** Ein Reiter außer „Skills“: wird beim Zeigen aufgefrischt. */
+export interface SettingsPage { show(): void }
+
 interface Deps {
   library: SomaApi['library'];
   choose: SomaApi['dialog']['choose'];
@@ -22,10 +28,14 @@ interface Deps {
   changed(): void;
   /** Stufe eines Skills im offenen Modell, null ohne Modell. */
   modelMode(id: string): Promise<SkillMode | null>;
+  /** Die übrigen Reiter (settingspages.ts). */
+  pages: Partial<Record<SettingsSection, SettingsPage>>;
 }
 
 interface Ui {
   root: HTMLElement;
+  /** Leiste mit den Reitern (Knöpfe mit `data-sec`) und je Reiter ein Abschnitt `#st-<name>`. */
+  nav: HTMLElement;
   list: HTMLElement;
   editor: HTMLElement;
   /** Popover für den Namen eines neuen Skills. */
@@ -45,8 +55,9 @@ const SOURCE_BADGE: Record<SkillSource, string> = { builtin: '', edited: 'Edited
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
- * Einstellungen (E78), zuerst nur die Bibliothek der Skills: links die Liste (mitgelieferte, bearbeitete, eigene), rechts
- * der Text im Editor mit Vorschau und Prüfung beim Tippen. Gespeichert wird nur auf Wunsch (Speichern, Strg+S). Die Modelle
+ * Einstellungen (E78, E81) mit Reitern: Viewer, Skills, Speicher, Info. Dieser Teil ist das Fenster selbst und der Reiter
+ * „Skills“, die übrigen stehen in settingspages.ts. Skills: links die Liste (mitgelieferte, bearbeitete, eigene), rechts der
+ * Text im Editor mit Vorschau und Prüfung beim Tippen. Gespeichert wird nur auf Wunsch (Speichern, Strg+S). Die Modelle
  * merken davon erst etwas, wenn ein Skill dort neu kopiert wird: Ihre Kopien bleiben, wie sie sind.
  */
 export class SettingsDialog {
@@ -59,6 +70,8 @@ export class SettingsDialog {
   private busy = false;
   private error = '';
   private lastFocus: HTMLElement | null = null;
+  /** Gezeigter Reiter. Beim nächsten Öffnen ohne Ziel kommt derselbe wieder. */
+  private section: SettingsSection = 'viewer';
   private view: EditorView;
   private builtinView: EditorView | null = null;
   private els: { empty: HTMLElement; ed: HTMLElement; hd: HTMLElement; notes: HTMLElement; bar: HTMLElement; cm: HTMLElement; md: HTMLElement; bi: HTMLElement; check: HTMLElement };
@@ -80,28 +93,51 @@ export class SettingsDialog {
     ui.newBtn.addEventListener('click', () => this.askName(ui.newBtn));
     ui.importBtn.addEventListener('click', () => void this.importFiles());
     ui.folderBtn.addEventListener('click', () => void deps.library.reveal());
+    ui.nav.querySelectorAll<HTMLButtonElement>('button[data-sec]').forEach((b) => b.addEventListener('click', () => void this.show(b.dataset.sec as SettingsSection)));
     // Escape schließt, außer CodeMirror braucht ihn (Suche) oder ein Popover ist offen (das fängt Menus vorher ab)
     ui.root.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); void this.close(); }
-      else if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); void this.save(); }
+      else if (this.section === 'skills' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); void this.save(); }
     });
   }
 
   get isOpen(): boolean { return !this.ui.root.hidden; }
 
-  /** Öffnen, mit `id` gleich bei diesem Skill. */
-  async open(id?: string): Promise<void> {
+  /** Öffnen: mit `id` gleich bei diesem Skill (Reiter „Skills“), sonst im Reiter `section` oder dem zuletzt gezeigten. */
+  async open(id?: string, section?: SettingsSection): Promise<void> {
     if (!this.isOpen) {
       this.lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       menus.close();
       this.ui.root.hidden = false;
       for (const b of this.ui.background) b.inert = true;
     }
+    const sec = id ? 'skills' : section ?? this.section;
+    if (sec !== 'skills') { await this.show(sec); return; }
+    this.showSection('skills');
     await this.reload();
     if (id && id !== this.doc?.id) await this.select(id);
     else if (this.doc && !this.lib?.skills.some((s) => s.id === this.doc!.id)) { this.doc = null; this.render(); } // außerhalb gelöscht
     else this.render();
     (this.ui.list.querySelector<HTMLElement>('.st-row.sel') ?? this.ui.newBtn).focus();
+  }
+
+  /** Reiter wechseln. „Skills“ mit ungespeichertem Text zu verlassen ist unbedenklich: Der Text bleibt im Editor. */
+  async show(sec: SettingsSection): Promise<void> {
+    if (sec === 'skills') { await this.open(undefined, 'skills'); return; }
+    this.showSection(sec);
+    this.deps.pages[sec]?.show();
+    this.ui.nav.querySelector<HTMLElement>(`button[data-sec="${sec}"]`)?.focus();
+  }
+
+  private showSection(sec: SettingsSection): void {
+    this.section = sec;
+    for (const s of SECTIONS) {
+      const page = document.getElementById(`st-${s}`);
+      if (page) page.hidden = s !== sec;
+    }
+    this.ui.nav.querySelectorAll<HTMLButtonElement>('button[data-sec]').forEach((b) => {
+      if (b.dataset.sec === sec) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
   }
 
   /** Schließen, bei ungespeicherten Änderungen erst fragen. Rückgabe: geschlossen. */
@@ -464,7 +500,7 @@ export class SettingsDialog {
   /** Für Tests. */
   state() {
     return {
-      open: this.isOpen, busy: this.busy, selected: this.doc?.id ?? null, source: this.doc?.source ?? null, dirty: this.dirty, mode: this.mode,
+      open: this.isOpen, section: this.section, busy: this.busy, selected: this.doc?.id ?? null, source: this.doc?.source ?? null, dirty: this.dirty, mode: this.mode,
       text: this.doc ? this.text() : null, check: this.check,
       skills: (this.lib?.skills ?? []).map((s) => ({ id: s.id, title: s.title, source: s.source, defaultMode: s.defaultMode, newerBuiltin: s.newerBuiltin, category: s.category })),
       ignored: this.lib?.ignored ?? [], dir: this.lib?.dir ?? '',
