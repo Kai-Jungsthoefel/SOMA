@@ -787,7 +787,8 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
                   worst=dict(value=round(float(sf[w_s]), 4), at=[round(float(x), 3) for x in nodes[w_s]]),
                   stress=dict(value=round(float(node_vm[w_s]), 3), at=[round(float(x), 3) for x in nodes[w_s]]),
                   displacement=dict(value=round(float(disp[w_d]), 4), at=[round(float(x), 3) for x in nodes[w_d]]),
-                  material=dict(name=mats[pi]["name"], E=mats[pi]["E"], strength=strength, note=mats[pi]["note"]))
+                  material=dict(name=mats[pi]["name"], E=mats[pi]["E"], nu=mats[pi]["nu"], density=mats[pi]["density"],
+                                strength=strength, note=mats[pi]["note"]))
         if crit.any():
             regs, count, total = analysis._regions(tri, area, vals, crit, False, max(1e-4, diag * 1e-7))
             groups = analysis._similar(regs, 0.1 * safety)
@@ -890,7 +891,9 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
                 fem=dict(study=rel, bcs=bcs_meta, applied=[round(float(x), 3) + 0.0 for x in applied],
                          reaction=[round(float(x), 3) + 0.0 for x in reaction], balance=round(balance, 6),
                          gravity=study.gravity_vec, maxDisp=round(max_disp, 4), diag=round(diag, 3),
-                         mesh=dict(size=h, nodes=int(len(nodes)), elements=int(len(fine["tets"])), dofs=fine["dofs"], solver=fine["method"]),
+                         # auto: Die Studie gibt keine Netzgroesse vor, sie folgt der Modellgroesse (der Bericht sagt das dazu)
+                         mesh=dict(size=h, auto=not study.mesh, nodes=int(len(nodes)), elements=int(len(fine["tets"])), dofs=fine["dofs"],
+                                   solver=fine["method"]),
                          coarse=dict(size=round(h * 1.6, 3), elements=int(len(coarse["tets"]))) if coarse else None))
     meta["summary"] = summary_text(meta)
     out = root / analysis.OUT_DIR
