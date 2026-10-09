@@ -153,6 +153,10 @@ export class Viewer {
   private wire = false;
   private ghost = false;
   private selectedId: string | null = null;
+  /** Mehrfachauswahl (Strg/Shift-Klick, Rahmen, Baum): alle leuchten orange, `selectedId` ist das zuletzt gewählte. */
+  private selectedIds = new Set<string>();
+  /** Rahmenauswahl mit Alt + links ziehen: Startpunkt und das Rechteck im Bild. */
+  private box: { x: number; y: number; el: HTMLElement; id: number } | null = null;
   private mode: 'select' | 'measure' = 'select';
   /** Hervorhebung unter dem Zeiger (Messen) und Markierungen der Messung. */
   private hover = new THREE.Group();
@@ -162,6 +166,8 @@ export class Viewer {
   /** HTML-Ebene über dem Bild: Messpunkte und Beschriftung, bei jedem Zeichnen neu positioniert. */
   private overlay: HTMLElement;
   private overlayItems: { el: HTMLElement; at: THREE.Vector3 }[] = [];
+  /** Beschriftungen eines Werkzeugs an Punkten im Raum (E82: Kraft und kleinster Wert einer Analyse), neben der Messung. */
+  private tagItems: { el: HTMLElement; at: THREE.Vector3 }[] = [];
   /** Mitte und Radius aller Bauteile, für die Schnittebenen der Kamera. */
   private center = new THREE.Vector3();
   private radius = 1;
@@ -200,7 +206,11 @@ export class Viewer {
   /** 2D-Fläche über dem Bild für Untertitel, Beschriftungen und Legende (E58). */
   private paint: HTMLCanvasElement;
   private painter: OverlayPainter | null = null;
-  onPick: (r: PickResult | null) => void = () => {};
+  onPick: (r: PickResult | null, mods: { shift: boolean; ctrl: boolean }) => void = () => {};
+  /** Rechtsklick ins Bild ohne Ziehen: Bauteil darunter (null: daneben) und die Stelle für das Menü. */
+  onContext: (partId: string | null, x: number, y: number) => void = () => {};
+  /** Rahmenauswahl fertig: Bauteile im Rahmen, `add` mit Shift oder Strg (zur Auswahl dazu). */
+  onBox: (ids: string[], add: boolean) => void = () => {};
   /** Klick im Messmodus. null: daneben geklickt. */
   onMeasurePick: (h: ProbeHit | null) => void = () => {};
   /** Klick im Messmodus auf die Schnittfläche selbst (die hat keine exakte Geometrie). */
@@ -297,6 +307,7 @@ export class Viewer {
     this.clearGroup(this.hover);
     this.hoverKey = '';
     if (this.selectedId && !this.parts.has(this.selectedId)) this.selectedId = null;
+    for (const id of [...this.selectedIds]) if (!this.parts.has(id)) this.selectedIds.delete(id);
     this.applySelection();
     this.updateExtent();
     if (!this.hasFitted && this.parts.size) { this.setView('iso'); this.hasFitted = true; }
@@ -595,6 +606,12 @@ export class Viewer {
    */
   private routeButton(e: PointerEvent): void {
     if (e.pointerType === 'touch' || e.target !== this.renderer.domElement) return;
+    // Alt + links ziehen: Rahmenauswahl, in jeder Mausbelegung frei. Die Kamera bleibt dabei stehen
+    if (e.altKey && e.button === 0 && !this.modelHidden && this.mode === 'select' && !this.planePick) {
+      this.controls.mouseButtons = { LEFT: NAV_NONE, MIDDLE: NAV_NONE, RIGHT: NAV_NONE };
+      this.startBox(e);
+      return;
+    }
     const button = NAV_BUTTON[e.button];
     if (!button) return;
     const held = e.ctrlKey || e.metaKey || e.shiftKey;
@@ -747,10 +764,11 @@ export class Viewer {
     // Vertritt eine Ebene das Modell, wählt ein Klick kein Bauteil: Er gehört dort der Ebene (Wert eines Ergebnisses merken)
     const hit = this.modelHidden ? undefined : this.firstHit();
     this.highlight.clear();
-    if (!hit) { this.selectedId = null; this.applySelection(); this.requestRender(); return null; }
+    if (!hit) { this.selectedId = null; this.selectedIds.clear(); this.applySelection(); this.requestRender(); return null; }
     const part = this.partOf(hit.object)!;
     const face = hit.faceIndex != null ? Viewer.faceOfTriangle(part.meta.faces, hit.faceIndex) : null;
     this.selectedId = part.meta.partId;
+    this.selectedIds = new Set([part.meta.partId]);
     this.applySelection();
     if (face && face.triCount) this.highlightFace(part, face);
     this.requestRender();
@@ -799,7 +817,19 @@ export class Viewer {
     const el = this.renderer.domElement;
     let down: [number, number] | null = null;
     // Ausgewählt wird nur mit der linken Taste: Mitte und rechts drehen oder verschieben je nach Belegung (E81)
-    el.addEventListener('pointerdown', (e) => { down = e.button === 0 ? [e.clientX, e.clientY] : null; });
+    let downR: [number, number] | null = null;
+    el.addEventListener('pointerdown', (e) => {
+      down = e.button === 0 && !e.altKey ? [e.clientX, e.clientY] : null;
+      downR = e.button === 2 ? [e.clientX, e.clientY] : null;
+    });
+    // Rechtsklick ohne Ziehen öffnet das Menü (rechts ziehen verschiebt oder dreht je nach Belegung)
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+    el.addEventListener('pointerup', (e) => {
+      if (e.button !== 2 || !downR || Math.hypot(e.clientX - downR[0], e.clientY - downR[1]) > 4) return;
+      downR = null;
+      if (this.mode !== 'select' || this.planePick) return;
+      this.onContext(this.partAt(e.clientX, e.clientY), e.clientX, e.clientY);
+    });
     el.addEventListener('pointerup', (e) => {
       if (!down || e.button !== 0 || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return; // Ziehen ist kein Klick
       if (this.planePick) { const cb = this.planePick; this.pickPlane(null); cb(this.planeAt(e.clientX, e.clientY)); return; }
@@ -809,7 +839,7 @@ export class Viewer {
         return;
       }
       const r = el.getBoundingClientRect();
-      this.onPick(this.pickAt(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1));
+      this.onPick(this.pickAt(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey });
     });
     // Messen: Element unter dem Zeiger hervorheben (höchstens einmal pro Bild berechnet)
     let queued: [number, number] | null = null;
@@ -1130,11 +1160,19 @@ export class Viewer {
     }
   }
 
+  /** Beschriftungen an Punkten (mm) ins Bild setzen, null: keine. Die Elemente baut der Aufrufer, hier werden sie nur verschoben. */
+  setTags(items: { el: HTMLElement; at: number[] }[] | null): void {
+    for (const t of this.tagItems) t.el.remove();
+    this.tagItems = (items ?? []).map((t) => ({ el: t.el, at: new THREE.Vector3(...(t.at as [number, number, number])) }));
+    for (const t of this.tagItems) this.overlay.appendChild(t.el);
+    this.requestRender();
+  }
+
   private placeOverlay(): void {
-    if (!this.overlayItems.length) return;
+    if (!this.overlayItems.length && !this.tagItems.length) return;
     const w = this.container.clientWidth, h = this.container.clientHeight;
     const v = new THREE.Vector3();
-    for (const it of this.overlayItems) {
+    for (const it of [...this.overlayItems, ...this.tagItems]) {
       v.copy(it.at).project(this.camera);
       const off = v.z > 1 || v.x < -1.2 || v.x > 1.2 || v.y < -1.2 || v.y > 1.2;
       it.el.hidden = off;
@@ -1142,14 +1180,123 @@ export class Viewer {
     }
   }
 
-  select(id: string | null): void { this.selectedId = id; this.highlight.clear(); this.applySelection(); this.requestRender(); }
+  select(id: string | null): void { this.setSelection(id ? [id] : [], id); }
+
+  /** Mehrere Bauteile auswählen. `primary`: das zuletzt gewählte (Auswahlkarte, Code). Die Fläche bleibt nur bei ihm markiert. */
+  setSelection(ids: string[], primary: string | null): void {
+    if (primary !== this.selectedId || ids.length !== 1) this.highlight.clear();
+    this.selectedIds = new Set(ids.filter((id) => this.parts.has(id)));
+    this.selectedId = primary && this.selectedIds.has(primary) ? primary : null;
+    this.applySelection();
+    this.requestRender();
+  }
+
+  get selectionIds(): string[] { return [...this.selectedIds]; }
+
+  /** Bauteil unter dem Zeiger (Rechtsklick), auch wenn eine Ergebnisebene das Modell vertritt. Ändert die Auswahl nicht. */
+  partAt(clientX: number, clientY: number): string | null {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    if (this.modelHidden) {
+      const hit = this.pickLayer(clientX, clientY);
+      return hit ? this.standIns.find((s) => s.mesh === hit.object)?.part?.meta.partId ?? null : null;
+    }
+    this.camera.updateMatrixWorld();
+    this.raycaster.setFromCamera(new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1), this.camera);
+    const hit = this.firstHit();
+    return hit ? this.partOf(hit.object)?.meta.partId ?? null : null;
+  }
+
+  // ---- Rahmenauswahl (Alt + links ziehen) -------------------------------------------------------------------------
+
+  private startBox(e: PointerEvent): void {
+    const r = this.container.getBoundingClientRect();
+    const box = document.createElement('div');
+    box.className = 'v-box';
+    this.container.appendChild(box);
+    this.box = { x: e.clientX - r.left, y: e.clientY - r.top, el: box, id: e.pointerId };
+    const canvas = this.renderer.domElement;
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* Zeiger ohne Fang (synthetisch): der Rahmen geht trotzdem */ }
+    const move = (ev: PointerEvent) => this.drawBox(ev.clientX - r.left, ev.clientY - r.top);
+    const up = (ev: PointerEvent) => {
+      canvas.removeEventListener('pointermove', move);
+      canvas.removeEventListener('pointerup', up);
+      canvas.removeEventListener('pointercancel', up);
+      const b = this.box;
+      this.box = null;
+      box.remove();
+      if (!b || ev.type === 'pointercancel') return;
+      const x1 = ev.clientX - r.left, y1 = ev.clientY - r.top;
+      if (Math.hypot(x1 - b.x, y1 - b.y) < 4) return;
+      // Von links nach rechts: nur Teile ganz im Rahmen. Von rechts nach links: auch angeschnittene (wie in CAD üblich)
+      this.onBox(this.partsInRect(Math.min(b.x, x1), Math.min(b.y, y1), Math.max(b.x, x1), Math.max(b.y, y1), x1 < b.x), ev.shiftKey || ev.ctrlKey || ev.metaKey);
+    };
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+    this.drawBox(this.box.x, this.box.y);
+  }
+
+  private drawBox(x: number, y: number): void {
+    const b = this.box;
+    if (!b) return;
+    b.el.style.left = `${Math.min(b.x, x)}px`;
+    b.el.style.top = `${Math.min(b.y, y)}px`;
+    b.el.style.width = `${Math.abs(x - b.x)}px`;
+    b.el.style.height = `${Math.abs(y - b.y)}px`;
+    b.el.classList.toggle('cross', x < b.x);
+  }
+
+  /**
+   * Sichtbare Bauteile im Rechteck (Pixel im Viewer). Geprüft werden die Ecken der Netze (bei großen Netzen eine Auswahl):
+   * `crossing` reicht eine Ecke im Rahmen, sonst müssen alle darin liegen. Angeschnitten zählt zusätzlich, was Strahlen auf
+   * einem Raster im Rahmen treffen (eine große Fläche ohne Ecke im Rahmen).
+   */
+  partsInRect(x0: number, y0: number, x1: number, y1: number, crossing: boolean): string[] {
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    this.camera.updateMatrixWorld();
+    const v = new THREE.Vector3();
+    const out = new Set<string>();
+    for (const [id, p] of this.parts) {
+      if (!p.group.visible) continue;
+      let any = false, all = true, n = 0;
+      for (const m of p.meshes) {
+        const pos = m.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+        if (!pos) continue;
+        m.updateMatrixWorld();
+        const step = Math.max(1, Math.floor(pos.count / 3000));
+        for (let i = 0; i < pos.count; i += step) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld).project(this.camera);
+          const sx = ((v.x + 1) / 2) * w, sy = ((1 - v.y) / 2) * h;
+          const inside = v.z <= 1 && sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1;
+          n++;
+          if (inside) any = true; else all = false;
+          if (crossing && any) break;
+          if (!crossing && !all) break;
+        }
+        if ((crossing && any) || (!crossing && !all)) break;
+      }
+      if (n && (crossing ? any : all)) out.add(id);
+    }
+    if (crossing) {
+      const steps = 12;
+      for (let i = 0; i <= steps; i++) for (let j = 0; j <= steps; j++) {
+        const sx = x0 + ((x1 - x0) * i) / steps, sy = y0 + ((y1 - y0) * j) / steps;
+        this.raycaster.setFromCamera(new THREE.Vector2((sx / w) * 2 - 1, -(sy / h) * 2 + 1), this.camera);
+        const hit = this.firstHit();
+        const id = hit ? this.partOf(hit.object)?.meta.partId : undefined;
+        if (id) out.add(id);
+      }
+    }
+    return [...this.parts.keys()].filter((id) => out.has(id));
+  }
 
   /** Das ausgewählte Bauteil leuchtet leicht orange (Farbe der Auswahl in der ganzen Oberfläche). */
   private applySelection(): void {
     for (const [id, p] of this.parts) {
       for (const m of p.meshes) {
         const mat = m.material as THREE.MeshStandardMaterial;
-        mat.emissive?.setHex(id === this.selectedId ? 0x5a2e00 : 0x000000);
+        mat.emissive?.setHex(this.selectedIds.has(id) ? 0x5a2e00 : 0x000000);
         // Hervorhebung einer Animation (E58): Flächenfarbe deutlich nach Orange ziehen. Nur Leuchten färbte ein blaues Teil violett
         // (Violett heißt in der Oberfläche Vorschau)
         // (Material.clone() macht aus einer Farbe in userData ein einfaches Objekt: dann neu merken)
@@ -1199,8 +1346,9 @@ export class Viewer {
    * damit das Bild aussieht wie der Viewer. Die Auswahl fehlt im Bild: Sie ist Orange wie der Stift und würde die Markierung verschlucken.
    */
   snapshot(): HTMLCanvasElement {
-    const sel = this.selectedId;
+    const sel = this.selectedId, sels = this.selectedIds;
     this.selectedId = null;
+    this.selectedIds = new Set();
     this.applySelection();
     this.highlight.visible = false;
     this.hover.visible = false; // Messlinien ohne ihre Beschriftung wären im Bild nur verwirrend
@@ -1212,6 +1360,7 @@ export class Viewer {
     const c = document.createElement('canvas');
     try { this.paintSnapshot(c); } finally {
       this.selectedId = sel;
+      this.selectedIds = sels;
       this.applySelection();
       this.highlight.visible = !this.modelHidden;
       this.hover.visible = true;

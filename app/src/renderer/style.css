@@ -92,14 +92,20 @@ code { font-family:var(--mono); font-size:.95em; }
 /* ---- Gerüst ---------------------------------------------------------------------------------------------------- */
 #body { flex:1; display:flex; min-height:0; }
 #rail { width:60px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:var(--s1); border-right:1px solid var(--line); }
-#rail button { width:50px; height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border-radius:8px; color:var(--tx2); }
+#rail button { position:relative; width:50px; height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border-radius:8px; color:var(--tx2); }
 #rail button span { font-size:10.5px; }
 #rail button:hover:not(:disabled) { background:var(--s2); color:var(--tx); }
 #rail button[aria-pressed=true] { background:var(--s3); color:var(--acc-tx); }
 #rail button:disabled { color:#4d555f; }
+/* Gruppen der Leiste (E82): Arbeit am Modell, Ergebnisse des Agenten, Regeln für den Agenten */
+.rail-sep { width:32px; height:1px; background:#3d444e; margin:8px 0; flex-shrink:0; }
+/* Punkt am Reiter: Neues vom Agenten, noch nicht angesehen */
+#rail .nd { position:absolute; top:7px; right:10px; width:7px; height:7px; border-radius:50%; background:var(--acc); box-shadow:0 0 0 2px var(--s1); }
+#rail button[aria-pressed=true] .nd { box-shadow:0 0 0 2px var(--s3); }
 .splitter { width:4px; margin:0 -2px; flex-shrink:0; cursor:col-resize; position:relative; z-index:5; }
 .splitter:hover, .splitter.drag { background:var(--acc-line); }
 
+#side.wide { width:max(var(--side, 272px), 352px); }
 #side { width:var(--side, 272px); flex-shrink:0; display:flex; flex-direction:column; min-width:0; background:var(--s1); border-right:1px solid var(--line); position:relative; }
 #editor { width:var(--editor, 520px); flex-shrink:0; display:flex; flex-direction:column; min-width:0; background:var(--term); border-right:1px solid var(--line); }
 .side-hd .hd-count { margin-left:6px; font-size:12px; }
@@ -420,56 +426,85 @@ code { font-family:var(--mono); font-size:.95em; }
 @keyframes vb-run { from { left:-35%; } to { left:100%; } }
 .float { position:absolute; z-index:2; background:rgba(24,27,31,.95); border:1px solid var(--line2); border-radius:10px; box-shadow:var(--shadow); }
 
-/* Bauteile (Entwurf 2): Baum in der Seitenleiste. Kompakte Zeilen, die Knöpfe erscheinen beim Überfahren
-   oder wenn sie etwas anzeigen (ausgeblendet, transparent). */
-.ptree { flex:1; overflow:auto; padding:6px 0 10px; }
-.row { display:flex; align-items:center; height:26px; padding:0 6px 0 4px; margin:0 6px; border-radius:6px; }
-.row:hover { background:var(--s3); }
-.row .nm { flex:1; min-width:0; display:flex; align-items:center; gap:9px; height:26px; padding:0 6px; border-radius:6px; text-align:left; }
-.row .eye { visibility:hidden; }
-.row:hover .eye, .row .eye:focus-visible, .row .eye.gh.on, .row .eye.gh.partly, .row.off .eye:not(.gh) { visibility:visible; }
-.row .pname { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.row.sel { background:var(--acc-tint); }
-.row.sel .nm { color:var(--acc-tx); font-weight:500; }
-.row.off .nm { color:var(--tx3); }
-.row .eye { width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:var(--tx3); }
-.row .eye:hover { background:var(--s3); color:var(--tx); }
-.row .eye.gh.on { color:var(--acc-tx); }
-.row .eye.gh.partly { color:var(--acc-tx); opacity:.45; } /* nur ein Teil der Gruppe ist transparent */
-.row.gr .nm { gap:5px; padding-left:4px; }
-.row.gr .chev { display:flex; color:var(--tx3); transition:transform .12s; }
-.row.gr .chev.shut { transform:rotate(-90deg); }
-.row.gr .gname { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.row.gr .gcount { font-size:11px; color:var(--tx3); margin-left:2px; }
+/* Strukturbaum ganz oben links im Viewer (E82, tree.ts). Ohne Hintergrund wie in CATIA: nur Schrift, Striche und Symbole, mit
+   dunklem Rand, damit sie über jedem Teil und jeder Ergebnisfarbe lesbar bleiben. Nur die Zeile unter der Maus hellt auf.
+   Je Zeile erst die Baumstriche, dann Pfeil (Gruppe), Auge und Halbkreis, dann der Name. Höchstens halb so hoch wie das Bild. */
+.tree { --trl:rgba(230,232,235,.3); position:absolute; left:12px; top:12px; z-index:4; display:flex; flex-direction:column; max-height:calc(50% - 12px);
+  font-size:12.5px; color:var(--tx); font-variant-numeric:tabular-nums; white-space:nowrap;
+  text-shadow:0 0 1px #0a0b0d, 0 0 2px #0a0b0d, 0 0 4px rgba(10,11,13,.9), 0 0 8px rgba(10,11,13,.6); }
+.tree svg.ic { filter:drop-shadow(0 0 1px #0a0b0d) drop-shadow(0 0 2px #0a0b0d) drop-shadow(0 0 5px rgba(10,11,13,.7)); }
+.tree.open { width:max-content; min-width:230px; max-width:min(340px, 46%); }
+.tr-hd { display:flex; align-items:center; gap:2px; height:28px; flex-shrink:0; }
+.tr-toggle { display:flex; align-items:center; gap:6px; height:28px; padding:0 8px 0 4px; border-radius:6px; min-width:0; }
+.tr-toggle:hover { background:rgba(255,255,255,.09); }
+.tr-toggle .chev { width:14px; display:flex; justify-content:center; color:var(--tx2); }
+.tr-toggle .ico { display:flex; color:var(--tx2); }
+.tr-toggle b { font-weight:500; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
+.tr-toggle .n { color:var(--tx2); font-size:12px; }
+.tr-hd .sp { flex:1; }
+.tree .hb { width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:5px; color:var(--tx2); flex-shrink:0; }
+.tree .hb:hover { background:rgba(255,255,255,.09); color:var(--tx); }
+.tr-search { display:flex; align-items:center; gap:7px; height:30px; flex-shrink:0; margin:0 0 4px; padding:0 3px 0 8px; border:1px solid var(--acc-line); border-radius:6px;
+  background:var(--bg); color:var(--tx3); text-shadow:none; }
+.tr-search svg.ic { filter:none; }
+.tr-search input { flex:1; min-width:60px; height:26px; border:0; outline:0; background:none; color:var(--tx); font:inherit; padding:0; }
+.tr-search input::-webkit-search-cancel-button { display:none; }
+.tr-hits { font-size:12px; color:var(--tx3); }
+.tr-rows { flex:1 1 auto; min-height:0; overflow:auto; padding:0 0 2px; }
+/* Schlanke Scrollleisten ohne Pfeile im Baum und in den Reitern Analysis und Animation. Im Baum kaum zu sehen, solange die Maus
+   nicht darüber ist: Er soll so wenig wie möglich im Weg sein */
+.tr-rows::-webkit-scrollbar, .cx-scroll::-webkit-scrollbar, .al::-webkit-scrollbar { width:6px; height:6px; }
+.tr-rows::-webkit-scrollbar-button, .cx-scroll::-webkit-scrollbar-button, .al::-webkit-scrollbar-button { display:none; width:0; height:0; }
+.tr-rows::-webkit-scrollbar-track, .cx-scroll::-webkit-scrollbar-track, .al::-webkit-scrollbar-track { background:transparent; }
+.tr-rows::-webkit-scrollbar-thumb { border-radius:3px; background:rgba(230,232,235,.14); }
+.tree:hover .tr-rows::-webkit-scrollbar-thumb { background:rgba(230,232,235,.32); }
+.cx-scroll::-webkit-scrollbar-thumb, .al::-webkit-scrollbar-thumb { border-radius:3px; background:var(--line2); }
+.cx-scroll::-webkit-scrollbar-thumb:hover, .al::-webkit-scrollbar-thumb:hover, .tr-rows::-webkit-scrollbar-thumb:hover { background:#4a525d; }
+.tr-row { display:flex; align-items:center; height:24px; border-radius:5px; padding:0 8px 0 4px; }
+.tr-row:hover { background:rgba(255,255,255,.09); }
+.tr-row:hover .tg { opacity:1; }
+/* Baumstriche je Ebene: v läuft weiter, t zweigt ab, l zweigt als letzter ab, h führt bei Teilen bis zu den Knöpfen */
+.tr-row .br { display:flex; align-self:stretch; flex-shrink:0; }
+.tr-row .br i { position:relative; width:14px; }
+.tr-row .br i::before, .tr-row .br i::after { box-shadow:0 0 0 1px rgba(10,11,13,.35); }
+.tr-row .br i.v::before, .tr-row .br i.t::before { content:''; position:absolute; left:6px; top:0; bottom:0; width:1px; background:var(--trl); }
+.tr-row .br i.l::before { content:''; position:absolute; left:6px; top:0; height:12px; width:1px; background:var(--trl); }
+.tr-row .br i.t::after, .tr-row .br i.l::after { content:''; position:absolute; left:6px; right:0; top:12px; height:1px; background:var(--trl); }
+.tr-row .br i.h::after { content:''; position:absolute; left:0; right:3px; top:12px; height:1px; background:var(--trl); }
+.tr-row .chev { width:14px; height:22px; display:flex; align-items:center; justify-content:center; color:var(--tx2); flex-shrink:0; }
+/* Knöpfe immer zu sehen, aber leise. Hell ist nur, was gerade wirkt: ausgeblendet oder transparent (orange) */
+.tr-row .tg { width:20px; height:22px; display:flex; align-items:center; justify-content:center; border-radius:5px; color:var(--tx2); opacity:.6; flex-shrink:0; }
+.tr-row .tg:hover { background:rgba(255,255,255,.12); color:var(--tx); }
+.tr-row .tg.gh { margin-right:5px; }
+.tr-row .tg.eye.on { opacity:1; color:var(--tx); }
+.tr-row .tg.gh.on { opacity:1; color:var(--acc-tx); }
+.tr-row .tg.gh.partly { opacity:.8; color:var(--acc-tx); } /* nur ein Teil der Gruppe ist transparent */
+.tr-row .nm { overflow:hidden; text-overflow:ellipsis; min-width:0; text-align:left; height:22px; }
+.tr-row.gr .nm { font-weight:500; }
+.tr-row .cnt { margin-left:6px; color:var(--tx2); font-size:12px; }
+.tr-row.off .nm { color:var(--tx3); }
+.tr-row.sel .nm { color:var(--acc-tx); font-weight:500; }
+.tr-hint { padding:4px 8px; color:var(--tx2); }
+.tr-ft { display:flex; align-items:center; gap:6px; height:26px; flex-shrink:0; padding:0 4px; font-size:12px; color:var(--tx2); }
+.tr-ft button { margin-left:auto; height:22px; padding:0 8px; border-radius:5px; color:var(--acc-tx); }
+.tr-ft button:hover { background:rgba(255,255,255,.09); }
 .sw { width:10px; height:10px; border-radius:3px; flex-shrink:0; display:inline-block; box-shadow:inset 0 0 0 1px rgba(255,255,255,.18); }
-.sw.ref { background:transparent !important; border:1px dashed var(--tx3); box-shadow:none; }
-.grp { padding:12px 16px 4px; font-size:11px; letter-spacing:.06em; color:var(--tx3); }
-.ptree .hint { color:var(--tx3); padding:8px 14px; }
 
-/* Obere Reihe (Entwurf 2): links der Umschalter (was der Viewer zeigt), in der Mitte die Werkzeuge, rechts Platz für den Würfel */
+/* Obere Reihe (Entwurf 2, E82): links Platz für den Baum, in der Mitte die Werkzeuge, rechts Platz für den Würfel */
 .vtop { position:absolute; left:12px; right:12px; top:12px; z-index:3; display:flex; align-items:flex-start; gap:12px; pointer-events:none; }
 .vtop > * { pointer-events:auto; }
 .vtop > .float { position:relative; }
 .vtop .cubespace { width:120px; flex-shrink:0; pointer-events:none; }
-.switcher { display:flex; align-items:center; height:40px; padding:0 4px 0 0; white-space:nowrap; min-width:0; }
-.switcher .sb { display:flex; align-items:center; gap:8px; height:38px; padding:0 10px 0 12px; border-radius:9px; min-width:0; }
-.switcher .sb:hover, .switcher .sb[aria-expanded=true] { background:var(--s3); }
-.switcher .sb b { overflow:hidden; text-overflow:ellipsis; max-width:220px; }
-.switcher.result .sb b { min-width:64px; }
-.switcher .vico { color:var(--tx2); display:flex; }
-.switcher.result .vico { color:var(--acc-tx); }
-.switcher.vio { border-color:rgba(154,166,255,.55); background:rgba(26,28,42,.97); }
-.switcher.vio .vico { color:var(--vio); }
-.switcher .vs { width:1px; height:18px; background:var(--line2); margin:0 2px; }
-.newbadge { display:flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:10px; background:var(--acc-tint); color:var(--acc-tx); font-size:11px; font-weight:500; }
-.newbadge::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--acc); }
-@container viewer (max-width: 620px) { .switcher #view-sub { display:none; } }
+.vtop .treespace { flex-shrink:0; pointer-events:none; }
 .dock { display:flex; align-items:center; gap:2px; padding:4px; }
 .dock button { display:flex; align-items:center; gap:7px; height:32px; padding:0 10px; border-radius:7px; white-space:nowrap; }
 .dock button:hover:not(:disabled), .dock button[aria-expanded=true] { background:var(--s3); }
 .dock button:disabled { color:#5d6671; }
 .vsep { width:1px; height:20px; background:var(--line2); margin:0 3px; flex-shrink:0; }
 @container viewer (max-width: 720px) { .dock .lbl { display:none; } .dock button { padding:0 8px; gap:3px; } }
+/* Neben dem aufgeklappten Baum wird es eng: nur Symbole (main.ts fitDock) */
+.dock.compact .lbl { display:none; }
+.dock.compact button { padding:0 9px; gap:3px; }
 
 .cube { position:absolute; top:12px; right:14px; z-index:2; display:flex; flex-direction:column; align-items:center; gap:8px; }
 .cube-view { width:116px; height:116px; }
@@ -512,6 +547,9 @@ code { font-family:var(--mono); font-size:.95em; }
 .mc-ent b { color:var(--acc-tx); }
 .mc-ent span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .v-overlay { position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
+/* Rahmenauswahl (Alt + links ziehen): durchgezogen von links nach rechts (ganz darin), gestrichelt von rechts nach links (angeschnitten) */
+.v-box { position:absolute; z-index:2; pointer-events:none; border:1px solid var(--acc); background:rgba(242,154,56,.08); }
+.v-box.cross { border-style:dashed; background:rgba(242,154,56,.05); }
 
 /* Schnitt: Karte im Stapel unten links */
 .sectcard { overflow:hidden; }
@@ -539,10 +577,10 @@ code { font-family:var(--mono); font-size:.95em; }
 .peek .ph { display:flex; justify-content:space-between; gap:10px; padding:0 10px 3px; font-size:11px; color:var(--tx3); }
 .sc-actions { display:flex; flex-wrap:wrap; gap:8px; padding:10px; }
 .sc-actions .btn { flex:1 1 auto; justify-content:center; }
-/* Sehr schmaler Viewer (Dateien, Code und Agent offen): Umschalter und Werkzeuge links untereinander, der Würfel behält seinen Platz */
+/* Sehr schmaler Viewer (Dateien, Code und Agent offen): die Werkzeuge untereinander links neben dem Würfel, links bleibt der Baum */
 @container viewer (max-width: 560px) {
-  .vtop { flex-direction:column; align-items:flex-start; gap:8px; right:auto; }
-  .vtop > .grow, .vtop .cubespace { display:none; }
+  .vtop { flex-direction:column; align-items:flex-end; gap:8px; left:auto; right:142px; }
+  .vtop > .grow, .vtop .cubespace, .vtop .treespace { display:none; }
   .vtop .dock { flex-direction:column; padding:3px; }
   .vtop .dock .vsep { width:20px; height:1px; margin:3px 0; }
 }
@@ -578,38 +616,168 @@ code { font-family:var(--mono); font-size:.95em; }
 .v-paint { pointer-events:none; }
 /* Karten unten links statt der Auswahlkarte (wie beim Messen). Klicks wählen weiter Bauteile. */
 #viewer.animating #selcard, #viewer.analyzing #selcard { display:none; }
-.ancard { overflow:hidden; }
-.rscard { overflow:hidden; }
-.an-select { flex:1; min-width:0; height:26px; margin-left:4px; padding:0 6px; border-radius:6px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:inherit; font-size:12.5px; }
-.an-select:disabled { opacity:1; border-color:transparent; background:transparent; appearance:none; padding-left:2px; color:var(--tx2); }
-.an-transport { display:flex; align-items:center; gap:8px; padding:2px 12px 4px 8px; }
-.an-transport input[type=range], .vv-bar input[type=range] { flex:1; min-width:0; accent-color:var(--acc); height:18px; }
-.an-play { width:32px; height:32px; border-radius:8px; background:var(--acc-tint); color:var(--acc-tx); display:flex; align-items:center; justify-content:center; }
-.an-play:disabled { background:transparent; color:#5d6671; }
 .an-time { font:12px var(--mono); color:var(--tx2); white-space:nowrap; min-width:92px; text-align:right; }
-.an-opts { display:flex; align-items:center; gap:6px; padding:2px 12px 4px; }
-.an-opts .btn[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); border-color:var(--acc-line); }
-.an-speed { height:26px; padding:0 4px; border-radius:6px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--mono); }
-.rs-legend { padding:2px 14px 6px; }
-.rs-q { font-size:12px; color:var(--tx2); margin-bottom:5px; }
-.rs-bar { position:relative; height:12px; border-radius:3px; }
-.rs-mark { position:absolute; top:-3px; bottom:-3px; width:2px; margin-left:-1px; background:var(--tx); border-radius:1px; }
-.rs-scale { display:flex; justify-content:space-between; gap:8px; margin-top:4px; font:11px var(--mono); color:var(--tx3); }
-.rs-scale .rs-thr { color:var(--tx2); font-family:var(--sans); }
-.rs-summary { padding:2px 0 2px; max-height:120px; overflow:auto; }
-.rs-row { display:flex; gap:8px; padding:2px 14px; font-size:12px; color:var(--tx2); min-width:0; }
-.rs-row b { color:var(--tx); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40%; }
-.rs-row span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rs-row.bad span { color:var(--err); }
-/* FEM (E65): Lastfall in Blau wie die Markierungen im Bild, Hinweise umbrechend und leiser */
-.rs-fem select { font-family:var(--sans); }
-.rs-opts { flex-wrap:wrap; row-gap:6px; }
-.rs-custom { display:flex; align-items:center; gap:4px; font-size:12px; color:var(--tx3); }
-.rs-num { width:64px; }
-.rs-num.bad { border-color:var(--err); }
-.rs-row.bc b { color:var(--mk-blue); font-weight:500; }
-.rs-note { padding:2px 14px; font-size:11.5px; line-height:1.35; color:var(--tx3); }
-.rs-probe { margin:4px 12px 2px; padding:6px 8px; border-radius:6px; background:var(--term); font-size:12px; color:var(--tx2); min-height:28px; }
+.vv-bar input[type=range] { flex:1; min-width:0; accent-color:var(--acc); height:18px; }
+
+/* Im Bild (E82): Legende senkrecht am rechten Rand unter dem Würfel, Darstellung und Abspielen in einer Leiste unten.
+   Beschriftungen (Kraft, kleinster Wert) stehen an ihrem Punkt im Raum. */
+/* Schmal (E82, Wunsch des Nutzers): Kopf kurz, Verlauf mit drei Zahlen und dem Grenzwert, darunter nichts. Die Skala stellt der
+   Knopf unter dem Kopf ein (Menü #menu-scale mit Größe ausgeschrieben, Spanne, eigenen Grenzen und was die Farben heißen). */
+/* Unten rechts über der Leiste der Analyse, damit die Mitte des Bilds frei bleibt (Wunsch des Nutzers) */
+.lg { right:14px; bottom:66px; width:auto; padding:8px 8px 10px; z-index:3; display:flex; flex-direction:column; align-items:stretch; }
+.lg-hd { font-weight:500; font-size:12px; text-align:center; max-width:76px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lg-sub { display:flex; align-items:center; justify-content:center; gap:2px; height:22px; margin:5px 0 10px; padding:0 4px 0 6px; border:1px solid var(--line2);
+  border-radius:5px; background:var(--term); color:var(--tx2); font-size:11px; white-space:nowrap; }
+.lg-sub:hover, .lg-sub[aria-expanded=true] { border-color:var(--acc-line); color:var(--acc-tx); }
+.lg-body { position:relative; width:58px; height:160px; }
+.lg-bar { position:absolute; left:2px; top:0; width:10px; height:100%; border-radius:3px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }
+.lg-t { position:absolute; left:18px; transform:translateY(-50%); font-size:11px; color:var(--tx3); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.lg-thr { position:absolute; left:-2px; right:0; height:0; }
+.lg-thr i { position:absolute; left:0; top:-1px; width:18px; height:2px; border-radius:1px; background:#f4f5f6; box-shadow:0 0 0 1px rgba(0,0,0,.4); }
+.lg-thr span { position:absolute; left:20px; top:-8px; font-size:11.5px; font-weight:600; color:var(--tx); white-space:nowrap; }
+.scalemenu { width:250px; }
+.scalemenu .sm-q { padding:0 10px 8px; font-weight:500; }
+.scalemenu .seg { margin:0 6px 8px; }
+.scalemenu .seg button[aria-checked=true] { background:var(--acc-tint); color:var(--acc-tx); }
+.scalemenu .rs-custom { display:flex; align-items:center; gap:6px; margin:0 10px 8px; font-size:12px; color:var(--tx3); }
+.scalemenu .rs-num { width:80px; height:26px; padding:0 6px; border-radius:5px; border:1px solid var(--line2); background:var(--term); color:var(--tx); font:12px var(--mono); }
+.scalemenu .rs-num.bad { border-color:var(--err); }
+@container viewer (max-height: 520px) { .lg-body { height:100px; } }
+.dbar { left:50%; bottom:14px; transform:translateX(-50%); display:flex; align-items:center; gap:8px; padding:5px 6px 5px 8px; white-space:nowrap; z-index:3; max-width:calc(100% - 24px); }
+.dbar .dl { font-size:12px; color:var(--tx3); margin-left:2px; }
+.dbar .dl.strong { color:var(--tx); font-size:12.5px; max-width:280px; overflow:hidden; text-overflow:ellipsis; }
+.dbar .seg { display:flex; margin:0; padding:0; gap:0; border:1px solid var(--line2); border-radius:7px; overflow:hidden; flex-shrink:0; background:none; }
+.dbar .seg button { flex:none; height:28px; padding:0 10px; font-size:12px; font-weight:400; color:var(--tx2); border-radius:0; box-shadow:none; }
+.dbar .seg button + button { border-left:1px solid var(--line2); }
+.dbar .seg button:hover { background:var(--s3); color:var(--tx); }
+.dbar .seg button.on { background:var(--acc-tint); color:var(--acc-tx); font-weight:500; }
+.tgl { display:flex; align-items:center; gap:6px; height:30px; padding:0 10px; border-radius:7px; font-size:12px; color:var(--tx2); border:1px solid var(--line2); white-space:nowrap; flex-shrink:0; }
+.tgl:hover:not(:disabled) { background:var(--s3); color:var(--tx); }
+.tgl[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); border-color:var(--acc-line); font-weight:500; }
+.tgl:disabled { color:#5d6671; }
+.c3d { position:absolute; left:0; top:0; display:flex; align-items:center; gap:6px; height:24px; margin:-12px 0 0 14px; padding:0 9px 0 8px; border-radius:12px;
+  background:rgba(18,20,23,.92); border:1px solid var(--line2); font-size:12px; color:var(--tx2); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.c3d b { font-weight:500; color:var(--tx); }
+.c3d svg.ic { color:var(--mk-blue); }
+.c3d .dot { width:6px; height:6px; }
+.c3d.pt { margin:-34px 0 0 10px; }
+.c3d.pt::before { content:''; position:absolute; left:-10px; top:22px; width:7px; height:7px; border-radius:50%; border:1.8px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.5); }
+.tbar { left:16px; right:16px; bottom:14px; display:flex; align-items:center; gap:10px; padding:5px 8px 5px 5px; z-index:3; font-variant-numeric:tabular-nums; }
+.tbar .play { width:32px; height:32px; border-radius:7px; background:var(--s3); color:var(--tx); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.tbar .play:hover:not(:disabled) { background:#2c323b; }
+.tbar .play:disabled { color:#5d6671; background:transparent; }
+.tbar .tm { font-size:12px; color:var(--tx2); white-space:nowrap; min-width:38px; }
+.tbar .scrub { position:relative; flex:1; height:24px; min-width:120px; }
+.tbar .scrub input { position:absolute; inset:0; width:100%; margin:0; appearance:none; background:transparent; cursor:pointer; z-index:1; }
+.tbar .scrub input::-webkit-slider-runnable-track { height:3px; border-radius:2px; background:linear-gradient(to right, var(--acc) var(--done, 0%), var(--line2) var(--done, 0%)); }
+.tbar .scrub input::-webkit-slider-thumb { appearance:none; width:13px; height:13px; margin-top:-5px; border-radius:50%; background:#f4f5f6; box-shadow:0 0 0 3px rgba(242,154,56,.3); }
+.tbar .scrub input:disabled { cursor:default; }
+.tbar .ticks { position:absolute; left:6px; right:6px; top:0; bottom:0; pointer-events:none; }
+.tbar .ticks .cm { position:absolute; top:7px; width:2px; height:11px; margin-left:-1px; border-radius:1px; background:#5d6671; }
+.tbar .sel { height:28px; padding:0 4px 0 6px; border:1px solid var(--line2); border-radius:6px; background:var(--term); color:var(--tx2); font:12px var(--sans); }
+@container viewer (max-width: 760px) { .tbar .tgl { padding:0 8px; font-size:0; gap:0; } .tbar .tgl svg.ic { margin:0; } }
+/* Unten liegen die Leisten der Analyse und Animation: Karten (Messen, Schnitt, Auswahl) rücken darüber */
+#viewer.analyzing .cards, #viewer.animating .cards { bottom:66px; }
+
+/* ---- Reiter Analysis und Animation (E82): Liste und ruhiger Bericht ------------------------------------------ */
+.cx { font-variant-numeric:tabular-nums; }
+.side-hd .back { display:flex; align-items:center; gap:5px; height:28px; padding:0 8px 0 4px; margin-left:-10px; border-radius:6px; color:var(--tx2); font-weight:500; }
+.side-hd .back:hover { background:var(--s3); color:var(--tx); }
+.side-hd .back .cnt { margin-left:2px; color:var(--tx3); font-weight:400; }
+.al { flex:1; overflow:auto; padding:6px 0 12px; }
+.al-sh { display:flex; align-items:center; gap:6px; height:30px; padding:8px 14px 0 18px; font-size:11px; letter-spacing:.07em; color:var(--tx3); }
+.al-sh .cnt { letter-spacing:0; }
+.al-sh .r { margin-left:auto; letter-spacing:0; font:11px var(--mono); }
+.al-row { display:grid; grid-template-columns:8px 1fr auto; align-items:start; gap:0 12px; width:calc(100% - 12px); margin:0 6px; padding:9px 10px 9px 12px; border-radius:7px; text-align:left; }
+.al-row:hover { background:var(--s3); }
+.al-row .dot { width:7px; height:7px; margin-top:6px; }
+.al-row .ic { color:var(--tx3); margin-top:2px; margin-left:-4px; display:flex; }
+.al-row .t { font-size:13px; line-height:1.35; color:var(--tx); overflow-wrap:anywhere; }
+.al-row .m { font-size:12px; color:var(--tx3); margin-top:2px; }
+.al-row .m .w { color:var(--warn); }
+.al-row .tag { margin-left:2px; }
+.al-row .v { text-align:right; font-size:13px; color:var(--tx); white-space:nowrap; }
+.al-row .v span { display:block; font-size:12px; color:var(--tx3); margin-top:2px; }
+.al-row.cur { background:var(--acc-tint); }
+.al-row.ic3 { grid-template-columns:16px 1fr auto; }
+.al-empty { padding:10px 18px 2px; color:var(--tx2); }
+.al-err { display:flex; gap:8px; margin:6px 18px; font-size:12px; line-height:1.4; color:var(--tx2); }
+.al-err svg.ic { color:var(--warn); margin-top:1px; }
+.al-note { margin:10px 18px 0; padding-top:12px; border-top:1px solid var(--line); font-size:12px; line-height:1.45; color:var(--tx3); }
+.cx-scroll { flex:1; min-height:0; overflow:auto; }
+.cx-head { padding:16px 18px 0; }
+.cx-title { margin:0; font-size:14px; line-height:1.35; font-weight:600; color:var(--tx); overflow-wrap:anywhere; }
+.cx-meta { margin-top:3px; font-size:12px; color:var(--tx3); }
+.cx-meta .w { color:var(--warn); }
+.cx-gap { height:14px; }
+.cx-sum { padding:18px 18px 16px; }
+.cx-num { display:flex; align-items:center; gap:12px; }
+.cx-num .n { font-size:30px; line-height:1; font-weight:500; color:var(--tx); letter-spacing:-.01em; white-space:nowrap; }
+.cx-num .n small { font-size:14px; color:var(--tx2); margin-left:3px; font-weight:400; letter-spacing:0; }
+.cx-num .t { font-size:12.5px; line-height:1.35; color:var(--tx2); }
+.cx-num .t span { color:var(--tx3); }
+.cx-dim .cx-num, .cx-dim .cx-st, .cx-dim .cx-pr { opacity:.45; }
+.cx-st { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; color:var(--tx); }
+.cx-st svg.bad { color:var(--err); } .cx-st svg.ok { color:var(--ok); }
+.cx-pr { display:flex; align-items:center; gap:9px; height:28px; margin:0 -8px; padding:0 4px 0 30px; border-radius:6px; font-size:12.5px; color:var(--tx2); cursor:pointer; }
+.cx-pr .dot { width:6px; height:6px; }
+.cx-pr .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.cx-pr .a { color:var(--tx3); margin-left:auto; white-space:nowrap; }
+.cx-pr .v { color:var(--tx); min-width:36px; text-align:right; }
+.cx-pr .go { width:22px; height:22px; display:flex; align-items:center; justify-content:center; color:var(--tx3); visibility:hidden; border-radius:5px; }
+.cx-pr:hover { background:var(--s3); } .cx-pr:hover .go, .cx-pr .go:focus-visible { visibility:visible; color:var(--tx); }
+.cx-warn { display:flex; gap:8px; align-items:flex-start; margin-top:10px; font-size:12px; line-height:1.4; color:var(--tx2); }
+.cx-warn svg.ic { color:var(--warn); margin-top:1px; }
+.cx-warn .lnk { color:var(--tx3); border-bottom:1px dotted var(--tx3); font-size:12px; }
+.cx-warn .lnk:hover { color:var(--tx); }
+.cx-line { display:flex; gap:8px; align-items:center; margin:14px 18px 0; font-size:12px; line-height:1.4; color:var(--tx2); }
+.cx-line svg.ic { color:var(--warn); flex-shrink:0; }
+.cx-line.info svg.ic { color:var(--tx3); }
+.cx-line button { margin-left:auto; color:var(--acc-tx); font-size:12px; white-space:nowrap; }
+.cx-prog { position:relative; height:2px; margin:14px 18px 0; background:var(--s3); border-radius:1px; overflow:hidden; }
+.cx-prog i { position:absolute; top:0; bottom:0; width:35%; background:var(--acc); animation:vb-run 1.4s ease-in-out infinite; }
+.cx-sec { border-top:1px solid var(--line); padding:4px 0 8px; }
+.cx-sh { display:flex; align-items:center; gap:6px; height:32px; padding:0 14px 0 18px; font-size:11px; letter-spacing:.07em; color:var(--tx3); }
+.cx-sh .r { margin-left:auto; letter-spacing:0; font-size:12px; }
+.cx-sh .cnt { letter-spacing:0; }
+.cx-row { display:grid; grid-template-columns:64px 1fr 14px; align-items:center; gap:10px; width:calc(100% - 12px); min-height:30px; margin:0 6px; padding:0 8px 0 12px; border-radius:6px; font-size:13px; text-align:left; }
+.cx-row:hover { background:var(--s3); }
+.cx-row .l { color:var(--tx3); font-size:12.5px; }
+.cx-row .v { color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cx-row .v span { color:var(--tx3); }
+.cx-row .ch { color:var(--tx3); display:flex; transition:transform .1s; }
+.cx-row.open .ch { transform:rotate(90deg); }
+.cx-det { display:grid; grid-template-columns:auto 1fr; gap:5px 14px; margin:2px 18px 10px 92px; font-size:12px; color:var(--tx2); }
+.cx-det.wide { margin-left:36px; }
+.cx-det dt { color:var(--tx3); } .cx-det dd { margin:0; overflow-wrap:anywhere; }
+.cx-det .okc { color:var(--ok); } .cx-det .wc { color:var(--warn); }
+.cx-det .sub { grid-column:1 / -1; color:var(--tx); margin-top:4px; }
+.cx-det .sub span { color:var(--tx3); }
+.cx-tbl { width:calc(100% - 36px); margin:0 18px; border-collapse:collapse; font-size:12.5px; table-layout:fixed; }
+.cx-tbl th { font-weight:400; font-size:11.5px; color:var(--tx3); text-align:right; padding:0 0 6px 8px; white-space:nowrap; }
+.cx-tbl th.l { text-align:left; padding-left:0; width:46%; }
+.cx-tbl td { height:28px; padding:0 0 0 8px; text-align:right; color:var(--tx2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cx-tbl td.nm { text-align:left; padding-left:0; color:var(--tx); }
+.cx-tbl td.nm .dot { width:6px; height:6px; margin-right:8px; vertical-align:1px; }
+.cx-fold { display:flex; align-items:center; gap:6px; width:100%; height:36px; padding:0 14px 0 18px; border-top:1px solid var(--line); font-size:11px; letter-spacing:.07em; color:var(--tx3); text-align:left; }
+.cx-fold:hover { color:var(--tx2); }
+.cx-fold .chev { display:flex; }
+.cx-fold .r { margin-left:auto; letter-spacing:0; font-size:12px; }
+.cx-p { display:flex; gap:9px; margin:2px 18px 10px; font-size:12px; line-height:1.45; color:var(--tx2); }
+.cx-p svg.ic { margin-top:2px; }
+.cx-p.w svg.ic { color:var(--warn); } .cx-p.i svg.ic { color:var(--tx3); }
+.cx-empty { padding:2px 18px 6px; font-size:12px; color:var(--tx3); }
+.cx-foot { border-top:1px solid var(--line); flex-shrink:0; background:var(--s1); }
+.cx-pick { padding:10px 14px 0; font-size:12px; line-height:1.4; color:var(--tx2); overflow-wrap:anywhere; }
+.cx-acts { display:flex; gap:8px; padding:12px; }
+.cx-acts .btn { flex:1; justify-content:center; }
+.cx-seq { display:grid; grid-template-columns:44px 1fr; align-items:center; gap:10px; width:calc(100% - 12px); min-height:30px; margin:0 6px; padding:4px 10px 4px 12px; border-radius:6px; font-size:13px; color:var(--tx2); text-align:left; }
+.cx-seq:hover { background:var(--s3); }
+.cx-seq .t { font-size:12px; color:var(--tx3); }
+.cx-seq.cur { background:var(--acc-tint); color:var(--tx); } .cx-seq.cur .t { color:var(--acc-tx); }
+.cx-file { display:grid; grid-template-columns:16px 1fr auto; align-items:center; gap:10px; width:calc(100% - 12px); height:30px; margin:0 6px; padding:0 10px 0 12px; border-radius:6px; font-size:13px; color:var(--tx); text-align:left; }
+.cx-file:hover { background:var(--s3); }
+.cx-file svg.ic { color:var(--tx3); } .cx-file .s { font-size:12px; color:var(--tx3); }
 /* Fadenkreuz über dem Bild wie beim Messen (dort setzt der Viewer es selbst auf die 3D-Fläche). Karten und Knöpfe behalten ihren Zeiger. */
 #viewer.analyzing > canvas { cursor:crosshair; }
 /* Schild am Zeiger: wie die Messbeschriftung (.v-label), aber neutral, denn Orange hieße Auswahl. Unter den Karten, Klicks gehen durch. */
@@ -711,11 +879,6 @@ code { font-family:var(--mono); font-size:.95em; }
 .mi .k { margin-left:auto; padding-left:16px; color:var(--tx3); font-size:12px; }
 .mi .sub { color:var(--tx3); font-size:12px; overflow:hidden; text-overflow:ellipsis; }
 .mi.cur span:nth-child(2) { color:var(--acc-tx); }
-#menu-view { width:360px; max-width:360px; }
-#menu-view .vl { overflow:hidden; text-overflow:ellipsis; }
-#menu-view .k { display:flex; align-items:center; gap:6px; }
-#menu-view .k .dot { width:7px; height:7px; }
-.mh .src { margin-left:6px; font-family:var(--mono); letter-spacing:0; }
 .mi .tag { font-size:10.5px; padding:1px 6px; border-radius:4px; }
 .tag.acc { background:var(--acc-tint); color:var(--acc-tx); }
 .mi .chk { width:15px; display:flex; color:var(--acc-tx); visibility:hidden; }
@@ -873,6 +1036,12 @@ code { font-family:var(--mono); font-size:.95em; }
 .st-h2 { margin:0; font-size:16px; font-weight:600; color:var(--tx); }
 .st-lead { margin:4px 0 0; color:var(--tx3); font-size:12.5px; line-height:1.5; }
 .st-group { margin-top:26px; }
+/* Reiter Shortcuts: Tasten links als Kappen, rechts was sie tun */
+.st-key { display:grid; grid-template-columns:220px 1fr; gap:16px; align-items:baseline; padding:8px 0; border-bottom:1px solid var(--line); font-size:12.5px; }
+.st-kk { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.st-kk kbd { display:inline-flex; align-items:center; height:22px; padding:0 7px; border:1px solid var(--line2); border-bottom-width:2px; border-radius:5px; background:var(--s2); color:var(--tx); font:12px var(--sans); white-space:nowrap; }
+.st-kk .plus { color:var(--tx3); font-size:11px; }
+.st-kw { color:var(--tx2); line-height:1.45; }
 .st-gh { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--tx3); padding-bottom:6px; border-bottom:1px solid var(--line); }
 .st-field { display:flex; align-items:flex-start; gap:28px; padding:12px 0; border-bottom:1px solid var(--line); }
 .st-fl { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }

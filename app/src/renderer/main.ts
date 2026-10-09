@@ -1,6 +1,8 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
 import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
+import { AnalysisPanel } from './analysispanel';
+import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
 import { CodePanel, codeRows, isDxf, isPdf, type Mark } from './code';
 import { AnimTool } from './animtool';
@@ -13,10 +15,10 @@ import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
 import { SettingsDialog } from './settings';
-import { AboutPage, StoragePage, ViewerPage } from './settingspages';
+import { AboutPage, ShortcutsPage, StoragePage, ViewerPage } from './settingspages';
 import { SkillsPanel } from './skills';
 import { ParamsPanel } from './params';
-import { DRAG_PART, PartsCard } from './parts';
+import { StructureTree } from './tree';
 import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
 import { TerminalTabs } from './terminals';
@@ -40,6 +42,8 @@ let errorAt = 0;
 let map: ModelMap | null = null;
 let loadSeq = 0;
 let selection: { partId: string; pick: PickResult | null } | null = null;
+/** Alle ausgewählten Bauteile (Strg/Shift-Klick, Rahmen, Baum). `selection` ist das zuletzt gewählte darunter. */
+let picked: string[] = [];
 let agents: AgentInfo[] = [];
 const textCache = new Map<string, string>();
 
@@ -62,13 +66,13 @@ const SURFACE: Record<string, string> = {
 const surfaceName = (s: string | null) => (s ? SURFACE[s] ?? s.toLowerCase() : 'face');
 const ERROR_KIND: Record<string, string> = { Timeout: 'Time limit exceeded', PythonStart: 'Python could not be started', NoResult: 'Build without result' };
 
-// ---- Seitenleiste (Bauteile, Parameter, Dateien, Skills) und Code-Spalte (Entwurf 2) ------------------------------
+// ---- Seitenleiste (Parameter, Dateien, Analyse, Animation, Skills, E82) und Code-Spalte (Entwurf 2) ------------------
 
-type PanelName = 'parts' | 'params' | 'files' | 'skills';
-const PANELS: PanelName[] = ['parts', 'params', 'files', 'skills'];
+type PanelName = 'params' | 'files' | 'analysis' | 'anim' | 'skills';
+const PANELS: PanelName[] = ['params', 'files', 'analysis', 'anim', 'skills'];
 let panel: PanelName | null = null;
 /** Zuletzt gezeigte Ansicht der Seitenleiste: Der Schalter oben bringt sie wieder. */
-let lastPanel: PanelName = 'parts';
+let lastPanel: PanelName = 'files';
 let filesDirty = true;
 let codeOpen = false;
 /** Der Dateibaum entsteht nach dem Code-Panel, das ihm schon beim Aufbau die offene Datei meldet. */
@@ -79,17 +83,24 @@ function showPanel(p: PanelName | null): void {
   if (p) lastPanel = p;
   $('side').hidden = !p;
   $('split-side').hidden = !p;
-  $('panel-parts').hidden = p !== 'parts';
   $('panel-params').hidden = p !== 'params';
   $('panel-files').hidden = p !== 'files';
+  $('panel-analysis').hidden = p !== 'analysis';
+  $('panel-anim').hidden = p !== 'anim';
   $('panel-skills').hidden = p !== 'skills';
+  // Bericht und Ablauf brauchen mehr Breite als Listen (Entwurf: 352 px). Zieht der Nutzer breiter, gilt seine Breite
+  $('side').classList.toggle('wide', p === 'analysis' || p === 'anim');
   document.querySelectorAll<HTMLButtonElement>('#rail [data-panel]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.panel === p)));
   if (p === 'files' && filesDirty) void refreshFiles();
   if (p === 'params') void paramsPanel.refresh();
   if (p === 'skills') void skills.refresh();
   else skills.closeDetail();
-  store.set('soma.side', p ?? '');
+  if (p === 'analysis') void openResults();
+  if (p === 'anim') void openAnims();
+  // Nur die Ansichten zum Arbeiten am Modell bleiben über einen Neustart: Ein Ergebnis zeigt sich erst auf Wunsch
+  if (p !== 'analysis' && p !== 'anim') store.set('soma.side', p ?? '');
   renderLayout();
+  renderResults();
 }
 
 /** Code als eigene Spalte neben der Seitenleiste, damit Dateien und Code gleichzeitig offen sein können. */
@@ -200,6 +211,7 @@ async function changeSettings(patch: SettingsPatch): Promise<SettingsResult> {
 
 const viewerPage = new ViewerPage($('st-viewer'), { current: () => appSettings, set: (patch) => changeSettings(patch), toast });
 const storagePage = new StoragePage($('st-storage'), { api: api.storage, toast });
+const shortcutsPage = new ShortcutsPage($('st-keys'), { current: () => appSettings });
 const aboutPage = new AboutPage($('st-about'), {
   api: api.about, toast,
   openUrl: (url) => void api.openUrl(url).then((r) => { if (!r.ok) toast(r.error ?? `${url} could not be opened.`, 'error'); }),
@@ -222,7 +234,7 @@ const settings = new SettingsDialog({
   },
   changed: () => { if (project && skills.isLoaded) void skills.refresh(); },
   modelMode: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id)?.mode ?? 'off' : null),
-  pages: { viewer: viewerPage, storage: storagePage, about: aboutPage },
+  pages: { viewer: viewerPage, keys: shortcutsPage, storage: storagePage, about: aboutPage },
 });
 $('btn-settings').addEventListener('click', () => void settings.open());
 $('btn-start-settings').addEventListener('click', () => void settings.open());
@@ -308,7 +320,7 @@ $('btn-folder-new').addEventListener('click', () => files.startCreate('', true))
 // Bauteile und Dateien aus der App lassen sich ins Terminal ziehen (ersetzt die Übergabeleiste, Entwurf 2).
 let dragDepth = 0;
 const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-const isInternal = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].some((t) => t === DRAG_PART || t === DRAG_FILE);
+const isInternal = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].some((t) => t === DRAG_FILE);
 const overTerminal = (e: DragEvent) => !!(e.target as HTMLElement | null)?.closest?.('#term-panes');
 document.addEventListener('dragenter', (e) => {
   if (!hasFiles(e)) return;
@@ -329,8 +341,8 @@ document.addEventListener('drop', (e) => {
   $('term-panes').classList.remove('dropping');
   if (isInternal(e)) {
     if (!overTerminal(e)) return;
-    const partId = e.dataTransfer?.getData(DRAG_PART), rel = e.dataTransfer?.getData(DRAG_FILE);
-    if (partId) { selectPart(partId, null); insertToAgent(selectionText()); } else if (rel) insertToAgent(`[File: ${rel}] `);
+    const rel = e.dataTransfer?.getData(DRAG_FILE);
+    if (rel) insertToAgent(`[File: ${rel}] `);
     return;
   }
   const list = [...(e.dataTransfer?.files ?? [])];
@@ -351,36 +363,90 @@ async function importFiles(list: File[]): Promise<void> {
 
 // ---- Bauteile und Auswahl ---------------------------------------------------------------------------------------
 
-const partsCard = new PartsCard({
-  list: $('tab-model'), count: $('parts-count'), search: $<HTMLButtonElement>('btn-parts-search'), filter: $<HTMLInputElement>('parts-filter'),
-}, {
-  select: (id) => selectPart(id, null, true),
+// Strukturbaum oben links im Viewer (E82). Ausblenden und Transparent liegen im Viewer und gelten für Modell, Analyse und Animation
+const tree = new StructureTree($('tree'), {
+  select: (s) => {
+    if (s.how === 'replace') selectPart(s.id, null, true);
+    else if (s.how === 'range') setPicked(s.ids, s.id);
+    else setPicked(picked.includes(s.id) ? picked.filter((x) => x !== s.id) : [...picked, s.id], picked.includes(s.id) ? picked.filter((x) => x !== s.id).at(-1) ?? null : s.id);
+  },
   setVisible: (ids, on) => { viewer.setVisible(ids, on); resultTool.forgetProbe(); },
   isVisible: (id) => viewer.isVisible(id),
   setGhost: (ids, on) => { viewer.setGhosted(ids, on); resultTool.forgetProbe(); },
   isGhost: (id) => viewer.isGhosted(id),
+  showAll: () => { viewer.showAll(); resultTool.forgetProbe(); },
   context: (id, x, y) => openPartMenu(id, x, y),
   groupContext: (ids, name, x, y) => openGroupMenu(ids, name, x, y),
+  resized: () => fitDock(),
 });
 
-const refreshPartsCard = () => { partsCard.set(viewer.partList(), viewer.selection); renderViewSwitch(); };
+const refreshTree = () => { tree.set(viewer.partList(), picked); resultTool.forgetProbe(); fitDock(); };
+
+/**
+ * Werkzeuge oben in der Mitte neben dem Baum: Der Platz links gehört dem Baum, wird es eng, zeigen sie nur Symbole (E82).
+ * Gemessen statt per CSS, weil die Breite des Baums vom Namen des Modells und vom Aufklappen abhängt.
+ */
+function fitDock(): void {
+  const dock = $('dock'), vtop = $('vtop');
+  $('tree-space').style.width = `${$('tree').offsetWidth}px`;
+  dock.classList.remove('compact');
+  const room = vtop.clientWidth - $('tree-space').offsetWidth - $('vtop').querySelector<HTMLElement>('.cubespace')!.offsetWidth - 3 * 12;
+  dock.classList.toggle('compact', dock.scrollWidth > room);
+}
+new ResizeObserver(() => fitDock()).observe($('viewer'));
 const partEntry = (id: string): PartMap | undefined => map?.parts.find((x) => x.id === id);
 const partInfo = (id: string) => viewer.partList().find((x) => x.id === id);
 const lineRange = (e: PartMap) => ({ from: e.line!, to: e.end_line && e.end_line >= e.line! ? e.end_line : e.line! });
 
 function selectPart(id: string | null, pick: PickResult | null, focus = false): void {
   selection = id ? { partId: id, pick } : null;
+  picked = id ? [id] : [];
   if (!pick) viewer.select(id); // ein Klick im Viewer hat die Auswahl dort schon gesetzt
   if (id && focus) viewer.focusPart(id);
-  partsCard.select(id);
+  tree.select(picked);
   void renderSelection();
 }
 
-viewer.onPick = (r) => selectPart(r?.partId ?? null, r);
+/** Mehrere Bauteile auswählen, `primary` zeigt die Auswahlkarte (bei mehreren eine Zusammenfassung). */
+function setPicked(ids: string[], primary: string | null, pick: PickResult | null = null): void {
+  picked = [...new Set(ids)];
+  const main = primary && picked.includes(primary) ? primary : picked.at(-1) ?? null;
+  selection = main ? { partId: main, pick: main === primary ? pick : null } : null;
+  viewer.setSelection(picked, main);
+  tree.select(picked);
+  void renderSelection();
+}
+
+// Klick ins Modell: allein auswählen, mit Shift dazu, mit Strg dazu oder heraus. Daneben geklickt mit Taste: Auswahl bleibt
+viewer.onPick = (r, mods) => {
+  const add = mods.shift || mods.ctrl;
+  if (!add) { selectPart(r?.partId ?? null, r); return; }
+  if (!r) { setPicked(picked, selection?.partId ?? null, selection?.pick ?? null); return; }
+  if (mods.ctrl && picked.includes(r.partId)) { const rest = picked.filter((x) => x !== r.partId); setPicked(rest, rest.at(-1) ?? null); return; }
+  setPicked([...picked, r.partId], r.partId, r);
+};
+// Alt + links ziehen: Rahmenauswahl, mit Shift oder Strg dazu
+viewer.onBox = (ids, add) => setPicked(add ? [...picked, ...ids] : ids, ids.at(-1) ?? (add ? selection?.partId ?? null : null));
+viewer.onContext = (id, x, y) => { if (id) openPartMenu(id, x, y); else openViewerMenu(x, y); };
+
+const partName = (id: string) => partEntry(id)?.name ?? partInfo(id)?.name ?? id;
 
 async function renderSelection(): Promise<void> {
   const card = $('selcard');
   if (!selection) { card.hidden = true; return; }
+  $<HTMLButtonElement>('btn-sel-export').disabled = picked.length > 1;
+  if (picked.length > 1) {
+    // Mehrere: Zahl und Namen, kein Code und kein Export eines einzelnen Teils
+    $('sel-name').textContent = `${picked.length} parts selected`;
+    $('sel-name').title = '';
+    $('sel-swatch').style.background = 'var(--acc)';
+    const names = picked.map(partName);
+    $('info').textContent = names.slice(0, 6).join(', ') + (names.length > 6 ? ` and ${names.length - 6} more` : '');
+    $('code').replaceChildren();
+    $<HTMLButtonElement>('btn-sel-code').disabled = true;
+    card.hidden = false;
+    return;
+  }
   const { partId, pick } = selection;
   const p = partInfo(partId);
   const e = partEntry(partId);
@@ -413,6 +479,10 @@ async function renderSelection(): Promise<void> {
 /** Text für die Eingabe des Agenten. Zahlen mit Punkt, damit sie eindeutig bleiben. */
 function selectionText(): string | null {
   if (!selection) return null;
+  if (picked.length > 1) {
+    const names = picked.map((id) => `"${partName(id)}"`);
+    return `[Selection: ${picked.length} parts: ${names.slice(0, 40).join(', ')}${names.length > 40 ? ` and ${names.length - 40} more` : ''}] `;
+  }
   const e = partEntry(selection.partId);
   const group = partInfo(selection.partId)?.group;
   const bits = [`part "${e?.name ?? partInfo(selection.partId)?.name ?? selection.partId}"${group ? ` in group "${group}"` : ''}`];
@@ -579,6 +649,7 @@ async function sendMarkup(): Promise<void> {
 // ---- Animation, Analyse und Video (E58) -----------------------------------------------------------------------------
 
 const resultLayer = new ResultLayer(viewer);
+/** Zeigt der Viewer gerade eine Analyse oder Animation, sagen es Reiter, Baum und die Leiste unten im Bild (E82). */
 /** Messen, Explosion, Animation und Analyse schließen sich aus: Jedes braucht das Modell in seiner eigenen Lage. */
 const endOthers = (keep: 'measure' | 'explode' | 'anim' | 'result') => {
   if (keep !== 'measure' && measureTool.isActive) measureTool.setActive(false);
@@ -587,26 +658,46 @@ const endOthers = (keep: 'measure' | 'explode' | 'anim' | 'result') => {
   if (keep !== 'result') resultTool.setActive(false);
 };
 const animTool = new AnimTool({
-  card: $('anim-card'), close: $<HTMLButtonElement>('btn-anim-close'),
-  select: $<HTMLSelectElement>('anim-select'), play: $<HTMLButtonElement>('btn-anim-play'), range: $<HTMLInputElement>('anim-range'), time: $('anim-time'),
-  loop: $<HTMLButtonElement>('btn-anim-loop'), follow: $<HTMLButtonElement>('btn-anim-follow'), speed: $<HTMLSelectElement>('anim-speed'), hint: $('anim-hint'),
-  video: $<HTMLButtonElement>('btn-anim-video'), agent: $<HTMLButtonElement>('btn-anim-agent'), viewerEl: $('viewer'),
+  bar: $('anim-bar'), close: $<HTMLButtonElement>('btn-anim-close'),
+  play: $<HTMLButtonElement>('btn-anim-play'), range: $<HTMLInputElement>('anim-range'), time: $('anim-time'), total: $('anim-total'), ticks: $('anim-ticks'),
+  loop: $<HTMLButtonElement>('btn-anim-loop'), follow: $<HTMLButtonElement>('btn-anim-follow'), texts: $<HTMLButtonElement>('btn-anim-texts'),
+  speed: $<HTMLSelectElement>('anim-speed'), viewerEl: $('viewer'),
 }, {
   viewer, list: () => api.anim.list(), build: (f) => api.anim.build(f), readBinary: (rel) => api.fs.readBinary(rel), renderVideo: (id) => api.render.video(id),
-  beforeOn: () => endOthers('anim'), insert: (t) => insertToAgent(t), toast, showVideo: (rel) => { void refreshFiles(); void videoView.open(rel); },
-  changed: () => renderViewSwitch(),
+  beforeOn: () => endOthers('anim'), insert: (t) => insertToAgent(t), toast,
+  showVideo: (rel) => { void refreshFiles(); seen.add(videoKey(rel)); scheduleViewLists(); void videoView.open(rel); },
+  changed: () => renderResults(),
+  tick: () => animPanel.tick(),
 });
 const resultTool = new ResultTool({
-  card: $('result-card'), close: $<HTMLButtonElement>('btn-result-close'), select: $<HTMLSelectElement>('result-select'),
-  legend: $('result-legend'), summary: $('result-summary'), probe: $('result-probe'), hint: $('result-hint'),
-  rerun: $<HTMLButtonElement>('btn-result-rerun'), agent: $<HTMLButtonElement>('btn-result-agent'), viewerEl: $('viewer'),
-  femRow: $('result-fem'), deform: $<HTMLSelectElement>('result-deform'), bcs: $<HTMLButtonElement>('btn-result-bcs'),
-  field: $<HTMLSelectElement>('result-field'), range: $<HTMLSelectElement>('result-range'), custom: $('result-custom'),
-  lo: $<HTMLInputElement>('result-lo'), hi: $<HTMLInputElement>('result-hi'),
+  legend: $('result-legend'), legendTitle: $('result-q'), legendBody: $('result-lg-body'), scaleBtn: $<HTMLButtonElement>('btn-result-scale'), scaleMode: $('result-scale-mode'),
+  scaleMenu: $('menu-scale'), legendFull: $('result-q-full'), legendFoot: $('result-lg-foot'),
+  range: $('result-range'), custom: $('result-custom'), lo: $<HTMLInputElement>('result-lo'), hi: $<HTMLInputElement>('result-hi'),
+  bar: $('result-bar'), field: $('result-field'), deform: $('result-deform'), deformLabel: $('result-deform-label'), bcs: $<HTMLButtonElement>('btn-result-bcs'),
+  name: $('result-name'), close: $<HTMLButtonElement>('btn-result-close'), viewerEl: $('viewer'),
 }, {
-  layer: resultLayer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
-  beforeOn: () => endOthers('result'), insert: (t) => insertToAgent(t), toast,
-  changed: () => renderViewSwitch(),
+  layer: resultLayer, viewer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
+  beforeOn: () => endOthers('result'), toast,
+  changed: () => renderResults(),
+});
+const analysisPanel = new AnalysisPanel({
+  list: $('an-list'), listCount: $('an-count'), rows: $('an-rows'),
+  report: $('an-report'), back: $<HTMLButtonElement>('btn-an-back'), backCount: $('an-back-count'), code: $<HTMLButtonElement>('btn-an-code'),
+  more: $<HTMLButtonElement>('btn-an-more'), body: $('an-body'), pick: $('an-pick'), rerun: $<HTMLButtonElement>('btn-result-rerun'),
+  agent: $<HTMLButtonElement>('btn-result-agent'), menu: $('menu-ctx'),
+}, {
+  tool: resultTool, insert: (t) => insertToAgent(t), openCode: (f) => void openCode(f),
+  copy: (t) => void navigator.clipboard.writeText(t).then(() => toast(`Copied: ${t}`), (e) => toast(`Could not copy: ${e instanceof Error ? e.message : String(e)}`, 'error')),
+  isNew: (r) => !seen.has(resultKey(r)), seen: (r) => { seen.add(resultKey(r)); },
+});
+const animPanel = new AnimPanel({
+  list: $('am-list'), listCount: $('am-count'), rows: $('am-rows'),
+  report: $('am-report'), back: $<HTMLButtonElement>('btn-am-back'), backCount: $('am-back-count'), code: $<HTMLButtonElement>('btn-am-code'),
+  body: $('am-body'), video: $<HTMLButtonElement>('btn-anim-video'), agent: $<HTMLButtonElement>('btn-anim-agent'),
+}, {
+  tool: animTool, videos: () => viewLists.videos, openVideo: (rel) => void videoView.open(rel),
+  openCode: (file, line) => void openCode(file, line ? { from: line, to: line, label: animTool.currentName ?? 'Animation' } : undefined),
+  insert: (t) => insertToAgent(t), isNew: (k) => !seen.has(k), seen: (k) => { seen.add(k); },
 });
 // Messen und Explosion schalten die beiden aus, bevor sie selbst anfangen (Lauscher in der Erfassungsphase laufen vor denen
 // der Werkzeuge): Beide rechnen mit der Einbaulage
@@ -626,17 +717,23 @@ $('btn-mark').addEventListener('click', startMarkup);
 $('btn-mark-cancel').addEventListener('click', () => markup.close());
 $('btn-mark-send').addEventListener('click', () => void sendMarkup());
 
+/**
+ * Rechtsklick auf ein Teil (Baum oder Bild). Ist es Teil einer Mehrfachauswahl, gilt das Menü für alle. Sonst wird es
+ * ausgewählt, wie in CAD üblich. Die Tasten stehen daneben.
+ */
 function openPartMenu(id: string, x: number, y: number): void {
+  if (picked.length > 1 && picked.includes(id)) { openSelectionMenu(x, y); return; }
+  if (selection?.partId !== id) selectPart(id, null);
   const e = partEntry(id);
   const visible = viewer.isVisible(id);
   const ghost = viewer.isGhosted(id);
   const m = $('menu-ctx');
   const items: (HTMLElement | null)[] = [
     el('div', { className: 'mh', textContent: e?.name ?? partInfo(id)?.name ?? id }),
-    menuItem('Isolate', { icon: 'target', onClick: () => { viewer.isolate(id); refreshPartsCard(); } }),
-    viewer.hiddenCount ? menuItem('Show all', { icon: 'eye', onClick: () => { viewer.showAll(); refreshPartsCard(); } }) : null,
-    menuItem(visible ? 'Hide' : 'Show', { icon: visible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(id, !visible); refreshPartsCard(); } }),
-    menuItem(ghost ? 'Not transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(id, !ghost); refreshPartsCard(); } }),
+    menuItem('Isolate', { icon: 'target', kbd: 'I', onClick: () => { viewer.isolate(id); refreshTree(); } }),
+    viewer.hiddenCount ? menuItem('Show all', { icon: 'eye', kbd: 'Shift H', onClick: () => { viewer.showAll(); refreshTree(); } }) : null,
+    menuItem(visible ? 'Hide' : 'Show', { icon: visible ? 'eyeoff' : 'eye', kbd: visible ? 'H' : '', onClick: () => { viewer.setVisible(id, !visible); refreshTree(); } }),
+    menuItem(ghost ? 'Not transparent' : 'Transparent', { icon: 'ghost', kbd: 'T', onClick: () => { viewer.setGhosted(id, !ghost); refreshTree(); } }),
     menuItem('Zoom to part', { icon: 'fit', onClick: () => viewer.focusPart(id) }),
     el('div', { className: 'msep' }),
     menuItem('Show code', { icon: 'code', disabled: !e?.file, onClick: () => { selectPart(id, null); if (e?.file && e.line) void openCode(e.file, { ...lineRange(e), label: e.name, color: partInfo(id)?.color }); } }),
@@ -654,15 +751,77 @@ function openGroupMenu(ids: string[], name: string, x: number, y: number): void 
   const m = $('menu-ctx');
   const items: (HTMLElement | null)[] = [
     el('div', { className: 'mh', textContent: `${name} · ${ids.length} part${ids.length === 1 ? '' : 's'}` }),
-    menuItem('Isolate', { icon: 'target', onClick: () => { viewer.isolate(ids); refreshPartsCard(); } }),
-    viewer.hiddenCount ? menuItem('Show all', { icon: 'eye', onClick: () => { viewer.showAll(); refreshPartsCard(); } }) : null,
-    menuItem(anyVisible ? 'Hide' : 'Show', { icon: anyVisible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(ids, !anyVisible); refreshPartsCard(); } }),
-    menuItem(allGhost ? 'Not transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(ids, !allGhost); refreshPartsCard(); } }),
+    menuItem('Isolate', { icon: 'target', onClick: () => { viewer.isolate(ids); refreshTree(); } }),
+    viewer.hiddenCount ? menuItem('Show all', { icon: 'eye', kbd: 'Shift H', onClick: () => { viewer.showAll(); refreshTree(); } }) : null,
+    menuItem(anyVisible ? 'Hide' : 'Show', { icon: anyVisible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(ids, !anyVisible); refreshTree(); } }),
+    menuItem(allGhost ? 'Not transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(ids, !allGhost); refreshTree(); } }),
     menuItem('Zoom to group', { icon: 'fit', onClick: () => viewer.setView('fit', ids) }),
   ];
   m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
   menus.at(m, x, y);
 }
+
+/** Rechtsklick auf mehrere ausgewählte Teile: Isolieren, Ausblenden, Transparent für alle. */
+function openSelectionMenu(x: number, y: number): void {
+  const ids = [...picked];
+  const allGhost = ids.every((id) => viewer.isGhosted(id));
+  const m = $('menu-ctx');
+  const items: (HTMLElement | null)[] = [
+    el('div', { className: 'mh', textContent: `${ids.length} parts selected` }),
+    menuItem(`Isolate ${ids.length} parts`, { icon: 'target', kbd: 'I', onClick: () => selectionAction('isolate') }),
+    menuItem(`Hide ${ids.length} parts`, { icon: 'eyeoff', kbd: 'H', onClick: () => selectionAction('hide') }),
+    viewer.hiddenCount ? menuItem('Show all', { icon: 'eye', kbd: 'Shift H', onClick: () => selectionAction('showAll') }) : null,
+    menuItem(allGhost ? 'Not transparent' : 'Transparent', { icon: 'ghost', kbd: 'T', onClick: () => selectionAction('ghost') }),
+    menuItem('Zoom to selection', { icon: 'fit', onClick: () => viewer.setView('fit', ids) }),
+    el('div', { className: 'msep' }),
+    menuItem('Send to agent', { icon: 'send', onClick: () => insertToAgent(selectionText()) }),
+    menuItem('Clear selection', { icon: 'x', kbd: 'Esc', onClick: () => selectPart(null, null) }),
+  ];
+  m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
+  menus.at(m, x, y);
+}
+
+/** Rechtsklick ins Bild neben das Modell: alles einblenden, Auswahl aufheben. Ohne beides kein Menü. */
+function openViewerMenu(x: number, y: number): void {
+  const items: HTMLElement[] = [];
+  if (viewer.hiddenCount) items.push(menuItem('Show all', { icon: 'eye', kbd: 'Shift H', onClick: () => selectionAction('showAll') }));
+  if (picked.length) items.push(menuItem('Clear selection', { icon: 'x', kbd: 'Esc', onClick: () => selectPart(null, null) }));
+  if (!items.length) return;
+  $('menu-ctx').replaceChildren(...items);
+  menus.at($('menu-ctx'), x, y);
+}
+
+/**
+ * Was die Tasten H, Shift H, I und T tun (auch aus den Menüs). Ausgeblendete Teile verlassen die Auswahl, sonst wirkte die
+ * nächste Taste auf Unsichtbares.
+ */
+function selectionAction(a: 'hide' | 'showAll' | 'isolate' | 'ghost'): void {
+  const ids = [...picked];
+  if (a === 'showAll') viewer.showAll();
+  else if (!ids.length) { toast('Select parts first: click in the model or the tree, Ctrl or Shift for more, Alt + drag for a box.', 'info'); return; }
+  else if (a === 'hide') { viewer.setVisible(ids, false); selectPart(null, null); }
+  else if (a === 'isolate') viewer.isolate(ids);
+  else viewer.setGhosted(ids, !ids.every((id) => viewer.isGhosted(id)));
+  refreshTree();
+}
+
+// Tasten für die Auswahl (wie in CAD): H ausblenden, Shift H alles einblenden, I isolieren, T transparent, Esc Auswahl aufheben.
+// Nicht beim Schreiben (Code, Terminal, Felder) und nicht, solange Markierung, Video, Einstellungen oder die Startseite offen sind
+window.addEventListener('keydown', (e) => {
+  if (!project || e.ctrlKey || e.altKey || e.metaKey || e.repeat || settings.isOpen || !$('start').hidden) return;
+  if ((e.target as HTMLElement | null)?.closest?.('#terminals, #code-view, input, textarea, select, [contenteditable=true]')) return;
+  if (markup.active || !$('videoview').hidden) return;
+  const k = e.key.toLowerCase();
+  if (k === 'h' && e.shiftKey) selectionAction('showAll');
+  else if (e.shiftKey) return;
+  else if (k === 'h') selectionAction('hide');
+  else if (k === 'i') selectionAction('isolate');
+  else if (k === 't') selectionAction('ghost');
+  // Escape gehört zuerst Menüs und Werkzeugen (Messen, Schnitt mit Flächenwahl, Ladeanzeige): nur ohne sie die Auswahl aufheben
+  else if (e.key === 'Escape' && picked.length && !e.defaultPrevented && !measureTool.isActive && $('viewer-busy').hidden) selectPart(null, null);
+  else return;
+  e.preventDefault();
+});
 
 // ---- Build und Modell -------------------------------------------------------------------------------------------
 
@@ -756,10 +915,12 @@ async function loadModel(): Promise<void> {
     if (resultTool.isActive) void resultTool.refresh();
     sectionTool.refresh();
     msg.className = ''; msg.textContent = '';
-    refreshPartsCard();
+    refreshTree();
     // Flächen-IDs gelten nur für einen Build: nach dem Neuladen bleibt das Bauteil gewählt, die Fläche nicht
-    if (selection && !partInfo(selection.partId)) selectPart(null, null);
-    else if (selection) { selection.pick = null; viewer.select(selection.partId); void renderSelection(); }
+    // Mehrfachauswahl: was es nach dem Build noch gibt
+    const still = picked.filter((id) => partInfo(id));
+    if (selection && !partInfo(selection.partId)) setPicked(still, still.at(-1) ?? null);
+    else if (selection) { selection.pick = null; setPicked(still, selection.partId); }
     void renderErrorCard();
     scheduleThumb();
   } catch (e) {
@@ -797,11 +958,11 @@ const versions = new VersionsBar({
       measureTool.reset();
       explodeTool.refresh();
       sectionTool.refresh();
-      refreshPartsCard();
+      refreshTree();
       selectPart(null, null);
       void renderErrorCard();
     } catch (e) { toast(`The preview cannot be shown: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
-    renderViewSwitch();
+    renderResults();
   },
   toast,
   beforeRestore: () => leaveEditor('Restore version'), // Wiederherstellen ersetzt Dateien
@@ -824,6 +985,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   videoView.close();
   viewer.clear();
   versions.reset();
+  tree.setTitle(p.name);
   terminals.closeAll();
   code.reset();
   skills.reset();
@@ -834,8 +996,9 @@ async function onProject(p: ProjectInfo): Promise<void> {
   resetViewLists();
   applyDisplayDefaults();
   selection = null;
+  picked = [];
   void renderSelection();
-  partsCard.message('Building the model …');
+  tree.message('Building the model …');
   $('doc-name').textContent = p.name;
   document.title = `SOMA – ${p.name}`;
   $<HTMLInputElement>('chk-auto').checked = p.autoBuild;
@@ -938,6 +1101,7 @@ async function doSave(saveAs = false): Promise<void> {
     toast(lines.join('\n'), r.warnings?.length ? 'error' : 'ok');
     project = await api.project.current(); // der Modellname folgt dem Dateinamen
     $('doc-name').textContent = project.name;
+    tree.setTitle(project.name);
     void refreshSaveState();
   } finally {
     saving = false;
@@ -962,6 +1126,14 @@ async function doBuild(): Promise<void> {
   await api.build.run();
 }
 const openProject = async (id: string) => { if (await leaveEditor('Open model')) await api.project.open(id); };
+
+// F3 klappt den Strukturbaum auf und zu wie in CATIA (E82, Vorschlag aus dem Entwurf). Nicht beim Schreiben in Code, Terminal oder Feldern
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'F3' || e.ctrlKey || e.altKey || e.shiftKey || !project || settings.isOpen || !$('start').hidden) return;
+  if ((e.target as HTMLElement | null)?.closest?.('#terminals, #code-view, input, textarea, select, [contenteditable=true]')) return;
+  e.preventDefault();
+  tree.setOpen(!tree.isOpen);
+});
 
 // Kurzbefehle gelten nicht im Terminal: dort gehören Strg+S/Strg+O den Programmen (Claude Code nutzt Strg+O selbst)
 window.addEventListener('keydown', (e) => {
@@ -1102,19 +1274,22 @@ async function doExport(fmt: string, label: string): Promise<ExportResult> {
   return r;
 }
 
-// ---- Umschalter oben links: was der Viewer zeigt (Entwurf 2) -----------------------------------------------------
-// Analysen, Animationen und Videos sind Ergebnisse des Agenten, keine Werkzeuge. Hier wählt man, was der Viewer zeigt.
+// ---- Ergebnisse des Agenten in den Reitern Analysis und Animation (E82) ----------------------------------------------
+// Analysen, Animationen und Videos sind Ergebnisse des Agenten, keine Werkzeuge. Ein Klick auf den Reiter zeigt das zuletzt
+// gezeigte Ergebnis im Viewer (beim ersten Mal das neueste), das × in der Leiste unten im Bild führt zurück zum Modell.
 
 let viewLists: { results: ResultEntry[]; anims: AnimEntry[]; videos: string[] } = { results: [], anims: [], videos: [] };
-/** Schon gesehene Ergebnisse. Was danach dazukommt, bekommt einen Punkt am Umschalter. */
+/** Angesehene Ergebnisse (Schlüssel). Was danach dazukommt, steht in der Liste als „new“, bis man es öffnet. */
 const seen = new Set<string>();
+/** Ergebnisse, die schon in einem geöffneten Reiter standen. Was nicht darin ist, gibt dem Reiter einen Punkt. */
+const tabSeen = new Set<string>();
 let seenReady = false;
 let viewSeq = 0;
 let viewTimer: ReturnType<typeof setTimeout> | undefined;
 
-const resultKey = (r: ResultEntry) => `r:${r.id}:${String((r as { created?: unknown }).created ?? '')}`;
-const animKey = (a: AnimEntry) => `a:${a.id}`;
-const viewKeys = () => [...viewLists.results.map(resultKey), ...viewLists.anims.map(animKey), ...viewLists.videos.map((v) => `v:${v}`)];
+const resultKey = (r: ResultEntry) => `r:${r.id}:${String(r.created ?? '')}`;
+const analysisKeys = () => viewLists.results.map(resultKey);
+const animKeys = () => [...viewLists.anims.map(animKey), ...viewLists.videos.map(videoKey)];
 
 function videosIn(nodes: FileNode[], out: string[] = []): string[] {
   for (const n of nodes) {
@@ -1128,8 +1303,9 @@ function resetViewLists(): void {
   viewSeq++;
   viewLists = { results: [], anims: [], videos: [] };
   seen.clear();
+  tabSeen.clear();
   seenReady = false;
-  renderViewSwitch();
+  renderResults();
   void refreshViewLists();
 }
 
@@ -1137,101 +1313,47 @@ async function refreshViewLists(): Promise<void> {
   if (!project) return;
   const seq = ++viewSeq;
   const [results, anims, nodes] = await Promise.all([
-    api.results.list().catch(() => [] as ResultEntry[]), api.anim.list().then((l) => l.animations).catch(() => [] as AnimEntry[]), api.fs.list().catch(() => [] as FileNode[]),
+    api.results.list().catch(() => null), api.anim.list().catch(() => null), api.fs.list().catch(() => [] as FileNode[]),
   ]);
   if (seq !== viewSeq) return;
-  viewLists = { results, anims, videos: videosIn(nodes) };
+  viewLists = { results: results ?? viewLists.results, anims: anims?.animations ?? viewLists.anims, videos: videosIn(nodes) };
+  if (results) resultTool.setList(results);
+  if (anims) animTool.setList(anims);
   // Was beim Öffnen des Modells schon da ist, gilt als gesehen
-  if (!seenReady) { for (const k of viewKeys()) seen.add(k); seenReady = true; }
-  renderViewSwitch();
+  if (!seenReady) { for (const k of [...analysisKeys(), ...animKeys()]) { seen.add(k); tabSeen.add(k); } seenReady = true; }
+  renderResults();
 }
 const scheduleViewLists = () => { clearTimeout(viewTimer); viewTimer = setTimeout(() => void refreshViewLists(), 400); };
 
-function renderViewSwitch(): void {
-  const prev = versions.previewed;
-  let ico = 'cube', name = 'Model', sub = '', closable = false;
-  const n = viewer.partList().length;
-  if (prev) { ico = 'history'; name = `Version ${prev.short}`; sub = 'view only'; closable = true; }
-  // Bei Analyse und Animation sagt das Symbol, was es ist: Der Platz gehört dem Namen
-  else if (resultTool.isActive) { ico = 'gauge'; name = resultTool.currentTitle ?? 'Analysis'; closable = true; }
-  else if (animTool.isActive) { ico = 'anim'; name = animTool.currentName ?? 'Animation'; closable = true; }
-  else sub = n ? `${n} part${n === 1 ? '' : 's'}` : '';
-  $('view-ico').replaceChildren(icon(ico, 16));
-  $('view-name').textContent = name;
-  $('view-sub').textContent = sub;
-  $('btn-view').title = resultTool.isActive && !prev ? `Analysis: ${name}` : animTool.isActive && !prev ? `Animation: ${name}` : 'What the viewer shows: the model, an analysis, an animation or a video';
-  $('view-switch').classList.toggle('vio', !!prev);
-  $('view-switch').classList.toggle('result', !prev && (resultTool.isActive || animTool.isActive));
-  $('btn-view-close').hidden = !closable;
-  $('view-sep').hidden = !closable;
-  const unseen = viewKeys().filter((k) => !seen.has(k)).length;
-  const badge = $('view-new');
-  badge.hidden = !unseen;
-  badge.dataset.n = String(unseen);
-  badge.textContent = `${unseen} new`;
-  badge.title = 'New results from the agent. Click to show the list.';
+/** Reiter, Punkte an der Leiste und Baum nachziehen: Was zeigt der Viewer, was ist neu? */
+function renderResults(): void {
+  // Ein offener Reiter zeigt das Neue selbst (in der Liste), dort braucht es keinen Punkt
+  if (panel === 'analysis') for (const k of analysisKeys()) tabSeen.add(k);
+  if (panel === 'anim') for (const k of animKeys()) tabSeen.add(k);
+  $('nd-analysis').hidden = !analysisKeys().some((k) => !tabSeen.has(k));
+  $('nd-anim').hidden = !animKeys().some((k) => !tabSeen.has(k));
+  if (panel === 'analysis') analysisPanel.render();
+  if (panel === 'anim') animPanel.render();
+  // In der Analyse stehen im Baum nur die gerechneten Körper, gegliedert wie im Modell
+  const r = resultTool.shown;
+  tree.limit(r ? r.parts.map((x) => x.name) : null);
+  fitDock();
 }
 
-/** Eintrag im Menü des Umschalters. `dot`: Statusfarbe (Fundstellen), `isNew`: noch nicht gesehen. */
-function viewItem(ico: string, label: string, opts: { sub?: string; on?: boolean; dot?: string; isNew?: boolean; title?: string; onClick: () => void }): HTMLButtonElement {
-  const d = opts.dot ? el('span', { className: 'dot' }) : null;
-  if (d) d.style.background = opts.dot!;
-  const b = el('button', { className: 'mi' + (opts.on ? ' cur' : ''), title: opts.title ?? '' },
-    icon(ico, 15), el('span', { className: 'vl', textContent: label }), opts.isNew ? el('span', { className: 'tag acc', textContent: 'new' }) : null,
-    el('span', { className: 'k' }, d, opts.sub ?? '', el('span', { className: 'chk' }, icon('check', 14, 2.2))));
-  b.setAttribute('role', 'menuitemradio');
-  b.setAttribute('aria-checked', String(!!opts.on));
-  b.addEventListener('click', opts.onClick);
-  return b;
-}
-
-async function openViewMenu(): Promise<void> {
-  const m = $('menu-view');
-  if (menus.isOpen(m)) { menus.close(); return; }
+/** Reiter Analysis geöffnet: das zuletzt gezeigte Ergebnis ins Bild, beim ersten Mal das neueste. Ohne Ergebnisse die Liste. */
+async function openResults(): Promise<void> {
+  analysisPanel.opened();
+  if (resultTool.isActive || versions.previewing) return;
   await refreshViewLists();
-  const n = viewer.partList().length;
-  const items: HTMLElement[] = [viewItem('cube', 'Model', { sub: `${n} part${n === 1 ? '' : 's'}`, on: !resultTool.isActive && !animTool.isActive, onClick: () => showModelView() })];
-  const { results, anims, videos } = viewLists;
-  const head = (t: string, src: string) => el('div', { className: 'mh' }, t, el('span', { className: 'src', textContent: src }));
-  if (results.length) {
-    items.push(el('div', { className: 'msep' }), head('ANALYSES', '.soma/results/'));
-    for (const r of results) {
-      const bad = r.parts.filter((x) => x.critical > 0).length;
-      items.push(viewItem('gauge', r.id === r.kind ? r.title : `${r.title} (${r.id})`, {
-        sub: r.stale ? 'outdated' : bad ? `${bad} part${bad === 1 ? '' : 's'} critical` : 'OK', dot: r.stale ? 'var(--tx3)' : bad ? 'var(--err)' : 'var(--ok)',
-        on: resultTool.isActive && resultTool.currentId === r.id, isNew: !seen.has(resultKey(r)), onClick: () => resultTool.show(r.id),
-      }));
-    }
-  }
-  if (anims.length) {
-    items.push(el('div', { className: 'msep' }), head('ANIMATIONS', 'animations/'));
-    for (const a of anims) {
-      items.push(viewItem('anim', a.name, { sub: `${a.duration.toFixed(1)} s`, on: animTool.isActive && animTool.currentId === a.id, isNew: !seen.has(animKey(a)), title: a.file, onClick: () => animTool.show(a.id) }));
-    }
-  }
-  if (videos.length) {
-    items.push(el('div', { className: 'msep' }), head('VIDEOS', 'renders/'));
-    for (const v of videos) items.push(viewItem('f-video', v.split('/').pop() ?? v, { isNew: !seen.has(`v:${v}`), title: v, onClick: () => void videoView.open(v) }));
-  }
-  if (!results.length && !anims.length && !videos.length) {
-    items.push(el('div', { className: 'msep' }), el('div', {
-      className: 'mnote', textContent: 'No results yet. The agent creates them: analyses with soma analyze, animations in animations/, videos with soma render (skills “Analysis” and “Animation and video”).',
-    }));
-  }
-  m.replaceChildren(...items);
-  for (const k of viewKeys()) seen.add(k);
-  renderViewSwitch();
-  menus.toggle(m, $('btn-view'));
+  if (panel === 'analysis' && !resultTool.isActive && viewLists.results.length) resultTool.show(null);
 }
 
-/** Zurück zum Modell: Analyse und Animation beenden, eine Vorschau verlassen. */
-function showModelView(): void {
-  if (versions.previewing) { $('btn-live').click(); return; }
-  animTool.setActive(false);
-  resultTool.setActive(false);
+async function openAnims(): Promise<void> {
+  animPanel.opened();
+  if (animTool.isActive || versions.previewing) return;
+  await refreshViewLists();
+  if (panel === 'anim' && !animTool.isActive && viewLists.anims.length) animTool.show(null);
 }
-$('btn-view').addEventListener('click', () => void openViewMenu());
-$('btn-view-close').addEventListener('click', () => showModelView());
 
 // ---- Viewer-Bedienung -------------------------------------------------------------------------------------------
 
@@ -1401,10 +1523,10 @@ api.project.onSaveState((st) => renderSaveState(st));
 void api.settings.get().then((st) => { appSettings = st; applySettings(); applyDisplayDefaults(); }).catch(() => { /* es gelten die Vorgaben */ });
 
 if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
-// Seitenleiste wie beim letzten Mal, beim ersten Start mit den Bauteilen
+// Seitenleiste wie beim letzten Mal, beim ersten Start zu: Die Bauteile stehen im Baum im Viewer (E82)
 {
   const side = store.get('soma.side');
-  showPanel(side === null ? 'parts' : PANELS.includes(side as PanelName) ? side as PanelName : null);
+  showPanel(side && PANELS.includes(side as PanelName) ? side as PanelName : null);
 }
 // Die App beginnt auf der Startseite (E69), der Hauptprozess öffnet kein Modell. Nur im Testmodus öffnet er gleich eins.
 if (api.startsHome) void showStart(true);
@@ -1419,7 +1541,11 @@ if (api.testMode) {
     status: () => ({ state: buildStatus.state, text: $('status').textContent, detail: $('status-detail').textContent, viewerMsg: $('errcard').hidden ? $('viewer-msg').textContent : $('errcard').textContent }),
     info: () => ($('selcard').hidden ? '' : `${$('sel-name').textContent} · ${$('info').textContent} · ${$('code').querySelector('.ph')?.textContent ?? ''}`),
     codeHighlight: () => [...document.querySelectorAll('#code .cl.hl')].map((x) => x.textContent),
-    treeNames: () => [...document.querySelectorAll('#tab-model .pname')].map((x) => x.textContent),
+    treeNames: () => tree.names(),
+    tree: () => tree.state(),
+    treeOpen: (on: boolean) => tree.setOpen(on),
+    picked: () => picked.map(partName),
+    treeExpandAll: () => tree.expandAll(),
     termText: (id: number) => terminals.text(id),
     versions: () => versions.state(),
     saveState: () => saveState,
@@ -1439,6 +1565,15 @@ if (api.testMode) {
     result: () => resultTool.state(),
     resultRefresh: () => resultTool.refresh(),
     resultPin: (x: number, y: number) => resultTool.testPin(x, y),
+    resultShow: (id: string) => resultTool.show(id),
+    resultField: (f: 'value' | 'stress' | 'disp') => resultTool.testField(f),
+    resultDeform: (sc: number) => resultTool.testDeform(sc),
+    analysis: () => analysisPanel.state(),
+    analysisToggle: (key: string) => analysisPanel.testToggle(key),
+    animShow: (id: string) => animTool.show(id),
+    animPanel: () => animPanel.state(),
+    rail: () => ({ analysis: !$('nd-analysis').hidden, anim: !$('nd-anim').hidden, pressed: [...document.querySelectorAll<HTMLElement>('#rail [aria-pressed=true]')].map((b) => b.dataset.panel) }),
+    dockCompact: () => $('dock').classList.contains('compact'),
     video: () => videoView.state(),
     videoOpen: (rel: string) => videoView.open(rel),
     videoSeek: (t: number) => videoView.testSeek(t),
@@ -1453,9 +1588,6 @@ if (api.testMode) {
     showPanel: (p: PanelName | 'code' | null) => (p === 'code' ? showCode(true) : showPanel(p)),
     showCode,
     layout: () => ({ side: panel, code: codeOpen, agent: !$('terminals').classList.contains('collapsed') }),
-    viewSwitch: () => ({ name: $('view-name').textContent, sub: $('view-sub').textContent, unseen: $('view-new').hidden ? 0 : Number($('view-new').dataset.n ?? 0), closable: !$('btn-view-close').hidden }),
-    openViewMenu: () => openViewMenu(),
-    viewMenu: () => [...$('menu-view').querySelectorAll('.mi')].map((x) => x.textContent),
     refreshViewLists: () => refreshViewLists(),
     openSkill: (id: string | null) => skills.openDetail(id),
     settings: () => settings.state(),
@@ -1464,7 +1596,7 @@ if (api.testMode) {
     settingsSelect: (id: string | null) => settings.select(id),
     settingsType: (text: string) => settings.type(text),
     settingsSave: () => settings.save(),
-    settingsShow: (sec: 'viewer' | 'skills' | 'storage' | 'about') => settings.open(undefined, sec),
+    settingsShow: (sec: 'viewer' | 'keys' | 'skills' | 'storage' | 'about') => settings.open(undefined, sec),
     settingsPages: () => ({ viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state() }),
     appSettings: () => appSettings,
     storageRefresh: () => storagePage.refresh(),

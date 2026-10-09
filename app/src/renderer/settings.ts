@@ -13,8 +13,8 @@ import { CATEGORY_ICON } from './skills';
 import { el, menus } from './ui';
 
 /** Reiter der Einstellungen (E78, E81). */
-export type SettingsSection = 'viewer' | 'skills' | 'storage' | 'about';
-export const SECTIONS: SettingsSection[] = ['viewer', 'skills', 'storage', 'about'];
+export type SettingsSection = 'viewer' | 'keys' | 'skills' | 'storage' | 'about';
+export const SECTIONS: SettingsSection[] = ['viewer', 'keys', 'skills', 'storage', 'about'];
 /** Ein Reiter außer „Skills“: wird beim Zeigen aufgefrischt. */
 export interface SettingsPage { show(): void }
 

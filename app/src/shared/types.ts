@@ -293,7 +293,10 @@ export interface ResultPart {
   worst?: { value: number; at: number[] }; overlap?: number; contact?: number;
   /** Nur FEM: höchste Vergleichsspannung (MPa), größte Verschiebung (mm), Werkstoff. */
   stress?: { value: number; at: number[] }; displacement?: { value: number; at: number[] };
-  material?: { name: string; E: number; strength: number; note?: string | null };
+  /** Werkstoff. Querdehnzahl `nu` und Dichte (g/cm³) für den Bericht (E82), sie fehlen bei älteren Ergebnissen. */
+  material?: { name: string; E: number; strength: number; nu?: number; density?: number; note?: string | null };
+  /** Nur FEM mit Netzprüfung: höchste Spannung mit dem gröberen Netz und die Änderung zum feinen (0.2 = 20 %). */
+  coarse?: { stress: number; change: number };
 }
 /** Randbedingung einer FEM-Studie (soma analyze fem): fest, Kraft oder Druck auf Flächen eines Teils. */
 export interface FemBc {
@@ -302,7 +305,10 @@ export interface FemBc {
 }
 export interface FemInfo {
   study: string; bcs: FemBc[]; applied: number[]; reaction: number[]; maxDisp: number; diag: number;
-  mesh: { size: number; elements: number; dofs: number; solver: string };
+  /** `auto`: Die Studie gibt keine Netzgröße vor (fehlt bei älteren Ergebnissen). */
+  mesh: { size: number; elements: number; dofs: number; solver: string; nodes?: number; auto?: boolean };
+  /** Abweichung des Gleichgewichts (0.001 = 0.1 %), gröberes Netz der Prüfung, Schwerkraft (m/s², null: ohne). */
+  balance?: number; coarse?: { size: number; elements: number } | null; gravity?: number[] | null;
 }
 export interface ResultMeta {
   id: string; kind: string; title: string; quantity: string; unit: string;
@@ -312,6 +318,8 @@ export interface ResultMeta {
   /** Werte in diesem Band gelten als Berührung, nicht als kritisch (Abstand). */
   neutral?: [number, number] | null;
   parts: ResultPart[]; summary: string; created: number; command: string[];
+  /** Rechenzeit in Sekunden. */
+  seconds?: number;
   /** Hinweise der Auswertung (FEM: Netzabhängigkeit, große Verformung, Werkstoff). */
   notes?: string[];
   fem?: FemInfo | null;

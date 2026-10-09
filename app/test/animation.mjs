@@ -1,7 +1,8 @@
 // Test von Animation, Analyse, soma render und Video (E58): Animationsdateien bauen (auch über den Watcher), Ablauf als Text,
 // Kollisionsprüfung, Fehler mit Datei und Zeile, Abspielen im Viewer (Lage, Hervorhebung, Kamera), Ausschluss mit Explosion
 // und Messen, soma render über die App (Bild, Übersicht, Video mit Untertiteln), Fehler der Verbindung, Video abspielen und
-// Standbild markieren, Auswertungen (Überhang, Wandstärke, Abstand) mit Anzeige, Wert unter dem Zeiger und Neu berechnen.
+// Standbild markieren, Auswertungen (Überhang, Wandstärke, Abstand) mit Anzeige, Wert unter dem Zeiger und Neu berechnen,
+// die Reiter Animation und Analysis mit Liste, Schritten und Bericht (E82).
 // Aufruf: npm run test:animation (baut vorher). SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 legt Bilder ab.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -139,20 +140,33 @@ try {
   await waitFor('Fehler weg', () => window.soma.anim.list().then((x) => x.errors.length === 0), 20000).catch(() => {});
   check('Gelöschte Datei: Ihr Fehler verschwindet aus der Liste', (await list()).errors.length === 0);
 
-  // 4) Abspielen im Viewer. Animationen und Analysen wählt man im Umschalter oben links (Entwurf 2), `pickView` klickt den
-  // Eintrag, dessen Text `label` enthält (eine Zahl: der n-te Eintrag, 0 ist „Modell“)
-  const pickView = async (label) => {
-    await ev(() => window.__t.openViewMenu());
-    await ev((l) => { const items = [...document.querySelectorAll('#menu-view .mi')]; (typeof l === 'number' ? items[l] : items.find((b) => b.textContent.includes(l))).click(); }, label);
+  // 4) Abspielen im Viewer. Animationen und Analysen stehen in eigenen Reitern (E82): Der Reiter zeigt beim ersten Mal die erste,
+  // `showAnim` wählt wie ein Klick in der Liste
+  await ev(() => window.__t.refreshViewLists());
+  check('Neue Animationen vom Agenten: Punkt am Reiter Animation', (await ev(() => window.__t.rail())).anim, JSON.stringify(await ev(() => window.__t.rail())));
+  await ev(() => window.__t.showPanel('anim'));
+  await waitFor('Animation geladen', () => window.__t.anim().name !== null && window.__t.animPanel().mode === 'report', 20000);
+  check('Reiter Animation: Punkt weg, Bericht der gezeigten', !(await ev(() => window.__t.rail())).anim, JSON.stringify(await ev(() => window.__t.animPanel())));
+  await domClick('btn-am-back');
+  let ap = await ev(() => window.__t.animPanel());
+  check('Liste: beide Animationen, die gezeigte markiert', ap.mode === 'list' && ap.list.length === 2 && ap.list.filter((x) => x.cur).length === 1, JSON.stringify(ap.list));
+  const showAnim = async (id) => {
+    await ev((i) => window.__t.animShow(i), id);
+    await waitFor(`Animation ${id}`, () => window.__t.anim().active && window.__t.anim().name !== null, 20000);
   };
-  await pickView('Deckel öffnen');
-  await waitFor('Animation geladen', () => window.__t.anim().name !== null, 20000);
-  await ev(() => { const s = document.getElementById('anim-select'); s.value = 'deckel-oeffnen'; s.dispatchEvent(new Event('change')); });
+  await ev(() => document.querySelector('#am-rows .al-row[data-id="deckel-oeffnen"]').click());
   await waitFor('Deckel öffnen gewählt', () => window.__t.anim().name === 'Deckel öffnen', 10000);
   let s = await ev(() => window.__t.anim());
-  check('Karte „Animation“: zwei zur Auswahl, Dauer 8 s, Kamera folgt (eigene Kamera), Hinweis mit Datei', s.active && s.options.length === 2 && near(s.duration, 8)
-    && s.follow && s.hint.startsWith('animations/deckel.py, line 4') && s.time === '0.00 / 8.00 s'
-    && JSON.stringify(await ev(() => window.__t.viewSwitch())) === '{"name":"Deckel öffnen","sub":"","unseen":0,"closable":true}', JSON.stringify(s));
+  ap = await ev(() => window.__t.animPanel());
+  check('Leiste unten: zwei Animationen, Dauer 8 s, Kamera folgt (eigene Kamera), Zeit 0.0 s', s.active && s.options.length === 2 && near(s.duration, 8)
+    && s.follow && s.time === '0.0 s', JSON.stringify(s));
+  check('Reiter Animation: Name, Dauer und bewegte Teile, Schritt aus dem Untertitel', ap.mode === 'report' && ap.title === 'Deckel öffnen'
+    && ap.meta === 'Animation · 8.0 s · 1 part move' && ap.steps.length === 1 && ap.steps[0].text === '1.0 sDer Deckel öffnet bis 110°' && !ap.steps[0].cur, JSON.stringify(ap));
+  await ev(() => document.querySelector('#am-body .cx-seq').click());
+  ap = await ev(() => window.__t.animPanel());
+  check('Klick auf den Schritt springt zu 1 s, der Schritt ist hervorgehoben', near((await ev(() => window.__t.anim())).t, 1) && ap.steps[0].cur, JSON.stringify(ap.steps));
+  check('Baum in der Animation: alle Teile des Modells', (await ev(() => window.__t.tree())).names.length === 7);
+  await ev(() => window.__t.animSeek(0));
   await ev(() => window.__t.animSeek(3));
   let pose = await ev((id) => window.__t.viewer.partPose(id), ids.Lid);
   const q = [-Math.sin(55 * Math.PI / 180), 0, 0, Math.cos(55 * Math.PI / 180)];
@@ -185,7 +199,7 @@ try {
   pose = await ev((id) => window.__t.viewer.partPose(id), ids.Lid);
   check('Explosion beendet die Animation (Deckel ohne Drehung, Hervorhebung weg)', !s.active && pose.quaternion[3] === 1
     && (await ev(() => window.__t.viewer.animViewState())).highlight.length === 0, JSON.stringify(pose));
-  await pickView('Deckel öffnen');
+  await showAnim('deckel-oeffnen');
   await waitFor('Animation wieder an', () => window.__t.anim().active && window.__t.anim().name === 'Deckel öffnen', 10000);
   check('Animation beendet die Explosion', !(await ev(() => window.__t.explode())).active);
   await domClick('btn-measure');
@@ -255,9 +269,14 @@ try {
   await domClick('btn-video-close');
   check('Schließen: Player weg', !(await ev(() => window.__t.video())).open);
 
-  // 9) Knopf „Video erzeugen“ in der Animation
-  await pickView('Deckel öffnen');
+  // 9) Knopf „Video erzeugen“ im Reiter Animation, das Video steht danach darunter
+  await ev(() => window.__t.showPanel('anim'));
+  await showAnim('deckel-oeffnen');
   await waitFor('Animation an', () => window.__t.anim().active && !!window.__t.anim().name, 10000);
+  await ev(() => window.__t.refreshViewLists());
+  ap = await ev(() => window.__t.animPanel());
+  check('Reiter Animation: Video der Animation (renders/deckel-oeffnen.mp4) unter VIDEOS', ap.videos.some((x) => x.startsWith('deckel-oeffnen.mp4')), JSON.stringify(ap.videos));
+  await shot('anim-3-reiter');
   fs.rmSync(mp4);
   await domClick('btn-anim-video');
   await waitFor('Video erzeugt und geöffnet', () => window.__t.video().open && window.__t.video().file === 'renders/deckel-oeffnen.mp4', 120000).catch(() => {});
@@ -276,15 +295,18 @@ try {
   check('Abstand: Stift mit 0,2 mm Spalt kritisch, Störer überschneidet sich, Deckel liegt nur auf', r.status === 0
     && /Stift: [^\n]*below 0\.50 mm/.test(r.stdout) && /Störer: -[^\n]*overlap/.test(r.stdout) && /Lid: [^\n]*nothing below 0\.50 mm[^\n]*contact/.test(r.stdout),
     r.stdout + r.stderr);
-  await pickView(1); // erste Analyse über den Umschalter oben links
+  await ev(() => window.__t.showPanel('analysis')); // zeigt das neueste
   await waitFor('Ergebnis geladen', () => window.__t.result().id !== null, 20000);
-  await ev(() => { const s = document.getElementById('result-select'); s.value = 'thickness'; s.dispatchEvent(new Event('change')); });
-  await waitFor('Wandstärke gewählt', () => window.__t.result().id === 'thickness', 10000);
+  await ev(() => window.__t.resultShow('thickness'));
+  await waitFor('Wandstärke gewählt', () => window.__t.result().id === 'thickness' && window.__t.analysis().title === 'Wall thickness', 10000);
   let rs = await ev(() => window.__t.result());
+  let an = await ev(() => window.__t.analysis());
   vs = await ev(() => window.__t.viewer.animViewState());
-  check('Karte „Analyse“: drei Ergebnisse, Wandstärke je Bauteil, Lasche kritisch, Modell tritt zurück', rs.active && rs.options.length === 3
-    && rs.rows.some((x) => x.startsWith('Lasche') && x.includes('critical') && !x.includes('nothing')) && rs.rows.some((x) => x.startsWith('Body') && x.includes('nothing critical'))
-    && vs.modelHidden && !rs.stale, JSON.stringify(rs.rows));
+  check('Analyse: drei Ergebnisse, Bericht mit kleinster Wandstärke 1 mm unter 1,2 mm, Lasche kritisch, Body nicht, Modell tritt zurück', rs.active && rs.options.length === 3
+    && an.number === '1mm' && / below the limit$/.test(an.status) && an.critical.some((x) => x.startsWith('Lasche')) && !an.critical.some((x) => x.startsWith('Body'))
+    && an.table.some((row) => row[0] === 'Lasche' && row[3] !== '–') && an.table.some((row) => row[0] === 'Body' && row[3] === '–')
+    && vs.modelHidden && !rs.stale, JSON.stringify(an));
+  check('Leiste unten ohne FEM: nur der Name und das ×', rs.bar === 'Wall thickness' && !rs.fem, JSON.stringify(rs.bar));
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
   const at = await ev(() => window.__t.viewer.screenAt([0, -40.5, 6]));
@@ -299,12 +321,14 @@ try {
   // Code ändern: Ergebnis veraltet, „Neu berechnen“ wertet das neue Modell aus
   fs.writeFileSync(path.join(dir, 'model.py'), MODEL(2.0));
   await waitFor('neuer Build', () => window.__t.status().state === 'ok' && window.__t.result().stale === true, 60000).catch(() => {});
-  rs = await ev(() => window.__t.result());
-  check('Nach Codeänderung: Ergebnis als veraltet gekennzeichnet', rs.stale && rs.hint.startsWith('Older than the code'), rs.hint);
+  await ev(() => window.__t.refreshViewLists());
+  an = await ev(() => window.__t.analysis());
+  check('Nach Codeänderung: Ergebnis als veraltet gekennzeichnet', an.meta.includes('older than the code') && an.stale?.startsWith('Values belong to the model'), JSON.stringify(an));
   await domClick('btn-result-rerun');
-  await waitFor('neu berechnet', () => window.__t.result().stale === false, 90000).catch(() => {});
-  rs = await ev(() => window.__t.result());
-  check('„Neu berechnen“: Lasche jetzt 2 mm, nichts kritisch', !rs.stale && rs.rows.some((x) => x.startsWith('Lasche') && x.includes('nothing critical')), JSON.stringify(rs.rows));
+  await waitFor('neu berechnet', () => window.__t.result().stale === false && !window.__t.result().busy, 90000).catch(() => {});
+  an = await ev(() => window.__t.analysis());
+  check('„Neu berechnen“: Lasche jetzt 2 mm, nichts kritisch', !an.stale && !an.critical.some((x) => x.startsWith('Lasche'))
+    && an.table.some((row) => row[0] === 'Lasche' && row[1] === '2' && row[3] === '–'), JSON.stringify(an));
   await domClick('btn-result-close');
   check('Analyse aus: Modell wieder sichtbar', !(await ev(() => window.__t.viewer.animViewState())).modelHidden);
 

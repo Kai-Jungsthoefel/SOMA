@@ -6,16 +6,17 @@ import { paintOverlay } from './overlay';
 import { el } from './ui';
 import type { Viewer } from './viewer';
 
-// Animationen im Viewer (E58): auswählen, abspielen, an eine Stelle springen. Die Bauteile bewegen sich im echten Modell,
+// Animationen im Viewer (E58, E82): abspielen, an eine Stelle springen. Die Bauteile bewegen sich im echten Modell,
 // angehalten gehen Schnitt, Auswahl und Markieren. Untertitel und Beschriftungen stehen wie im Video über dem Bild, lassen sich
-// im Viewer aber ausblenden (das Video behält sie).
+// im Viewer aber ausblenden (das Video behält sie). Abgespielt wird in der Leiste unten im Bild (mit dem × zurück zum Modell),
+// Liste, Schritte und Videos zeigt der Reiter Animation (animpanel.ts).
 
 interface Ui {
-  card: HTMLElement; close: HTMLButtonElement;
-  select: HTMLSelectElement; play: HTMLButtonElement; range: HTMLInputElement; time: HTMLElement;
-  loop: HTMLButtonElement; follow: HTMLButtonElement; speed: HTMLSelectElement; hint: HTMLElement;
-  video: HTMLButtonElement; agent: HTMLButtonElement;
-  /** Bekommt die Klasse `animating`, solange die Karte offen ist. */
+  /** Leiste unten im Bild. */
+  bar: HTMLElement; close: HTMLButtonElement;
+  play: HTMLButtonElement; range: HTMLInputElement; time: HTMLElement; total: HTMLElement; ticks: HTMLElement;
+  loop: HTMLButtonElement; follow: HTMLButtonElement; texts: HTMLButtonElement; speed: HTMLSelectElement;
+  /** Bekommt die Klasse `animating`, solange eine Animation gezeigt wird. */
   viewerEl: HTMLElement;
 }
 interface Deps {
@@ -30,8 +31,10 @@ interface Deps {
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
   /** Ein erzeugtes Video zeigen. */
   showVideo(rel: string): void;
-  /** An, aus oder eine andere Animation: der Umschalter oben links zeigt, was zu sehen ist. */
+  /** An, aus, eine andere Animation, neu gelesen oder Video fertig: Reiter und Baum ziehen nach. */
   changed(): void;
+  /** Zeit oder Abspielen geändert (bei jedem Bild): der aktuelle Schritt im Reiter. */
+  tick(): void;
 }
 
 export class AnimTool {
@@ -46,27 +49,25 @@ export class AnimTool {
   private loop = false;
   /** Titel, Untertitel und Beschriftungen zeigen. Gilt für alle Animationen der Sitzung: Wer sie ausblendet, will meist nur die Bewegung sehen. */
   private texts = true;
-  /** Der Schalter steht in der Karte, gesucht statt übergeben (fehlt er, gibt es eben keinen Schalter). */
-  private readonly textsBtn: HTMLButtonElement | null;
   private rendering = false;
+  /** Fortschritt beim Erzeugen eines Videos (0 bis 1). */
+  private renderFraction = 0;
+  /** Zuletzt gezeigte Animation: Der Reiter Animation bringt sie wieder. */
+  private lastId: string | null = null;
   /** Für welche veraltete Animation schon ein Neubau angestoßen ist (nicht in jeder Runde erneut). */
   private rebuilt = '';
   private loading = 0;
-  /** Beim nächsten Laden diese Animation zeigen (Wahl im Umschalter). */
+  /** Beim nächsten Laden diese Animation zeigen (Wahl im Reiter). */
   private want: string | null = null;
 
   constructor(private readonly ui: Ui, private readonly d: Deps) {
     ui.close.addEventListener('click', () => this.setActive(false));
-    ui.select.addEventListener('change', () => void this.choose(ui.select.value));
     ui.play.addEventListener('click', () => (this.playing ? this.pause() : this.play()));
     ui.range.addEventListener('input', () => { this.pause(); this.seek(Number(ui.range.value)); });
     ui.loop.addEventListener('click', () => { this.loop = !this.loop; ui.loop.setAttribute('aria-pressed', String(this.loop)); });
     ui.follow.addEventListener('click', () => this.setFollow(!this.follow));
-    this.textsBtn = ui.card.querySelector<HTMLButtonElement>('#btn-anim-texts');
-    this.textsBtn?.addEventListener('click', () => this.setTexts(!this.texts));
+    ui.texts.addEventListener('click', () => this.setTexts(!this.texts));
     ui.speed.addEventListener('change', () => { this.last = performance.now(); });
-    ui.video.addEventListener('click', () => void this.makeVideo());
-    ui.agent.addEventListener('click', () => { const t = this.agentNote(); if (t) d.insert(t); });
     window.addEventListener('keydown', (e) => {
       if (!this.active || (e.target as HTMLElement | null)?.closest?.('input, textarea, select, .cm-editor, #terminals')) return;
       // Liegt ein Video oder die Zeichenfläche darüber, gehört ihnen die Leertaste
@@ -79,19 +80,26 @@ export class AnimTool {
   /** Name der gezeigten Animation (null: keine geladen). */
   get currentName(): string | null { return this.active ? this.current?.entry.name ?? null : null; }
   get currentId(): string | null { return this.active ? this.current?.entry.id ?? null : null; }
+  /** Gezeigte Animation mit ihren Daten (Schritte, Untertitel), null: keine. */
+  get shown(): { entry: AnimEntry; data: AnimData } | null { return this.active ? this.current : null; }
+  /** Alle Animationen und Fehler der Dateien, wie zuletzt gelesen. */
+  get entries(): AnimList { return this.list; }
+  get time(): number { return this.t; }
+  get isPlaying(): boolean { return this.playing; }
+  get isRendering(): boolean { return this.rendering; }
 
-  /** Eine bestimmte Animation zeigen (aus dem Umschalter oben links), null: die zuletzt gezeigte oder die erste. */
+  /** Eine bestimmte Animation zeigen, null: die zuletzt gezeigte, beim ersten Mal die erste. */
   show(id: string | null): void {
-    this.want = id;
+    this.want = id ?? this.lastId;
     if (!this.active) this.setActive(true);
-    else if (id && id !== this.current?.entry.id) void this.choose(id);
+    else if (this.want && this.want !== this.current?.entry.id) { const w = this.want; this.want = null; void this.choose(w); }
   }
 
   setActive(on: boolean): void {
     if (on === this.active) return;
     if (on) this.d.beforeOn();
     this.active = on;
-    this.ui.card.hidden = !on;
+    this.ui.bar.hidden = !on;
     this.ui.viewerEl.classList.toggle('animating', on);
     this.d.changed();
     if (on) { void this.refresh(); return; }
@@ -102,19 +110,18 @@ export class AnimTool {
     this.d.viewer.setPainter(null);
   }
 
-  /** Liste neu lesen (Watcher, Build, Einschalten) und die gewählte Animation neu laden. */
+  /** Liste neu lesen (Watcher, Build, Einschalten) und die gewählte Animation neu laden. Ohne gezeigte Animation nur die Liste. */
   async refresh(): Promise<void> {
-    if (!this.active) return;
     const seq = ++this.loading;
-    try { this.list = await this.d.list(); } catch { return; }
-    if (seq !== this.loading || !this.active) return;
+    let list: AnimList;
+    try { list = await this.d.list(); } catch { return; }
+    if (seq !== this.loading) return;
+    this.list = list;
+    if (!this.active) { this.d.changed(); return; }
     const anims = this.list.animations;
-    this.ui.select.replaceChildren(...anims.map((a) => el('option', { value: a.id, textContent: `${a.name} (${a.duration.toFixed(1)} s)` })));
-    this.ui.select.disabled = anims.length < 2;
     const want = anims.find((a) => a.id === (this.want ?? this.current?.entry.id)) ?? anims[0];
     this.want = null;
     if (want) {
-      this.ui.select.value = want.id;
       // Veraltet (Code oder Animationsdatei geändert): einmal neu bauen lassen, die Liste kommt danach wieder
       if (!want.stale) this.rebuilt = '';
       else if (!this.list.building && this.rebuilt !== want.id) {
@@ -129,7 +136,11 @@ export class AnimTool {
       this.d.viewer.setPainter(null);
     }
     this.render();
+    this.d.changed();
   }
+
+  /** Liste von außen (der Reiter liest sie ohnehin), ohne die gezeigte Animation neu zu laden. */
+  setList(list: AnimList): void { this.list = list; }
 
   /** Neues Modell geladen: Liste neu lesen (veraltet?) und die Lagen erneut anwenden, die Bauteile sind neu. */
   modelChanged(): void { if (this.active) void this.refresh(); }
@@ -141,6 +152,7 @@ export class AnimTool {
     this.t = 0;
     await this.load(e, ++this.loading);
     this.render();
+    this.d.changed();
   }
 
   private async load(entry: AnimEntry, seq: number): Promise<void> {
@@ -150,12 +162,19 @@ export class AnimTool {
       if (seq !== this.loading || !this.active) return;
       const fresh = this.current?.entry.id !== entry.id;
       this.current = { entry, data, glb: entry.glb };
+      this.lastId = entry.id;
       if (fresh) this.setFollow(!data.meta.cameraAuto);
       this.ui.range.max = String(data.duration);
       this.ui.range.step = String(Math.min(0.01, data.duration / 1000));
       this.t = Math.min(this.t, data.duration);
+      // Marken der Schritte auf der Zeitleiste
+      this.ui.ticks.replaceChildren(...stepsOf(data).map((s) => {
+        const m = el('span', { className: 'cm', title: s.text });
+        m.style.left = `${((s.start / Math.max(data.duration, 1e-6)) * 100).toFixed(2)}%`;
+        return m;
+      }));
+      this.ui.total.textContent = `${data.duration.toFixed(1)} s`;
       this.apply();
-      this.d.changed();
     } catch (e) {
       this.current = null;
       this.d.toast(`Could not load the animation: ${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -170,7 +189,7 @@ export class AnimTool {
 
   private setTexts(on: boolean): void {
     this.texts = on;
-    this.textsBtn?.setAttribute('aria-pressed', String(on));
+    this.ui.texts.setAttribute('aria-pressed', String(on));
     // Nur die Texte neu malen: Ein ganzes apply() würde angehalten die frei gedrehte Kamera zurücksetzen
     if (this.current) this.paintTexts(this.current.data.frame(this.t));
   }
@@ -180,6 +199,9 @@ export class AnimTool {
     this.t = Math.max(0, Math.min(this.current.data.duration, t));
     this.apply();
   }
+
+  /** An eine Zeit springen (Schritt im Reiter angeklickt). Läuft die Animation, läuft sie dort weiter. */
+  jump(t: number): void { this.last = performance.now(); this.seek(t); }
 
   /** Stand zur aktuellen Zeit in den Viewer: Lagen, Zustände, Kamera (wenn sie folgt) und Texte. */
   private apply(): void {
@@ -195,7 +217,9 @@ export class AnimTool {
     if (this.follow) this.d.viewer.setCamera(f.camera.position, f.camera.target);
     this.paintTexts(f);
     this.ui.range.value = String(this.t);
-    this.ui.time.textContent = `${this.t.toFixed(2)} / ${c.data.duration.toFixed(2)} s`;
+    this.ui.range.style.setProperty('--done', `${((this.t / Math.max(c.data.duration, 1e-6)) * 100).toFixed(2)}%`);
+    this.ui.time.textContent = `${this.t.toFixed(1)} s`;
+    this.d.tick();
   }
 
   /** Titel, Untertitel und Beschriftungen über das Bild, ausgeschaltet gar nichts (auch nicht im Bild für die Markierung). */
@@ -203,8 +227,8 @@ export class AnimTool {
     if (!this.texts) { this.d.viewer.setPainter(null); return; }
     this.d.viewer.setPainter((g, w, h, project) => paintOverlay(g, w, h, {
       caption: f.caption, title: f.title,
-      // Im Viewer stehen unten links die Karten: Untertitel darüber, sonst verdecken sie ihn (im Video steht er unten)
-      captionLift: this.ui.card.hidden ? 0 : ((this.ui.card.parentElement ?? this.ui.card).offsetHeight + 24) * (w / Math.max(1, this.ui.viewerEl.clientWidth)),
+      // Im Viewer steht unten die Abspielleiste: Untertitel darüber, sonst verdeckt sie ihn (im Video steht er unten)
+      captionLift: this.ui.bar.hidden ? 0 : (this.ui.bar.offsetHeight + 34) * (w / Math.max(1, this.ui.viewerEl.clientWidth)),
       labels: f.labels.map((l) => ({ text: l.text, p: project(l.at) })).filter((l) => l.p).map((l) => ({ text: l.text, x: l.p!.x, y: l.p!.y })),
     }));
   }
@@ -238,42 +262,43 @@ export class AnimTool {
   }
 
   private renderPlay(): void {
-    this.ui.play.replaceChildren(icon(this.playing ? 'pause' : 'play', 16, 2));
+    this.ui.play.replaceChildren(icon(this.playing ? 'pause' : 'play', 16, 2.2));
     this.ui.play.setAttribute('aria-label', this.playing ? 'Pause' : 'Play');
     this.ui.play.title = this.playing ? 'Pause (Space)' : 'Play (Space)';
+    this.d.tick();
   }
 
   private render(): void {
-    const c = this.current, hint = this.ui.hint;
-    const err = this.list.errors[0];
-    const has = !!c;
-    for (const b of [this.ui.play, this.ui.agent, this.ui.video, this.ui.follow, this.ui.loop, this.textsBtn]) if (b) b.disabled = !has;
+    const has = !!this.current;
+    for (const b of [this.ui.play, this.ui.follow, this.ui.loop, this.ui.texts]) b.disabled = !has;
     this.ui.range.disabled = !has;
-    this.ui.video.disabled = !has || this.rendering;
-    hint.classList.toggle('warn', !!err || !!c?.entry.stale);
-    if (this.rendering) return;
-    if (err) hint.textContent = `${err.file}${err.line ? `, line ${err.line}` : ''}: ${err.message}`;
-    else if (this.list.building) hint.textContent = 'Building the animation …';
-    else if (c?.entry.stale) hint.textContent = 'Older than the code, rebuilding …';
-    else if (c) hint.textContent = `${c.entry.file}, line ${c.entry.line ?? 1} · ${c.entry.parts} moving part${c.entry.parts === 1 ? '' : 's'}`;
-    else hint.textContent = 'No animation yet. The agent creates them in animations/ (skill “Animation and video”).';
-    if (!has) this.ui.time.textContent = '';
+    if (!has) { this.ui.time.textContent = ''; this.ui.total.textContent = ''; this.ui.ticks.replaceChildren(); }
+  }
+
+  /** Zeile unter dem Kopf im Reiter: Fehler, Bauen, veraltet, Video in Arbeit. `warn`: gelb. */
+  hint(): { text: string; warn: boolean } | null {
+    const c = this.current, err = this.list.errors[0];
+    if (this.rendering) return { text: `Making the video … ${Math.round(this.renderFraction * 100)} %`, warn: false };
+    if (err) return { text: `${err.file}${err.line ? `, line ${err.line}` : ''}: ${err.message}`, warn: true };
+    if (this.list.building) return { text: 'Building the animation …', warn: false };
+    if (c?.entry.stale) return { text: 'Older than the code, rebuilding …', warn: true };
+    return null;
   }
 
   /** Fortschritt beim Erzeugen eines Videos (0 bis 1). */
   progress(f: number): void {
     if (!this.rendering) return;
-    this.ui.hint.classList.remove('warn');
-    this.ui.hint.textContent = `Making the video … ${Math.round(f * 100)} %`;
+    this.renderFraction = f;
+    this.d.changed();
   }
 
-  private async makeVideo(): Promise<void> {
+  async makeVideo(): Promise<void> {
     const c = this.current;
     if (!c || this.rendering) return;
     this.pause();
     this.rendering = true;
-    this.ui.video.disabled = true;
-    this.progress(0);
+    this.renderFraction = 0;
+    this.d.changed();
     try {
       const r = await this.d.renderVideo(c.entry.id);
       if (!r.ok) { this.d.toast(`Could not make the video: ${r.error ?? 'unknown error'}`, 'error'); return; }
@@ -282,7 +307,7 @@ export class AnimTool {
       if (mp4) this.d.showVideo(mp4);
     } finally {
       this.rendering = false;
-      this.render();
+      this.d.changed();
     }
   }
 
@@ -293,7 +318,7 @@ export class AnimTool {
     return `animation "${this.current.entry.name}" at ${this.t.toFixed(2)} s${this.texts ? '' : ' (without titles, captions and labels)'}`;
   }
 
-  private agentNote(): string | null {
+  agentNote(): string | null {
     const c = this.current;
     return c ? `[Animation: "${c.entry.name}" (${c.entry.file}) at ${this.t.toFixed(2)} s] ` : null;
   }
@@ -303,7 +328,7 @@ export class AnimTool {
     return {
       active: this.active, playing: this.playing, t: +this.t.toFixed(3), follow: this.follow, loop: this.loop, texts: this.texts,
       name: this.current?.entry.name ?? null, duration: this.current?.data.duration ?? null,
-      options: [...this.ui.select.options].map((o) => o.textContent), hint: this.ui.hint.textContent, time: this.ui.time.textContent,
+      options: this.list.animations.map((a) => a.name), hint: this.hint()?.text ?? '', time: this.ui.time.textContent,
       note: this.agentNote(), building: this.list.building, errors: this.list.errors.length,
     };
   }
@@ -311,3 +336,16 @@ export class AnimTool {
   /** Prüfhilfe: an diese Zeit springen (in unsichtbaren Fenstern läuft requestAnimationFrame nicht). */
   testSeek(t: number): void { this.pause(); this.seek(t); }
 }
+
+/**
+ * Schritte einer Animation für den Reiter (E82): die Untertitel, die der Agent für Menschen geschrieben hat. Ohne Untertitel
+ * der Ablauf aus der Datei (Bewegungen und Kamera, wie `soma anim info`), ohne Pausen und Texte.
+ */
+export function stepsOf(data: AnimData): { start: number; end: number; text: string }[] {
+  const caps = (data.meta.captions ?? []).filter((c) => c.text);
+  if (caps.length) return caps;
+  return (data.meta.steps ?? []).filter((x) => !/^(Pause|Title|Caption|Label)/.test(x.text));
+}
+
+/** Woher die Schritte kommen. */
+export const stepsSource = (data: AnimData) => ((data.meta.captions ?? []).some((c) => c.text) ? 'from the subtitles' : 'from the animation');

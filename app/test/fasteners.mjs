@@ -259,12 +259,12 @@ try {
   check('Rollen: Normteile "hardware", Gehäuse und Deckel "part"', parts.filter((p) => p.role === 'hardware').length === 10 && byName['Gehäuse']?.role === 'part'
     && byName['Schraube 1']?.group === 'Normteile/Schrauben', parts.map((p) => `${p.name}:${p.role}`).join(' ').slice(0, 100));
 
-  const outline = await ev(() => [...document.querySelectorAll('#tab-model .row, #tab-model .grp')].map((r) => (r.classList.contains('grp') ? '#' : '')
-    + ((r.querySelector('.gname') ?? r.querySelector('.pname'))?.textContent ?? r.textContent)).join(' '));
-  check('Bauteilbaum: Normteile als Gruppe bei den eigenen Teilen, keine Referenzen-Überschrift', outline.includes('Normteile') && outline.includes('Einsätze')
-    && !outline.includes('#REFERENCES'), outline.slice(0, 120));
+  await ev(() => { window.__t.treeOpen(true); window.__t.treeExpandAll(); });
+  const outline = (await ev(() => window.__t.tree())).rows.map((x) => x.name).join(' ');
+  check('Strukturbaum: Normteile als Gruppe bei den eigenen Teilen, keine Gruppe References', outline.includes('Normteile') && outline.includes('Einsätze')
+    && !outline.includes('References'), outline.slice(0, 120));
 
-  await ev(() => [...document.querySelectorAll('#tab-model .row:not(.gr)')].find((r) => r.querySelector('.pname')?.textContent === 'Schraube 1').querySelector('.nm').click());
+  await ev(() => [...document.querySelectorAll('#tree .tr-row:not(.gr)')].find((r) => r.querySelector('.nm')?.textContent === 'Schraube 1').querySelector('.nm').click());
   await waitFor('Auswahl', () => window.__t.info() !== '', 5000).catch(() => {});
   const info = await ev(() => window.__t.info());
   check('Auswahl einer Schraube: Name mit „(purchased part)“, Codestelle wie bei eigenen Teilen', info.startsWith('Schraube 1 (purchased part)'), info.slice(0, 60));

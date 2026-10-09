@@ -2,6 +2,7 @@ import { DECIMALS, NAV_PRESETS, navLegend, type NavPreset, type Projection, type
 import type { AboutInfo, ComponentInfo, SomaApi, StorageArea, StorageEntry, StorageStats } from '../shared/types';
 import { icon } from './icons';
 import type { SettingsPage } from './settings';
+import { shortcutGroups } from './shortcuts';
 import { el } from './ui';
 
 /**
@@ -131,6 +132,19 @@ const AREA: Record<Exclude<StorageEntry['id'], 'appdata'>, { title: string; icon
   skills: { title: 'Your skills', icon: 'book', desc: () => 'Skills you created or edited under “Skills”.' },
   other: { title: 'Other', icon: 'file', desc: () => 'Caches of the display, the settings and the state of the app.' },
 };
+
+/** Reiter „Shortcuts“: alle Tasten und Mausgesten zum Nachschlagen, die Navigation nach der gewählten Mausbelegung. Nur lesen. */
+export class ShortcutsPage implements SettingsPage {
+  constructor(private root: HTMLElement, private deps: { current(): SettingsState }) {}
+
+  show(): void {
+    const nav = this.deps.current().settings.viewer.navigation;
+    const groups = shortcutGroups(nav).map((g) => group(g.title, ...g.items.map((it) => el('div', { className: 'st-key' },
+      el('span', { className: 'st-kk' }, ...it.keys.flatMap((k, i) => [i ? el('span', { className: 'plus', textContent: '+' }) : null, el('kbd', { textContent: k })])),
+      el('span', { className: 'st-kw', textContent: it.what })))));
+    this.root.replaceChildren(...head('Shortcuts', `Keys and mouse gestures of SOMA. Not active while you type in the code, the terminal or a field. Navigation as set under Viewer (${NAV_PRESETS.find((p) => p.id === nav)?.label ?? nav}).`), ...groups);
+  }
+}
 
 export class StoragePage implements SettingsPage {
   private stats: StorageStats | null = null;

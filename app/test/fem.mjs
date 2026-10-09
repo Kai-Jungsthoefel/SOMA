@@ -1,6 +1,7 @@
 // Test der FEM-Auswertung (E65): soma analyze fem mit einer Studie in analyses/, Vergleich mit der Balkenformel, verschmolzene
 // Teile mit eigenem Werkstoff, Druck, Eigengewicht und near=, Fehlermeldungen (Lagerung, Bauteil, Selektor, kein fix), Anzeige in
-// der App (Karte mit Lastfall, Überhöhung, Wert unter dem Zeiger in Ausgangslage, An Agent geben), soma render --result,
+// der App (Reiter Analysis mit Bericht, Leiste und Legende im Bild, Beschriftungen, Überhöhung, Wert unter dem Zeiger in
+// Ausgangslage, An Agent geben, E82), soma render --result,
 // veraltet nach Änderung der Studie, Neu berechnen und das Beispiel aus dem Skill.
 // Aufruf: node test/run-all.mjs fem (baut vorher mit npm run build). SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 legt Bilder ab.
 import { spawnSync } from 'node:child_process';
@@ -109,17 +110,46 @@ try {
   check('Ohne Studie: Hinweis auf die Datei', r.status === 1 && (r.stderr + r.stdout).includes('needs the file with the load case'), r.stderr + r.stdout);
   check('Fehler legen keine Ergebnisse an', !fs.existsSync(path.join(dir, '.soma', 'results', 'kaputt.glb')) && !fs.existsSync(path.join(dir, '.soma', 'results', 'lose.glb')));
 
-  // 4) Anzeige in der App: Karte mit Lastfall und Überhöhung, Wert unter dem Zeiger in Ausgangslage
-  await ev(() => window.__t.openViewMenu());
-  await ev(() => { [...document.querySelectorAll('#menu-view .mi')].find((b) => b.textContent.includes('Balken unter Last')).click(); });
-  await waitFor('FEM-Ergebnis geladen', () => window.__t.result().id === 'balken', 20000);
+  // 4) Anzeige in der App (E82): Punkt am Reiter, Reiter Analysis zeigt das neueste, Liste, Bericht, Leiste und Legende im Bild
+  await ev(() => window.__t.refreshViewLists());
+  check('Neue Analysen vom Agenten: Punkt am Reiter Analysis, keiner an Animation', (await ev(() => window.__t.rail())).analysis
+    && !(await ev(() => window.__t.rail())).anim, JSON.stringify(await ev(() => window.__t.rail())));
+  await ev(() => window.__t.showPanel('analysis'));
+  await waitFor('neuestes Ergebnis gezeigt', () => window.__t.result().id === 'winkel' && window.__t.analysis().mode === 'report', 20000);
+  let an = await ev(() => window.__t.analysis());
+  check('Reiter Analysis: zeigt beim ersten Mal das neueste (Winkel) mit Bericht, Punkt am Reiter weg', an.title === 'Winkel'
+    && an.meta.startsWith('FEM · ') && !(await ev(() => window.__t.rail())).analysis, JSON.stringify(an));
+  check('Bericht Winkel: Druck, Schwerkraft und zwei Werkstoffe als Annahmen', an.inputs.some((x) => x.startsWith('Pressure0.2 MPa'))
+    && an.inputs.some((x) => x.startsWith('Gravity9.81 m/s²')) && an.inputs.some((x) => x.startsWith('MaterialAluminium 6082 · Steel S235')), JSON.stringify(an.inputs));
+  await domClick('btn-an-back');
+  an = await ev(() => window.__t.analysis());
+  check('Liste: alle Analysen, die gezeigte markiert, die andere „new“', an.mode === 'list' && an.list.length === 2
+    && an.list.find((x) => x.id === 'winkel')?.cur && !an.list.find((x) => x.id === 'winkel')?.isNew && an.list.find((x) => x.id === 'balken')?.isNew, JSON.stringify(an.list));
+  await ev(() => document.querySelector('#an-rows .al-row[data-id="balken"]').click());
+  await waitFor('FEM-Ergebnis geladen', () => window.__t.result().id === 'balken' && window.__t.analysis().title === 'Balken unter Last', 20000);
   let rs = await ev(() => window.__t.result());
+  an = await ev(() => window.__t.analysis());
   // Überhöhung: 5 % von 101 mm / 0,286 mm = 17,7, auf eine runde Zahl abgerundet 10
-  check('Karte: Sicherheit, Spannung, Verschiebung je Teil, Lastfall in zwei Zeilen, verformt 10-fach', rs.active && rs.fem
-    && rs.rows.some((x) => x.startsWith('Balken') && /Safety \d+\.\d+ · 30(\.\d)? MPa · 0\.28\d mm$/.test(x))
-    && rs.fem.bcRows.length === 2 && rs.fem.bcRows[0].startsWith('Fixed') && rs.fem.bcRows[0].includes('reaction force 50 N') && rs.fem.bcRows[1].startsWith('Force')
-    && rs.fem.scale === 10 && rs.fem.options.includes('Exaggerated 10×') && rs.fem.bcs === true && rs.meta.unit === '', JSON.stringify(rs));
-  check('Hinweis in der Karte nennt den Befehl mit der Studie', rs.hint.startsWith('soma analyze fem analyses/balken.py'), rs.hint);
+  check('Bericht: eine Zahl groß (Sicherheit über 2), hält, Lager und Kraft, Werkstoff, Netz, Tabelle mit 30 MPa und 0,28 mm', /^\d+(\.\d+)?$/.test(an.number)
+    && Number(an.number) > 2 && an.status === 'Holds the required safety' && an.critical.length === 0
+    && an.inputs.some((x) => x.startsWith('SupportFixed · Balken')) && an.inputs.some((x) => x.startsWith('Force50 N downward · Balken'))
+    && an.inputs.some((x) => x.startsWith('MaterialAluminium 6082')) && an.inputs.some((x) => /^Mesh[\d.]+ mm · [\d,]+ elements/.test(x))
+    && an.table.some((row) => row[0] === 'Balken' && near(Number(row[2]), 30, 4) && /^0\.28\d$/.test(row[3])), JSON.stringify(an));
+  await ev(() => { window.__t.analysisToggle('bc0'); window.__t.analysisToggle('mat'); window.__t.analysisToggle('mesh'); window.__t.analysisToggle('calc'); });
+  an = await ev(() => window.__t.analysis());
+  check('Aufgeklappt: Lagerkraft 50 N nach oben im Gleichgewicht, E-Modul, Querdehnzahl, Dichte, Netz aus der Modellgröße, Löser', an.details.some((x) => x.includes('Reaction50 N upward') && x.includes('in equilibrium'))
+    && an.details.some((x) => x.includes('E modulus70 GPa') && x.includes('Poisson ν0.33') && x.includes('Density2.7 g/cm³') && x.includes('allowable 125 MPa'))
+    && an.details.some((x) => x.includes('automatic from the model size') && x.includes('coarser mesh'))
+    && an.details.some((x) => x.includes('Studyanalyses/balken.py') && x.includes('Commandsoma analyze fem analyses/balken.py')), JSON.stringify(an.details));
+  check('Im Bild: Sicherheit, Spannung, Verschiebung wählbar, verformt 10-fach, Lastfall an, Kraft und kleinster Wert beschriftet', rs.active && rs.fem
+    && rs.fem.fields.join() === 'Safety factor,Stress,Displacement' && rs.fem.scale === 10 && rs.fem.options.join() === 'Off,1×,10×' && rs.fem.bcs === true
+    && rs.meta.unit === '' && rs.tags.some((x) => x === '50 N') && rs.tags.some((x) => x.startsWith('Min ')) && rs.scale.legend.startsWith('Safety Auto') && rs.scale.legend.includes('Safety factor'), JSON.stringify(rs));
+  check('Legende schmal (höchstens 90 px), die Skala stellt das Menü hinter dem Knopf „Auto“ ein', await ev(() => document.getElementById('result-legend').offsetWidth <= 90)
+    && await ev(() => { document.getElementById('btn-result-scale').click(); return !document.getElementById('menu-scale').hidden; }), String(await ev(() => document.getElementById('result-legend').offsetWidth)));
+  await shot('fem-1b-skala');
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  const tr = await ev(() => window.__t.tree());
+  check('Baum in der Analyse: nur die gerechneten Körper', JSON.stringify(tr.names) === '["Balken"]', JSON.stringify(tr.names));
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
   // Vorderseite am Ende: um 10 x 0,28 mm nach unten verschoben gezeichnet, der Wert nennt die Stelle im unverformten Modell
@@ -128,24 +158,25 @@ try {
   check('Klick auf das verformte Balkenende: Stelle in Ausgangslage, Verschiebung um 0,28 mm, Spannung klein', pin?.name === 'Balken'
     && near(pin.point[0], 97, 1) && near(pin.point[2], 0, 1.2) && near(pin.disp, 0.28, 0.03) && pin.stress < 5 && pin.value > 20, JSON.stringify(pin));
   rs = await ev(() => window.__t.result());
+  check('Gemerkte Stelle steht im Bericht', (await ev(() => window.__t.analysis())).pick?.startsWith('Picked: Balken, Safety '), (await ev(() => window.__t.analysis())).pick);
   check('An Agent geben: Sicherheit, Spannung und Verschiebung', /^\[Result: "Balken unter Last" \(\.soma\/results\/balken\.glb, limit 2\.00\), part "Balken": safety factor (over 99|\d+\.\d\d) \(\d+\.\d MPa, displacement 0\.2\d\d mm\) at \(/.test(rs.note), rs.note);
   await ev(() => window.__t.viewer.setView('iso'));
   await shot('fem-1');
-  await ev(() => { const s = document.getElementById('result-deform'); s.value = '0'; s.dispatchEvent(new Event('change')); });
+  await ev(() => window.__t.resultDeform(0));
   await domClick('btn-result-bcs');
   rs = await ev(() => window.__t.result());
-  check('Unverformt und Lastfall aus', rs.fem.scale === 0 && rs.fem.bcs === false, JSON.stringify(rs.fem));
+  check('Unverformt und Lastfall aus, ohne Beschriftung der Kraft', rs.fem.scale === 0 && rs.fem.bcs === false && !rs.tags.includes('50 N'), JSON.stringify(rs));
   await domClick('btn-result-bcs');
 
   // Farbskala: Spannung statt Sicherheit (Grenze 250 / 2 = 125 MPa, kritisch darüber), Spanne Min bis Max und eigene
-  const pick = (id, v) => ev((a) => { const s = document.getElementById(a.id); s.value = a.v; s.dispatchEvent(new Event('change')); }, { id, v });
+  const pick = (id, v) => ev((a) => document.querySelector(`#${a.id} [data-range="${a.v}"]`).click(), { id, v });
   check('Skala automatisch: Sicherheit, Spanne der Auswertung', rs.scale.field === 'value' && rs.scale.mode === 'auto' && rs.scale.canStress
     && rs.scale.range[0] === 0 && rs.scale.threshold === 2, JSON.stringify(rs.scale));
-  await pick('result-field', 'stress');
+  await ev(() => window.__t.resultField('stress'));
   rs = await ev(() => window.__t.result());
   check('Spannung: MPa, Grenze 125 MPa kritisch darüber, Skala 0 bis 250', rs.scale.field === 'stress' && rs.scale.unit === 'MPa'
     && rs.scale.threshold === 125 && rs.scale.range.join() === '0,250' && rs.scale.legend.includes('von Mises stress (MPa)')
-    && rs.scale.legend.includes('Limit 125 MPa, critical above'), JSON.stringify(rs.scale));
+    && rs.scale.legend.includes('Red: above allowable'), JSON.stringify(rs.scale));
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
   const pin2 = await ev((p) => window.__t.resultPin(p.x, p.y), at);
@@ -166,20 +197,27 @@ try {
   await typeIn('result-lo', '10');
   rs = await ev(() => window.__t.result());
   // Farben über die Spanne: Das untere Ende ist grau, das obere rot, obwohl der Grenzwert weit darüber liegt
-  const ends = await ev(() => getComputedStyle(document.querySelector('#result-legend .rs-bar')).backgroundImage.match(/rgb\([^)]*\)/g));
+  // Die Legende steht senkrecht: oben das obere Ende der Spanne
+  const ends = await ev(() => getComputedStyle(document.querySelector('#result-legend .lg-bar')).backgroundImage.match(/rgb\([^)]*\)/g));
   check('Eigene Skala 10 bis 40 MPa gilt sofort, Farbe über die Spanne bis Rot, Grenze außerhalb ohne Strich', rs.scale.range.join() === '10,40'
-    && rs.scale.legend.includes('color across the range') && ends.at(-1) === 'rgb(240, 116, 112)'
-    && await ev(() => document.querySelector('#result-legend .rs-mark').hidden), JSON.stringify(rs.scale) + ends?.join(' '));
+    && rs.scale.legend.includes('Color across the range') && ends[0] === 'rgb(240, 116, 112)'
+    && await ev(() => !document.querySelector('#result-legend .lg-thr')), JSON.stringify(rs.scale) + ends?.join(' '));
   await shot('fem-2');
   await typeIn('result-lo', '50');
   rs = await ev(() => window.__t.result());
   check('Von größer als bis: rot umrandet, Skala bleibt', rs.scale.range.join() === '10,40' && await ev(() => document.getElementById('result-lo').classList.contains('bad')), JSON.stringify(rs.scale));
   await typeIn('result-lo', '10');
-  await pick('result-field', 'value');
+  await ev(() => window.__t.resultField('value'));
   rs = await ev(() => window.__t.result());
   check('Zurück zur Sicherheit: eigene Skala neu aus deren Spanne', rs.scale.field === 'value' && rs.scale.range[0] === 0 && rs.scale.threshold === 2
     && await ev(() => document.getElementById('result-hi').value) === String(rs.scale.range[1]), JSON.stringify(rs.scale));
   await pick('result-range', 'auto');
+  await ev(() => window.__t.resultField('disp'));
+  rs = await ev(() => window.__t.result());
+  check('Verschiebung: mm, ohne Grenzwert, Skala 0 bis zur größten (0,286 mm)', rs.scale.field === 'disp' && rs.scale.unit === 'mm' && rs.scale.threshold === null
+    && rs.scale.range[0] === 0 && near(rs.scale.range[1], 0.286, 0.01) && rs.scale.legend.includes('No limit'), JSON.stringify(rs.scale));
+  await shot('fem-2b-verschiebung');
+  await ev(() => window.__t.resultField('value'));
 
   // 5) soma render --result: Bild mit Legende
   r = soma(['render', '--result', 'balken']);
@@ -190,25 +228,28 @@ try {
   study('balken', BALKEN(100));
   const stale = await ev(() => window.soma.results.list().then((l) => l.find((x) => x.id === 'balken')?.stale));
   check('Geänderte Studie: Ergebnis veraltet', stale === true, String(stale));
-  await ev(() => window.__t.resultRefresh?.());
+  await ev(() => window.__t.refreshViewLists());
+  an = await ev(() => window.__t.analysis());
+  check('Bericht: „older than the code“ und Zeile mit Neu berechnen', an.meta.includes('older than the code') && an.stale?.startsWith('Values belong to the model as it was at'), JSON.stringify(an));
+  await shot('fem-4-veraltet');
   await domClick('btn-result-rerun');
-  await waitFor('neu berechnet', () => window.__t.result().stale === false && window.__t.result().fem?.bcRows?.[0]?.includes('100 N'), 120000).catch(() => {});
-  rs = await ev(() => window.__t.result());
-  check('Neu berechnen: Lagerkraft jetzt 100 N, Verschiebung doppelt', !rs.stale && rs.fem?.bcRows[0].includes('reaction force 100 N')
-    && rs.rows.some((x) => x.startsWith('Balken') && /0\.5[67]\d mm/.test(x)), JSON.stringify(rs));
+  await waitFor('neu berechnet', () => window.__t.result().stale === false && window.__t.analysis().details.some((x) => x.includes('Reaction100 N')), 120000).catch(() => {});
+  an = await ev(() => window.__t.analysis());
+  check('Neu berechnen: Lagerkraft jetzt 100 N, Verschiebung doppelt', !an.stale && an.details.some((x) => x.includes('Reaction100 N upward'))
+    && an.table.some((row) => row[0] === 'Balken' && /^0\.5[67]\d$/.test(row[3])), JSON.stringify(an));
   await domClick('btn-result-close');
-  check('Analyse aus: Modell wieder sichtbar', !(await ev(() => window.__t.viewer.animViewState())).modelHidden);
+  check('× in der Leiste: Analyse aus, Modell wieder sichtbar, Baum mit allen Teilen, Bericht wird zur Liste', !(await ev(() => window.__t.viewer.animViewState())).modelHidden
+    && (await ev(() => window.__t.tree())).names.length === 4 && (await ev(() => window.__t.analysis())).mode === 'list');
 
   // Schnitt durch verschmolzene Teile: Jedes Netz ist für sich geschlossen, auch an der Fläche, an der die Wand auf dem Fuß
   // steht. Sonst füllt der Deckel des Schnitts auch Stellen, an denen der Blick durch diese Fläche geht
-  await ev(() => window.__t.openViewMenu());
-  await ev(() => { [...document.querySelectorAll('#menu-view .mi')].find((b) => b.textContent.includes('Winkel')).click(); });
+  await ev(() => window.__t.resultShow('winkel'));
   await waitFor('Ergebnis Winkel geladen', () => window.__t.result().id === 'winkel', 20000);
   const scaleW = (await ev(() => window.__t.result())).fem.scale;
   // Waagerecht durch die Wand bei z = 40, behalten wird darunter: Die Kontur folgt der Überhöhung (die Wand kippt nach −X)
   await ev(() => window.__t.viewer.setSection({ normal: [0, 0, -1], constant: 40 }));
   const boxBent = (await ev(() => window.__t.viewer.sectionState())).contourBox;
-  await pick('result-deform', '0');
+  await ev(() => window.__t.resultDeform(0));
   const boxFlat = (await ev(() => window.__t.viewer.sectionState())).contourBox;
   check('Schnitt im Ergebnis: Kontur folgt der Überhöhung (verformt nach −X, unverformt bis x = 30)', scaleW > 0 && near(boxFlat?.[1][0], 30, 0.05)
     && boxBent?.[1][0] < 29.5, JSON.stringify({ scaleW, boxBent, boxFlat }));

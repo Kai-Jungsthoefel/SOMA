@@ -35,10 +35,15 @@
   </header>
 
   <div id="body">
+    <!-- Leiste in drei Gruppen (E82): Arbeit am Modell, Ergebnisse des Agenten, Regeln für den Agenten. Die Bauteile stehen im Baum oben links im Viewer.
+         Der Punkt am Reiter: Neues vom Agenten, noch nicht angesehen -->
     <nav id="rail" aria-label="Sidebars">
-      <button data-panel="parts" aria-pressed="false" title="Parts of the model: select, hide and show, make transparent"><i data-icon="cube" data-size="20" data-stroke="1.7"></i><span>Parts</span></button>
       <button data-panel="params" aria-pressed="false" title="Parameters: values of the model you can change, such as sizes, counts or angles"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Parameters</span></button>
       <button data-panel="files" aria-pressed="false" title="Files of the model. Click a file to open it in the code next to it."><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Files</span></button>
+      <span class="rail-sep"></span>
+      <button data-panel="analysis" aria-pressed="false" title="Analyses of the agent: strength (FEM), wall thickness, overhang, clearance. Shows the result in the viewer."><i data-icon="gauge" data-size="20" data-stroke="1.7"></i><span>Analysis</span><i id="nd-analysis" class="nd" hidden></i></button>
+      <button data-panel="anim" aria-pressed="false" title="Animations and videos of the agent. Plays the animation in the viewer."><i data-icon="anim" data-size="20" data-stroke="1.7"></i><span>Animation</span><i id="nd-anim" class="nd" hidden></i></button>
+      <span class="rail-sep"></span>
       <button data-panel="skills" aria-pressed="false" title="Skills: rules for the agent, set per model (3D printing, tolerances …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
       <span class="grow"></span>
       <button disabled title="Help is coming in a later version"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Help</span></button>
@@ -46,14 +51,6 @@
     </nav>
 
     <aside id="side" hidden>
-      <!-- Bauteile (Entwurf 2): fest in der Seitenleiste statt als Karte im Viewer -->
-      <section id="panel-parts" class="panel" aria-label="Parts" hidden>
-        <div class="side-hd"><b>Parts</b><span id="parts-count" class="c3 hd-count"></span><span class="grow"></span>
-          <button id="btn-parts-search" class="ibtn s" aria-label="Search parts" title="Search parts"><i data-icon="search" data-size="15" data-stroke="1.9"></i></button>
-          <button class="ibtn s side-close" aria-label="Close sidebar"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
-        <input id="parts-filter" class="filter" type="search" placeholder="Search part" aria-label="Search part" hidden>
-        <div id="tab-model" class="list ptree"></div>
-      </section>
       <!-- Parameter (Entwurf 2, Bild 6): Werte, die der Agent mit param() freigibt. Der Wert im Code bleibt, die des Nutzers stehen in parameters.json -->
       <section id="panel-params" class="panel" aria-label="Parameters" hidden>
         <div class="side-hd"><b>Parameters</b><span id="params-count" class="c3 hd-count"></span><span class="grow"></span>
@@ -70,6 +67,48 @@
           <button class="ibtn s side-close" aria-label="Close files"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <div id="tab-files" class="ftree"></div>
         <div id="dropzone" class="dropzone" title="STEP files, images and sketches go to inputs/. Existing files are not overwritten."><i data-icon="upload" data-size="16"></i><span><b>Drop here:</b> goes to <code>inputs/</code></span></div>
+      </section>
+      <!-- Analysis (E82): Liste aller Ergebnisse und der ruhige Bericht zum gezeigten (analysispanel.ts) -->
+      <section id="panel-analysis" class="panel cx" aria-label="Analyses" hidden>
+        <div id="an-list" class="panel">
+          <div class="side-hd"><b>Analyses</b><span id="an-count" class="c3 hd-count"></span><span class="grow"></span>
+            <button class="ibtn s" aria-label="What are analyses?" title="Analyses are results of the agent: strength with FEM, wall thickness, overhang, clearance. Click one to see it in the viewer with its report. The × in the bar below the image shows the model again."><i data-icon="info" data-size="15" data-stroke="1.9"></i></button>
+            <button class="ibtn s side-close" aria-label="Close sidebar"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+          <div id="an-rows" class="al"></div>
+        </div>
+        <div id="an-report" class="panel" hidden>
+          <div class="side-hd"><button id="btn-an-back" class="back" title="All analyses"><i data-icon="left" data-size="15" data-stroke="2"></i>Analyses<span id="an-back-count" class="cnt"></span></button><span class="grow"></span>
+            <button id="btn-an-code" class="ibtn s" aria-label="Open the study file"><i data-icon="code" data-size="15" data-stroke="1.9"></i></button>
+            <button id="btn-an-more" class="ibtn s" aria-label="More" title="More" aria-haspopup="menu" aria-expanded="false"><i data-icon="more" data-size="16"></i></button>
+            <button class="ibtn s side-close" aria-label="Close sidebar" title="Close the sidebar. The result stays in the viewer."><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+          <div id="an-body" class="cx-scroll"></div>
+          <div class="cx-foot">
+            <div id="an-pick" class="cx-pick" hidden></div>
+            <div class="cx-acts">
+              <button id="btn-result-rerun" class="btn sm" title="Run the same analysis again on the current model"><i data-icon="refresh" data-size="14" data-stroke="1.9"></i>Recalculate</button>
+              <button id="btn-result-agent" class="btn sm acc" title="Add the result and the clicked spot to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- Animation (E82): Liste mit Videos und der Ablauf der gezeigten (animpanel.ts). Abgespielt wird unten im Bild -->
+      <section id="panel-anim" class="panel cx" aria-label="Animations" hidden>
+        <div id="am-list" class="panel">
+          <div class="side-hd"><b>Animations</b><span id="am-count" class="c3 hd-count"></span><span class="grow"></span>
+            <button class="ibtn s" aria-label="What are animations?" title="Animations show motion: assembly, mechanisms, explanations. The agent writes them in animations/. Click one to play it in the viewer, the × in the bar below the image shows the model again. Videos are made from them."><i data-icon="info" data-size="15" data-stroke="1.9"></i></button>
+            <button class="ibtn s side-close" aria-label="Close sidebar"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+          <div id="am-rows" class="al"></div>
+        </div>
+        <div id="am-report" class="panel" hidden>
+          <div class="side-hd"><button id="btn-am-back" class="back" title="All animations"><i data-icon="left" data-size="15" data-stroke="2"></i>Animations<span id="am-back-count" class="cnt"></span></button><span class="grow"></span>
+            <button id="btn-am-code" class="ibtn s" aria-label="Open the animation file"><i data-icon="code" data-size="15" data-stroke="1.9"></i></button>
+            <button class="ibtn s side-close" aria-label="Close sidebar" title="Close the sidebar. The animation stays in the viewer."><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+          <div id="am-body" class="cx-scroll"></div>
+          <div class="cx-foot"><div class="cx-acts">
+            <button id="btn-anim-video" class="btn sm" title="Write a video (MP4) of this animation to renders/ and play it"><i data-icon="f-video" data-size="14" data-stroke="1.9"></i>Make video</button>
+            <button id="btn-anim-agent" class="btn sm acc" title="Add the animation's name and the time to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
+          </div></div>
+        </div>
       </section>
       <section id="panel-skills" class="panel" aria-label="Skills" hidden>
         <div class="side-hd"><b>Skills</b><span class="grow"></span>
@@ -112,15 +151,10 @@
           </div>
         </div>
 
-        <!-- Oben links: was der Viewer zeigt (Modell oder ein Ergebnis des Agenten). In der Mitte die Werkzeuge. -->
+        <!-- Ganz oben links der Strukturbaum (E82, tree.ts): ohne Hintergrund, eingeklappt nur der Name des Modells. In der Mitte die Werkzeuge. -->
+        <div id="tree" class="tree" aria-label="Structure tree"></div>
         <div id="vtop" class="vtop">
-          <div id="view-switch" class="float switcher">
-            <button id="btn-view" class="sb" aria-haspopup="menu" aria-expanded="false" title="What the viewer shows: the model, an analysis, an animation or a video">
-              <span id="view-ico" class="vico"><i data-icon="cube" data-size="16"></i></span><b id="view-name">Model</b><span id="view-sub" class="c3"></span>
-              <span id="view-new" class="newbadge" hidden></span><i data-icon="down" data-size="14" data-stroke="2"></i></button>
-            <span id="view-sep" class="vs" hidden></span>
-            <button id="btn-view-close" class="ibtn s" aria-label="Back to the model" title="Back to the model" hidden><i data-icon="x" data-size="14" data-stroke="2"></i></button>
-          </div>
+          <span id="tree-space" class="treespace"></span>
           <span class="grow"></span>
           <div id="dock" class="float dock" role="toolbar" aria-label="Tools">
             <button id="btn-measure" aria-pressed="false" title="Measure: click a face or edge, a second click measures distance and angle (exact values)"><i data-icon="ruler"></i><span class="lbl">Measure</span></button>
@@ -216,62 +250,39 @@
           </div>
         </div>
 
-        <!-- Animation (E58, animtool.ts): Ablauf aus animations/*.py abspielen. Ändert nichts am Modell. -->
-        <div id="anim-card" class="float ancard" hidden>
-          <div class="mc-hd"><span class="mc-ico"><i data-icon="anim" data-size="16"></i></span><b>Animation</b>
-            <select id="anim-select" class="an-select" aria-label="Choose animation"></select>
-            <button id="btn-anim-close" class="ibtn s" aria-label="Close animation" title="Close animation (the model returns to its assembled position)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
-          <div class="an-transport">
-            <button id="btn-anim-play" class="ibtn an-play" aria-label="Play" title="Play (Space)"><i data-icon="play" data-size="16" data-stroke="2"></i></button>
-            <input id="anim-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the animation">
-            <span id="anim-time" class="an-time"></span>
-          </div>
-          <div class="an-opts">
-            <button id="btn-anim-follow" class="btn sm" aria-pressed="true" title="Follow the animation's camera. Off: rotate freely, the parts still move"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Camera</button>
-            <button id="btn-anim-loop" class="btn sm" aria-pressed="false" title="Start over at the end"><i data-icon="loop" data-size="14" data-stroke="1.9"></i>Loop</button>
-            <button id="btn-anim-texts" class="btn sm" aria-pressed="true" title="Show titles, subtitles and labels of the animation. Off: only the motion, the video still contains them"><i data-icon="text" data-size="14" data-stroke="1.9"></i>Texts</button>
-            <span class="grow"></span>
-            <select id="anim-speed" class="an-speed" aria-label="Speed" title="Speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
-          </div>
-          <div id="anim-hint" class="mc-hint"></div>
-          <div class="sc-actions">
-            <button id="btn-anim-video" class="btn sm" title="Write a video (MP4) of this animation to renders/ and play it"><i data-icon="f-video" data-size="14" data-stroke="1.9"></i>Make video</button>
-            <button id="btn-anim-agent" class="btn sm acc" title="Add the animation's name and the time to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
-          </div>
         </div>
 
-        <!-- Analyse (E58, resulttool.ts): Ergebnisse von soma analyze farbig zeigen -->
-        <div id="result-card" class="float rscard" hidden>
-          <div class="mc-hd"><span class="mc-ico"><i data-icon="gauge" data-size="16"></i></span><b>Analysis</b>
-            <select id="result-select" class="an-select" aria-label="Choose result"></select>
-            <button id="btn-result-close" class="ibtn s" aria-label="Close analysis" title="Close analysis (shows the model again)"><i data-icon="x" data-size="14" data-stroke="2"></i></button></div>
-          <div id="result-legend" class="rs-legend"></div>
-          <!-- Farbskala: gezeigte Größe (nur FEM: Sicherheit oder Vergleichsspannung) und Spanne der Färbung -->
-          <div id="result-scale" class="an-opts rs-fem rs-opts">
-            <select id="result-field" class="an-speed" aria-label="Quantity" title="Quantity shown: safety factor or von Mises stress" hidden>
-              <option value="value">Safety factor</option><option value="stress">Stress</option></select>
-            <select id="result-range" class="an-speed" aria-label="Range of the color scale" title="Range of the coloring: as suggested by the analysis, from the smallest to the largest value, or custom">
-              <option value="auto">Auto scale</option><option value="minmax">Scale min to max</option><option value="custom">Custom scale</option></select>
-            <span id="result-custom" class="rs-custom" hidden>
-              <input id="result-lo" class="an-speed rs-num" type="number" step="any" aria-label="Scale from" title="Lower end of the color scale">
-              <span>to</span>
-              <input id="result-hi" class="an-speed rs-num" type="number" step="any" aria-label="Scale to" title="Upper end of the color scale"></span>
-          </div>
-          <!-- Nur bei FEM (E65): Verformung überhöht zeigen, Lastfall ein- und ausblenden -->
-          <div id="result-fem" class="an-opts rs-fem" hidden>
-            <select id="result-deform" class="an-speed" aria-label="Deformation" title="Deformation: undeformed, true scale or exaggerated so you can see it"></select>
-            <span class="grow"></span>
-            <button id="btn-result-bcs" class="btn sm" aria-pressed="true" title="Show the load case: fixed faces and loads in blue, forces as arrows"><i data-icon="arrow" data-size="14" data-stroke="1.9"></i>Load case</button>
-          </div>
-          <div id="result-summary" class="rs-summary"></div>
-          <div id="result-probe" class="rs-probe"></div>
-          <div id="result-hint" class="mc-hint"></div>
-          <div class="sc-actions">
-            <button id="btn-result-rerun" class="btn sm" title="Run the same analysis again on the current model"><i data-icon="refresh" data-size="14" data-stroke="1.9"></i>Recalculate</button>
-            <button id="btn-result-agent" class="btn sm acc" title="Add the result and the clicked spot to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Send to agent</button>
-          </div>
+        <!-- Analyse im Bild (E82, resulttool.ts): schmale Legende senkrecht am rechten Rand unter dem Würfel. Die Skala stellt das
+             Menü hinter dem Knopf darunter ein (#menu-scale), dort stehen auch Größe und Erklärung ausgeschrieben -->
+        <div id="result-legend" class="float lg" hidden>
+          <div id="result-q" class="lg-hd"></div>
+          <button id="btn-result-scale" class="lg-sub" aria-haspopup="menu" aria-expanded="false" title="Change the color scale: automatic, min to max, or your own range"><span id="result-scale-mode">Auto</span><i data-icon="down" data-size="11" data-stroke="2.2"></i></button>
+          <div id="result-lg-body" class="lg-body"></div>
+        </div>
+        <!-- Darstellung unten im Bild: Größe und Verformung nur bei FEM (E65), × zurück zum Modell -->
+        <div id="result-bar" class="float dbar" role="toolbar" aria-label="Analysis" hidden>
+          <span id="result-name" class="dl strong"></span>
+          <div id="result-field" class="seg" role="radiogroup" aria-label="Quantity shown"></div>
+          <span class="vsep" data-fem></span><span id="result-deform-label" class="dl">Deformation</span>
+          <div id="result-deform" class="seg" role="radiogroup" aria-label="Deformation"></div>
+          <span class="vsep" data-fem></span>
+          <button id="btn-result-bcs" class="tgl" aria-pressed="true" title="Show the load case: fixed faces and loads in blue, forces as arrows"><i data-icon="force" data-size="14" data-stroke="2"></i>Load case</button>
+          <span class="vsep" data-fem></span>
+          <button id="btn-result-close" class="ibtn s" aria-label="Close the analysis" title="Close the analysis and show the model"><i data-icon="x" data-size="15" data-stroke="2"></i></button>
         </div>
 
+        <!-- Animation im Bild (E82, animtool.ts): Abspielleiste unten, × zurück zum Modell -->
+        <div id="anim-bar" class="float tbar" role="toolbar" aria-label="Animation" hidden>
+          <button id="btn-anim-play" class="play" aria-label="Play" title="Play (Space)"><i data-icon="play" data-size="16" data-stroke="2.2"></i></button>
+          <span id="anim-time" class="tm"></span>
+          <div class="scrub"><input id="anim-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the animation"><div id="anim-ticks" class="ticks"></div></div>
+          <span id="anim-total" class="tm"></span><span class="vsep"></span>
+          <select id="anim-speed" class="sel" aria-label="Speed" title="Speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+          <button id="btn-anim-follow" class="tgl" aria-pressed="true" title="Follow the animation's camera. Off: rotate freely, the parts still move"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Camera</button>
+          <button id="btn-anim-loop" class="tgl" aria-pressed="false" title="Start over at the end"><i data-icon="loop" data-size="14" data-stroke="1.9"></i>Loop</button>
+          <button id="btn-anim-texts" class="tgl" aria-pressed="true" title="Show titles, subtitles and labels of the animation. Off: only the motion, the video still contains them"><i data-icon="text" data-size="14" data-stroke="1.9"></i>Texts</button>
+          <span class="vsep"></span>
+          <button id="btn-anim-close" class="ibtn s" aria-label="Close the animation" title="Close the animation and show the model (it returns to its assembled position)"><i data-icon="x" data-size="15" data-stroke="2"></i></button>
         </div>
 
         <div id="errcard" class="float errcard" hidden>
@@ -392,7 +403,6 @@
     <button id="btn-build" class="mi" role="menuitem"><i data-icon="play" data-size="15"></i><span>Build now</span><span class="k">Ctrl B</span></button>
   </div>
 
-  <div id="menu-view" class="menu wide" role="menu" aria-label="What the viewer shows" hidden></div>
 
   <div id="menu-display" class="menu" role="menu" hidden>
     <div class="mh">DISPLAY</div>
@@ -439,6 +449,22 @@
   </div>
 
   <div id="menu-ctx" class="menu" role="menu" hidden></div>
+
+  <!-- Farbskala der Analyse (E82): Spanne wählen, eigene Grenzen, was die Farben heißen -->
+  <div id="menu-scale" class="menu scalemenu" role="dialog" aria-label="Color scale" hidden>
+    <div class="mh">COLOR SCALE</div>
+    <div id="result-q-full" class="sm-q"></div>
+    <div id="result-range" class="seg" role="radiogroup" aria-label="Range of the color scale">
+      <button data-range="auto" role="radio" title="Range as suggested by the analysis">Auto</button>
+      <button data-range="minmax" role="radio" title="From the smallest to the largest value in the model">Min to max</button>
+      <button data-range="custom" role="radio" title="Your own range">Custom</button>
+    </div>
+    <span id="result-custom" class="rs-custom" hidden>
+      <input id="result-lo" class="rs-num" type="number" step="any" aria-label="Scale from" title="Lower end of the color scale">
+      <span>to</span>
+      <input id="result-hi" class="rs-num" type="number" step="any" aria-label="Scale to" title="Upper end of the color scale"></span>
+    <div id="result-lg-foot" class="mnote"></div>
+  </div>
 
   <div id="menu-mark-color" class="menu" role="menu" aria-label="Markup color" hidden>
     <div class="mh">COLOR</div>
@@ -499,11 +525,13 @@
       <div class="st-body">
         <nav id="st-nav" class="st-nav" aria-label="Settings">
           <button data-sec="viewer" aria-current="page"><i data-icon="cube" data-size="16" data-stroke="1.8"></i><span>Viewer</span></button>
+          <button data-sec="keys"><i data-icon="key" data-size="16" data-stroke="1.8"></i><span>Shortcuts</span></button>
           <button data-sec="skills"><i data-icon="book" data-size="16" data-stroke="1.8"></i><span>Skills</span></button>
           <button data-sec="storage"><i data-icon="disk" data-size="16" data-stroke="1.8"></i><span>Storage</span></button>
           <button data-sec="about"><i data-icon="info" data-size="16" data-stroke="1.8"></i><span>About</span></button>
         </nav>
         <section id="st-viewer" class="st-sec st-page" aria-label="Viewer"></section>
+        <section id="st-keys" class="st-sec st-page" aria-label="Shortcuts" hidden></section>
         <section id="st-skills" class="st-sec" aria-label="Skills" hidden>
           <div class="st-col">
             <div class="st-tools">

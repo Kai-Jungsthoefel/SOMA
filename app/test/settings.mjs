@@ -86,7 +86,7 @@ try {
   await waitFor('Einstellungen offen', () => window.__t.settings().open, 5000);
   const nav = await ev(() => [...document.querySelectorAll('#st-nav button')].map((b) => `${b.dataset.sec}:${b.textContent.trim()}`));
   const st0 = await ev(() => window.__t.settings());
-  check('Einstellungen: Reiter Viewer, Skills, Storage, About, ohne Ziel offen im Reiter Viewer', JSON.stringify(nav) === '["viewer:Viewer","skills:Skills","storage:Storage","about:About"]'
+  check('Einstellungen: Reiter Viewer, Shortcuts, Skills, Storage, About, ohne Ziel offen im Reiter Viewer', JSON.stringify(nav) === '["viewer:Viewer","keys:Shortcuts","skills:Skills","storage:Storage","about:About"]'
     && st0.section === 'viewer' && await ev(() => !document.getElementById('st-viewer').hidden && document.getElementById('st-skills').hidden), nav.join(','));
   let pv = (await pages()).viewer.text;
   let cam = await vs();
@@ -231,6 +231,12 @@ try {
   fs.writeFileSync(path.join(ud, 'previews', fakeId, 'abc1234', 'model.glb'), Buffer.alloc(1024 * 1024));
   fs.mkdirSync(path.join(ud, 'previews', proj2.id, 'def5678'), { recursive: true });
   fs.writeFileSync(path.join(ud, 'previews', proj2.id, 'def5678', 'model.glb'), Buffer.alloc(2048));
+  await ev(() => window.__t.settingsShow('keys'));
+  const keys = await ev(() => document.getElementById('st-keys').textContent);
+  check('Reiter Shortcuts: Tasten für Auswahl (H, I, T, Alt + Drag), Navigation nach der gewählten Mausbelegung', !(await ev(() => document.getElementById('st-keys').hidden))
+    && keys.includes('Isolate: show only the selected parts') && keys.includes('Alt+DragBox select') && keys.includes('Shift+HShow all parts again')
+    && keys.includes('Navigation as set under Viewer (SolidWorks)') && keys.includes('middle dragRotate'), keys.slice(0, 300));
+  await shot('settings-1b-shortcuts');
   await ev(() => window.__t.settingsShow('storage'));
   await waitFor('Speicherplatz berechnet', () => { const s = window.__t.settingsPages().storage; return !s.loading && !!s.stats; }, 30000);
   let sp = (await pages()).storage;

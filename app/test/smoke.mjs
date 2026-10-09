@@ -33,7 +33,7 @@ try {
   const versionUi = await ev(() => ({ start: document.getElementById('start-version').textContent, logo: document.getElementById('btn-home').title }));
   check('Version (E68): in project.json, auf der Startseite und am Logo', JSON.parse(fs.readFileSync(path.join(proj.dir, '.soma', 'project.json'), 'utf8')).app_version === appVersion
     && versionUi.start === appVersion && versionUi.logo === `Start page · SOMA ${appVersion}`, `${appVersion} ${JSON.stringify(versionUi)}`);
-  check('Erster Build automatisch, 2 Bauteile in der Bauteilkarte', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
+  check('Erster Build automatisch, 2 Bauteile im Strukturbaum', JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]');
   check('Nach dem Build kein Fehlerhinweis', (await status()).viewerMsg === '', (await status()).text);
   const okStatus = await status();
   check('Build-Anzeige oben: „Built · 2 parts"', okStatus.text === 'Built' && okStatus.detail.startsWith('2 parts'), `${okStatus.text} ${okStatus.detail}`);
@@ -55,14 +55,24 @@ try {
 
   await shot('1-arbeitsbereich');
 
-  check('Seitenleiste zeigt beim ersten Start die Bauteile, Code ist zu (Entwurf 2)', JSON.stringify(await ev(() => window.__t.layout())) === '{"side":"parts","code":false,"agent":true}',
+  check('Seitenleiste beim ersten Start zu, Code zu: Die Bauteile stehen im Baum im Viewer (E82)', JSON.stringify(await ev(() => window.__t.layout())) === '{"side":null,"code":false,"agent":true}',
     JSON.stringify(await ev(() => window.__t.layout())));
+  const rail = await ev(() => [...document.querySelectorAll('#rail > *')].map((x) => (x.classList.contains('rail-sep') ? '|' : x.dataset?.panel ?? '')).filter(Boolean).join(' '));
+  check('Leiste in drei Gruppen: Parameters, Files | Analysis, Animation | Skills, kein Reiter Parts', rail === 'params files | analysis anim | skills', rail);
+  let tree = await ev(() => window.__t.tree());
+  check('Strukturbaum oben links: eingeklappt nur der Name des Modells', !tree.open && tree.head === proj.name && tree.rows.length === 0, JSON.stringify(tree.head));
+  await ev(() => window.__t.treeOpen(true));
+  tree = await ev(() => window.__t.tree());
+  check('Aufgeklappt: Body und Lid, Lid als Auswahl orange, Auge und Halbkreis je Zeile', tree.rows.map((x) => x.name).join() === 'Body,Lid'
+    && tree.rows.find((x) => x.name === 'Lid')?.sel && await ev(() => document.querySelectorAll('#tree .tr-row .tg').length === 4), JSON.stringify(tree.rows));
+  await shot('1b-baum');
+  await ev(() => window.__t.treeOpen(false));
 
   // Code als eigene Spalte und Dateien gleichzeitig (Entwurf 2)
   await domClick('btn-sel-code');
   await waitFor('Code-Spalte', () => window.__t.codeText().includes('add_part("Lid"'), 10000).catch(() => {});
-  check('„Code" in der Auswahlkarte zeigt model.py in der Code-Spalte, die Bauteile bleiben offen', (await ev(() => window.__t.codeText())).includes('add_part("Lid"')
-    && JSON.stringify(await ev(() => window.__t.layout())) === '{"side":"parts","code":true,"agent":true}');
+  check('„Code" in der Auswahlkarte zeigt model.py in der Code-Spalte, die Seitenleiste bleibt zu', (await ev(() => window.__t.codeText())).includes('add_part("Lid"')
+    && JSON.stringify(await ev(() => window.__t.layout())) === '{"side":null,"code":true,"agent":true}');
   await shot('2-code');
   await ev(() => window.__t.showPanel('files'));
   await waitFor('Dateiliste', () => window.__t.fileRows().includes('model.py'), 10000).catch(() => {});
@@ -77,7 +87,7 @@ try {
   await ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', ctrlKey: true, bubbles: true })));
   const lay2 = await ev(() => window.__t.layout());
   check('Spalten-Schalter oben: Code und Seitenleiste zu, Strg 1 bringt die letzte Ansicht (Dateien) wieder', !lay.code && lay.side === null && lay2.side === 'files', `${JSON.stringify(lay)} ${JSON.stringify(lay2)}`);
-  await ev(() => window.__t.showPanel('parts'));
+  await ev(() => window.__t.showPanel(null));
 
   // Export mit Dateidialog (statt nach exports/): ein Bauteil aus der Auswahlkarte, alle Bauteile in einen Ordner
   const expDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-export-test-'));
@@ -250,20 +260,11 @@ try {
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   check('Escape ohne Zeichnung schließt die Zeichenfläche, es entsteht keine Datei', again && !(await ev(() => window.__t.markup().active)) && fs.readdirSync(fbDir).length === 1);
 
-  // Ziehen ins Terminal ersetzt die Übergabeleiste (Entwurf 2): Bauteil aus der Seitenleiste fallen lassen
-  const dropOver = await ev(() => {
-    const dt = new DataTransfer();
-    dt.setData('application/x-soma-part', window.__t.parts().find((p) => p.name === 'Body').id);
-    const pane = [...document.querySelectorAll('#term-panes .term-pane')].find((x) => !x.hidden) ?? document.getElementById('term-panes');
-    pane.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
-    const over = document.getElementById('term-panes').classList.contains('dropping');
-    pane.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
-    return over;
-  });
-  await waitFor('Verweis im Terminal', (id) => window.__t.termText(id).includes('[Selection: part "Body"'), 10000, tid).catch(() => {});
-  check('Bauteil ins Terminal gezogen: Hinweis beim Darüberziehen, Verweis in der Eingabe, keine Übergabeleiste mehr', dropOver && !(await ev(() => document.getElementById('handoff')))
-    && (await ev((id) => window.__t.termText(id), tid)).includes('[Selection: part "Body"'));
-  await ev((id) => window.soma.term.write(id, '\x03'), tid);
+  // Bauteile gehen über „Send to agent“ in der Auswahlkarte an den Agenten, die Zeilen des Baums lassen sich nicht mehr ziehen (E82)
+  await ev(() => window.__t.treeOpen(true));
+  check('Zeilen des Strukturbaums sind nicht ziehbar, keine Übergabeleiste', await ev(() => [...document.querySelectorAll('#tree .tr-row')].every((r) => !r.draggable))
+    && !(await ev(() => document.getElementById('handoff'))));
+  await ev(() => window.__t.treeOpen(false));
 
   // Dateibaum: Markierungen sichtbar, anlegen, umbenennen, löschen über Menü und Tasten
   await ev(() => window.__t.showPanel('files'));
