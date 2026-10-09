@@ -168,6 +168,13 @@ def cmd_env(args):
     return 0 if res["ok"] else 1
 
 
+def cmd_dxfview(args):
+    """DXF fuer die Ansicht der App (E80): Geometrie als JSON nach --out, auch Fehler stehen dort (dxfview.write)."""
+    from . import dxfview
+    res = dxfview.write(args.file, args.out)
+    return 0 if res["ok"] else 1
+
+
 def cmd_serve(args):
     """Messdienst der App: JSON-Zeilen auf stdin/stdout (siehe measure.serve)."""
     from . import measure
@@ -446,6 +453,11 @@ def main(argv=None):
     v.add_argument("--project", default=".")
     v.add_argument("--json", action="store_true")
     v.set_defaults(func=cmd_env)
+
+    x = sub.add_parser("dxfview", help=argparse.SUPPRESS)  # nur fuer die App: DXF fuer die Ansicht im Code-Panel (E80)
+    x.add_argument("file")
+    x.add_argument("--out", required=True)
+    x.set_defaults(func=cmd_dxfview)
 
     args = ap.parse_args(argv)
     # Zusatzpakete des Projekts (E67): soma laeuft mit dem Python der Basis, das Modell darf sie trotzdem importieren
