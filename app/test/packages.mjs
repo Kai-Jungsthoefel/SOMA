@@ -159,7 +159,8 @@ try {
   const req2 = path.join(dir2, 'requirements.txt');
   check('Paket wurde aus requirements.txt installiert, der Build gelingt', fs.existsSync(path.join(site2, 'somatestpkg', '__init__.py'))
     && (await ev(() => window.__t.status().state)) === 'ok', (await ev(() => window.__t.status().viewerMsg)).slice(0, 120));
-  check('Kein Hinweis auf einen Paketfehler', !(await ev(() => window.__t.toast())).error);
+  const toast6 = await ev(() => window.__t.toast());
+  check('Kein Hinweis auf einen Paketfehler', !toast6.error, toast6.error ? toast6.text.slice(0, 600) : '');
 
   // ---- 7) Paket lässt sich nicht installieren: melden, Liste behalten ----
   fs.appendFileSync(req2, 'somamissing==2.0\n');
