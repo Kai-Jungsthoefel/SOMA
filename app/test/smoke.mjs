@@ -510,6 +510,11 @@ try {
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));
 } catch (e) {
   console.log('ABBRUCH:', e.message);
+  // Für Läufe, die man nur aus dem Protokoll kennt (CI): was Renderer und Hauptprozess bis dahin gemeldet haben
+  if (app) {
+    console.log('Fehler im Renderer:', app.page.errors.slice(0, 10).join('\n  ') || '(keine)');
+    console.log('Ausgabe der App (Ende):\n' + app.log().slice(-4000));
+  }
   t.fail();
 }
 if (app) { await app.stop(); cleanup(app.ud); }
