@@ -67,6 +67,9 @@ Decide for each pair how it is really joined:
 - A part held only by a contact without friction can slide sideways: the command says so before it calculates. Give it
   friction, a `fix()` or leave it bonded. If a part slides or lifts off for good under the load, the calculation stops
   and says so.
+- Friction only holds where the load itself presses the faces together. Screws have no pre-tension here, so friction
+  under a screw head or between screwed-on plates holds nothing: leave screwed faces bonded, or hold the face under
+  the head with `fix()`, and use `contact()` for faces the load presses on or lifts off.
 - The result gives per contact the force it carries, the highest pressure, where it is open (gap) and where it slides
   at the friction limit. In the app, "Contact pressure" colours the touching faces.
 - Contact takes longer: from about ten seconds to a few minutes, mostly with friction.

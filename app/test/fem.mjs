@@ -28,6 +28,10 @@ add_part("Wand", wand)
 bracket = cq.Workplane().box(40, 20, 4, centered=(False, True, False)).union(
     cq.Workplane().box(4, 20, 30, centered=(False, True, False))).translate((0, -100, 0))
 add_part("Bracket", bracket)
+# Platte mit Arm auf einer Bodenplatte (Bericht eines Testagenten: brach als "moves without limit" ab)
+add_part("Grund", cq.Workplane().box(100, 100, 10, centered=(True, True, False)).translate((0, 250, -10)))
+add_part("Halter", cq.Workplane().box(60, 60, 8, centered=(True, True, False)).union(
+    cq.Workplane().box(20, 12, 80, centered=(True, True, False)).translate((0, 0, 8))).translate((0, 250, 0)))
 `;
 const BALKEN = (n) => `from soma.fem import Study
 study = Study("Balken unter Last", material="Aluminium 6082", safety=2)
@@ -69,7 +73,7 @@ try {
   await waitFor('Projekt und Build', () => !!window.__t && !!window.__t.project() && window.__t.status().state === 'ok' && window.__t.partCount() > 0);
   const dir = (await ev(() => window.__t.project())).dir;
   fs.writeFileSync(path.join(dir, 'model.py'), MODEL);
-  await waitFor('Testmodell gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 4, 90000);
+  await waitFor('Testmodell gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 6, 90000);
   const bridge = await ev(() => window.soma.test.bridge());
   const env = { ...process.env, ...bridge, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
   const soma = (args) => spawnSync(PY, ['-m', 'soma', ...args], { cwd: dir, env, encoding: 'utf8', timeout: 10 * 60 * 1000 });
@@ -254,7 +258,7 @@ try {
     && an.table.some((row) => row[0] === 'Balken' && /^0\.5[67]\d$/.test(row[3])), JSON.stringify(an));
   await domClick('btn-result-close');
   check('× in der Leiste: Analyse aus, Modell wieder sichtbar, Baum mit allen Teilen, Bericht wird zur Liste', !(await ev(() => window.__t.viewer.animViewState())).modelHidden
-    && (await ev(() => window.__t.tree())).names.length === 4 && (await ev(() => window.__t.analysis())).mode === 'list');
+    && (await ev(() => window.__t.tree())).names.length === 6 && (await ev(() => window.__t.analysis())).mode === 'list');
 
   // Schnitt durch verschmolzene Teile: Jedes Netz ist für sich geschlossen, auch an der Fläche, an der die Wand auf dem Fuß
   // steht. Sonst füllt der Deckel des Schnitts auch Stellen, an denen der Blick durch diese Fläche geht
@@ -316,6 +320,19 @@ try {
   check('Bericht: Zeile Kontakt mit Reibung, aufgeklappt Kraft und Pressung', an.inputs.some((x) => x.startsWith('ContactFriction 0.3 · Fuss – Wand'))
     && an.details.some((x) => x.includes('Carries') && x.includes('Highest pressure')), JSON.stringify(an));
   await domClick('btn-result-close');
+  // Der Kontakt hält die Platte, die Armspitze ist nur seitlich geführt. Die Berührfläche findet CalculiX erst nach 11
+  // Iterationen; früher galt das ab 12 als Pendeln, und das weiche Gesetz drückte die Teile auseinander
+  study('arm', `from soma.fem import Study
+study = Study("Arm", material="Steel S235", check_mesh=False)
+study.fix("Grund", faces="<Z")
+study.fix("Halter", faces=">Z", axes="xy")
+study.force("Halter", faces=">Z", N=(0, 0, -200))
+study.contact("Grund", "Halter", friction=0.2)
+`);
+  r = soma(['analyze', 'fem', 'analyses/arm.py']);
+  check('Platte mit Arm auf Kontakt: rechnet mit dem steifen Gesetz, trägt 200 N, im Gleichgewicht', r.status === 0
+    && /contact: Grund – Halter \(3600\.0 mm², friction 0\.2\), carries 200\.0 N/.test(r.stdout) && r.stdout.includes('(in equilibrium)')
+    && !r.stdout.includes('softer one'), r.stdout + r.stderr);
 
   // 8) Das Beispiel im Skill läuft so, wie es dasteht
   const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'fem.md'), 'utf8');
