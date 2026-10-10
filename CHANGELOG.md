@@ -16,6 +16,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ### Behoben
 
+- Überhang im Viewer: Die schlimmste Stelle heißt „Max“ statt „Min“.
 - Ein Klick auf Analysis oder Animation in der Leiste links zeigt die Liste, statt gleich ein Ergebnis zu öffnen (E86).
 - FEM: Die Kraft, die ein Kontakt trägt, stimmt jetzt auch, wenn das Teil zusätzlich an etwas hängt oder der Kontakt auf die Kante eines Lagers drückt. Vorher konnten Kontaktkraft und Gleichgewicht der Lagerkräfte dort deutlich danebenliegen.
 - FEM: Netze mit einzelnen umgeklappten Elementen in engen Spalten (etwa zwischen Scheibe und Mutter) werden geglättet, statt mit „distorted elements“ abzubrechen.
