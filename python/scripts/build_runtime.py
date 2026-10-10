@@ -107,12 +107,36 @@ def write_launchers_unix(rt):
     print(f"{n} launchers in {bindir}")
 
 
+# libgmsh aus dem Wheel von gmsh braucht unter Linux Bibliotheken des Systems. libGL, libX11, GTK 3 usw. hat jeder
+# Desktop, auf dem Electron laeuft. Diese hier fehlen dagegen oft (auch auf den Runnern der CI): Sie kommen neben
+# libgmsh nach lib/, dort sucht es zuerst (RUNPATH $ORIGIN/../lib). Lizenzen: SGI Free B (libGLU), MIT (die uebrigen).
+LINUX_BUNDLE = ["libGLU.so.1", "libXft.so.2", "libXinerama.so.1", "libXcursor.so.1"]
+
+
+def bundle_linux_libs(rt):
+    cache = subprocess.run(["ldconfig", "-p"], check=True, capture_output=True, text=True).stdout
+    for soname in LINUX_BUNDLE:
+        m = re.search(rf"^\s*{re.escape(soname)} \(libc6,x86-64[^)]*\) => (\S+)$", cache, re.M)
+        if not m:
+            sys.exit(f"{soname} not found on this system. Install it first (Ubuntu: libglu1-mesa libxft2 libxinerama1 libxcursor1).")
+        src = Path(m.group(1)).resolve()
+        shutil.copy2(src, rt / "lib" / soname)
+        print(f"  bundled {soname} from {src}")
+
+
 def check(rt):
     """Laeuft die Umgebung von einem anderen Ort aus? Kopie in einen Ordner mit Leerzeichen, dort soma und Basispakete."""
     with tempfile.TemporaryDirectory(prefix="soma check ") as tmp:
         moved = Path(tmp) / "py rt"
         shutil.copytree(rt, moved, symlinks=True)
         py = python_exe(moved)
+        if sys.platform.startswith("linux"):
+            # Alles, was libgmsh braucht, muss sich aufloesen lassen, die mitgelieferten aus dem verschobenen Ordner
+            libgmsh = next((moved / "lib").glob("libgmsh.so*"))
+            ldd = subprocess.run(["ldd", str(libgmsh)], check=True, capture_output=True, text=True).stdout
+            print(ldd)
+            if "not found" in ldd or any(f"{s} => {moved / 'lib'}" not in ldd for s in LINUX_BUNDLE):
+                sys.exit(f"Libraries of {libgmsh.name} do not resolve to the runtime (see ldd above)")
         run(py, "-I", "-c", "import cadquery, OCP, vtk, gmsh, numpy, scipy, ezdxf, pdfplumber, soma, soma.ccx as c; "
                             "print('cadquery', cadquery.__version__, '| soma', soma.__version__, '| ccx', c.version())")
         # Startprogramme ueber den PATH wie im Terminal der App, die Ausgabe muss vom verschobenen Ordner kommen
@@ -154,6 +178,8 @@ def main():
     if not args.skip_ccx:
         run(py, ROOT / "python" / "scripts" / "fetch_ccx.py", "--target", target / "ccx")
     write_launchers_windows(target) if WIN else write_launchers_unix(target)
+    if sys.platform.startswith("linux"):
+        bundle_linux_libs(target)
     freeze = subprocess.run([str(py), "-m", "pip", "list", "--format=freeze"], check=True, capture_output=True, text=True).stdout
     (target / "SOMA-RUNTIME.txt").write_text(f"Python {PYTHON} for SOMA ({sys.platform})\n\n{freeze}", encoding="utf-8", newline="\n")
     check(target)
