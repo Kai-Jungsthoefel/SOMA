@@ -6,7 +6,10 @@ cadquery==2.8.0
 cadquery-ocp==7.9.3.1.1
 cadquery-ocp-proxy==7.9.3.1.1
 casadi==3.8.1
+cffi==2.1.1
+charset-normalizer==3.5.2
 contourpy==1.4.0
+cryptography==50.0.2
 cycler==0.12.1
 ezdxf==1.4.4
 fonttools==4.66.0
@@ -24,11 +27,15 @@ nlopt==2.11.0
 numba==0.67.0
 numpy==2.5.3
 packaging==26.3
+pdfminer-six==20260107
+pdfplumber==0.11.10
 pillow==12.3.0
 pip==26.2.1
 propcache==0.5.4
 pyamg==5.3.0
+pycparser==3.11
 pyparsing==3.3.3
+pypdfium2==5.14.0
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3
 runtype==0.5.3

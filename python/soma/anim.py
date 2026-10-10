@@ -188,6 +188,11 @@ def _resolve(spec, what="Part"):
     hit = [p["name"] for p in parts if p["group"] and ("/".join(p["group"]) == path or "/".join(p["group"]).startswith(path + "/"))]
     if hit:
         return hit
+    # Teil mit Gruppenpfad davor ("Raum/Dachschräge"), so wie es im Strukturbaum steht
+    group, _, name = path.rpartition("/")
+    hit = [p["name"] for p in parts if group and p["name"] == name and "/".join(p["group"]) == group]
+    if hit:
+        return hit
     names = ", ".join(repr(p["name"]) for p in parts[:30]) + (" ..." if len(parts) > 30 else "")
     groups = sorted({"/".join(p["group"][:i + 1]) for p in parts for i in range(len(p["group"]))})
     extra = f" Groups: {', '.join(repr(g) for g in groups)}." if groups else ""

@@ -330,6 +330,8 @@ export interface ResultEntry extends ResultMeta { file: string; stale: boolean }
 export interface RenderJob {
   id: number; kind: 'still' | 'sheet' | 'video'; width: number; height: number;
   view: string | null; at: number; grid: [number, number]; fps: number;
+  /** Freie Blickrichtung (vom Modell zur Kamera) statt `view`, Teile oder Gruppen ausblenden, nur zeigen, einpassen, Zoom. */
+  dir: [number, number, number] | null; hide: string[]; only: string[]; fit: string[]; zoom: number;
   model: ArrayBuffer; anim: ArrayBuffer | null; result: ArrayBuffer | null;
 }
 /** Antwort des Render-Fensters. Video: MP4, Untertitel (WebVTT) und eine Übersicht als PNG. */

@@ -61,9 +61,28 @@ def _num(t):
 def prepare(root, args):
     """Auftrag fuer die App aus den Argumenten. Baut eine veraltete Animation vorher neu."""
     root = Path(root).resolve()
-    job = dict(project=str(root), view=args.view or None, warnings=[])
-    if args.view and args.view not in VIEWS:
-        raise RenderError(f"--view {args.view!r} does not exist. Possible: {', '.join(VIEWS)}")
+    job = dict(project=str(root), view=None, warnings=[])
+    view = (getattr(args, "view", None) or "").strip()
+    if view and view not in VIEWS:
+        try:
+            d = [float(x) for x in view.split(",")]
+        except ValueError:
+            d = []
+        if len(d) != 3 or not any(d):
+            raise RenderError(f"--view {view!r} does not exist. Possible: {', '.join(VIEWS)} or a direction x,y,z "
+                              "from the model to the camera, e.g. 1,-2,1")
+        job["dir"] = d
+    elif view:
+        job["view"] = view
+    for key in ("hide", "only", "fit"):
+        names = [n for n in (getattr(args, key, None) or []) if n.strip()]
+        if names:
+            job[key] = names
+    zoom = getattr(args, "zoom", None)
+    if zoom is not None:
+        if not 0.05 <= zoom <= 50:
+            raise RenderError("--zoom between 0.05 and 50")
+        job["zoom"] = zoom
     modes = [x for x in ("at", "sheet", "video") if getattr(args, x) not in (None, False)]
     if modes and not args.anim:
         raise RenderError(f"--{modes[0]} belongs to an animation: --anim \"Name\"")
@@ -112,7 +131,7 @@ def prepare(root, args):
     else:
         job["kind"] = "still"
         job["size"] = _size(args.size, (1280, 800))
-        name = f"result-{Path(job['result']).stem}" if args.result else f"view-{args.view or 'iso'}"
+        name = f"result-{Path(job['result']).stem}" if args.result else f"view-{job['view'] or ('custom' if 'dir' in job else 'iso')}"
         job["out"] = _out(root, args.out, f"renders/{name}.png", ".png")
     return job
 

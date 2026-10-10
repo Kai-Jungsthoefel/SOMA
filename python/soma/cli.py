@@ -430,7 +430,12 @@ def main(argv=None):
     z.set_defaults(func=cmd_analyze)
 
     r = sub.add_parser("render", help="picture or video of the model (through the app), to renders/")
-    r.add_argument("--view", help="iso, front, back, left, right, top, bottom (default iso, for animations their camera)")
+    r.add_argument("--view", help="iso, front, back, left, right, top, bottom or a direction x,y,z from the model to the camera "
+                   "(--view=-1,0,0 with a leading minus; default iso, for animations their camera)")
+    r.add_argument("--hide", action="append", metavar="NAME", help="hide a part or group (\"Housing\", \"Housing/Lid\"), repeatable")
+    r.add_argument("--only", action="append", metavar="NAME", help="show only these parts or groups, repeatable")
+    r.add_argument("--fit", action="append", metavar="NAME", help="frame these parts or groups, repeatable (default: all visible)")
+    r.add_argument("--zoom", type=float, help="closer than framed (2 = twice as close), 0.05 to 50")
     r.add_argument("--size", help="width x height in pixels, e.g. 1280x800")
     r.add_argument("--anim", help="name of an animation")
     r.add_argument("--at", type=float, help="moment in the animation (seconds)")

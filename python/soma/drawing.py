@@ -998,17 +998,19 @@ class View:
         self._refs.append(ln)
         self.sheet._annotate([ln], ("center",), f"a center line (line {_where()[1]})")
 
-    def leader(self, point, text, at, end="arrow", height=TEXT_HEIGHT):
+    def leader(self, point, text, at, end="arrow", height=TEXT_HEIGHT, side=None):
         """Leader from a model point to a text at the sheet point `at`. end: "arrow" (ends on an edge), "dot" (ends
-        inside a surface) or "none". The text sits on a short horizontal line at `at`."""
-        return self.sheet.leader(self.pt(point), text, at, end, height)
+        inside a surface) or "none". The text sits on a short horizontal line at `at`, on the side given by `side`
+        (see Sheet.leader)."""
+        return self.sheet.leader(self.pt(point), text, at, end, height, side)
 
 
 # ---- Blatt ----------------------------------------------------------------------------------------------------------
 
 class Sheet:
     """A drawing sheet with frame and title block (ISO 5457 and ISO 7200). Every Sheet(...) in drawings/*.py becomes
-    output/drawings/<name>.pdf and .dxf plus a picture .soma/drawings/<name>.png. output/drawings.pdf holds all sheets
+    output/drawings/<id>.pdf and .dxf plus a picture .soma/drawings/<id>.png, <id> being the name in ASCII with "_"
+    for spaces ("Disc small" -> Disc_small; soma drawing build prints the paths). output/drawings.pdf holds all sheets
     of the model in one file.
 
     name        unique name, also the file name
@@ -1479,17 +1481,47 @@ class Sheet:
                                          what=_what or f"Text \"{_short(t)}\"", hint=_hint))
         return out if len(lines) > 1 else (out[0] if out else None)
 
-    def leader(self, point, text, at, end="arrow", height=TEXT_HEIGHT):
+    def text_width(self, text, height=TEXT_HEIGHT):
+        """Width in mm that `text` takes on the sheet at this height (the widest line for several lines), measured with
+        the font of the drawing. Use it to place texts, leaders and table columns before building."""
+        if not isinstance(text, str):
+            text = str(text)
+        h = float(height)
+        if not h > 0:
+            raise ValueError("height must be greater than 0")
+        width = 0.0
+        for t in text.expandtabs(4).split("\n"):
+            if t.strip():
+                width = max(width, self._measure(t, h))
+        return width
+
+    def _measure(self, t, h):
+        """Breite einer Textzeile: probeweise als TEXT anlegen, messen, wieder entfernen."""
+        e = self.msp.add_text(t, height=h, dxfattribs={"layer": "TEXT", "style": "ISO"})
+        try:
+            from ezdxf.tools.text_size import text_size
+            return float(text_size(e).width)
+        except Exception:  # Schrift nicht messbar: ungefaehre Breite
+            return 0.6 * h * len(t)
+        finally:
+            self.msp.delete_entity(e)
+
+    def leader(self, point, text, at, end="arrow", height=TEXT_HEIGHT, side=None):
         """Leader from the sheet point `point` to a text at `at` (both in mm on the sheet). end: "arrow", "dot" or
-        "none". View.leader() takes a model point instead. Several lines stack above the short horizontal line."""
+        "none". View.leader() takes a model point instead. Several lines stack above the short horizontal line.
+        side: "right" puts the text right of `at` (starting there), "left" left of it (ending there). Default: away
+        from `point`, so right when `at` is right of `point` (or straight above or below it), else left.
+        sh.text_width(text) tells how much room the text needs."""
         p, a = _pt2(point, "point"), _pt2(at, "at")
         if end not in ("arrow", "dot", "none"):
             raise ValueError(f"end must be \"arrow\", \"dot\" or \"none\", not {end!r}")
+        if side not in (None, "left", "right"):
+            raise ValueError(f"side must be \"left\" or \"right\", not {side!r}")
         if not isinstance(text, str):
             text = str(text)
         msp = self.msp
         owner = self._new_owner("leader")
-        left = a[0] < p[0]
+        left = side == "left" if side else a[0] < p[0]
         up = (text.count("\n")) * LINE_SPACING * float(height)  # die letzte Zeile steht auf der Linie
         e = self.text(text, (a[0] - 1 if left else a[0] + 1, a[1] + 1 + up), height=height,
                       align="right" if left else "left", _owner=owner)
@@ -1515,11 +1547,23 @@ class Sheet:
             h.set_solid_fill(color=256)
         return e
 
-    def table(self, rows, at, widths, row_height=7.0, text_height=TEXT_HEIGHT):
+    def table(self, rows, at, widths=None, row_height=7.0, text_height=TEXT_HEIGHT):
         """Table, e.g. a parts list: rows is a list of rows (lists of texts), at the top left corner on the sheet,
-        widths the column widths in mm. Returns the bounding box (x0, y0, x1, y1). Nothing else may lie on it, and its
-        texts must fit their cells (the check reports both)."""
+        widths the column widths in mm. Without widths, or with None for a column, the column gets as wide as its
+        longest text plus 4 mm (at least 8 mm). Returns the bounding box (x0, y0, x1, y1). Nothing else may lie on it,
+        and its texts must fit their cells (the check reports both)."""
         x0, y_top = _pt2(at, "at")
+        rows = [list(r) for r in rows]
+        ncol = max((len(r) for r in rows), default=0)
+        if widths is None:
+            widths = [None] * ncol
+        widths = list(widths)
+        if len(widths) < ncol:
+            raise ValueError(f"{len(widths)} widths for {ncol} columns. Give one per column, None for automatic")
+        for i, w in enumerate(widths):
+            if w is None:
+                texts = [str(r[i]) for r in rows if i < len(r) and r[i] is not None and str(r[i]) != ""]
+                widths[i] = max([8.0] + [self.text_width(t, text_height) + 4.0 for t in texts])
         widths = [float(w) for w in widths]
         owner = self._new_owner("table")
         file, line = _where()
