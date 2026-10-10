@@ -10,9 +10,18 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 - Hilfe: Der Knopf „Help“ in der Leiste (auch auf der Startseite, Taste F1) öffnet eine kurze Anleitung zu allen Bereichen der App, mit Screenshots, auf denen die Elemente nummeriert sind. Dieselbe Anleitung bekommt der Agent als Skill „Using the app“ (ab Werk „On demand“) samt Bildern, damit er Fragen zur Bedienung beantworten kann (E83).
 - Einstellungen, Reiter „About“: nennt Kai Jungsthöfel als Autor.
+- `soma render`: freie Blickrichtung (`--view=1,-2,1`), Teile oder Gruppen ausblenden (`--hide`) oder nur sie zeigen (`--only`), auf Teile einpassen (`--fit`) und `--zoom`. Der Agent kann so in ein Modell hineinsehen, ohne eine Animation zu schreiben (E85).
+- PDFs aus `inputs/` kann der Agent lesen: pdfplumber (MIT) liegt in der Basisumgebung, mit Text, Linien und Koordinaten (E85).
+- Technische Zeichnungen: `sh.text_width()` misst Texte vor dem Bauen, `leader(..., side="left"/"right")` legt die Seite des Hinweistexts fest, `sh.table()` ohne `widths` passt die Spalten den Texten an (E85).
+- Animationen sprechen Teile auch mit ihrer Gruppe an (`"Gehäuse/Deckel"`) (E85).
+
+### Geändert
+
+- `AGENTS.md`: Die Vorderseite eines Modells zeigt nach −Y (Vorderansicht von −Y, X nach rechts), damit Agenten Modelle von Anfang an richtig ausrichten (E85).
 
 ### Behoben
 
+- Technische Zeichnungen: Der Docstring von `Sheet` nannte das Bild `.soma/drawings/<name>.png`, die Datei heißt nach der ASCII-Kennung (`Scheibe_klein.png`) (E85).
 - Markup: Die Zeichenfläche passt sich dem Viewer an. Wird er größer, etwa weil die PDF daneben geschlossen wird, wächst sie mit, statt klein in der Ecke zu bleiben. Mausrad zoomt um den Zeiger (bis 8-fach), Ziehen mit der rechten oder mittleren Maustaste verschiebt, Ctrl+0 passt wieder ein. Das Bild für den Agenten bleibt dabei in voller Auflösung.
 
 ## [0.4.0] - 2026-10-09
