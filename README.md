@@ -44,7 +44,7 @@ Any CLI agent that can read files and run commands works: Claude Code, OpenCode,
 - Mouse navigation like in SolidWorks, Fusion 360, Onshape, Creo or Rhino, perspective or orthographic view
 - Exact measurements on the B-rep, not on the mesh: faces, edges, distances, hole spacing
 - Section views, exploded views with a disassembly analysis, transparency and isolation per group
-- Analysis: overhangs, wall thickness, clearance between parts, strength with FEM (CalculiX), also with contact between parts
+- Analysis: overhangs, wall thickness, clearance between parts, strength with FEM (CalculiX), also with contact between parts and preloaded bolts
 - Animations written in Python, rendered to images and MP4
 
 **Feedback to the agent**
