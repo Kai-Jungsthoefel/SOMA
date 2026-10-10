@@ -19,6 +19,7 @@ const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 
 // Konsole aus dem Beispiel im Skill
 const MODEL = `import cadquery as cq
 from soma import add_part
+from soma.fasteners import Screw
 
 add_part("Balken", cq.Workplane().box(100, 10, 10, centered=(False, True, True)))
 fuss = cq.Workplane().box(60, 40, 5, centered=(True, True, False)).translate((0, 100, 0))
@@ -32,6 +33,11 @@ add_part("Bracket", bracket)
 add_part("Grund", cq.Workplane().box(100, 100, 10, centered=(True, True, False)).translate((0, 250, -10)))
 add_part("Halter", cq.Workplane().box(60, 60, 8, centered=(True, True, False)).union(
     cq.Workplane().box(20, 12, 80, centered=(True, True, False)).translate((0, 0, 8))).translate((0, 250, 0)))
+# Lasche mit einer Schraube M5 auf einem Sockel mit Gewinde (bolt())
+screw = Screw("ISO 4762", "M5x16", at=(0, -250, 6))
+add_part("Sockel", cq.Workplane().box(30, 30, 12, centered=(True, True, False)).translate((0, -250, -12)).cut(screw.tap_hole()))
+add_part("Lasche", cq.Workplane().box(30, 30, 6, centered=(True, True, False)).translate((0, -250, 0)).cut(screw.clearance_hole()))
+add_part("Schraube", screw)
 `;
 const BALKEN = (n) => `from soma.fem import Study
 study = Study("Balken unter Last", material="Aluminium 6082", safety=2)
@@ -73,7 +79,7 @@ try {
   await waitFor('Projekt und Build', () => !!window.__t && !!window.__t.project() && window.__t.status().state === 'ok' && window.__t.partCount() > 0);
   const dir = (await ev(() => window.__t.project())).dir;
   fs.writeFileSync(path.join(dir, 'model.py'), MODEL);
-  await waitFor('Testmodell gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 6, 90000);
+  await waitFor('Testmodell gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 9, 90000);
   const bridge = await ev(() => window.soma.test.bridge());
   const env = { ...process.env, ...bridge, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' };
   const soma = (args) => spawnSync(PY, ['-m', 'soma', ...args], { cwd: dir, env, encoding: 'utf8', timeout: 10 * 60 * 1000 });
@@ -258,7 +264,7 @@ try {
     && an.table.some((row) => row[0] === 'Balken' && /^0\.5[67]\d$/.test(row[3])), JSON.stringify(an));
   await domClick('btn-result-close');
   check('× in der Leiste: Analyse aus, Modell wieder sichtbar, Baum mit allen Teilen, Bericht wird zur Liste', !(await ev(() => window.__t.viewer.animViewState())).modelHidden
-    && (await ev(() => window.__t.tree())).names.length === 6 && (await ev(() => window.__t.analysis())).mode === 'list');
+    && (await ev(() => window.__t.tree())).names.length === 9 && (await ev(() => window.__t.analysis())).mode === 'list');
 
   // Schnitt durch verschmolzene Teile: Jedes Netz ist für sich geschlossen, auch an der Fläche, an der die Wand auf dem Fuß
   // steht. Sonst füllt der Deckel des Schnitts auch Stellen, an denen der Blick durch diese Fläche geht
@@ -333,6 +339,45 @@ study.contact("Grund", "Halter", friction=0.2)
   check('Platte mit Arm auf Kontakt: rechnet mit dem steifen Gesetz, trägt 200 N, im Gleichgewicht', r.status === 0
     && /contact: Grund – Halter \(3600\.0 mm², friction 0\.2\), carries 200\.0 N/.test(r.stdout) && r.stdout.includes('(in equilibrium)')
     && !r.stdout.includes('softer one'), r.stdout + r.stderr);
+
+  // Verschraubung: erst 3000 N Vorspannung, dann 1000 N Zug an der Lasche. Die Fuge trägt die Vorspannung minus den Zug
+  const LASCHE = (extra) => `from soma.fem import Study
+study = Study("Lasche verschraubt", material="Aluminium 6082", mesh=4, check_mesh=False)
+study.fix("Sockel", faces="<Z")
+study.force("Lasche", faces=">Z", N=(0, 0, 1000))
+${extra}
+`;
+  study('lasche', LASCHE('study.contact("Sockel", "Lasche", friction=0.2)\nstudy.bolt("Schraube", preload=3000)'));
+  r = soma(['analyze', 'fem', 'analyses/lasche.py']);
+  const bf = Number(/bolt: Schraube \(ISO 4762 M5x16, 8\.8, thread in Sockel\), preload 3000 N \(given\), in the end (\d+) N pull/.exec(r.stdout)?.[1]);
+  const jf = Number(/contact: Sockel – Lasche \([\d.]+ mm², friction 0\.2\), carries (\d+\.\d) N/.exec(r.stdout)?.[1]);
+  check('bolt(): Vorspannung 3000 N, Schraube am Ende etwas mehr, Fuge trägt Schraubenkraft minus Zug, im Gleichgewicht', r.status === 0
+    && bf >= 3000 && bf < 3300 && near(jf, bf - 1000, 15) && r.stdout.includes('linear elastic, with contact and bolts')
+    && r.stdout.includes('touching: Lasche – Schraube') && r.stdout.includes('bonded (bolt: head and thread)')
+    && r.stdout.includes('(in equilibrium)') && /2 load steps/.test(r.stdout), r.stdout + r.stderr);
+  await ev(() => window.__t.refreshViewLists());
+  await ev(() => window.__t.resultShow('lasche'));
+  await waitFor('Ergebnis Lasche geladen', () => window.__t.result().id === 'lasche', 20000);
+  await ev(() => window.__t.showPanel('analysis'));
+  await waitFor('Bericht Lasche', () => window.__t.analysis().title === 'Lasche verschraubt', 20000);
+  await ev(() => window.__t.analysisToggle('bolt0'));
+  an = await ev(() => window.__t.analysis());
+  check('Bericht: Zeile Bolt mit Kraft und Schraube, aufgeklappt Vorspannung und Auslastung', an.inputs.some((x) => x.startsWith('Bolt') && x.includes('· Schraube'))
+    && an.details.some((x) => x.includes('Preload3,000 N') && x.includes('of the yield strength')), JSON.stringify(an));
+  const boltIds = await ev(() => window.__t.viewer.partList().filter((p) => ['Sockel', 'Lasche', 'Schraube'].includes(p.name)).map((p) => p.id));
+  await ev(() => window.__t.viewer.setSection({ normal: [0, 1, 0], constant: 250 }));
+  await ev((ids) => window.__t.viewer.setView('front', ids), boltIds);
+  await shot('fem-6-schraube');
+  await ev(() => window.__t.viewer.setSection(null));
+  await domClick('btn-result-close');
+  // Ohne Kontakt und ohne Angabe: Vorspannung 70 % der Streckgrenze im Spannungsquerschnitt (0.7 x 640 x 14.18 mm²)
+  study('lasche', LASCHE('study.bolt("Schraube")'));
+  r = soma(['analyze', 'fem', 'analyses/lasche.py']);
+  check('bolt() ohne preload: 6354 N automatisch, Schraube aus Stahl 8.8', r.status === 0 && r.stdout.includes('preload 6354 N (automatic)')
+    && r.stdout.includes('Schraube (steel 8.8, E 210000 MPa, strength 640 MPa)'), r.stdout + r.stderr);
+  study('lasche', LASCHE('study.bolt("Lasche")'));
+  r = soma(['analyze', 'fem', 'analyses/lasche.py']);
+  check('bolt() auf einem Teil, das keine Schraube ist: Meldung', r.status !== 0 && (r.stdout + r.stderr).includes("bolt('Lasche'): not a screw from soma.fasteners"), r.stdout + r.stderr);
 
   // 8) Das Beispiel im Skill läuft so, wie es dasteht
   const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'fem.md'), 'utf8');

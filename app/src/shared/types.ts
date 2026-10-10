@@ -304,7 +304,7 @@ export interface FemBc {
   axes?: string; reaction?: number[]; total?: number[]; value?: number;
 }
 /** Teile, die sich berühren (E84): verklebt oder als Kontakt der Studie. Fläche in mm². */
-export interface FemTouching { a: string; b: string; area: number; joint: 'bonded' | 'contact'; friction: number | null }
+export interface FemTouching { a: string; b: string; area: number; joint: 'bonded' | 'contact' | 'bolt'; friction: number | null }
 /**
  * Kontaktpaar (E84): getragene Kraft (N), höchste Pressung (MPa), offene Fläche (mm², hebt ab) mit größtem Spalt (mm),
  * größter Gleitweg (mm), mit Reibung die Fläche, die an der Haftgrenze gleitet.
@@ -313,6 +313,15 @@ export interface FemContact {
   a: string; b: string; friction: number; area: number; force: number; maxPressure: { value: number; at: number[] };
   openArea: number; maxGap: number; maxSlip: number; slideArea?: number;
 }
+/**
+ * Vorgespannte Schraube (bolt()): Vorspannung und Kraft am Ende (N), Querkraft im Schaft (N), Zugspannung im
+ * Spannungsquerschnitt (MPa), Auslastung der Streckgrenze aus Zug und Schub (1 = 100 %). `limit`: was die automatische
+ * Vorspannung begrenzt hat ("screw" oder das Teil unter dem Kopf).
+ */
+export interface FemBolt {
+  part: string; designation: string; grade: string; preload: number; auto: boolean; limit: string | null;
+  force: number; shear: number; stress: number; utilization: number; engaged: string; at: number[];
+}
 export interface FemInfo {
   study: string; bcs: FemBc[]; applied: number[]; reaction: number[]; maxDisp: number; diag: number;
   /** `auto`: Die Studie gibt keine Netzgröße vor (fehlt bei älteren Ergebnissen). */
@@ -320,7 +329,7 @@ export interface FemInfo {
   /** Abweichung des Gleichgewichts (0.001 = 0.1 %), gröberes Netz der Prüfung, Schwerkraft (m/s², null: ohne). */
   balance?: number; coarse?: { size: number; elements: number } | null; gravity?: number[] | null;
   /** Berührende Teile und Kontaktpaare (E84, fehlen bei älteren Ergebnissen). */
-  touching?: FemTouching[]; contacts?: FemContact[];
+  touching?: FemTouching[]; contacts?: FemContact[]; bolts?: FemBolt[];
 }
 export interface ResultMeta {
   id: string; kind: string; title: string; quantity: string; unit: string;

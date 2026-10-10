@@ -200,6 +200,16 @@ export class AnalysisPanel {
       det.push(['Slip', `up to ${loc(c.maxSlip, 3)} mm`]);
       sec.append(...this.row(`contact${i}`, 'Contact', c.friction ? `Friction ${loc(c.friction, 2)}` : 'No friction', `${c.a} – ${c.b}`, det));
     });
+    // Schrauben mit Vorspannung: Kraft am Ende, Auslastung (über 90 % gelb wie im Bericht von soma)
+    (fem.bolts ?? []).forEach((b, i) => {
+      const use = el('span', { className: b.utilization > 0.9 ? 'wc' : '', textContent: `${Math.round(100 * b.utilization)} % of the yield strength` });
+      const det: [string, string | HTMLElement][] = [
+        ['Screw', `${b.designation}, ${b.grade}`], ['Thread in', b.engaged],
+        ['Preload', `${loc(b.preload, 0)} N${b.auto ? (b.limit && b.limit !== 'screw' ? `, limited by ${b.limit}` : ', automatic') : ''}`],
+        ['In the end', `${loc(b.force, 0)} N pull, ${loc(b.shear, 0)} N across`], ['Load', use],
+      ];
+      sec.append(...this.row(`bolt${i}`, 'Bolt', `${loc(b.force, 0)} N`, b.part, det));
+    });
     const bonded = (fem.touching ?? []).filter((t) => t.joint === 'bonded');
     if (bonded.length) {
       const det: [string, string][] = bonded.map((t) => [`${t.a} – ${t.b}`, `${loc(t.area, 1)} mm²`]);
