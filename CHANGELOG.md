@@ -9,6 +9,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 ### Neu
 
 - Hilfe: Der Knopf „Help“ in der Leiste (auch auf der Startseite, Taste F1) öffnet eine kurze Anleitung zu allen Bereichen der App, mit Screenshots, auf denen die Elemente nummeriert sind. Dieselbe Anleitung bekommt der Agent als Skill „Using the app“ (ab Werk „On demand“) samt Bildern, damit er Fragen zur Bedienung beantworten kann (E83).
+- Einstellungen, Reiter „About“: nennt Kai Jungsthöfel als Autor.
 
 ### Behoben
 

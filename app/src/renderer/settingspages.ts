@@ -282,7 +282,7 @@ export class AboutPage implements SettingsPage {
     copy.addEventListener('click', () => void this.copy());
     const kids: (HTMLElement | null)[] = [
       el('div', { className: 'st-about-hd' }, el('span', { className: 'st-logo' }, icon('logo', 34, 1.5)),
-        el('div', {}, el('h2', { className: 'st-h2', textContent: `SOMA ${a?.version ?? ''}`.trim() }), el('p', { className: 'st-lead', textContent: 'Solid Object Modeling with Agents' }))),
+        el('div', {}, el('h2', { className: 'st-h2', textContent: `SOMA ${a?.version ?? ''}`.trim() }), el('p', { className: 'st-lead', textContent: 'Solid Object Modeling with Agents' }), el('p', { className: 'st-lead', textContent: 'Author: Kai Jungsthöfel' }))),
       el('div', { className: 'st-actions' }, copy, this.link('Project page', REPO, 'Source code, issues and releases on GitHub'), this.link('Changelog', `${REPO}/blob/main/CHANGELOG.md`, 'What changed in each version')),
       el('p', { className: 'st-license' },
         'SOMA is free software under the GNU GPL, version 3 or later. The SOMA Model Exception makes sure that what you design belongs to you: your models, their files and everything SOMA creates from them.'),
