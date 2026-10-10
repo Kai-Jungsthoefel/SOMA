@@ -19,7 +19,7 @@ Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten
 | `design/strukturbaum-entwurf.html` | Freigegebener Entwurf für den Strukturbaum im Viewer und die Reiter Analysis und Animation (E82), umgesetzt. Ersetzt in Entwurf 2 den Reiter Bauteile und den Umschalter oben links, enthält den ruhigen Bericht der Analyse. Maßstab für Baum, Reiter und Bericht |
 | `design/ui-entwurf.html` | Erster Oberflächenentwurf (E38), Farben und Bausteine gelten weiter, der Aufbau ist durch Entwurf 2 ersetzt |
 | `design/icon-vorschlaege.html` | Die fünf Icon-Entwürfe, aus denen „Dialog“ gewählt wurde (E44). Nur noch Referenz |
-| `python/soma/` | Hilfsbibliothek und CLI: `add_part` (mit `group=` und `role=`), `param` (`params.py`, Werte für das Parameter-Panel, E74), `import_step`, `import_assembly`, `fasteners.py` (Normteile, Maßtabellen aus bd_warehouse in `data/fasteners/`), `soma build`, `soma export`, `soma glb`, `soma serve` (Messdienst, `measure.py`), `soma anim` (`anim.py`, `animrun.py`), `soma analyze` (`analysis.py`, FEM in `fem.py`), `soma drawing` (`drawing.py`, `drawrun.py`, technische Zeichnungen, E76), `soma dxfview` (`dxfview.py`, DXF für die Ansicht der App, E80), `soma render` (`render.py`, über die App), `soma env` (`env.py`, Projektumgebung `.soma/env` und `requirements.txt`, E67) |
+| `python/soma/` | Hilfsbibliothek und CLI: `add_part` (mit `group=` und `role=`), `param` (`params.py`, Werte für das Parameter-Panel, E74), `import_step`, `import_assembly`, `fasteners.py` (Normteile, Maßtabellen aus bd_warehouse in `data/fasteners/`), `soma build`, `soma export`, `soma glb`, `soma serve` (Messdienst, `measure.py`), `soma anim` (`anim.py`, `animrun.py`), `soma analyze` (`analysis.py`, FEM in `fem.py`, gerechnet mit CalculiX über `ccx.py`, E84), `soma drawing` (`drawing.py`, `drawrun.py`, technische Zeichnungen, E76), `soma dxfview` (`dxfview.py`, DXF für die Ansicht der App, E80), `soma render` (`render.py`, über die App), `soma env` (`env.py`, Projektumgebung `.soma/env` und `requirements.txt`, E67) |
 | `prototype/phase0/` | Abgeschlossener technischer Prototyp mit `ERGEBNISSE.md`. Nur noch Referenz |
 
 Details: `app/README.md`.
@@ -27,7 +27,7 @@ Details: `app/README.md`.
 ## Befehle
 
 ```
-# einmalig: Python-Umgebung (lokal) und soma darin
+# einmalig: Python-Umgebung (lokal) und soma darin, das Skript holt auch CalculiX (python/scripts/fetch_ccx.py nach venv-full/ccx)
 powershell -File prototype/phase0/setup_env.ps1
 uv pip install --python "$LOCALAPPDATA/cadide-phase0/venv-full/Scripts/python.exe" -e python
 

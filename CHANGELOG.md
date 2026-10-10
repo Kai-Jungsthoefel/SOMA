@@ -6,6 +6,17 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Neu
+
+- FEM mit Kontakt: `study.contact("Deckel", "Gehäuse")` macht die Berührfläche zweier Teile zu einem Kontakt, der abheben und gleiten kann, mit `friction=` auch mit Reibung. Das Ergebnis nennt je Kontakt die getragene Kraft, die höchste Pressung, wo er offen ist und wo er gleitet. Im Bild gibt es die Größe „Contact pressure“, im Bericht je Kontakt eine Zeile (E84).
+- FEM nennt alle Teile, die sich berühren, mit Fläche und ob sie verklebt sind, und weist auf `contact()` hin (E84).
+- Die FEM rechnet mit CalculiX statt mit dem eigenen Solver, bei üblichen Modellgrößen zwei- bis dreimal schneller mit denselben Zahlen. CalculiX kommt mit SOMA (Windows: 53 MB), ohne CalculiX rechnet der eigene Solver weiter, nur ohne Kontakt (E84).
+- Einstellungen, Reiter „About“: nennt gmsh und CalculiX mit Version.
+
+### Geändert
+
+- FEM: Der Hinweis, dass die Spitzenspannung vom Netz abhängt, entfällt bei kaum belasteten Teilen (unter 2 % der Festigkeit).
+
 ## [0.4.1] - 2026-10-10
 
 Hilfe mit nummerierten Screenshots, die der Agent als Skill kennt, dazu Verbesserungen aus der Kritik eines Agenten: `soma render` mit freier Richtung und Ausblenden, PDFs lesen, Zeichnungen mit Textmaß.

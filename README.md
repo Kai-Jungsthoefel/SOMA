@@ -44,7 +44,7 @@ Any CLI agent that can read files and run commands works: Claude Code, OpenCode,
 - Mouse navigation like in SolidWorks, Fusion 360, Onshape, Creo or Rhino, perspective or orthographic view
 - Exact measurements on the B-rep, not on the mesh: faces, edges, distances, hole spacing
 - Section views, exploded views with a disassembly analysis, transparency and isolation per group
-- Analysis: overhangs, wall thickness, clearance between parts, strength with FEM
+- Analysis: overhangs, wall thickness, clearance between parts, strength with FEM (CalculiX), also with contact between parts
 - Animations written in Python, rendered to images and MP4
 
 **Feedback to the agent**
@@ -132,4 +132,4 @@ SOMA is free software under the [GNU General Public License v3.0](LICENSE) or an
 
 What you design with SOMA is yours. The [SOMA Model Exception](MODEL-EXCEPTION.md) lets you license your model files under any terms you like, even though they import `soma`. Exported files like STEP or STL are not affected by the GPL at all.
 
-Third-party components keep their own licenses. Among them are CadQuery (Apache-2.0), OpenCascade (LGPL-2.1), Git (GPL-2.0), gmsh (GPL-2.0-or-later) and pdf.js (Apache-2.0).
+Third-party components keep their own licenses. Among them are CadQuery (Apache-2.0), OpenCascade (LGPL-2.1), Git (GPL-2.0), gmsh (GPL-2.0-or-later), CalculiX (GPL-2.0-or-later) and pdf.js (Apache-2.0).
