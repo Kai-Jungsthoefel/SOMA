@@ -40,9 +40,15 @@ export class TerminalManager {
   create(opts: { command?: string } = {}): number {
     const win = process.platform === 'win32';
     const shell = win ? 'powershell.exe' : (process.env.SHELL || 'bash');
-    const p = pty.spawn(shell, win ? ['-NoLogo'] : [], {
-      name: 'xterm-256color', cols: 100, rows: 30, cwd: this.dir, env: terminalEnv(this.dir) as Record<string, string>,
-    });
+    let p: pty.IPty;
+    try {
+      p = pty.spawn(shell, win ? ['-NoLogo'] : [], {
+        name: 'xterm-256color', cols: 100, rows: 30, cwd: this.dir, env: terminalEnv(this.dir) as Record<string, string>,
+      });
+    } catch (e) {
+      console.error('[terminal]', e);
+      throw new Error(`Could not start the terminal (${shell}): ${e instanceof Error ? e.message : String(e)}`);
+    }
     const id = nextId++;
     this.terms.set(id, p);
     p.onData((d) => { if (!this.wc.isDestroyed()) this.wc.send('term:data', id, d); });

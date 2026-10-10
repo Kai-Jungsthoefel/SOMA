@@ -2,7 +2,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import { icon } from './icons';
-import { el } from './ui';
+import { el, toast } from './ui';
 
 interface Tab { id: number; term: Terminal; fit: FitAddon; pane: HTMLElement; tab: HTMLElement; title: string; agent: boolean; exited: boolean }
 
@@ -38,10 +38,17 @@ export class TerminalTabs {
     new ResizeObserver(() => this.fitActive()).observe(panes);
   }
 
-  async add(opts: { command?: string; title?: string } = {}): Promise<number> {
+  async add(opts: { command?: string; title?: string } = {}): Promise<number | null> {
     // Vor dem Anlegen der Shell warten: Danach darf bis zum Eintrag in `tabs` nichts mehr warten, sonst gehen Ausgaben verloren
     await fontsReady;
-    const id = await window.soma.term.create({ command: opts.command });
+    let id: number;
+    try {
+      id = await window.soma.term.create({ command: opts.command });
+    } catch (e) {
+      // Shell startet nicht (fehlt, keine Rechte): sagen, statt still kein Terminal zu zeigen
+      toast(String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error');
+      return null;
+    }
     const term = new Terminal({
       fontFamily: '"IBM Plex Mono", "Cascadia Mono", Consolas, monospace', fontSize: 13, lineHeight: 1, cursorBlink: true, scrollback: 5000,
       fontWeight: '400', fontWeightBold: '700',
