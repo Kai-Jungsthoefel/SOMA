@@ -1,6 +1,10 @@
 # Abhängigkeiten und Build-Ausgaben
 node_modules/
 app/dist/
+# Installationspakete: Python-Basisumgebung (build_runtime.py) und Ausgabe von electron-builder
+app/python-runtime/
+app/python-runtime.old/
+app/release/
 *.tsbuildinfo
 
 # Python

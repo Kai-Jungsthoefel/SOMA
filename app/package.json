@@ -4,7 +4,8 @@
   "private": true,
   "license": "GPL-3.0-or-later",
   "author": "Kai Jungsthöfel",
-  "description": "SOMA (Solid Object Modeling with Agents): Desktop-App fuer 3D-Modelle mit KI-Agenten",
+  "description": "SOMA (Solid Object Modeling with Agents): design 3D models in CadQuery with an AI agent of your choice",
+  "homepage": "https://github.com/Kai-Jungsthoefel/SOMA",
   "main": "dist/main/main.js",
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -27,6 +28,8 @@
     "test:settings": "npm run build && node test/settings.mjs",
     "test:unit": "node test/unit.mjs",
     "help:shots": "npm run build && node test/helpshots.mjs",
+    "dist": "npm run build && electron-builder --config electron-builder.config.cjs --publish never",
+    "dist:dir": "npm run build && electron-builder --config electron-builder.config.cjs --publish never --dir",
     "test": "npm run build && node test/run-all.mjs"
   },
   "dependencies": {
@@ -60,6 +63,7 @@
     "@types/yauzl": "^3.4.0",
     "@types/yazl": "^3.3.1",
     "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.0"
   }

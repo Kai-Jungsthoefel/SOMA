@@ -30,7 +30,9 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
   // Nach einem harten Beenden kann ein Kindprozess der alten App den Debug-Port noch kurz halten (geerbter Socket):
   // warten, sonst startet Electron ohne Debug-Port und der Test findet kein Fenster
   for (const t0 = Date.now(); !(await portFree(port)) && Date.now() - t0 < 30000;) await sleep(300);
-  const child = spawn(electronExe(APP), ['.', `--remote-debugging-port=${port}`], {
+  // SOMA_TEST_EXE: die gepackte App statt der Entwicklungsfassung (Prüfung der Auslieferung, siehe app/README.md)
+  const packaged = process.env.SOMA_TEST_EXE;
+  const child = spawn(packaged || electronExe(APP), [...(packaged ? [] : ['.']), `--remote-debugging-port=${port}`], {
     cwd: APP, env: { ...process.env, SOMA_USER_DATA: ud, SOMA_TEST: '1', SOMA_HIDDEN: visible ? '0' : mode === 'offscreen' ? 'offscreen' : '1', ...env }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
