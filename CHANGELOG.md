@@ -6,6 +6,8 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+## [0.6.0] - 2026-10-10
+
 ### Neu
 
 - Installationspakete: Installer für Windows, AppImage und tar.gz für Linux, dmg für macOS mit Apple Silicon, mit Python, CadQuery, `soma`, CalculiX und Git an Bord. Bisher nur unter Windows getestet, die Pakete sind noch nicht signiert.
@@ -145,7 +147,8 @@ Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
 - Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
 - Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.5.0...HEAD
+[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.3.0...v0.4.0
