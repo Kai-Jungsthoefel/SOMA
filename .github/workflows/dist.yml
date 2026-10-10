@@ -1,0 +1,87 @@
+# Installationspakete für Windows, Linux und macOS. Jedes System baut sein eigenes Paket: Python-Basisumgebung, CalculiX
+# und das Git von dugite sind plattformabhängig. Ablauf und Grenzen in app/README.md („Installationspakete“).
+#
+# Start von Hand (Actions > Installers > Run workflow) oder mit einem Versions-Tag (vX.Y.Z). Die Pakete liegen danach als
+# Artefakte am Lauf. Ohne Zertifikate: Windows unsigniert (SmartScreen warnt), macOS nur ad-hoc signiert, nicht notarisiert.
+name: Installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  dist:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            exe: release/win-unpacked/SOMA.exe
+            files: app/release/*.exe
+          # 22.04 statt neuer: Das Paket läuft nur auf Systemen mit mindestens dieser glibc
+          - os: ubuntu-22.04
+            exe: release/linux-unpacked/soma-app
+            files: |
+              app/release/*.AppImage
+              app/release/*.tar.gz
+          # Apple Silicon (für Intel-Macs fehlen Wheels der Basisumgebung)
+          - os: macos-15
+            exe: release/mac-arm64/SOMA.app/Contents/MacOS/SOMA
+            files: app/release/*.dmg
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      # Gleiche uv-Version wie in der Entwicklung: Sie bestimmt, welches Python 3.12.x build_runtime.py bekommt
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.22'
+
+      - name: npm ci
+        working-directory: app
+        run: npm ci
+
+      - name: Typecheck und Unit-Tests
+        working-directory: app
+        run: |
+          npm run typecheck
+          npm run test:unit
+
+      - name: Python-Basisumgebung
+        run: uv run --no-project --python 3.12 python python/scripts/build_runtime.py
+
+      - name: Installationspaket
+        working-directory: app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist
+
+      # Erste Prüfung der gepackten App mit der Smoke-Suite. Nur Windows ist bisher getestet: Unter Linux und macOS
+      # bricht der Lauf nicht ab, das Protokoll zeigt, was dort noch fehlt.
+      - name: Smoke-Test der gepackten App
+        working-directory: app
+        continue-on-error: ${{ runner.os != 'Windows' }}
+        env:
+          SOMA_TEST_EXE: ${{ github.workspace }}/app/${{ matrix.exe }}
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a node test/smoke.mjs; else node test/smoke.mjs; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SOMA-${{ runner.os }}
+          path: ${{ matrix.files }}
+          retention-days: 14
+          compression-level: 0
