@@ -188,6 +188,24 @@ export class AnalysisPanel {
     if (fem.gravity && Math.hypot(...fem.gravity) > 0) {
       sec.append(...this.row('gravity', 'Gravity', `${loc(Math.hypot(...fem.gravity), 2)} m/s²`, direction(fem.gravity), [['Vector', `(${fem.gravity.map((x) => loc(x, 2)).join(', ')}) m/s²`], ['Mass', 'from the density of each material']]));
     }
+    // Berührende Teile (E84): je Kontaktpaar eine Zeile, die verklebten zusammen in einer
+    (fem.contacts ?? []).forEach((c, i) => {
+      const pct = (a: number) => `${Math.round((100 * a) / Math.max(c.area, 1e-12))} %`;
+      const det: [string, string | HTMLElement][] = [
+        ['Faces', `${loc(c.area, 1)} mm²`], ['Carries', `${loc(c.force, 1)} N`],
+        ['Highest pressure', `${loc(c.maxPressure.value, 2)} MPa`],
+        ['Open', c.openArea > 0 ? `${pct(c.openArea)} of the faces, gap up to ${loc(c.maxGap, 3)} mm` : 'closed everywhere'],
+      ];
+      if (c.slideArea != null) det.push(['Sliding', c.slideArea > 0 ? el('span', { className: c.slideArea > 0.5 * c.area ? 'wc' : '', textContent: `${pct(c.slideArea)} at the friction limit` }) : 'sticks everywhere']);
+      det.push(['Slip', `up to ${loc(c.maxSlip, 3)} mm`]);
+      sec.append(...this.row(`contact${i}`, 'Contact', c.friction ? `Friction ${loc(c.friction, 2)}` : 'No friction', `${c.a} – ${c.b}`, det));
+    });
+    const bonded = (fem.touching ?? []).filter((t) => t.joint === 'bonded');
+    if (bonded.length) {
+      const det: [string, string][] = bonded.map((t) => [`${t.a} – ${t.b}`, `${loc(t.area, 1)} mm²`]);
+      det.push(['Joined', 'glued where they touch; study.contact() makes it a contact']);
+      sec.append(...this.row('bonded', 'Touching', 'Bonded', bonded.length === 1 ? `${bonded[0].a} – ${bonded[0].b}` : plural(bonded.length, 'pair'), det));
+    }
     // Werkstoffe: je Werkstoff einmal, mit den Teilen dazu
     const mats = new Map<string, { m: NonNullable<ResultPart['material']>; parts: string[] }>();
     for (const p of r.parts) if (p.material) {
@@ -222,6 +240,7 @@ export class AnalysisPanel {
       ['Element size', `${loc(mesh.size, 2)} mm${mesh.auto == null ? '' : mesh.auto ? ', automatic from the model size' : ', set in the study'}`],
       ['Elements', `${mesh.elements.toLocaleString('en-US')} tetrahedra, 10 nodes`],
       ...(mesh.nodes ? [['Nodes', mesh.nodes.toLocaleString('en-US')] as [string, string]] : []),
+      ['Solver', mesh.solver],
       ['Check', check],
     ]));
     return sec;

@@ -46,6 +46,13 @@ study = Study("lose", material="PLA")
 study.fix("Fuss", faces="<Z", axes="z")
 study.force("Wand", faces=">Z", N=(-10, 0, 0))
 `;
+// Kontakt (E84): Die Wand steht auf dem Fuß, oben gedrückt und leicht seitlich (20 N < 0,3 x 400 N: haftet)
+const KONTAKT = (friction) => `from soma.fem import Study
+study = Study("Wand steht auf", material="Aluminium 6082", check_mesh=False)
+study.fix("Fuss", faces="<Z")
+study.force("Wand", faces=">Z", N=(-20, 0, -400))
+study.contact("Fuss", "Wand"${friction ? `, friction=${friction}` : ''})
+`;
 
 const near = (a, b, eps) => Math.abs(a - b) <= eps;
 const pngSize = (f) => { const b = fs.readFileSync(f); return b.toString('ascii', 1, 4) === 'PNG' ? [b.readUInt32BE(16), b.readUInt32BE(20)] : null; };
@@ -81,6 +88,12 @@ try {
   check('Netzprüfung: zweite Rechnung mit gröberem Netz genannt, Hinweis zur Spitze an der Einspannung', /with a coarser mesh \d+\.\d MPa/.test(r.stdout)
     && r.stdout.includes('at the edge of a fixed support'), r.stdout);
   check('Ergebnisdatei .soma/results/balken.glb', fs.existsSync(path.join(dir, '.soma', 'results', 'balken.glb')));
+  check('Gerechnet mit CalculiX (E84)', /unknowns, CalculiX \d/.test(r.stdout), r.stdout);
+  // Rückfallweg ohne CalculiX: der eingebaute Solver, dieselbe Durchbiegung
+  const r0 = spawnSync(PY, ['-m', 'soma', 'analyze', 'fem', 'analyses/balken.py', '--name=balken-eigen'], { cwd: dir, env: { ...env, SOMA_FEM_SOLVER: 'builtin' }, encoding: 'utf8', timeout: 10 * 60 * 1000 });
+  check('Eingebauter Solver (SOMA_FEM_SOLVER=builtin): gleiche Durchbiegung, direkt gelöst', r0.status === 0 && /unknowns, direct/.test(r0.stdout)
+    && near(Number(/largest displacement (\d+\.\d+) mm/.exec(r0.stdout)?.[1]), w, 0.002), r0.stdout + r0.stderr);
+  fs.rmSync(path.join(dir, '.soma', 'results', 'balken-eigen.glb'), { force: true });
 
   // 2) Zwei verschmolzene Teile mit eigenem Werkstoff, Druck über near=, Eigengewicht
   study('winkel', WINKEL);
@@ -89,6 +102,8 @@ try {
     && /Fuss \(Aluminium 6082/.test(r.stdout) && /Wand \(Steel S235/.test(r.stdout) && /pressure: Wand near \(30, 100, 30\) \(1600\.0 mm²\), 0\.2 MPa, in total \(-320\.0, 0\.0, 0\.0\) N/.test(r.stdout)
     && r.stdout.includes('self-weight') && r.stdout.includes('(in equilibrium)'), r.stdout + r.stderr);
   check('Winkel: Einspannung 2400 mm² trägt Druck und Gewicht', /fixed: Fuss <Z \(2400\.0 mm²\), reaction force \(320\.0, 0\.0, \d\.\d\) N/.test(r.stdout), r.stdout);
+  check('Winkel: berührende Teile genannt, verklebt, mit Hinweis auf contact()', r.stdout.includes('touching: Fuss – Wand (200.0 mm²), bonded')
+    && r.stdout.includes('add study.contact("A", "B")'), r.stdout);
 
   // 3) Fehler: verständlich, Exit 1, keine Ergebnisdatei
   study('lose', LOSE);
@@ -269,13 +284,47 @@ try {
   await ev(() => window.__t.viewer.setSection(null));
   await domClick('btn-result-close');
 
-  // 7) Das Beispiel im Skill läuft so, wie es dasteht
+  // 7) Kontakt (E84): ohne Reibung hält nichts die Wand seitlich, mit Reibung steht sie
+  study('kontakt', KONTAKT(0));
+  r = soma(['analyze', 'fem', 'analyses/kontakt.py']);
+  check('Kontakt ohne Reibung, seitlich frei: vor der Rechnung gemeldet', r.status === 1
+    && /Wand: still free \([^)]*moving in X[^)]*\) \(held only by a contact without friction/.test(r.stderr + r.stdout), r.stderr + r.stdout);
+  study('kontakt', KONTAKT(0.3));
+  r = soma(['analyze', 'fem', 'analyses/kontakt.py']);
+  const cf = Number(/contact: Fuss – Wand \(200\.0 mm², friction 0\.3\), carries (\d+\.\d) N/.exec(r.stdout)?.[1]);
+  check('Kontakt mit Reibung: trägt die 400 N, im Gleichgewicht, mit Kontakt gerechnet', r.status === 0 && near(cf, 400, 8)
+    && r.stdout.includes('linear elastic, with contact') && r.stdout.includes('(in equilibrium)') && /CalculiX [\d.]+, \d+ threads, \d+ load steps?/.test(r.stdout), r.stdout + r.stderr);
+  await ev(() => window.__t.refreshViewLists());
+  await ev(() => window.__t.resultShow('kontakt'));
+  await waitFor('Ergebnis Kontakt geladen', () => window.__t.result().id === 'kontakt', 20000);
+  await ev(() => window.__t.resultField('press'));
+  rs = await ev(() => window.__t.result());
+  check('Im Bild: Kontaktpressung wählbar, MPa ohne Grenzwert, Spanne bis zur größten', rs.fem.fields.join() === 'Safety factor,Stress,Displacement,Contact'
+    && rs.scale.field === 'press' && rs.scale.unit === 'MPa' && rs.scale.threshold === null && rs.scale.range[1] > 0 && rs.scale.legend.includes('Contact pressure'), JSON.stringify(rs));
+  // Die Kontaktfläche liegt zwischen den Teilen: Wand ausblenden, dann sieht man die Pressung auf dem Fuß
+  const wandIds = await ev(() => window.__t.viewer.partList().filter((p) => p.name === 'Wand').map((p) => p.id));
+  await ev((ids) => window.__t.viewer.setVisible(ids, false), wandIds);
+  await ev(() => window.__t.viewer.setView('top'));
+  await shot('fem-5-kontakt');
+  await ev((ids) => window.__t.viewer.setVisible(ids, true), wandIds);
+  await ev(() => window.__t.viewer.setView('iso'));
+  await ev(() => window.__t.resultField('value'));
+  await ev(() => window.__t.showPanel('analysis'));
+  await waitFor('Bericht Kontakt', () => window.__t.analysis().title === 'Wand steht auf', 20000);
+  await ev(() => window.__t.analysisToggle('contact0'));
+  an = await ev(() => window.__t.analysis());
+  check('Bericht: Zeile Kontakt mit Reibung, aufgeklappt Kraft und Pressung', an.inputs.some((x) => x.startsWith('ContactFriction 0.3 · Fuss – Wand'))
+    && an.details.some((x) => x.includes('Carries') && x.includes('Highest pressure')), JSON.stringify(an));
+  await domClick('btn-result-close');
+
+  // 8) Das Beispiel im Skill läuft so, wie es dasteht
   const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'fem.md'), 'utf8');
   const block = /```python\r?\n([\s\S]*?)\r?\n```/.exec(skill)?.[1] ?? '';
   study('skill', block);
   r = soma(['analyze', 'fem', 'analyses/skill.py']);
-  check('Beispiel aus dem Skill „Strength with FEM“ rechnet ohne Fehler', r.status === 0 && r.stdout.includes('FEM "Bracket, 5 kg on the arm"')
-    && /Bracket \(PETG/.test(r.stdout), r.stdout.slice(0, 600) + r.stderr);
+  // Gleichgewicht: Die Knotenkräfte aus der frd von CalculiX lagen hier 5 % daneben, die Lagerkräfte rechnet soma selbst
+  check('Beispiel aus dem Skill „Strength with FEM“ rechnet ohne Fehler, im Gleichgewicht', r.status === 0 && r.stdout.includes('FEM "Bracket, 5 kg on the arm"')
+    && /Bracket \(PETG/.test(r.stdout) && r.stdout.includes('(in equilibrium)'), r.stdout.slice(0, 900) + r.stderr);
 } catch (e) {
   t.fail();
   console.log('ABBRUCH:', e);

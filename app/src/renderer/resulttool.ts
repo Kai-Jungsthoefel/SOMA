@@ -45,8 +45,11 @@ export const safety = (v: number) => (v >= SAFETY_CAP ? `over ${SAFETY_CAP}` : l
 const femAt = (p: ResultProbe, field: ResultField, label: boolean) => {
   const stress = p.stress != null ? `${loc(p.stress, 1)} MPa` : null;
   const disp = p.disp != null ? `${loc(p.disp, 3)} mm` : null;
+  // Pressung nur, wo Kontakt ist (oder wenn sie die gezeigte Größe ist)
+  const press = p.press != null && (p.press > 0 || field === 'press') ? `contact ${loc(p.press, 2)} MPa` : null;
   const sf = `${label || field !== 'value' ? 'Safety ' : ''}${safety(p.value)}`;
-  const parts = field === 'stress' ? [stress, sf, disp] : field === 'disp' ? [disp, sf, stress] : [sf, stress, disp];
+  const parts = field === 'stress' ? [stress, sf, disp, press] : field === 'disp' ? [disp, sf, stress, press]
+    : field === 'press' ? [press, sf, stress, disp] : [sf, stress, disp, press];
   return parts.filter(Boolean).join(' · ');
 };
 type RangeMode = 'auto' | 'minmax' | 'custom';
@@ -55,7 +58,11 @@ const TIP_GAP = 14;
 /** Höhe des Verlaufs in der Legende (px). */
 const LEGEND_H = 160;
 const RANGE_LABEL: Record<RangeMode, string> = { auto: 'Auto', minmax: 'Min–max', custom: 'Custom' };
-const FIELD_LABEL: Record<ResultField, string> = { value: 'Safety factor', stress: 'Stress', disp: 'Displacement' };
+// Kurz, damit die Leiste mit vier Größen ins Bild passt (mit „Contact pressure“ fiel das × heraus), ausgeschrieben im Tooltip
+const FIELD_LABEL: Record<ResultField, string> = { value: 'Safety factor', stress: 'Stress', disp: 'Displacement', press: 'Contact' };
+const FIELD_TITLE: Record<ResultField, string> = { value: 'Safety factor', stress: 'von Mises stress', disp: 'Displacement', press: 'Contact pressure between parts' };
+/** Die Kontaktflächen liegen zwischen den Teilen, im Bild sieht man sie erst, wenn ein Teil weg ist. */
+const PRESS_HINT = 'The contact faces lie between the parts: hide one part in the structure tree or use a section to see them.';
 
 /** Kleinster Wert (kritisch darunter) oder größter (kritisch darüber) über alle Teile, mit dem Teil. */
 export function worstOf(r: ResultEntry): { part: string; value: number; at: number[] | null } | null {
@@ -281,6 +288,7 @@ export class ResultTool {
         : v.ramp ? `Color across the range, limit ${withUnit(v.threshold, v.unit)}${weakest}`
           : `Red: ${v.bad === 'high' ? 'above' : 'below'} ${r.fem ? (this.d.layer.field === 'stress' ? 'allowable' : 'required') : 'the limit'}${weakest}`,
       this.d.layer.deformNote(),
+      this.d.layer.field === 'press' ? PRESS_HINT : null,
     ].filter((x): x is string => !!x);
     this.ui.legendFoot.replaceChildren(...foot.flatMap((t, i) => (i ? [el('br'), t] : [t])));
     this.ui.legend.title = foot.join('\n');
@@ -297,13 +305,16 @@ export class ResultTool {
     this.ui.bcs.hidden = !fem;
     for (const sep of this.ui.bar.querySelectorAll<HTMLElement>('.vsep[data-fem]')) sep.hidden = !fem;
     if (!fem) return;
-    const fields: ResultField[] = ['value', ...(l.canStress ? ['stress' as const] : []), ...(l.canDisp ? ['disp' as const] : [])];
+    const fields = (['value', 'stress', 'disp', 'press'] as const).filter((f) => l.available(f));
     this.ui.field.replaceChildren(...fields.map((f) => {
-      const b = el('button', { textContent: FIELD_LABEL[f], className: l.field === f ? 'on' : '' });
+      const b = el('button', { textContent: FIELD_LABEL[f], className: l.field === f ? 'on' : '', title: FIELD_TITLE[f] });
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(l.field === f));
       b.dataset.field = f;
-      b.addEventListener('click', () => { this.field = f; this.applyScale(); this.renderLegend(); this.renderBar(); this.renderTags(); this.d.changed(); });
+      b.addEventListener('click', () => {
+        if (f === 'press' && this.field !== 'press') this.d.toast(PRESS_HINT, 'info');
+        this.field = f; this.applyScale(); this.renderLegend(); this.renderBar(); this.renderTags(); this.d.changed();
+      });
       return b;
     }));
     const scales: [number, string][] = [[0, 'Off'], [1, '1×']];
@@ -360,6 +371,16 @@ export class ResultTool {
     };
     if (l.field === 'stress') peak('stress', 'MPa', 1);
     else if (l.field === 'disp') peak('displacement', 'mm', 3);
+    else if (l.field === 'press') {
+      // Höchste Pressung über alle Kontaktpaare, an der Stelle auf dem weicheren Teil (dort rechnet CalculiX sie)
+      let best: { part: string; value: number; at: number[] } | null = null;
+      for (const c of r.fem?.contacts ?? []) if (!best || c.maxPressure.value > best.value) best = { part: c.a, value: c.maxPressure.value, at: c.maxPressure.at };
+      if (best && (visible(best.part) || r.fem?.contacts?.some((c) => visible(c.b)))) {
+        const d = el('span', { className: 'dot' });
+        d.style.background = 'var(--tx2)';
+        tags.push({ el: el('div', { className: 'c3d pt' }, d, 'Max ', el('b', { textContent: `${loc(best.value, 2)} MPa` })), at: l.shownAt(best.part, best.at) });
+      }
+    }
     else if (w) spotTag(w.part, 'Min ', val(w.value));
     if (this.spot && this.spot !== w?.part) {
       const p = r.parts.find((x) => x.name === this.spot);
@@ -388,7 +409,7 @@ export class ResultTool {
   private applyScale(): void {
     const l = this.d.layer, r = this.current;
     if (!l.meta || !r) return;
-    const field: ResultField = this.field === 'stress' && l.canStress ? 'stress' : this.field === 'disp' && l.canDisp ? 'disp' : 'value';
+    const field: ResultField = l.available(this.field) ? this.field : 'value';
     let range: [number, number] | null = null;
     if (this.mode === 'minmax') range = l.dataRange(field);
     else if (this.mode === 'custom') {
@@ -469,7 +490,8 @@ export class ResultTool {
     const head = `[Result: "${r.title}" (${r.file}, limit ${dot(r.threshold, r.unit)})`;
     const p = this.pinned;
     // FEM: Sicherheit mit Spannung und Verschiebung, damit der Agent die Stelle ohne neue Rechnung einordnen kann
-    const extra = p && p.stress != null ? ` (${p.stress.toFixed(1)} MPa${p.disp != null ? `, displacement ${p.disp.toFixed(3)} mm` : ''})` : '';
+    const extra = p && p.stress != null ? ` (${p.stress.toFixed(1)} MPa${p.disp != null ? `, displacement ${p.disp.toFixed(3)} mm` : ''}`
+      + `${p.press ? `, contact pressure ${p.press.toFixed(2)} MPa` : ''})` : '';
     return p ? `${head}, part "${p.name}": ${r.fem ? 'safety factor ' : ''}${r.fem && p.value >= SAFETY_CAP ? `over ${SAFETY_CAP}` : dot(p.value, r.unit)}${extra} at (${p.point.map((v) => v.toFixed(1)).join(', ')}) mm] ` : `${head}] `;
   }
 
@@ -489,7 +511,7 @@ export class ResultTool {
       tags: [...this.ui.viewerEl.querySelectorAll('.v-overlay .c3d')].map((x) => x.textContent),
       // Nur was zu sehen ist (ohne FEM fehlen Größe, Verformung und Lastfall)
       bar: this.ui.bar.hidden ? null : [...this.ui.bar.children].filter((c) => !(c as HTMLElement).hidden).map((c) => c.textContent?.trim()).filter(Boolean).join(' · '),
-      scale: { field: l.field, mode: this.mode, canStress: l.canStress, canDisp: l.canDisp, range: l.view?.range ?? null,
+      scale: { field: l.field, mode: this.mode, canStress: l.canStress, canDisp: l.canDisp, canPress: l.canPress, range: l.view?.range ?? null,
         threshold: l.view?.threshold ?? null, unit: l.view?.unit ?? null, legend: this.ui.legend.hidden ? '' : `${this.ui.legend.textContent ?? ''} ${this.ui.scaleMenu.textContent ?? ''}`.replace(/\s+/g, ' ').trim() },
       fem: this.current?.fem && this.active ? {
         deform: String(l.scale), options: [...this.ui.deform.querySelectorAll('button')].map((o) => o.textContent),

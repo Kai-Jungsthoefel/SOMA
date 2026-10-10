@@ -38,7 +38,7 @@ def info(name):
     if not lic:
         lic = ', '.join(c.split('::')[-1].strip() for c in (md.get_all('Classifier') or []) if c.startswith('License ::'))
     return {'name': md.get('Name') or name, 'version': d.version, 'license': lic}
-names = ['soma', 'cadquery', 'cadquery-ocp', 'ezdxf', 'numpy', 'scipy', 'matplotlib', 'vtk', 'pyamg']
+names = ['soma', 'cadquery', 'cadquery-ocp', 'ezdxf', 'numpy', 'scipy', 'matplotlib', 'vtk', 'gmsh', 'pyamg']
 try:
     for r in m.requires('soma') or []:
         if 'extra ==' in r:
@@ -54,6 +54,13 @@ try:
     for p in packages:
         if p['name'].lower() == 'soma':
             p['version'] = soma.__version__
+except Exception:
+    pass
+try:
+    # CalculiX ist kein Python-Paket: soma findet es neben der Umgebung (E84) und fragt es nach seiner Version
+    from soma import ccx
+    v = ccx.version()
+    packages.append({'name': 'CalculiX (ccx)', 'version': v or ('not found' if ccx.find() is None else 'does not start'), 'license': 'GPL-2.0-or-later'})
 except Exception:
     pass
 print(json.dumps({'version': sys.version.split()[0], 'executable': sys.executable, 'packages': packages}))

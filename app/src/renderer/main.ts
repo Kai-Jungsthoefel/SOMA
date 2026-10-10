@@ -1579,7 +1579,7 @@ if (api.testMode) {
     resultRefresh: () => resultTool.refresh(),
     resultPin: (x: number, y: number) => resultTool.testPin(x, y),
     resultShow: (id: string) => resultTool.show(id),
-    resultField: (f: 'value' | 'stress' | 'disp') => resultTool.testField(f),
+    resultField: (f: 'value' | 'stress' | 'disp' | 'press') => resultTool.testField(f),
     resultDeform: (sc: number) => resultTool.testDeform(sc),
     analysis: () => analysisPanel.state(),
     analysisToggle: (key: string) => analysisPanel.testToggle(key),

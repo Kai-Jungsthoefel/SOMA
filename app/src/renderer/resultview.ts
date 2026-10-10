@@ -9,9 +9,11 @@ import type { Viewer } from './viewer';
 // (Viewer.setStandIns): Ausblenden und Transparent aus der Seitenleiste gelten für sie, der Schnitt füllt sie wie das Modell.
 // FEM (E65) bringt dazu je Ecke die Vergleichsspannung (_STRESS) und die Verschiebung (_DISP) mit, und den Lastfall als
 // eigene Netze (extras.soma.marker): Die Verformung lässt sich überhöht zeigen, Einspannungen und Lasten sind markiert.
+// Mit Kontakt (E84) kommt die Kontaktpressung je Ecke dazu (_PRESS, auf beiden Seiten der Berührfläche, sonst 0).
 
 interface ResultMesh {
   mesh: THREE.Mesh; name: string; values: THREE.BufferAttribute; stress?: THREE.BufferAttribute; disp?: THREE.BufferAttribute;
+  press?: THREE.BufferAttribute;
   /** Betrag der Verschiebung je Ecke (mm), aus `disp` beim Laden berechnet. */
   dispMag?: THREE.BufferAttribute;
 }
@@ -21,12 +23,15 @@ interface Arrow { obj: THREE.Object3D; base: THREE.Vector3; shift: THREE.Vector3
 
 export interface ResultProbe {
   name: string; value: number; point: number[];
-  /** FEM: Vergleichsspannung (MPa) und Betrag der Verschiebung (mm) an der Stelle. */
-  stress?: number; disp?: number;
+  /** FEM: Vergleichsspannung (MPa), Betrag der Verschiebung (mm) und Kontaktpressung (MPa) an der Stelle. */
+  stress?: number; disp?: number; press?: number;
 }
 
-/** Gezeigte Größe: der Wert der Auswertung (bei FEM die Sicherheit), bei FEM auch die Vergleichsspannung nach von Mises oder der Betrag der Verschiebung. */
-export type ResultField = 'value' | 'stress' | 'disp';
+/**
+ * Gezeigte Größe: der Wert der Auswertung (bei FEM die Sicherheit), bei FEM auch die Vergleichsspannung nach von Mises, der Betrag
+ * der Verschiebung oder, mit Kontakt, die Kontaktpressung.
+ */
+export type ResultField = 'value' | 'stress' | 'disp' | 'press';
 
 /** Blau des Lastfalls: keine Statusfarbe, nicht Orange (Aktion) und nicht Violett (Vorschau). */
 const BC_COLOR = 0x5ea8ff;
@@ -58,6 +63,8 @@ export class ResultLayer {
   get canStress(): boolean { return this.isFem && this.stressLimit > 0 && this.meshes.length > 0 && this.meshes.every((m) => m.stress); }
   /** Verschiebung zeigbar: FEM mit _DISP an jedem Netz. */
   get canDisp(): boolean { return this.isFem && this.meshes.length > 0 && this.meshes.every((m) => m.dispMag); }
+  /** Kontaktpressung zeigbar: FEM mit Kontakt (_PRESS an jedem Netz). */
+  get canPress(): boolean { return this.isFem && this.meshes.length > 0 && this.meshes.every((m) => m.press); }
   /** Grenze der Spannung gilt nur für den schwächsten von mehreren Werkstoffen. */
   get stressLimitMixed(): boolean { return this.stressMixed; }
 
@@ -73,7 +80,9 @@ export class ResultLayer {
       ? { ...m, quantity: 'von Mises stress', unit: 'MPa', bad: 'high', threshold: this.stressLimit, range: this.autoRange('stress') }
       : this.field === 'disp'
         ? { ...m, quantity: 'Displacement', unit: 'mm', bad: 'high', threshold: NaN, range: this.autoRange('disp'), ramp: true }
-        : m;
+        : this.field === 'press'
+          ? { ...m, quantity: 'Contact pressure', unit: 'MPa', bad: 'high', threshold: NaN, range: this.autoRange('press'), ramp: true }
+          : m;
     return this.range ? { ...base, range: this.range, ramp: true } : base;
   }
 
@@ -83,7 +92,7 @@ export class ResultLayer {
    */
   autoRange(field: ResultField): [number, number] {
     if (field === 'value' || !this.meta) return this.meta ? [...this.meta.range] as [number, number] : [0, 1];
-    if (field === 'disp') return [0, +Math.max(this.dataRange('disp')[1], 1e-6).toPrecision(3)];
+    if (field === 'disp' || field === 'press') return [0, +Math.max(this.dataRange(field)[1], 1e-6).toPrecision(3)];
     const [, hi] = this.dataRange('stress');
     return [0, +Math.max(2 * this.stressLimit, Math.min(hi, 4 * this.stressLimit)).toPrecision(3)];
   }
@@ -100,19 +109,25 @@ export class ResultLayer {
 
   /** Werte je Ecke für eine Größe (ohne sie: der Wert der Auswertung). */
   private attr(m: ResultMesh, field: ResultField): THREE.BufferAttribute {
-    return (field === 'stress' ? m.stress : field === 'disp' ? m.dispMag : undefined) ?? m.values;
+    return (field === 'stress' ? m.stress : field === 'disp' ? m.dispMag : field === 'press' ? m.press : undefined) ?? m.values;
   }
 
   /** Größe und Spanne wählen (null: Spanne der Auswertung) und neu einfärben. */
   setDisplay(field: ResultField, range: [number, number] | null): void {
-    this.field = field === 'stress' && this.canStress ? 'stress' : field === 'disp' && this.canDisp ? 'disp' : 'value';
+    this.field = this.available(field) ? field : 'value';
     this.range = range;
     this.recolor();
   }
 
-  /** Gezeigter Wert an einer Stelle (Spannung, Verschiebung oder der Wert der Auswertung). */
+  /** Ob sich die Größe zeigen lässt (der Wert der Auswertung immer). */
+  available(field: ResultField): boolean {
+    return field === 'value' || (field === 'stress' && this.canStress) || (field === 'disp' && this.canDisp) || (field === 'press' && this.canPress);
+  }
+
+  /** Gezeigter Wert an einer Stelle (Spannung, Verschiebung, Pressung oder der Wert der Auswertung). */
   shown(p: ResultProbe): number {
-    return this.field === 'stress' && p.stress != null ? p.stress : this.field === 'disp' && p.disp != null ? p.disp : p.value;
+    return this.field === 'stress' && p.stress != null ? p.stress : this.field === 'disp' && p.disp != null ? p.disp
+      : this.field === 'press' && p.press != null ? p.press : p.value;
   }
 
   async show(glb: ArrayBuffer): Promise<ResultMeta> {
@@ -165,7 +180,10 @@ export class ResultLayer {
             for (let i = 0; i < disp.count; i++) a[i] = Math.hypot(disp.getX(i), disp.getY(i), disp.getZ(i));
             dispMag = new THREE.BufferAttribute(a, 1);
           }
-          own.push({ mesh: m, name, values, stress: m.geometry.getAttribute('_stress') as THREE.BufferAttribute | undefined, disp, dispMag });
+          own.push({
+            mesh: m, name, values, stress: m.geometry.getAttribute('_stress') as THREE.BufferAttribute | undefined, disp, dispMag,
+            press: m.geometry.getAttribute('_press') as THREE.BufferAttribute | undefined,
+          });
           deformable(m.geometry);
         } else if ((c as THREE.LineSegments).isLineSegments) {
           const l = c as THREE.LineSegments;
@@ -193,7 +211,7 @@ export class ResultLayer {
     this.stressLimit = limits.length ? Math.min(...limits) : 0;
     this.stressMixed = new Set(limits).size > 1;
     this.range = null;
-    if ((this.field === 'stress' && !this.canStress) || (this.field === 'disp' && !this.canDisp)) this.field = 'value';
+    if (!this.available(this.field)) this.field = 'value';
     this.recolor();
     this.viewer.setModelHidden(true);
     this.viewer.addLayer(this.group);
@@ -368,7 +386,7 @@ export class ResultLayer {
     }
     return {
       name: m.name, value: m.values.getX(i), point: p.toArray().map((v) => +v.toFixed(2)),
-      ...(m.stress ? { stress: m.stress.getX(i) } : {}), ...(disp != null ? { disp } : {}),
+      ...(m.stress ? { stress: m.stress.getX(i) } : {}), ...(disp != null ? { disp } : {}), ...(m.press ? { press: m.press.getX(i) } : {}),
     };
   }
 }
