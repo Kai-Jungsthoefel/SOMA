@@ -43,6 +43,28 @@ npm run help:shots      # Bilder der Anleitung neu aufnehmen (resources/help/), 
 
 **Windows und Netzlaufwerk:** Liegt `node_modules` auf einem Netzlaufwerk, starten die sandboxed Prozesse von Electron nicht (`launch-failed`, Code 18, schwarzes Fenster). `npm start` und der Test nutzen deshalb automatisch eine lokale Kopie von Electron unter `%LOCALAPPDATA%\soma-dev\` (`scripts/electron-local.mjs`, einmalig rund 370 MB). Die App selbst darf auf dem Netzlaufwerk liegen. Eine installierte App muss lokal liegen, sonst zeigt sie eine Fehlermeldung.
 
+## Installationspakete
+
+Jedes Betriebssystem baut sein eigenes Paket, die Python-Basisumgebung, CalculiX und das Git von dugite sind plattformabhängig. Die CI macht das für alle drei Systeme ([../.github/workflows/dist.yml](../.github/workflows/dist.yml), von Hand oder mit einem Tag `vX.Y.Z`, Pakete als Artefakte am Lauf). Lokal:
+
+```
+# 1. Python-Basisumgebung: eigenständiges Python 3.12 (python-build-standalone über uv) mit requirements-base.txt, soma und CalculiX
+python ../python/scripts/build_runtime.py --target "$LOCALAPPDATA/soma-dev/python-runtime"
+# 2. Paket (Windows: NSIS-Installer, Linux: AppImage und tar.gz, macOS: dmg für Apple Silicon)
+SOMA_RUNTIME="$LOCALAPPDATA/soma-dev/python-runtime" SOMA_RELEASE="$LOCALAPPDATA/soma-dev/release" npm run dist
+#    nur den entpackten Ordner (schneller, zum Prüfen): npm run dist:dir
+# 3. Smoke-Suite gegen die gepackte App
+SOMA_TEST_EXE="$LOCALAPPDATA/soma-dev/release/win-unpacked/SOMA.exe" node test/smoke.mjs
+```
+
+- Ohne `--target` und `SOMA_RUNTIME` liegt die Basisumgebung in `app/python-runtime`, die Pakete in `app/release` (beide in `.gitignore`). In einem synchronisierten Ordner (OneDrive, Netzlaufwerk) besser nicht: rund 1,4 GB in Zehntausenden Dateien.
+- **Basisumgebung:** Ein venv lässt sich nicht verschieben, deshalb ein eigenständiges Python. Die Startprogramme (`soma`, `pip` …) bekommen einen relativen Pfad zum Python: unter Windows als `.cmd` (PowerShell, cmd) und ohne Endung (Git Bash), sonst als Shell-Vorspann. `build_runtime.py` prüft am Ende eine Kopie in einem Ordner mit Leerzeichen. `EXTERNALLY-MANAGED` bleibt, pip installiert nur in die Projektumgebung (E67).
+- **Im Paket:** `resources/python` (Basisumgebung, `paths.ts` findet sie vor der Entwicklungsumgebung), `resources/app` mit `dist/`, `resources/` und nur `dugite` und `node-pty` aus `node_modules` (alles andere bündelt esbuild), ohne asar. Dazu `LICENSE.txt` und `MODEL-EXCEPTION.md`.
+- **Windows:** Installation für den Nutzer nach `%LOCALAPPDATA%\Programs\SOMA` ohne Adminrechte, unsigniert (SmartScreen warnt beim ersten Start).
+- **macOS:** nur Apple Silicon (für Intel fehlt `cryptography` als Wheel), ad-hoc signiert, nicht notarisiert: Gatekeeper lässt die App erst nach Rechtsklick > Öffnen oder `xattr -cr /Applications/SOMA.app` starten. Die installierte App übernimmt beim Start den PATH einer Login-Shell, sonst fänden Agenten-Erkennung und Terminals nichts aus Homebrew oder npm.
+- **Linux:** gebaut unter Ubuntu 22.04, braucht glibc 2.31 oder neuer (cadquery-ocp). Unter Ubuntu 24.04 und neuer kann AppArmor die Sandbox von Electron im AppImage blockieren.
+- Getestet ist das Paket nur unter Windows. Für Linux und macOS gibt es bisher nur die CI, deren Smoke-Test dort noch nicht blockiert.
+
 ## Aufbau
 
 | Pfad | Inhalt |

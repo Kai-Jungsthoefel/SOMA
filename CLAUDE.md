@@ -24,12 +24,13 @@ Details in `app/README.md`.
 - `src/renderer/` Oberfläche, verdrahtet in `main.ts`. Viewer: `viewer.ts`, `viewcube.ts`, `tree.ts` (Strukturbaum, E82), Werkzeuge `sectiontool.ts`, `explodetool.ts`, `measuretool.ts`, `markup.ts`. Panels: `code.ts`, `pdfview.ts`, `dxfview.ts`, `markdown.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `params.ts`, `skills.ts`, `help.ts`, `settings.ts` + `settingspages.ts`. Animation und Analyse: `animtool.ts`, `animpanel.ts`, `animdata.ts`, `overlay.ts`, `resulttool.ts`, `resultview.ts`, `analysispanel.ts`, `videoview.ts`. Render-Fenster: `render.ts`/`render.html`. Allgemein: `ui.ts`, `icons.ts`, `busy.ts`, `shortcuts.ts`, `style.css`.
 - `src/shared/` `types.ts` (IPC-Vertrag), `settings.ts` (Vorgaben, Prüfung, Mausbelegungen, E81), `editable.ts`, `help.ts`, `skillname.ts`, `version.ts`.
 - `resources/` `template/` (Vorlage für Nutzerprojekte inkl. `AGENTS.md`), `skills/` (mitgelieferte Skills, darunter `soma-app.md` als Nutzeranleitung für Hilfe und Agent, E83), `help/` (Bilder der Anleitung), `icon.*` (erzeugt mit `scripts/make-icon.py`).
-- `test/` Testsuiten, CDP-Client, Screenshots.
+- `test/` Testsuiten, CDP-Client, Screenshots. `SOMA_TEST_EXE` lässt sie gegen eine gepackte App laufen.
+- `electron-builder.config.cjs` Installationspakete, `build-resources/` großes Icon dafür. CI für alle drei Systeme in `.github/workflows/dist.yml`.
 
 **`python/soma/`** Hilfsbibliothek und CLI
 - API: `add_part` (mit `group=`, `role=`), `param` (`params.py`, E74), `import_step`, `import_assembly`, Normteile in `fasteners.py` (Maßtabellen aus bd_warehouse in `data/fasteners/`).
 - CLI: `soma build`, `export`, `glb`, `serve` (Messdienst, `measure.py`), `anim` (`anim.py`, `animrun.py`), `analyze` (`analysis.py`, FEM in `fem.py`, CalculiX über `ccx.py`, E84), `drawing` (`drawing.py`, `drawrun.py`, E76), `dxfview` (E80), `render` (nur über die App), `env` (`env.py`, `.soma/env` und `requirements.txt`, E67).
-- `python/scripts/`: `setup_env.ps1` (Entwicklungsumgebung aus `python/requirements-base.txt`), `fetch_ccx.py` (CalculiX).
+- `python/scripts/`: `setup_env.ps1` (Entwicklungsumgebung aus `python/requirements-base.txt`), `fetch_ccx.py` (CalculiX), `build_runtime.py` (eigenständige Basisumgebung für die Installationspakete).
 
 **`design/`** freigegebene Oberflächenentwürfe, im Browser öffnen, Pfeiltasten blättern
 - `ui-entwurf-2.html` „Aufgeräumt“ (E62): Maßstab für Aufbau, Farben und Texte. Bild 6 ist das Parameter-Panel (E74).
@@ -52,6 +53,7 @@ npm test                             # baut, dann alle Suiten parallel über tes
 node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run build
 npm run test:unit                    # ohne Build, prüft u. a. die Versionsnummer
 npm run help:shots                   # Bilder der Nutzeranleitung neu erzeugen
+npm run dist                         # Installationspaket für dieses System, vorher build_runtime.py (app/README.md)
 
 # soma direkt
 "$LOCALAPPDATA/soma-dev/venv/Scripts/soma.exe" build --project <ordner>

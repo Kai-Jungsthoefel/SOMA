@@ -8,6 +8,7 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ### Neu
 
+- Installationspakete: Installer für Windows, AppImage und tar.gz für Linux, dmg für macOS mit Apple Silicon, mit Python, CadQuery, `soma`, CalculiX und Git an Bord. Bisher nur unter Windows getestet, die Pakete sind noch nicht signiert.
 - FEM mit Schrauben: `study.bolt("Schraube 1")` spannt eine Schraube aus `soma.fasteners` vor, dann wirken die Lasten. Das Ergebnis nennt je Schraube Vorspannung, Zug und Querkraft am Ende und die Auslastung der Streckgrenze, der Kontakt der Fuge zeigt, ob sie klafft oder rutscht. Ohne Angabe 70 % der Streckgrenze, bei Kunststoffteilen begrenzt auf das, was die Fläche unter dem Kopf trägt. Mutter, Scheibe und verschraubte Teile rechnen von selbst mit (E84).
 
 ### Geändert
