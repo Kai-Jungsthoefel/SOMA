@@ -82,7 +82,7 @@ try {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-drawing-'));
   fs.mkdirSync(path.join(dir, 'drawings'));
   fs.writeFileSync(path.join(dir, 'model.py'), MODEL);
-  const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'zeichnung.md'), 'utf8');
+  const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'drawings.md'), 'utf8');
   // Platzhalter mit den Standardwerten aus dem Kopf, wie die App sie in die Kopie schreibt
   const defaults = Object.fromEntries([...skill.matchAll(/^var (\w+): ([^|]*?) \|/gm)].map((m) => [m[1], m[2].trim()]));
   const block = (/```python\r?\n([\s\S]*?)\r?\n```/.exec(skill)?.[1] ?? '').replace(/\{\{(\w+)\}\}/g, (all, k) => defaults[k] ?? all);

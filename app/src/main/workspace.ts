@@ -6,7 +6,7 @@ import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, editBackupsDir, previewsDir, projectStateDir, skillBackupsDir, skillDirs, templateDir, thumbnailsDir, workspacesDir } from './paths';
-import { SKILLS_DIR, applyDefaultSkills, isSkillId, isSkillMode, type SkillDefaults, type SkillModes } from './skills';
+import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
 export const API_VERSION = 1;
@@ -205,7 +205,7 @@ export function getSkillDefaults(): SkillDefaults {
     if (!isSkillId(id)) continue;
     if (isSkillMode(v)) out[id] = v; else if (typeof v === 'boolean') out[id] = v ? 'always' : 'demand';
   }
-  return out;
+  return withCurrentIds(out);
 }
 
 /** Legt die Stufe für neue Modelle fest. Entspricht sie dem Kopf des Skills (`factory`), fällt der Eintrag weg. */
@@ -225,7 +225,18 @@ export function setSkillDefault(id: string, mode: SkillMode, factory: SkillMode)
 export function getSkillBases(): Record<string, string> {
   const raw = readJson<{ skill_bases?: unknown }>(appStateFile())?.skill_bases;
   if (!raw || typeof raw !== 'object') return {};
-  return Object.fromEntries(Object.entries(raw).filter(([id, v]) => isSkillId(id) && typeof v === 'string')) as Record<string, string>;
+  return withCurrentIds(Object.fromEntries(Object.entries(raw).filter(([id, v]) => isSkillId(id) && typeof v === 'string')) as Record<string, string>);
+}
+
+/**
+ * Einträge unter alten Kennungen (bis 0.5.0, E87) gelten für den Nachfolger, sofern es für ihn keinen eigenen gibt. Beim
+ * nächsten Schreiben stehen sie unter der neuen Kennung in state.json.
+ */
+function withCurrentIds<T>(entries: Record<string, T>): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [id, v] of Object.entries(entries)) if (currentSkillId(id) === id) out[id] = v;
+  for (const [id, v] of Object.entries(entries)) if (currentSkillId(id) !== id && !(currentSkillId(id) in out)) out[currentSkillId(id)] = v;
+  return out;
 }
 
 /** Fingerabdruck setzen (null: entfernen, etwa nach dem Zurücksetzen). */

@@ -199,11 +199,11 @@ try {
   // Bibliothek (E78): mitgelieferte und eigene Skills, hier ohne eigene
   const SKD = { bundled: path.join(APP, 'resources', 'skills'), user: path.join(tmp, 'keine-eigenen-skills') };
   const dm = defaultModes(SKD, {});
-  check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise (mit Parametrik) und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'konstruktionsablauf,cadquery,parametrik,normteile'
-    && dm.demand.join(',') === 'soma-app,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm));
-  const dm2 = defaultModes(SKD, { konstruktionsablauf: 'demand', toleranzen: 'always', '3d-druck': 'always', laser: 'off' });
-  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,parametrik,3d-druck,toleranzen,normteile'
-    && dm2.demand.join(',') === 'konstruktionsablauf,soma-app,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm2));
+  check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise (mit Parametrik) und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'design-workflow,cadquery,parametric,standard-parts'
+    && dm.demand.join(',') === 'soma-app,3d-printing,resin-powder,cnc,laser,sheet-metal,tolerances,joints,strength,assemblies,analysis,animation,fem,drawings', JSON.stringify(dm));
+  const dm2 = defaultModes(SKD, { 'design-workflow': 'demand', tolerances: 'always', '3d-printing': 'always', laser: 'off' });
+  check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,parametric,3d-printing,tolerances,standard-parts'
+    && dm2.demand.join(',') === 'design-workflow,soma-app,resin-powder,cnc,sheet-metal,joints,strength,assemblies,analysis,animation,fem,drawings', JSON.stringify(dm2));
   // Bei Bedarf (E55): Hinweis unter der ersten Überschrift, Werte als Standard der App, vom Nutzer gesetzte mit Namen
   const rd = renderSkill(SRC, {}, 'demand');
   check('Bei Bedarf: Hinweis direkt unter der Überschrift, mit Leerzeilen, Werte als Standard der App, NOTES.md', rd.includes('# Skill\n\n> **On demand:**')
@@ -251,34 +251,34 @@ try {
   check('Gleicher Name noch einmal: eigene Kennung mit -2', SL.createLibrarySkill(LIB, 'Geschweißte Rahmen') === 'geschweisste-rahmen-2');
   check('Name fehlt oder zu lang: abgelehnt', (() => { try { SL.createLibrarySkill(LIB, '  '); return false; } catch { return true; } })()
     && (() => { try { SL.createLibrarySkill(LIB, 'x'.repeat(81)); return false; } catch { return true; } })());
-  const dupId = SL.createLibrarySkill(LIB, 'Mein 3D-Druck', '3d-druck');
+  const dupId = SL.createLibrarySkill(LIB, 'Mein 3D-Druck', '3d-printing');
   const dupText = fs.readFileSync(path.join(LIB.user, `${dupId}.md`), 'utf8');
   check('Duplikat eines mitgelieferten: neuer Titel und Name im Kopf und in der Überschrift, Einstellungen bleiben', dupId === 'mein-3d-druck' && dupText.includes('title: Mein 3D-Druck\nname: Mein 3D-Druck\n')
     && dupText.includes('# Skill: Mein 3D-Druck') && dupText.includes('var overhang: 45') && !dupText.includes('title: 3D printing'));
 
   // Mitgelieferten bearbeiten: eigene Datei, Herkunft „edited“, Fingerabdruck der mitgelieferten Fassung
-  const fdmBuiltin = SL.readLibrarySkill(LIB, '3d-druck');
+  const fdmBuiltin = SL.readLibrarySkill(LIB, '3d-printing');
   const edited = fdmBuiltin.text.replace('summary: ', 'summary: Edited. ');
-  const sv = SL.saveLibrarySkill(LIB, '3d-druck', edited, fdmBuiltin.text, lbak);
-  const st1 = SL.libraryState(LIB, {}, { '3d-druck': sv.base });
+  const sv = SL.saveLibrarySkill(LIB, '3d-printing', edited, fdmBuiltin.text, lbak);
+  const st1 = SL.libraryState(LIB, {}, { '3d-printing': sv.base });
   check('Mitgelieferten speichern: eigene Datei, „edited“, Fingerabdruck der mitgelieferten Fassung, Bibliothek liefert die bearbeitete', sv.backup === null && sv.base === SL.textHash(fdmBuiltin.text)
-    && fs.existsSync(path.join(LIB.user, '3d-druck.md')) && st1.skills.find((s) => s.id === '3d-druck').source === 'edited' && !st1.skills.find((s) => s.id === '3d-druck').newerBuiltin
-    && st1.skills.find((s) => s.id === '3d-druck').summary.startsWith('Edited. ') && SL.readLibrarySkill(LIB, '3d-druck').builtin === fdmBuiltin.builtin);
-  check('Neuere mitgelieferte Fassung (anderer Fingerabdruck): gemeldet', SL.libraryState(LIB, {}, { '3d-druck': 'alt' }).skills.find((s) => s.id === '3d-druck').newerBuiltin);
+    && fs.existsSync(path.join(LIB.user, '3d-printing.md')) && st1.skills.find((s) => s.id === '3d-printing').source === 'edited' && !st1.skills.find((s) => s.id === '3d-printing').newerBuiltin
+    && st1.skills.find((s) => s.id === '3d-printing').summary.startsWith('Edited. ') && SL.readLibrarySkill(LIB, '3d-printing').builtin === fdmBuiltin.builtin);
+  check('Neuere mitgelieferte Fassung (anderer Fingerabdruck): gemeldet', SL.libraryState(LIB, {}, { '3d-printing': 'alt' }).skills.find((s) => s.id === '3d-printing').newerBuiltin);
   // Außerhalb der App geändert (Datei weicht von `base` ab): diese Fassung kommt in die Sicherung
-  fs.writeFileSync(path.join(LIB.user, '3d-druck.md'), edited + '\nvon außen\n');
-  const sv2 = SL.saveLibrarySkill(LIB, '3d-druck', edited + '\nneu\n', edited, lbak);
+  fs.writeFileSync(path.join(LIB.user, '3d-printing.md'), edited + '\nvon außen\n');
+  const sv2 = SL.saveLibrarySkill(LIB, '3d-printing', edited + '\nneu\n', edited, lbak);
   check('Datei außerhalb geändert: alte Fassung in der Sicherung, neue geschrieben', !!sv2.backup && fs.readFileSync(sv2.backup, 'utf8').includes('von außen')
-    && fs.readFileSync(path.join(LIB.user, '3d-druck.md'), 'utf8').endsWith('\nneu\n'));
-  check('Fehler im Text (leer): nicht gespeichert', (() => { try { SL.saveLibrarySkill(LIB, '3d-druck', ' ', null, lbak); return false; } catch (e) { return /empty/.test(e.message); } })()
-    && fs.readFileSync(path.join(LIB.user, '3d-druck.md'), 'utf8').endsWith('\nneu\n'));
+    && fs.readFileSync(path.join(LIB.user, '3d-printing.md'), 'utf8').endsWith('\nneu\n'));
+  check('Fehler im Text (leer): nicht gespeichert', (() => { try { SL.saveLibrarySkill(LIB, '3d-printing', ' ', null, lbak); return false; } catch (e) { return /empty/.test(e.message); } })()
+    && fs.readFileSync(path.join(LIB.user, '3d-printing.md'), 'utf8').endsWith('\nneu\n'));
   // Zurück auf den Text der mitgelieferten Fassung getippt: keine eigene Datei mehr, die bearbeitete in der Sicherung
-  const sv3 = SL.saveLibrarySkill(LIB, '3d-druck', fdmBuiltin.builtin, edited + '\nneu\n', lbak);
-  check('Text gleich der mitgelieferten Fassung: eigene Datei weg (gesichert), wieder „builtin“', sv3.base === null && !!sv3.backup && !fs.existsSync(path.join(LIB.user, '3d-druck.md'))
-    && libIds().find((s) => s.id === '3d-druck').source === 'builtin');
-  SL.saveLibrarySkill(LIB, '3d-druck', edited, fdmBuiltin.builtin, lbak);
-  const rb = SL.removeLibrarySkill(LIB, '3d-druck', lbak);
-  check('Zurücksetzen: eigene Fassung in der Sicherung, wieder die mitgelieferte', !!rb && fs.readFileSync(rb, 'utf8') === edited && libIds().find((s) => s.id === '3d-druck').source === 'builtin');
+  const sv3 = SL.saveLibrarySkill(LIB, '3d-printing', fdmBuiltin.builtin, edited + '\nneu\n', lbak);
+  check('Text gleich der mitgelieferten Fassung: eigene Datei weg (gesichert), wieder „builtin“', sv3.base === null && !!sv3.backup && !fs.existsSync(path.join(LIB.user, '3d-printing.md'))
+    && libIds().find((s) => s.id === '3d-printing').source === 'builtin');
+  SL.saveLibrarySkill(LIB, '3d-printing', edited, fdmBuiltin.builtin, lbak);
+  const rb = SL.removeLibrarySkill(LIB, '3d-printing', lbak);
+  check('Zurücksetzen: eigene Fassung in der Sicherung, wieder die mitgelieferte', !!rb && fs.readFileSync(rb, 'utf8') === edited && libIds().find((s) => s.id === '3d-printing').source === 'builtin');
   check('Mitgelieferte lassen sich nicht löschen', (() => { try { SL.removeLibrarySkill(LIB, 'cnc', lbak); return false; } catch (e) { return /cannot be deleted/.test(e.message); } })());
   const rm = SL.removeLibrarySkill(LIB, 'geschweisste-rahmen-2', lbak);
   check('Eigenen löschen: Datei in der Sicherung, nicht mehr in der Bibliothek', !!rm && !libIds().some((s) => s.id === 'geschweisste-rahmen-2') && !fs.existsSync(path.join(LIB.user, 'geschweisste-rahmen-2.md')));
@@ -287,7 +287,32 @@ try {
   fs.writeFileSync(path.join(LIB.user, 'immer-eigen.md'), '---\ntitle: Immer\ncategory: My skills\ndefault: always\n---\n# Immer\n');
   const dmLib = defaultModes(LIB, { 'geschweisste-rahmen': 'off' });
   check('Neue Modelle: eigener Skill mit „default: always“ immer, eigener auf „Aus“ fehlt, der Rest wie bisher', dmLib.always.includes('immer-eigen') && !dmLib.demand.includes('geschweisste-rahmen')
-    && !dmLib.always.includes('geschweisste-rahmen') && dmLib.demand.includes('mein-3d-druck') && dmLib.always.includes('normteile'), JSON.stringify(dmLib));
+    && !dmLib.always.includes('geschweisste-rahmen') && dmLib.demand.includes('mein-3d-druck') && dmLib.always.includes('standard-parts'), JSON.stringify(dmLib));
+  // Alte Kennungen (bis 0.5.0, E87): Ein älteres Modell führt den Skill weiter unter der alten, die Bibliothek liefert den Text
+  const SKM = await import(pathToFileURL(sk).href);
+  const oldRoot = path.join(tmp, 'altes-modell');
+  const fdmText = fs.readFileSync(path.join(SKD.bundled, '3d-printing.md'), 'utf8');
+  fs.mkdirSync(path.join(oldRoot, '.soma', 'skills'), { recursive: true });
+  fs.writeFileSync(path.join(oldRoot, '.soma', 'skills', '3d-druck.md'), renderSkill(fdmText, {}, 'demand'));
+  fs.writeFileSync(path.join(oldRoot, 'AGENTS.md'), `# A\n\n${skillsBlock([{ id: '3d-druck', name: '3D printing (FDM)', when: '', mode: 'demand' }])}\n`);
+  const oldModes = { always: [], demand: ['3d-druck'] };
+  const oldList = SKM.listSkills(oldRoot, SKD, oldModes, null, { '3d-printing': 'always' });
+  const oldRow = oldList.find((x) => x.id === '3d-druck');
+  check('Altes Modell: Skill einmal unter der alten Kennung, als mitgelieferter erkannt, unverändert, ohne Problem, Vorgabe der neuen Kennung',
+    !!oldRow && !oldList.some((x) => x.id === '3d-printing') && oldRow.source === 'builtin' && oldRow.title === '3D printing (FDM)' && !oldRow.changed
+    && !oldRow.problems.length && oldRow.defaultMode === 'always' && oldRow.vars.some((v) => v.name === 'overhang') && oldList.some((x) => x.id === 'tolerances'), JSON.stringify(oldRow));
+  SKM.copySkill(oldRoot, SKD, '3d-druck', path.join(tmp, 'alt-sicherung'), { overhang: 50 }, 'demand', {});
+  check('Altes Modell: Einstellung schreibt die Kopie unter der alten Kennung, keine zweite Datei', fs.readFileSync(path.join(oldRoot, '.soma', 'skills', '3d-druck.md'), 'utf8').includes('up to 50°')
+    && !fs.existsSync(path.join(oldRoot, '.soma', 'skills', '3d-printing.md')) && SKM.agentsEntries(oldRoot, SKD, oldModes)[0].name === '3D printing (FDM)');
+  const renLib = { bundled: SKD.bundled, user: path.join(tmp, 'eigene-alt') };
+  fs.mkdirSync(renLib.user);
+  fs.writeFileSync(path.join(renLib.user, '3d-druck.md'), 'bearbeitet');
+  fs.writeFileSync(path.join(renLib.user, 'blech.md'), 'alt');
+  fs.writeFileSync(path.join(renLib.user, 'sheet-metal.md'), 'neu');
+  SL.renameOldSkillFiles(renLib);
+  check('Eigene Fassungen unter alter Kennung: umbenannt, eine vorhandene neue bleibt, die alte daneben auch', fs.readFileSync(path.join(renLib.user, '3d-printing.md'), 'utf8') === 'bearbeitet'
+    && !fs.existsSync(path.join(renLib.user, '3d-druck.md')) && fs.readFileSync(path.join(renLib.user, 'sheet-metal.md'), 'utf8') === 'neu' && fs.existsSync(path.join(renLib.user, 'blech.md')));
+
   // Dateien, die die App nicht liest, werden gemeldet, nicht umbenannt
   fs.writeFileSync(path.join(LIB.user, 'Meine Regeln.md'), '# X\n');
   fs.writeFileSync(path.join(LIB.user, 'notiz.txt'), 'x');

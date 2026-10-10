@@ -29,6 +29,24 @@ import { backupText, resolveInside } from './files';
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 export const isSkillId = (id: unknown): id is string => typeof id === 'string' && ID.test(id);
 export const isSkillMode = (m: unknown): m is SkillMode => m === 'off' || m === 'demand' || m === 'always';
+
+/**
+ * Kennungen der mitgelieferten Skills bis 0.5.0 (deutsch, E73) und ihre englischen Nachfolger (E87). Ältere Modelle führen
+ * den Skill weiter unter der alten Kennung (Kopie, project.json, AGENTS.md): Die alte Kennung steht dort für den Skill der
+ * Bibliothek mit der neuen, das Modell wird dafür nicht umgeschrieben.
+ */
+export const OLD_SKILL_IDS: Readonly<Record<string, string>> = {
+  '3d-druck': '3d-printing', analyse: 'analysis', baugruppen: 'assemblies', blech: 'sheet-metal', festigkeit: 'strength',
+  'harz-pulver': 'resin-powder', konstruktionsablauf: 'design-workflow', normteile: 'standard-parts', parametrik: 'parametric',
+  toleranzen: 'tolerances', verbindungen: 'joints', zeichnung: 'drawings',
+};
+/** Neue Kennung zu einer alten, sonst die Kennung selbst. */
+export const currentSkillId = (id: string): string => (Object.hasOwn(OLD_SKILL_IDS, id) ? OLD_SKILL_IDS[id] : id);
+
+/** Skill der Bibliothek zu einer Kennung, eine alte Kennung ohne eigenen Eintrag über ihren Nachfolger. */
+function inLibrary<T>(lib: Map<string, T>, id: string): T | undefined {
+  return lib.get(id) ?? lib.get(currentSkillId(id));
+}
 export const SKILLS_DIR = '.soma/skills';
 const BEGIN = '<!-- soma:skills -->';
 const END = '<!-- /soma:skills -->';
@@ -350,7 +368,7 @@ export function librarySkills(dirs: SkillDirs): Map<string, LibSkill> {
   return out;
 }
 
-export const librarySkill = (dirs: SkillDirs, id: string): LibSkill | undefined => librarySkills(dirs).get(id);
+export const librarySkill = (dirs: SkillDirs, id: string): LibSkill | undefined => inLibrary(librarySkills(dirs), id);
 
 const relOf = (id: string) => `${SKILLS_DIR}/${id}.md`;
 
@@ -388,9 +406,12 @@ export function listSkills(root: string, dirs: SkillDirs, modes: SkillModes | nu
   try { files = fs.readdirSync(path.join(root, SKILLS_DIR)).filter((n) => /\.md$/i.test(n)).map((n) => n.replace(/\.md$/i, '')).filter(isSkillId); } catch { /* noch keiner eingeschaltet */ }
   const raw = agentsText(root);
   const agents = raw == null ? null : agentsSections(raw);
-  const ids = [...new Set([...bundled.keys(), ...known.always, ...known.demand, ...files])];
+  const used = [...known.always, ...known.demand, ...files];
+  // Führt ein älteres Modell einen Skill unter der alten Kennung, steht er nur einmal in der Liste: unter dieser
+  const renamed = new Set(used.filter((id) => !bundled.has(id) && bundled.has(currentSkillId(id))).map(currentSkillId));
+  const ids = [...new Set([...[...bundled.keys()].filter((id) => !renamed.has(id) || used.includes(id)), ...used])];
   const out: SkillInfo[] = ids.map((id) => {
-    const b = bundled.get(id);
+    const b = inLibrary(bundled, id);
     const copy = projectCopy(root, id);
     const meta = b ?? (copy != null ? parseSkill(id, copy) : null);
     const mode = modeOf(known, id);
@@ -403,7 +424,7 @@ export function listSkills(root: string, dirs: SkillDirs, modes: SkillModes | nu
       id, title: meta?.title ?? id, summary: showText(meta?.summary ?? '', vars, values), topics: (meta?.topics ?? []).map((x) => showText(x, vars, values)),
       order: meta?.order ?? 100, category: meta?.category ?? '', source: b?.source ?? null, mode, file: copy != null ? relOf(id) : null,
       // Für neue Modelle gibt es nur, was die Bibliothek hat
-      defaultMode: b ? (defaults[id] ?? b.defaultMode) : 'off',
+      defaultMode: b ? (defaults[b.id] ?? b.defaultMode) : 'off',
       changed: !!b && copy != null && !(mode === 'off' ? ON_MODES.some(rendered) : rendered(mode)),
       vars: vars.map((v) => ({ ...v, value: values[v.name] ?? v.default })),
       problems: [],
@@ -543,7 +564,7 @@ export function skillsBlock(entries: AgentsEntry[]): string {
 export function agentsEntries(root: string, dirs: SkillDirs, modes: SkillModes): AgentsEntry[] {
   const bundled = librarySkills(dirs);
   const meta = (id: string) => {
-    const b = bundled.get(id);
+    const b = inLibrary(bundled, id);
     if (b) return b;
     const copy = projectCopy(root, id);
     return copy != null ? parseSkill(id, copy) : null;

@@ -14,7 +14,7 @@ import { readHelp, readHelpImage } from './help';
 import { appIcon, editBackupsDir, helpDir, libraryBackupsDir, skillDirs, skillsDir, thumbnailsDir, userSkillsDir } from './paths';
 import { readSettings, writeSettings } from './settings';
 import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
-import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, saveLibrarySkill } from './skilllibrary';
+import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, renameOldSkillFiles, saveLibrarySkill } from './skilllibrary';
 import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
 import type { FileOpResult, LibraryResult, StorageClear } from '../shared/types';
@@ -360,6 +360,7 @@ app.whenReady().then(async () => {
   // Python schon jetzt vorwärmen: Bis das Fenster steht und das letzte Modell offen ist, ist cadquery geladen (build.ts)
   warmUp();
   sweepDiscarded(); // Reste verworfener Modelle (E69) vom letzten Mal
+  renameOldSkillFiles(skillDirs()); // eigene Fassungen unter den Kennungen bis 0.5.0 (E87)
   await startBridge(async (route, body) => {
     if (!controller) return { status: 503, body: { ok: false, error: 'The app has no window right now.' } };
     if (route === 'render') return controller.renderForAgent(body);

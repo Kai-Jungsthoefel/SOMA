@@ -5,7 +5,7 @@ import { skillIdFrom, uniqueSkillId } from '../shared/skillname';
 import type { IgnoredSkillFile, LibraryState, LibraryText, SkillCheck } from '../shared/types';
 import { backupText } from './files';
 import {
-  MAX_BYTES, bundledSkills, checkSkillText, isSkillId, librarySkills, norm, readSkillFile, showText, sortSkills, writeAtomic, type SkillDefaults, type SkillDirs,
+  MAX_BYTES, OLD_SKILL_IDS, bundledSkills, checkSkillText, isSkillId, librarySkills, norm, readSkillFile, showText, sortSkills, writeAtomic, type SkillDefaults, type SkillDirs,
 } from './skills';
 
 /**
@@ -216,6 +216,20 @@ export async function importLibrarySkills(dirs: SkillDirs, files: string[], back
 
 /** Text prüfen (für die Hinweise beim Tippen). */
 export const checkLibraryText = (text: unknown): SkillCheck => (typeof text === 'string' ? checkSkillText(text) : { errors: ['No text.'], warnings: [] });
+
+/**
+ * Bearbeitete Fassungen mitgelieferter Skills unter einer alten Kennung (bis 0.5.0, E87) bekommen beim Start die neue,
+ * damit sie den mitgelieferten Skill weiter ersetzen. Das sind Dateien der App, nicht des Modells. Liegt unter der neuen
+ * Kennung schon eine Datei, bleibt die alte unberührt (dann ein eigener Skill mit der alten Kennung).
+ */
+export function renameOldSkillFiles(dirs: SkillDirs): void {
+  const bundled = bundledSkills(dirs.bundled);
+  for (const [old, id] of Object.entries(OLD_SKILL_IDS)) {
+    const from = fileOf(dirs, old), to = fileOf(dirs, id);
+    if (!bundled.has(id) || bundled.has(old) || !fs.existsSync(from) || fs.existsSync(to)) continue;
+    try { fs.renameSync(from, to); } catch (e) { console.error(`[soma] Could not rename your skill ${old}.md to ${id}.md:`, e); }
+  }
+}
 
 /** Absoluter Pfad der eigenen Datei, null wenn es keine gibt (mitgeliefert). */
 export function ownFile(dirs: SkillDirs, id: string): string | null {

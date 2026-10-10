@@ -224,7 +224,7 @@ try {
   check('Python-Prüfungen liefen durch', lib.status === 0 && lines.length >= 28, lib.status !== 0 ? lib.stderr.slice(-300) : String(lines.length));
 
   // Der Skill „Normteile“ erklärt dem Agenten die Bibliothek: sein Codeblock und die genannten Aufrufe müssen laufen
-  const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'normteile.md'), 'utf8');
+  const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'standard-parts.md'), 'utf8');
   const block = /```python\r?\n([\s\S]*?)\r?\n```/.exec(skill)?.[1] ?? '';
   const run = py(['-c', [
     'import cadquery as cq',
