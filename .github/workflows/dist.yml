@@ -60,6 +60,11 @@ jobs:
           npm run typecheck
           npm run test:unit
 
+      # Bibliotheken, die build_runtime.py für gmsh mitliefert (LINUX_BUNDLE), müssen auf dem Runner da sein
+      - name: Bibliotheken für gmsh
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libglu1-mesa libxft2 libxinerama1 libxcursor1
+
       - name: Python-Basisumgebung
         run: uv run --no-project --python 3.12 python python/scripts/build_runtime.py
 
