@@ -129,7 +129,7 @@ sh.text("Deburr all edges", (30, 30))
   fitting dimensions.
 - Item numbers with `view.leader(point_on_part, "1", at=..., end="dot")`, lined up in a row or column next to the
   views and off the parts list, the same part always gets the same number.
-- Parts list with `sh.table(rows, at, widths)` on the title block: item, name, quantity, material or designation (for
+- Parts list with `sh.table(rows, at)` on the title block (columns as wide as their texts, or give `widths` in mm): item, name, quantity, material or designation (for
   standard parts the designation of `soma.fasteners`, e.g. "ISO 4762 M5x16").
 
 ## Free drawing
@@ -141,6 +141,9 @@ sh.text("Deburr all edges", (30, 30))
   symbols, datum triangles, a different title block.
 - `sh.text(text, at, height=3.5, align=, rotation=)`. Several lines with `\n`: the first line at `at`, the others below,
   leading spaces indent. Heights: 3.5 mm, view names 5 mm, never under 2.5 mm.
+- Place texts by measuring, not by trying: `sh.text_width(text, height)` is the width in mm before you build.
+  `leader(..., at=, side=)`: the text starts at `at` going right, or ends there with `side="left"`. Without `side`
+  it points away from the leader's point.
 
 ## Build and check
 
@@ -148,7 +151,7 @@ sh.text("Deburr all edges", (30, 30))
    edges, on dimension, leader or cutting lines or on each other, things outside the frame or on the title block or a
    table, texts too long for their cell or title block field, points on no edge, typed numbers that differ from the
    model and uncommon scales. Fix them, or tell the user why one is fine.
-2. **Open the picture `.soma/drawings/<name>.png` and look at it.** It is large and gets scaled down when you open it:
+2. **Open the picture and look at it** (`.soma/drawings/<id>.png`, the build prints the path). It is large and gets scaled down when you open it:
    crop parts of it (Pillow is installed) to read small texts and check every dimension and hatching.
 3. `soma drawing info "Name"`: views with their place on the sheet, circles, every dimension with its value. Compare
    with your plan: every feature dimensioned once, nothing crowded.

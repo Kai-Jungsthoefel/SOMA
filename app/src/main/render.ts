@@ -13,6 +13,12 @@ export interface RenderRequest {
   kind: 'still' | 'sheet' | 'video';
   size: [number, number];
   view: string | null;
+  /** Freie Blickrichtung statt `view`, Namen von Teilen oder Gruppen (aufgelöst im Render-Fenster), Zoom (1: eingepasst). */
+  dir: [number, number, number] | null;
+  hide: string[];
+  only: string[];
+  fit: string[];
+  zoom: number;
   at: number;
   grid: [number, number];
   fps: number;
@@ -37,6 +43,17 @@ export function checkRequest(root: string, raw: unknown): RenderRequest | string
   if (grid.length !== 2 || !grid.every((v) => Number.isInteger(v) && v >= 1 && v <= 6)) return 'Contact sheet: 1 to 6 columns and rows.';
   const view = r.view == null ? null : String(r.view);
   if (view && !VIEWS.includes(view)) return `Unknown view ${view}.`;
+  const dir = r.dir == null ? null : Array.isArray(r.dir) ? r.dir.map(Number) : [];
+  if (dir && (dir.length !== 3 || !dir.every(Number.isFinite) || Math.hypot(...dir) < 1e-9)) return 'The view direction needs three numbers, not all zero.';
+  const names = (v: unknown, what: string): string[] | Error => {
+    if (v == null) return [];
+    if (!Array.isArray(v) || v.length > 500 || !v.every((x) => typeof x === 'string' && x.trim() && x.length <= 300)) return new Error(`${what}: a list of part or group names.`);
+    return v as string[];
+  };
+  const hide = names(r.hide, 'Hide'), only = names(r.only, 'Only'), fit = names(r.fit, 'Fit');
+  for (const x of [hide, only, fit]) if (x instanceof Error) return x.message;
+  const zoom = r.zoom == null ? 1 : Number(r.zoom);
+  if (!Number.isFinite(zoom) || zoom < 0.05 || zoom > 50) return 'Zoom between 0.05 and 50.';
   const at = r.at == null ? 0 : Number(r.at);
   const fps = r.fps == null ? 30 : Number(r.fps);
   if (!Number.isFinite(at) || at < 0) return 'Invalid time.';
@@ -58,7 +75,7 @@ export function checkRequest(root: string, raw: unknown): RenderRequest | string
   if (!out.toLowerCase().endsWith(ext)) return `The target must end in ${ext}.`;
   if (/^(\.git|\.soma)(\/|$)/i.test(out) || out.split('/').includes('..') || path.isAbsolute(out)) return 'The target must be in the project folder, not in .git/ or .soma/.';
   try { resolveInside(root, out); } catch { return 'The target is not in the project folder.'; }
-  return { kind, size: [size[0], size[1]], view, at, grid: [grid[0], grid[1]], fps, anim, result, out };
+  return { kind, size: [size[0], size[1]], view, dir: dir as [number, number, number] | null, hide: hide as string[], only: only as string[], fit: fit as string[], zoom, at, grid: [grid[0], grid[1]], fps, anim, result, out };
 }
 
 export class RenderService {
@@ -97,6 +114,7 @@ export class RenderService {
       const [w, h] = req.kind === 'video' ? [req.size[0] & ~1, req.size[1] & ~1] : req.size; // H.264 braucht gerade Maße
       const job: RenderJob = {
         id, kind: req.kind, width: w, height: h, view: req.view, at: req.at, grid: req.grid, fps: req.fps,
+        dir: req.dir, hide: req.hide, only: req.only, fit: req.fit, zoom: req.zoom,
         model, anim: req.anim ? read(req.anim) : null, result: req.result ? read(req.result) : null,
       };
       const win = await this.window();

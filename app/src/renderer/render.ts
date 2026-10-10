@@ -1,5 +1,5 @@
 import { BufferTarget, canEncodeVideo, CanvasSource, Mp4OutputFormat, Output, QUALITY_HIGH } from 'mediabunny';
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import type { RenderJob, RenderOutput, ResultMeta } from '../shared/types';
 import { AnimData, fmtTime } from './animdata';
 import { paintOverlay } from './overlay';
@@ -13,7 +13,34 @@ const api = window.somaRender;
 const viewer = new Viewer(document.getElementById('stage')!, { pixelRatio: 1 });
 const results = new ResultLayer(viewer);
 
-interface Scene { anim: AnimData | null; legend: ResultMeta | null; ids: Map<string, string>; view: ViewName }
+/** Kamera des Auftrags: Richtung, eingepasste Teile und Zoom. `forced`: gilt auch statt der Kamera einer Animation. */
+interface Look { dir: THREE.Vector3 | null; view: ViewName; fit: string[] | undefined; zoom: number; forced: boolean }
+interface Scene { anim: AnimData | null; legend: ResultMeta | null; ids: Map<string, string>; look: Look }
+
+/**
+ * Namen aus `--hide`, `--only` und `--fit` in Bauteil-IDs: Teilname, Gruppe ("Gehäuse", "Gehäuse/Schrauben", mit allem
+ * darunter) oder Teil mit Gruppe ("Gehäuse/Deckel"), wie in den Animationen. Unbekanntes ist ein Fehler mit den Namen.
+ */
+function resolveNames(specs: string[], what: string): string[] {
+  const parts = viewer.partList();
+  const out = new Set<string>();
+  for (const raw of specs) {
+    const spec = raw.trim().replace(/^\/+|\/+$/g, '');
+    let hit = parts.filter((p) => p.name === raw.trim());
+    if (!hit.length) hit = parts.filter((p) => p.group && (p.group === spec || p.group.startsWith(`${spec}/`)));
+    if (!hit.length) {
+      const i = spec.lastIndexOf('/');
+      if (i > 0) hit = parts.filter((p) => p.name === spec.slice(i + 1) && p.group === spec.slice(0, i));
+    }
+    if (!hit.length) {
+      const names = parts.slice(0, 30).map((p) => `'${p.name}'`).join(', ') + (parts.length > 30 ? ' ...' : '');
+      const groups = [...new Set(parts.flatMap((p) => (p.group ?? '').split('/').map((_, k, a) => a.slice(0, k + 1).join('/')).filter(Boolean)))].sort();
+      throw new Error(`${what} '${raw}' does not exist in the model. Parts: ${names}.${groups.length ? ` Groups: ${groups.map((g) => `'${g}'`).join(', ')}.` : ''}`);
+    }
+    for (const p of hit) out.add(p.id);
+  }
+  return [...out];
+}
 
 async function prepare(job: RenderJob): Promise<Scene> {
   results.hide();
@@ -28,7 +55,15 @@ async function prepare(job: RenderJob): Promise<Scene> {
   const legend = job.result ? await results.show(job.result) : null;
   const anim = job.anim ? await AnimData.parse(job.anim) : null;
   const ids = new Map(viewer.partList().map((p) => [p.name, p.id]));
-  return { anim, legend, ids, view: (job.view as ViewName | null) ?? 'iso' };
+  // Ausblenden gilt zusätzlich zu dem, was eine Animation ausblendet. Eingepasst wird auf das Sichtbare
+  if (job.only.length) viewer.isolate(resolveNames(job.only, '--only'));
+  if (job.hide.length) viewer.setVisible(resolveNames(job.hide, '--hide'), false);
+  const fit = job.fit.length ? resolveNames(job.fit, '--fit') : undefined;
+  const look: Look = {
+    dir: job.dir ? new THREE.Vector3(...job.dir) : null, view: (job.view as ViewName | null) ?? 'iso', fit, zoom: job.zoom,
+    forced: !!job.view || !!job.dir || !!fit || job.zoom !== 1,
+  };
+  return { anim, legend, ids, look };
 }
 
 /** Stand zur Zeit t (ohne Animation: die gewählte Ansicht) und ein Bild davon. */
@@ -43,15 +78,22 @@ function frame(s: Scene, t: number, stamp: string | null, forceView: boolean): H
     for (const [n, m] of f.poses) { const id = s.ids.get(n); if (id) poses.set(id, m); }
     viewer.setPoses(poses);
     viewer.setAnimState({ hidden: byId(f.hidden), ghost: byId(f.ghost), highlight: byId(f.highlight) });
-    if (forceView) viewer.setView(s.view);
+    if (forceView) place(s.look);
     else viewer.setCamera(f.camera.position, f.camera.target);
     content = { ...content, caption: f.caption, title: f.title };
     labels = f.labels;
-  } else viewer.setView(s.view);
+  } else place(s.look);
   viewer.setPainter((g, w, h, project) => paintOverlay(g, w, h, {
     ...content, labels: labels.map((l) => ({ text: l.text, p: project(l.at) })).filter((l) => l.p).map((l) => ({ text: l.text, x: l.p!.x, y: l.p!.y })),
   }));
   return viewer.snapshot();
+}
+
+const VIEW_DIRS: Record<string, [number, number, number]> = {
+  iso: [0.8, -1.2, 0.9], front: [0, -1, 0], back: [0, 1, 0], top: [0, 0, 1], bottom: [0, 0, -1], right: [1, 0, 0], left: [-1, 0, 0],
+};
+function place(l: Look): void {
+  viewer.viewFrom(l.dir ?? new THREE.Vector3(...(VIEW_DIRS[l.view] ?? VIEW_DIRS.iso)), l.fit, l.zoom);
 }
 
 function png(c: HTMLCanvasElement): Promise<ArrayBuffer> {
@@ -74,7 +116,7 @@ async function sheet(s: Scene, job: RenderJob, cols: number, rows: number): Prom
   g.fillText(`${anim.meta.name} · ${fmtTime(anim.duration)} · ${n} stills`, gap * 2, head / 2 + gap / 2);
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0 : (anim.duration * i) / (n - 1);
-    const img = frame(s, t, fmtTime(t), !!job.view);
+    const img = frame(s, t, fmtTime(t), s.look.forced);
     g.drawImage(img, gap + (i % cols) * (cw + gap), head + gap + Math.floor(i / cols) * (ch + gap), cw, ch);
   }
   return png(c);
@@ -99,7 +141,7 @@ async function video(s: Scene, job: RenderJob, progress: (f: number) => void): P
   const n = Math.max(1, Math.round(anim.duration * job.fps)) + 1;
   for (let i = 0; i < n; i++) {
     const t = Math.min(anim.duration, i / job.fps);
-    g.drawImage(frame(s, t, null, !!job.view), 0, 0);
+    g.drawImage(frame(s, t, null, s.look.forced), 0, 0);
     await source.add(i / job.fps, 1 / job.fps);
     if (i % 10 === 0) progress(i / n);
   }
@@ -114,7 +156,7 @@ async function run(job: RenderJob): Promise<RenderOutput> {
   const warnings: string[] = [];
   if (job.kind === 'still') {
     const t = s.anim ? Math.min(job.at, s.anim.duration) : 0;
-    return { ok: true, png: await png(frame(s, t, null, !!job.view)), warnings };
+    return { ok: true, png: await png(frame(s, t, null, s.look.forced)), warnings };
   }
   if (!s.anim) return { ok: false, error: 'A contact sheet or video needs an animation.' };
   if (job.kind === 'sheet') return { ok: true, png: await sheet(s, job, job.grid[0], job.grid[1]), warnings };

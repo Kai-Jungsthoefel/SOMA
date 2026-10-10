@@ -64,6 +64,11 @@ a = sh.section("Bracket", "front", path=[(-70, 17.5, 0), (-20, 17.5, 0), (-20, 0
                at=(100, 110), letters_at=[(25, 225), (175, 225)])
 sh.table([["1", "Bracket", "1"]], at=(230, 70), widths=[10, 40, 10])
 top.leader((0, 0, 12), "1", at=(235, 65), end="dot")
+w = sh.text_width("Ra 3.2")
+assert 8 < w < 20 and sh.text_width("Ra 3.2\\nlonger second line") > 2 * w, w
+tb = sh.table([["Pos", "Name"], ["2", "Very long part name"]], at=(30, 50))
+assert abs((tb[2] - tb[0]) - (max(8, sh.text_width("Pos") + 4) + sh.text_width("Very long part name") + 4)) < 0.01, tb
+top.leader((20, -20, 12), "Ra 3.2", at=(200, 262), side="left")
 `;
 
 const BROKEN = `from soma.drawing import Sheet
@@ -129,6 +134,8 @@ try {
     !fw.some((m) => /^([4-9]|1[0-2]): /.test(m)), fw.filter((m) => /^([4-9]|1[0-2]): /.test(m)).join(' | '));
   check('Maße: Ø nicht doppelt ("Ø10 H7"), 80 bis zum Mittenkreuz, 120 über die Unterbrechung', ['"Ø10 H7"', '80', '120'].every((l) => fb?.dims.some((d) => d.label === l)),
     fb?.dims.map((d) => d.label).join(' '));
+  check('text_width misst, Tabelle ohne widths passt sich den Texten an, Hinweislinie mit side="left": gebaut ohne Hinweise',
+    !!fb && !fw.some((m) => /^(1[6-9]|20): /.test(m)), fw.filter((m) => /^(1[6-9]|20): /.test(m)).join(' | ') || JSON.stringify(res?.errors)?.slice(0, 300));
   const fbCheck = py(['-c', String.raw`
 import json, sys, math, ezdxf
 doc = ezdxf.readfile(sys.argv[1])
@@ -141,6 +148,7 @@ print(json.dumps(dict(
     indent=any(t.startswith("  1. Deburr") for t, _p in texts), mtext=len(msp.query("MTEXT")),
     dimtext=[d.dxf.text for d in dia], ø=[e.plain_text() for e in mt], up=[round(e.dxf.insert.y - 200, 2) for e in mt],
     letters=sorted(p for t, p in texts if t == "A"), label=[p for t, p in texts if t == "Shortened"],
+    ra=[p for t, p in texts if t == "Ra 3.2"],
     breaks=len([p for p in msp.query("LWPOLYLINE[layer=='THIN']") if len(p) == 6]),
     cut=[len(p) for p in msp.query("LWPOLYLINE[layer=='CUT']")], step=len(step))))
 `, path.join(dir, 'output', 'drawings', 'Feedback.dxf')]);
@@ -149,6 +157,7 @@ print(json.dumps(dict(
   check('Mehrzeiliger Text als Zeilen (kein MTEXT), Einrückung bleibt', fx?.indent === true && fx.mtext === 0, (fbCheck.stderr || fbCheck.stdout).slice(-200));
   check('Durchmesser: "Ø<> H7" wird "Ø10 H7", der Text steht in Richtung angle=90 (über der Mitte)', fx?.dimtext?.[0] === '<> H7' && fx.ø[0] === 'Ø10 H7' && fx.up[0] > 5,
     JSON.stringify(fx && { dimtext: fx.dimtext, ø: fx.ø, up: fx.up }));
+  check('Hinweislinie mit side="left": Text endet 1 mm vor at', JSON.stringify(fx?.ra) === '[[199,263]]', JSON.stringify(fx?.ra));
   check('Buchstaben des Schnittverlaufs an letters_at, Titel an label_at', JSON.stringify(fx?.letters) === '[[25,225],[175,225]]' && JSON.stringify(fx?.label) === '[[300,255]]',
     JSON.stringify(fx && { letters: fx.letters, label: fx.label }));
   check('Stufenschnitt: Schnittverlauf mit 4 Punkten und zwei dicken Knicken, keine Kante an der Stufe; zwei Bruchlinien', JSON.stringify(fx?.cut) === '[4,3,3]' && fx.step === 0 && fx.breaks === 2,

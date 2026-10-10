@@ -34,7 +34,7 @@ a.wait(1)
 
 - `hinge(parts, p1, p2)`: angle in degrees, right-hand rule around `p2 - p1`. `slider(parts, direction)`: way in mm.
   `part(parts)`: free motion with `to(cq.Location(...))`, `translate((x, y, z))`, `rotate(p1, p2, angle)`.
-- `parts` is a name from `add_part`, a group (`"Housing"`, `"Housing/Screws"`) or a list. One joint per part. A joint
+- `parts` is a name from `add_part`, a group (`"Housing"`, `"Housing/Screws"`), a part with its group (`"Housing/Lid"`) or a list. One joint per part. A joint
   on a moving part gets `parent=lid`, its axis is given in the model position.
 - `joint.to(value)` (0 = as modelled), `joint.by(delta)`.
 - `play(*actions, run_time=1, ease="smooth")`, eases `smooth`, `linear`, `in`, `out`. `wait(seconds)`. `title()` also
@@ -45,6 +45,7 @@ a.wait(1)
 - `a.camera.set(view=, fit=, zoom=, target=, distance=)` jumps, `a.camera.move(...)` is a flight inside `play()`.
   Views: iso, front, back, left, right, top, bottom or a direction from the target to the camera. `fit=["Lid"]`
   frames these parts over their whole motion. `a.camera.orbit(degrees, tilt=0)` circles around Z, `zoom(factor)`.
+  Wide motions (explosions) leave the parts small: give `fit` the parts that matter or a `zoom`.
 - Keep the moving parts in view, one camera move at a time, 1 to 3 s each. Without camera calls the user turns the
   view freely.
 

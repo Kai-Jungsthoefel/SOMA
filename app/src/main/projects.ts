@@ -629,7 +629,7 @@ export class ProjectController {
       entry = b.animations.find((a) => a.id === animId);
       if (!entry) return { ok: false, files: [], warnings: [], error: b.errors.find((e) => e.file === file)?.message ?? b.error ?? 'The animation could not be rebuilt.' };
     }
-    return this.render({ kind: 'video', size: [1280, 720], view: null, at: 0, grid: [3, 3], fps: 30, anim: entry.glb, result: null, out: `renders/${entry.id}.mp4` }, false);
+    return this.render({ kind: 'video', size: [1280, 720], view: null, dir: null, hide: [], only: [], fit: [], zoom: 1, at: 0, grid: [3, 3], fps: 30, anim: entry.glb, result: null, out: `renders/${entry.id}.mp4` }, false);
   }
 
   // ---- Beenden ----------------------------------------------------------------------------------------------------

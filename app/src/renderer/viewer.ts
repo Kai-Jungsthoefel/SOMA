@@ -531,17 +531,27 @@ export class Viewer {
   }
 
   setView(name: ViewName, ids?: string[]): void {
-    const box = this.bounds(ids);
-    if (box.isEmpty()) return;
-    const center = box.getCenter(new THREE.Vector3());
-    const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
-    const dir = {
+    this.viewFrom({
       iso: new THREE.Vector3(0.8, -1.2, 0.9), front: new THREE.Vector3(0, -1, 0), back: new THREE.Vector3(0, 1, 0),
       top: new THREE.Vector3(0, -0.0001, 1), bottom: new THREE.Vector3(0, -0.0001, -1),
       right: new THREE.Vector3(1, 0, 0), left: new THREE.Vector3(-1, 0, 0),
       fit: this.camera.position.clone().sub(this.controls.target),
-    }[name].clone().normalize();
-    const dist = radius / Math.sin(THREE.MathUtils.degToRad(this.persp.fov / 2)) * 1.05;
+    }[name], ids);
+  }
+
+  /**
+   * Blick aus der Richtung `dir` (vom Modell zur Kamera) auf die Bauteile `ids` (ohne: alle sichtbaren), eingepasst.
+   * `zoom` größer 1 rückt näher. Für `soma render --view x,y,z --fit … --zoom …`.
+   */
+  viewFrom(dir0: THREE.Vector3, ids?: string[], zoom = 1): void {
+    const box = this.bounds(ids);
+    if (box.isEmpty() || dir0.lengthSq() < 1e-18) return;
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1);
+    // Genau von oben oder unten hätte die Kamera keine Richtung für „oben“: minimal kippen wie bei top und bottom
+    const dir = dir0.clone().normalize();
+    if (Math.abs(dir.z) > 0.99999) dir.set(0, -0.0001, Math.sign(dir.z)).normalize();
+    const dist = radius / Math.sin(THREE.MathUtils.degToRad(this.persp.fov / 2)) * 1.05 / Math.max(zoom, 0.01);
     this.anim?.stop();
     this.placeAt(center, dir, dist);
     this.controls.update();

@@ -226,6 +226,17 @@ try {
     && JSON.stringify(pngSize(iso)) === '[1280,800]', r.stdout + r.stderr);
   r = soma(['render', '--view', 'top', '--size', '640x400', '--out', 'renders/oben.png']);
   check('--view, --size und --out', r.status === 0 && JSON.stringify(pngSize(path.join(dir, 'renders', 'oben.png'))) === '[640,400]', r.stdout + r.stderr);
+  // Freie Richtung, Ausblenden, nur zeigen, einpassen, Zoom: jedes Bild anders als das ohne Option
+  const look = (args, out) => { const res = soma(['render', '--size', '320x200', '--out', `renders/${out}.png`, ...args]); return { res, png: res.status === 0 ? fs.readFileSync(path.join(dir, 'renders', `${out}.png`)) : null }; };
+  const lPlain = look([], 'l-plain'), dirv = look(['--view=1,-2,1'], 'l-dir'), hid = look(['--hide', 'Body'], 'l-hide'),
+    only = look(['--only', 'Lid', '--fit', 'Lid'], 'l-only'), zoom = look(['--zoom', '3'], 'l-zoom');
+  const shots = [lPlain, dirv, hid, only, zoom];
+  check('soma render --view=x,y,z, --hide, --only mit --fit, --zoom: Bilder entstehen und unterscheiden sich', shots.every((x) => x.png)
+    && new Set(shots.map((x) => x.png.toString('base64'))).size === shots.length, shots.map((x) => x.res.stderr).join(' | ').slice(0, 300));
+  r = soma(['render', '--hide', 'Gibtsnicht']);
+  check('Unbekannter Name bei --hide: Fehler mit den Teilen', r.status === 1 && r.stderr.includes("'Gibtsnicht' does not exist") && r.stderr.includes("'Lid'"), r.stderr);
+  r = soma(['render', '--view', 'schraeg']);
+  check('Unbekannte Ansicht: Meldung nennt auch die Richtung x,y,z', r.status === 1 && r.stderr.includes('direction x,y,z'), r.stderr);
   r = soma(['render', '--anim', 'Deckel öffnen', '--at', '2']);
   check('Animation zu einer Zeit: renders/deckel-oeffnen-2s.png', r.status === 0 && fs.existsSync(path.join(dir, 'renders', 'deckel-oeffnen-2s.png')), r.stdout + r.stderr);
   r = soma(['render', '--anim', 'Deckel öffnen', '--sheet', '3x2', '--size', '320x200']);
