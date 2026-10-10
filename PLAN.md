@@ -1,6 +1,6 @@
 # Plan: SOMA (CAD mit KI-Agenten)
 
-> Stand: 2026-09-30 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](prototype/phase0/ERGEBNISSE.md)), **Phase 1 läuft** (Schritte 1 bis 5 erledigt, Messen vorgezogen, siehe Abschnitt 10 und [app/README.md](app/README.md))
+> Stand: 2026-09-30 · Status: **Phase 0 abgeschlossen** ([Ergebnisse](docs/phase0-ergebnisse.md)), **Phase 1 läuft** (Schritte 1 bis 5 erledigt, Messen vorgezogen, siehe Abschnitt 10 und [app/README.md](app/README.md))
 > Ursprung: [IDEA.md](IDEA.md) · Begründungen und Historie: [DECISIONS.md](DECISIONS.md)
 > Zahlen in Klammern, z. B. (E12), verweisen auf Entscheidungen im Log.
 
@@ -184,7 +184,7 @@ Agenten befolgen `AGENTS.md` nicht zuverlässig. Sie können Dateien verschieben
 
 ## 10. Phasen
 
-**Phase 0: technischer Prototyp ohne App (E13, E14). Abgeschlossen**, alle Punkte bestanden. Details und Zahlen in [ERGEBNISSE.md](prototype/phase0/ERGEBNISSE.md), Code und Tests in `prototype/phase0/`:
+**Phase 0: technischer Prototyp ohne App (E13, E14). Abgeschlossen**, alle Punkte bestanden. Details und Zahlen in [phase0-ergebnisse.md](docs/phase0-ergebnisse.md), Code und Tests im Git-Verlauf (zuletzt im Tag `v0.5.0` unter `prototype/phase0/`):
 
 1. **STEP mit Namen und Farben:** `cq.Assembly.export` genügt, kein eigener XCAF-Export nötig. Nicht-ASCII-Namen werden beim Export zerstört, daher ASCII-Namen in der STEP.
 2. **GLB mit Flächen-IDs:** eigener Mesher (rund 150 Zeilen), alle IDs gegen OCC verifiziert. Die IDs gelten nur für einen Build. Der Python-Anteil ist nicht der Engpass, das Meshen in OCC ist es.
@@ -398,7 +398,7 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - **Im Viewer:** Die Karte „Analyse“ zeigt bei FEM die Verformung überhöht (unverformt, echte Größe oder so, dass die größte Verschiebung 5 % der Modellgröße ist, auf eine runde Zahl), den Lastfall in Blau (Einspannungen kräftig, Lastflächen schwach, Kräfte als Pfeile vor dem Modell, ein- und ausblendbar), Zeilen für Lastfall und Hinweise. Unter dem Zeiger stehen Sicherheit, Spannung und Verschiebung, die Stelle gilt im unverformten Modell. Der Schnitt füllt und umrandet die verformten Netze, die Kontur folgt einer geänderten Überhöhung. „An Agent geben“ nennt alle drei. `soma render --result` zeigt die Verformung wie der Viewer und nennt die Überhöhung in der Legende. Veraltet ist ein Ergebnis auch, wenn die Studie neuer ist, „Neu berechnen“ nimmt die Studie wieder.
 - **Farbskala (Wunsch des Nutzers):** Bei FEM wählt man die gezeigte Größe, Sicherheit oder Vergleichsspannung nach von Mises (Grenze ist die zulässige Spannung, Festigkeit durch geforderte Sicherheit, bei mehreren Werkstoffen die des schwächsten, kritisch darüber). Bei jeder Auswertung lässt sich die Spanne der Färbung wählen: automatisch (wie bisher, am Grenzwert ausgerichtet), Min bis Max der Werte im Modell, oder selbst gewählt (zwei Zahlenfelder, gilt beim Tippen, ungültig rot umrandet). Bei Min bis Max und selbst gewählt läuft die Farbe gleichmäßig über die Spanne von Grau bis Rot, die Legende sagt das dazu. Eigene Grenzen bleiben für dasselbe Ergebnis und dieselbe Größe, auch nach „Neu berechnen“. `soma render --result` zeigt weiter die automatische Skala der Sicherheit.
 - **Für den Agenten:** Skill „Festigkeit mit FEM“ (Prüfen und Zeigen, bei Bedarf, Einstellung Sicherheitsfaktor), `AGENTS.md` nennt `analyses/` und den Befehl, „Festigkeit“ und „Analyse“ verweisen darauf. Das Beispiel im Skill rechnet im Test so, wie es dasteht.
-- **Pakete:** gmsh 4.15 (GPL 2 oder später) und pyamg 5.3 (MIT) in der Basisumgebung, gepinnt in `prototype/phase0/requirements-phase0.txt`. scikit-fem war kurz installiert und ist wieder entfernt. gmsh läuft nur im Python-Prozess von `soma`, nicht in der App. Seit E71 steht SOMA selbst unter GPL-3.0, gmsh passt damit in die Auslieferung.
+- **Pakete:** gmsh 4.15 (GPL 2 oder später) und pyamg 5.3 (MIT) in der Basisumgebung, gepinnt in `python/requirements-base.txt`. scikit-fem war kurz installiert und ist wieder entfernt. gmsh läuft nur im Python-Prozess von `soma`, nicht in der App. Seit E71 steht SOMA selbst unter GPL-3.0, gmsh passt damit in die Auslieferung.
 - **Grenzen:** linear-elastisch, kein Kontakt, kein Gleiten, kein Knicken, keine Vorspannung von Schrauben, keine Ermüdung. Teile sind verschmolzen, nicht gefügt. Werkstoffe gleichmäßig (keine Schichtrichtung, kein Infill, kein Holzfaserverlauf). Werte nur an der Oberfläche. Getestet unter Windows.
 
 *Wartezeiten (E66, Wunsch des Nutzers; Prüfungen in `app/test/versions.mjs` und `unit.mjs`):*
@@ -549,7 +549,7 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 
 *Verbesserungen aus der Kritik eines Agenten (E85, Wunsch des Nutzers; Prüfungen in `app/test/animation.mjs` und `drawing.mjs`):*
 
-- **PDFs:** pdfplumber 0.11 (MIT, mit pdfminer.six und pypdfium2) in der Basisumgebung (`prototype/phase0/requirements-phase0.txt`). `AGENTS.md` nennt es in der Zeile zu `inputs/`, mit `page.to_image()` für ein Bild. Die Projektumgebung übernimmt die Versionen wie die übrigen Basispakete.
+- **PDFs:** pdfplumber 0.11 (MIT, mit pdfminer.six und pypdfium2) in der Basisumgebung (`python/requirements-base.txt`). `AGENTS.md` nennt es in der Zeile zu `inputs/`, mit `page.to_image()` für ein Bild. Die Projektumgebung übernimmt die Versionen wie die übrigen Basispakete.
 - **Achse:** Regel 6 in `AGENTS.md`: „Z is up, the front faces −Y (the front view looks from −Y), X points right.“ So wie Viewer, `soma render` und Zeichnungen „front“ verstehen.
 - **soma render:** `--view` nimmt auch eine Richtung `x,y,z` vom Modell zur Kamera (mit führendem Minus als `--view=-1,0,0`, argparse hält es sonst für eine Option). `--hide` und `--only` (mehrfach) blenden Teile oder Gruppen aus, zusätzlich zu dem, was eine Animation ausblendet. `--fit` passt auf Teile ein, `--zoom` (0.05 bis 50) rückt näher. Mit einer Animation ersetzen Richtung, `--fit` und `--zoom` ihre Kamera wie bisher `--view`. Die Namen löst das Render-Fenster auf (Teil, Gruppe mit allem darunter, „Gruppe/Teil“), Unbekanntes ist ein Fehler mit der Liste der Teile und Gruppen. Im Viewer neu `viewFrom(dir, ids, zoom)`, `setView` nutzt es.
 - **Animation:** `"Gruppe/Teil"` spricht ein Teil mit seiner Gruppe an. Der Skill sagt in einem Satz, dass große Bewegungen die Teile klein machen und `fit` oder `zoom` helfen.
@@ -582,6 +582,7 @@ Alle Codeblöcke der Skills sind gegen die Basisumgebung geprüft (Überhangsuch
 - `AGENTS.md` und die Kommentare der Vorlage sind **auf Englisch** (Agenten befolgen englische Anweisungen zuverlässiger). Seit E73 ist auch die Oberfläche englisch
 - App auf Englisch (E73): nur Englisch, keine Umschaltung der Sprache. IDs und Dateinamen der Skills bleiben deutsch (`3d-druck.md`), sonst müssten bestehende Projekte umziehen. Begriffe: „Mark up“/„Markup“ für Markieren, „Explode“ und „Exploded view“, „Section“, „Send to agent“, „issues“ für die Hinweise zum Projekt, Skill-Stufen Off, On demand, Always. „Show in Explorer“ und „Recycle Bin“ passen nur zu Windows
 - App-Daten liegen unter Windows in `%LOCALAPPDATA%\soma`, nicht im Roaming-Profil (Arbeitsordner und Caches gehören nicht ins Netz)
+- Vor der Veröffentlichung (2026-10-10): Der Prototyp aus Phase 0 und die Icon-Entwürfe sind aus dem Repo (im Git-Verlauf bis `v0.5.0`). Die Entwicklungsumgebung heißt `%LOCALAPPDATA%\soma-dev\venv` statt `cadide-phase0\venv-full`, gebaut von `python/scripts/setup_env.ps1` aus `python/requirements-base.txt`. Eine schon eingerichtete alte Umgebung lässt sich per Junction unter dem neuen Pfad einhängen
 - Beim Öffnen eines Projekts wird sofort gebaut, damit der Viewer nicht leer ist, außer der letzte Build gilt noch (E66), dann wird er gezeigt. Beim Anlegen läuft vor dem Startcommit ein Build (im vorgewärmten Prozess unter 1 s)
 - Der Modellname folgt dem Dateinamen der Modelldatei
 - Speichern baut vorher neu, wenn der Quelltext neuer ist als das letzte Ergebnis, und wartet auf laufende Builds

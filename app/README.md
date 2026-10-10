@@ -5,7 +5,7 @@ Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. 
 ## Voraussetzungen
 
 - Node.js 22 oder neuer, Python 3.12 mit CadQuery (Basisumgebung), `soma` darin installiert.
-- Entwicklung: die Umgebung aus Phase 0 (`prototype/phase0/setup_env.ps1`, enthält seit E67 auch pip und holt seit E84 CalculiX mit `python/scripts/fetch_ccx.py` nach `venv-full\ccx`) und darin `uv pip install -e ../python`. Die App findet sie unter `%LOCALAPPDATA%\cadide-phase0\venv-full` oder über `SOMA_PYTHON`. Jedes Modell bekommt daneben eine kleine Projektumgebung unter `.soma/env` für Zusatzpakete (E67).
+- Entwicklung: `powershell -File ../python/scripts/setup_env.ps1` baut die Basisumgebung aus `python/requirements-base.txt` (mit pip, E67), installiert `soma` darin editierbar und holt CalculiX mit `python/scripts/fetch_ccx.py` nach `venv\ccx` (E84). Die App findet sie unter `%LOCALAPPDATA%\soma-dev\venv` oder über `SOMA_PYTHON`. Jedes Modell bekommt daneben eine kleine Projektumgebung unter `.soma/env` für Zusatzpakete (E67).
 - Hinter einem Proxy lädt Node den Electron-Download nur mit `NODE_USE_ENV_PROXY=1`:
   `NODE_USE_ENV_PROXY=1 node node_modules/electron/install.js` (falls `npm install` das Binary nicht geholt hat).
 

@@ -108,8 +108,7 @@ Early prototype, version 0.5.0. See [CHANGELOG.md](CHANGELOG.md).
 Requirements: Windows, Node.js 22, Python 3.12 and [uv](https://github.com/astral-sh/uv).
 
 ```
-powershell -File prototype/phase0/setup_env.ps1
-uv pip install --python "$env:LOCALAPPDATA/cadide-phase0/venv-full/Scripts/python.exe" -e python
+powershell -File python/scripts/setup_env.ps1
 cd app
 npm install
 npm start
