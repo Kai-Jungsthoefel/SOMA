@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+## [0.5.0] - 2026-10-10
+
+Die FEM rechnet mit CalculiX und kennt Kontakt zwischen Teilen: abheben, gleiten, mit und ohne Reibung.
+
 ### Neu
 
 - FEM mit Kontakt: `study.contact("Deckel", "Gehäuse")` macht die Berührfläche zweier Teile zu einem Kontakt, der abheben und gleiten kann, mit `friction=` auch mit Reibung. Das Ergebnis nennt je Kontakt die getragene Kraft, die höchste Pressung, wo er offen ist und wo er gleitet. Im Bild gibt es die Größe „Contact pressure“, im Bericht je Kontakt eine Zeile (E84).
@@ -122,7 +126,8 @@ Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
 - Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
 - Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.1...HEAD
+[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.2.0...v0.3.0
