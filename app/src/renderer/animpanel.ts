@@ -38,6 +38,7 @@ export class AnimPanel {
     ui.code.addEventListener('click', () => { const e = d.tool.shown?.entry; if (e) d.openCode(e.file, e.line); });
   }
 
+  /** Reiter geöffnet: der Ablauf der Animation im Bild, sonst die Liste. */
   opened(): void { this.mode = 'report'; this.render(); }
 
   render(): void {

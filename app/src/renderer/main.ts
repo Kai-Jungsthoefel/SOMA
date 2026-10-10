@@ -1288,8 +1288,8 @@ async function doExport(fmt: string, label: string): Promise<ExportResult> {
 }
 
 // ---- Ergebnisse des Agenten in den Reitern Analysis und Animation (E82) ----------------------------------------------
-// Analysen, Animationen und Videos sind Ergebnisse des Agenten, keine Werkzeuge. Ein Klick auf den Reiter zeigt das zuletzt
-// gezeigte Ergebnis im Viewer (beim ersten Mal das neueste), das × in der Leiste unten im Bild führt zurück zum Modell.
+// Analysen, Animationen und Videos sind Ergebnisse des Agenten, keine Werkzeuge. Ein Klick auf den Reiter zeigt die Liste (oder
+// den Bericht, wenn schon ein Ergebnis im Bild ist), erst ein Klick in der Liste bringt eins in den Viewer. Das × in der Leiste unten im Bild führt zurück zum Modell.
 
 let viewLists: { results: ResultEntry[]; anims: AnimEntry[]; videos: string[] } = { results: [], anims: [], videos: [] };
 /** Angesehene Ergebnisse (Schlüssel). Was danach dazukommt, steht in der Liste als „new“, bis man es öffnet. */
@@ -1353,19 +1353,15 @@ function renderResults(): void {
   fitDock();
 }
 
-/** Reiter Analysis geöffnet: das zuletzt gezeigte Ergebnis ins Bild, beim ersten Mal das neueste. Ohne Ergebnisse die Liste. */
+/** Reiter Analysis oder Animation geöffnet: Liste frisch laden. Von selbst kommt nichts ins Bild, das wählt der Nutzer in der Liste. */
 async function openResults(): Promise<void> {
   analysisPanel.opened();
-  if (resultTool.isActive || versions.previewing) return;
   await refreshViewLists();
-  if (panel === 'analysis' && !resultTool.isActive && viewLists.results.length) resultTool.show(null);
 }
 
 async function openAnims(): Promise<void> {
   animPanel.opened();
-  if (animTool.isActive || versions.previewing) return;
   await refreshViewLists();
-  if (panel === 'anim' && !animTool.isActive && viewLists.anims.length) animTool.show(null);
 }
 
 // ---- Viewer-Bedienung -------------------------------------------------------------------------------------------

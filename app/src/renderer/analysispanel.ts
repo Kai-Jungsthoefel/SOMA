@@ -50,7 +50,7 @@ export class AnalysisPanel {
     ui.more.addEventListener('click', () => this.openMore());
   }
 
-  /** Reiter geöffnet: der Bericht des gezeigten Ergebnisses, ohne Ergebnisse die Liste. */
+  /** Reiter geöffnet: der Bericht des Ergebnisses im Bild, sonst die Liste. Ins Bild kommt eins erst mit einem Klick in die Liste. */
   opened(): void { this.mode = 'report'; this.render(); }
 
   get showing(): 'list' | 'report' { return this.d.tool.shown ? this.mode : 'list'; }

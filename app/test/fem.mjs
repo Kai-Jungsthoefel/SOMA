@@ -135,15 +135,19 @@ try {
   check('Ohne Studie: Hinweis auf die Datei', r.status === 1 && (r.stderr + r.stdout).includes('needs the file with the load case'), r.stderr + r.stdout);
   check('Fehler legen keine Ergebnisse an', !fs.existsSync(path.join(dir, '.soma', 'results', 'kaputt.glb')) && !fs.existsSync(path.join(dir, '.soma', 'results', 'lose.glb')));
 
-  // 4) Anzeige in der App (E82): Punkt am Reiter, Reiter Analysis zeigt das neueste, Liste, Bericht, Leiste und Legende im Bild
+  // 4) Anzeige in der App (E82): Punkt am Reiter, Reiter Analysis zeigt die Liste, Bericht, Leiste und Legende im Bild
   await ev(() => window.__t.refreshViewLists());
   check('Neue Analysen vom Agenten: Punkt am Reiter Analysis, keiner an Animation', (await ev(() => window.__t.rail())).analysis
     && !(await ev(() => window.__t.rail())).anim, JSON.stringify(await ev(() => window.__t.rail())));
   await ev(() => window.__t.showPanel('analysis'));
-  await waitFor('neuestes Ergebnis gezeigt', () => window.__t.result().id === 'winkel' && window.__t.analysis().mode === 'report', 20000);
+  await waitFor('Liste geladen', () => window.__t.analysis().mode === 'list' && window.__t.analysis().list.length === 2, 20000);
   let an = await ev(() => window.__t.analysis());
-  check('Reiter Analysis: zeigt beim ersten Mal das neueste (Winkel) mit Bericht, Punkt am Reiter weg', an.title === 'Winkel'
-    && an.meta.startsWith('FEM · ') && !(await ev(() => window.__t.rail())).analysis, JSON.stringify(an));
+  check('Reiter Analysis: zeigt die Liste, kein Ergebnis von selbst im Bild, Punkt am Reiter weg', !(await ev(() => window.__t.result())).id
+    && !an.list.some((x) => x.cur) && !(await ev(() => window.__t.rail())).analysis, JSON.stringify(an));
+  await ev(() => document.querySelector('#an-rows .al-row[data-id="winkel"]').click());
+  await waitFor('Winkel gezeigt', () => window.__t.result().id === 'winkel' && window.__t.analysis().mode === 'report', 20000);
+  an = await ev(() => window.__t.analysis());
+  check('Klick in der Liste: Bericht zu Winkel', an.title === 'Winkel' && an.meta.startsWith('FEM · '), JSON.stringify(an));
   check('Bericht Winkel: Druck, Schwerkraft und zwei Werkstoffe als Annahmen', an.inputs.some((x) => x.startsWith('Pressure0.2 MPa'))
     && an.inputs.some((x) => x.startsWith('Gravity9.81 m/s²')) && an.inputs.some((x) => x.startsWith('MaterialAluminium 6082 · Steel S235')), JSON.stringify(an.inputs));
   await domClick('btn-an-back');

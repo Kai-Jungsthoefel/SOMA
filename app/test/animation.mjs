@@ -140,16 +140,15 @@ try {
   await waitFor('Fehler weg', () => window.soma.anim.list().then((x) => x.errors.length === 0), 20000).catch(() => {});
   check('Gelöschte Datei: Ihr Fehler verschwindet aus der Liste', (await list()).errors.length === 0);
 
-  // 4) Abspielen im Viewer. Animationen und Analysen stehen in eigenen Reitern (E82): Der Reiter zeigt beim ersten Mal die erste,
-  // `showAnim` wählt wie ein Klick in der Liste
+  // 4) Abspielen im Viewer. Animationen und Analysen stehen in eigenen Reitern (E82): Der Reiter zeigt die Liste, erst ein Klick
+  // darin spielt eine ab. `showAnim` wählt wie ein Klick in der Liste
   await ev(() => window.__t.refreshViewLists());
   check('Neue Animationen vom Agenten: Punkt am Reiter Animation', (await ev(() => window.__t.rail())).anim, JSON.stringify(await ev(() => window.__t.rail())));
   await ev(() => window.__t.showPanel('anim'));
-  await waitFor('Animation geladen', () => window.__t.anim().name !== null && window.__t.animPanel().mode === 'report', 20000);
-  check('Reiter Animation: Punkt weg, Bericht der gezeigten', !(await ev(() => window.__t.rail())).anim, JSON.stringify(await ev(() => window.__t.animPanel())));
-  await domClick('btn-am-back');
+  await waitFor('Liste geladen', () => window.__t.animPanel().mode === 'list' && window.__t.animPanel().list.length === 2, 20000);
   let ap = await ev(() => window.__t.animPanel());
-  check('Liste: beide Animationen, die gezeigte markiert', ap.mode === 'list' && ap.list.length === 2 && ap.list.filter((x) => x.cur).length === 1, JSON.stringify(ap.list));
+  check('Reiter Animation: Punkt weg, Liste mit beiden Animationen, keine von selbst im Bild', !(await ev(() => window.__t.rail())).anim
+    && !(await ev(() => window.__t.anim())).active && !ap.list.some((x) => x.cur), JSON.stringify(ap));
   const showAnim = async (id) => {
     await ev((i) => window.__t.animShow(i), id);
     await waitFor(`Animation ${id}`, () => window.__t.anim().active && window.__t.anim().name !== null, 20000);
@@ -306,8 +305,7 @@ try {
   check('Abstand: Stift mit 0,2 mm Spalt kritisch, Störer überschneidet sich, Deckel liegt nur auf', r.status === 0
     && /Stift: [^\n]*below 0\.50 mm/.test(r.stdout) && /Störer: -[^\n]*overlap/.test(r.stdout) && /Lid: [^\n]*nothing below 0\.50 mm[^\n]*contact/.test(r.stdout),
     r.stdout + r.stderr);
-  await ev(() => window.__t.showPanel('analysis')); // zeigt das neueste
-  await waitFor('Ergebnis geladen', () => window.__t.result().id !== null, 20000);
+  await ev(() => window.__t.showPanel('analysis'));
   await ev(() => window.__t.resultShow('thickness'));
   await waitFor('Wandstärke gewählt', () => window.__t.result().id === 'thickness' && window.__t.analysis().title === 'Wall thickness', 10000);
   let rs = await ev(() => window.__t.result());
