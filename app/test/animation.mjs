@@ -316,6 +316,15 @@ try {
     && an.table.some((row) => row[0] === 'Lasche' && row[3] !== '–') && an.table.some((row) => row[0] === 'Body' && row[3] === '–')
     && vs.modelHidden && !rs.stale, JSON.stringify(an));
   check('Leiste unten ohne FEM: nur der Name und das ×', rs.bar === 'Wall thickness' && !rs.fem, JSON.stringify(rs.bar));
+  // Schlimmste Stelle im Bild: bei der Wandstärke der kleinste Wert, beim Überhang der größte
+  await ev(() => window.__t.resultShow('overhang'));
+  await waitFor('Überhang gewählt', () => window.__t.result().id === 'overhang' && window.__t.result().tags.some((x) => /^M(in|ax) /.test(x)), 10000).catch(() => {});
+  const ovTags = (await ev(() => window.__t.result())).tags;
+  check('Schlimmste Stelle: Wandstärke „Min“, Überhang „Max“', rs.tags.some((x) => x.startsWith('Min ')) && ovTags.some((x) => x.startsWith('Max ')) && !ovTags.some((x) => x.startsWith('Min ')),
+    JSON.stringify([rs.tags, ovTags]));
+  await ev(() => window.__t.resultShow('thickness'));
+  await waitFor('Wandstärke wieder gewählt', () => window.__t.result().id === 'thickness', 10000);
+  rs = await ev(() => window.__t.result());
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
   const at = await ev(() => window.__t.viewer.screenAt([0, -40.5, 6]));

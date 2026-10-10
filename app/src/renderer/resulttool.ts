@@ -381,7 +381,8 @@ export class ResultTool {
         tags.push({ el: el('div', { className: 'c3d pt' }, d, 'Max ', el('b', { textContent: `${loc(best.value, 2)} MPa` })), at: l.shownAt(best.part, best.at) });
       }
     }
-    else if (w) spotTag(w.part, 'Min ', val(w.value));
+    // Schlimmste Stelle: kleinster Wert, wenn wenig schlecht ist (Wandstärke, Sicherheit), sonst größter (Überhang)
+    else if (w) spotTag(w.part, r.bad === 'low' ? 'Min ' : 'Max ', val(w.value));
     if (this.spot && this.spot !== w?.part) {
       const p = r.parts.find((x) => x.name === this.spot);
       const v = p ? (r.bad === 'low' ? p.min : p.max) : undefined;
