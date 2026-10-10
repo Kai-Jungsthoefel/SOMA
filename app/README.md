@@ -1,6 +1,6 @@
 # SOMA: Desktop-App
 
-Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. Plan: [../PLAN.md](../PLAN.md). Version **0.4.0** (Major.minor.bugfix, E68, steht in `package.json` und `../python/soma/__init__.py`). Stand: **Phase 1, Schritte 1 bis 5** (Gerüst, Git und ZIP, Oberfläche nach dem Entwurf in [../design/ui-entwurf.html](../design/ui-entwurf.html), Markierung, Editor), dazu Messen, Gruppen, Schnitt, Skills, Animation, Analyse sowie Bilder und Videos über `soma render`.
+Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. Plan: [../PLAN.md](../PLAN.md). Version **0.4.1** (Major.minor.bugfix, E68, steht in `package.json` und `../python/soma/__init__.py`). Stand: **Phase 1, Schritte 1 bis 5** (Gerüst, Git und ZIP, Oberfläche nach dem Entwurf in [../design/ui-entwurf.html](../design/ui-entwurf.html), Markierung, Editor), dazu Messen, Gruppen, Schnitt, Skills, Animation, Analyse sowie Bilder und Videos über `soma render`.
 
 ## Voraussetzungen
 

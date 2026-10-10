@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+## [0.4.1] - 2026-10-10
+
+Hilfe mit nummerierten Screenshots, die der Agent als Skill kennt, dazu Verbesserungen aus der Kritik eines Agenten: `soma render` mit freier Richtung und Ausblenden, PDFs lesen, Zeichnungen mit Textmaß.
+
 ### Neu
 
 - Hilfe: Der Knopf „Help“ in der Leiste (auch auf der Startseite, Taste F1) öffnet eine kurze Anleitung zu allen Bereichen der App, mit Screenshots, auf denen die Elemente nummeriert sind. Dieselbe Anleitung bekommt der Agent als Skill „Using the app“ (ab Werk „On demand“) samt Bildern, damit er Fragen zur Bedienung beantworten kann (E83).
@@ -107,7 +111,8 @@ Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
 - Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
 - Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.0...HEAD
+[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.1.0...v0.2.0
