@@ -1,20 +1,24 @@
-"""`soma analyze fem <study.py>`: strength with the finite element method (E58, E65).
+"""`soma analyze fem <study.py>`: strength with the finite element method (E58, E65, E84).
 
 The agent describes the load case in a Python file (analyses/<name>.py) with `Study`: which parts, of which material,
 where they are held and which loads act where. Faces are chosen with CadQuery selectors (">X") or a point nearby.
-The calculation is linear elastic:
+The material is linear elastic:
 
 - Mesh: gmsh from the BREP shapes of the build, quadratic tetrahedra (10 nodes) on the real geometry. Several parts
-  are fused into one continuous mesh (rigidly joined where they touch).
-- Stiffness in numpy (four Gauss points per element), solved with pyamg (CG with algebraic multigrid) or directly for
-  small meshes.
+  are meshed together and bonded where they touch, unless `study.contact(a, b)` makes the touching faces a contact
+  (can lift off, slides without or with friction).
+- Solved with CalculiX (ccx, see soma.ccx). Without ccx, and only without contact, with the built-in solver: stiffness
+  in numpy (four Gauss points per element), pyamg (CG with algebraic multigrid) or direct for small meshes.
 - Result as with the other analyses: .soma/results/<name>.glb with the safety factor as _VALUE, plus the von Mises
-  stress (_STRESS) and the displacement (_DISP) per vertex, and the load case as markers.
+  stress (_STRESS), the displacement (_DISP) and with contact the contact pressure (_PRESS) per vertex, and the load
+  case as markers.
 
-Report instead of trust: the calculation checks that every part is held, gives the reaction forces, calculates a second
-time with a coarser mesh and says when the peak stress depends on it (sharp inner edge, edge of a fixed support).
+Report instead of trust: the calculation checks that every part is held, gives the reaction forces, names the parts
+that touch and how they are joined, calculates a second time with a coarser mesh and says when the peak stress depends
+on it (sharp inner edge, edge of a fixed support).
 """
 import math
+import os
 import runpy
 import sys
 import tempfile
@@ -24,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import analysis, build, gltf, mesher
+from . import analysis, build, ccx, gltf, mesher
 
 
 class FemError(analysis.AnalysisError):
@@ -102,6 +106,7 @@ class Study:
         self.check_mesh = bool(check_mesh)
         self.materials = {}
         self.bcs = []
+        self.contacts = []
         self.gravity_vec = None
         self.where = _caller()
         _STUDIES.append(self)
@@ -128,6 +133,24 @@ class Study:
     def pressure(self, part, MPa, faces=None, near=None):
         """Pressure in MPa (= N/mm²) normal to the faces, positive presses into the material."""
         self.bcs.append(dict(kind="pressure", part=str(part), faces=faces, near=near, value=float(MPa), where=_caller()))
+        return self
+
+    def contact(self, part_a, part_b, friction=0.0):
+        """The faces where the two parts touch become a contact instead of bonded: they press on each other, can lift
+        off and slide. friction=0: slides freely; friction=0.2 (steel on steel, dry) to 0.5 (plastic, rubber): sticks
+        until the sideways force exceeds friction times the pressing force."""
+        a, b = str(part_a), str(part_b)
+        if a == b:
+            raise FemError(f"contact({a!r}, {b!r}): two different parts are needed")
+        try:
+            mu = float(friction)
+        except (TypeError, ValueError):
+            raise FemError(f"contact(friction={friction!r}): a number, e.g. 0.2") from None
+        if not 0 <= mu <= 2:
+            raise FemError(f"contact(friction={mu:g}): between 0 and 2 (dry steel about 0.2, plastics 0.3 to 0.5)")
+        if any({c["a"], c["b"]} == {a, b} for c in self.contacts):
+            raise FemError(f"contact({a!r}, {b!r}) is given twice")
+        self.contacts.append(dict(a=a, b=b, friction=mu, where=_caller()))
         return self
 
     def gravity(self, g=9.81, direction="-z"):
@@ -546,17 +569,25 @@ def _rigid_modes(x):
     return R / scale
 
 
-def _check_held(nodes, tets, fixed, part_names, epart):
-    """Jeder zusammenhaengende Körper muss gegen alle sechs Starrkoerperbewegungen gehalten sein."""
+def _check_held(nodes, tets, fixed, part_names, epart, links=None, normals=None):
+    """Jeder zusammenhaengende Körper muss gegen alle sechs Starrkoerperbewegungen gehalten sein.
+
+    links: Knotenpaare (m, 2), die als verbunden gelten (Kontakt mit Reibung haelt wie verklebt, solange er nicht
+    rutscht, das zeigt erst die Rechnung). normals: (Knoten, Normale) an Kontaktflaechen ohne Reibung, sie halten
+    nur senkrecht zur Flaeche."""
     from scipy.sparse import coo_matrix
     from scipy.sparse.csgraph import connected_components
     n = len(nodes)
     c4 = tets[:, :4]
     rows = np.repeat(c4[:, 0], 3)
     cols = c4[:, 1:].reshape(-1)
+    if links is not None and len(links):
+        rows = np.concatenate([rows, links[:, 0]])
+        cols = np.concatenate([cols, links[:, 1]])
     _k, lab = connected_components(coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n)), directed=False)
     used = np.zeros(n, bool)
     used[tets.reshape(-1)] = True
+    nn_nodes, nn_vec = normals if normals is not None else (np.zeros(0, int), np.zeros((0, 3)))
     problems = []
     for comp in np.unique(lab[tets[:, 0]]):
         nd = np.nonzero((lab == comp) & used)[0]
@@ -564,19 +595,115 @@ def _check_held(nodes, tets, fixed, part_names, epart):
         R = _rigid_modes(nodes[nd])
         dofs = (3 * nd[:, None] + np.arange(3)).reshape(-1)
         mask = fixed[dofs]
-        if not mask.any():
+        C = [R[mask]]
+        # Kontakt ohne Reibung: je Knoten der Flaeche eine Zeile n . (Bewegung des Knotens)
+        sel = np.isin(nn_nodes, nd)
+        if sel.any():
+            pos = np.searchsorted(nd, nn_nodes[sel])
+            Rn = R.reshape(len(nd), 3, 6)[pos]
+            C.append(np.einsum("ij,ijk->ik", nn_vec[sel], Rn))
+        C = np.concatenate(C)
+        if not len(C):
             problems.append(f"{', '.join(names)}: not held (no fix() on this body; do the parts really touch?)")
             continue
-        _u, sv, vt = np.linalg.svd(R[mask], full_matrices=True)
+        _u, sv, vt = np.linalg.svd(C, full_matrices=True)
         rank = int((sv > sv[0] * 1e-6).sum())
         if rank < 6:
             free = []
             for v in vt[rank:]:
                 free.append(MODE_NAMES[int(np.argmax(np.abs(v)))])
-            problems.append(f"{', '.join(names)}: still free ({', '.join(dict.fromkeys(free))})")
+            via = " (held only by a contact without friction, which does not hold sideways)" if sel.any() and not mask.any() else ""
+            problems.append(f"{', '.join(names)}: still free ({', '.join(dict.fromkeys(free))}){via}")
     if problems:
-        raise FemError("The supports are not enough, the parts can move as a whole: " + "; ".join(problems)
-                       + ". Fix more faces or use axes=\"xyz\".")
+        hint = (" Fix more faces, use axes=\"xyz\", give the contact friction= or leave the parts bonded."
+                if len(nn_nodes) else " Fix more faces or use axes=\"xyz\".")
+        raise FemError("The supports are not enough, the parts can move as a whole: " + "; ".join(problems) + "." + hint)
+
+
+# ---- Beruehrflaechen und Kontakt ----------------------------------------------------------------------------------
+
+def _interfaces(tets, epart):
+    """Elementflaechen, die zwei Teile gemeinsam haben (gemeinsames Netz aus fragment): {(pa, pb): (el_a, k_a, el_b, k_b)}
+    mit pa < pb."""
+    key = np.sort(tets[:, FACES].reshape(-1, 3), axis=1)
+    _u, inv, cnt = np.unique(key, axis=0, return_inverse=True, return_counts=True)
+    inv = inv.reshape(-1)
+    shared = np.nonzero(cnt[inv] == 2)[0]
+    if not len(shared):
+        return {}
+    pairs = shared[np.argsort(inv[shared], kind="stable")].reshape(-1, 2)
+    e1, e2 = pairs[:, 0] // 4, pairs[:, 1] // 4
+    p1, p2 = epart[e1], epart[e2]
+    out = {}
+    diff = p1 != p2
+    pairs, p1, p2 = pairs[diff], p1[diff], p2[diff]
+    swap = p1 > p2
+    pairs[swap] = pairs[swap][:, ::-1]
+    lo, hi = np.minimum(p1, p2), np.maximum(p1, p2)
+    for a, b in set(zip(lo.tolist(), hi.tolist())):
+        s = np.nonzero((lo == a) & (hi == b))[0]
+        fa, fb = pairs[s, 0], pairs[s, 1]
+        out[(a, b)] = (fa // 4, fa % 4, fb // 4, fb % 4)
+    return out
+
+
+def _face6(tets, el, k):
+    """Knoten einer Elementflaeche (Ecken, dann Kantenmitten), ohne Ausrichtung: (n, 6)."""
+    edge_of = {frozenset(e): 4 + i for i, e in enumerate(EDGES)}
+    out = np.zeros((len(el), 6), dtype=np.int64)
+    for f in range(4):
+        s = k == f
+        a, b, c = FACES[f]
+        out[s] = tets[el[s]][:, [a, b, c, edge_of[frozenset((a, b))], edge_of[frozenset((b, c))], edge_of[frozenset((c, a))]]]
+    return out
+
+
+def _split(nodes, tets, epart, faces, side):
+    """Trennt die Knoten einer Beruehrflaeche: Die Elemente von Teil `side` bekommen eigene Kopien aller Knoten auf den
+    Flaechen `faces` (el, k dieses Teils). Liefert (nodes, tets, remap fuer die Knoten des Teils, Paare alt/neu)."""
+    dup = np.unique(_face6(tets, faces[0], faces[1]).reshape(-1))
+    new = np.arange(len(nodes), len(nodes) + len(dup))
+    remap = np.arange(len(nodes) + len(dup))
+    remap[dup] = new
+    tets = tets.copy()
+    own = epart == side
+    tets[own] = remap[tets[own]]
+    # Ein drittes Teil, das an einer Kante der Beruehrflaeche mit `side` verklebt ist, haengt danach dort am anderen
+    # Teil. Selten (drei Teile an einer Kante) und an einer Linie, das aendert das Ergebnis kaum
+    return np.vstack([nodes, nodes[dup]]), tets, remap, np.column_stack([dup, new])
+
+
+def _reactions(nodes, tets, D, u, f, fixed):
+    """Lagerkraefte K u - f, nur aus den Elementen an gehaltenen Knoten (an freien Knoten ist es 0). Die Knotenkraefte, die
+    CalculiX in die frd schreibt, taugen dafuer nicht: Am Winkel aus dem Skill fehlten 5 % (45.4 statt 49 N), obwohl seine
+    Verschiebungen mit K u = f bis auf 1e-6 stimmten."""
+    held = np.zeros(len(nodes), bool)
+    held[np.nonzero(fixed)[0] // 3] = True
+    sel = np.nonzero(held[tets].any(axis=1))[0]
+    r = np.zeros(3 * len(nodes))
+    if len(sel):
+        t = tets[sel]
+        x = nodes[t]
+        ue = u.reshape(-1, 3)[t].reshape(len(t), 30)
+        fe = np.zeros((len(t), 30))
+        for xi, w in GAUSS:
+            g, det = _gradients(x, xi)
+            B = _bmat(g)
+            sig = np.einsum("eij,ejk,ek->ei", D[sel], B, ue)
+            fe += np.einsum("eki,ek->ei", B, sig) * (w * det)[:, None]
+        np.add.at(r, (3 * t[:, :, None] + np.arange(3)).reshape(-1), fe.reshape(-1))
+    return np.where(fixed, r - f, 0.0)
+
+
+def _check_jacobians(nodes, tets, chunk=20000):
+    """Zahl verzerrter Elemente (det J <= 0 an einem Gausspunkt), wie in _assemble, ohne die Matrix zu bauen."""
+    bad = 0
+    for s in range(0, len(tets), chunk):
+        x = nodes[tets[s:s + chunk]]
+        for xi, _w in GAUSS:
+            dn = _dshape(xi)
+            bad += int((np.linalg.det(np.einsum("eni,nj->eij", x, dn)) <= 0).sum())
+    return bad
 
 
 def _solve(K, f, fixed, nodes):
@@ -636,14 +763,56 @@ def _gravity_load(nodes, tets, dens_e, g):
 def _analyse(parts, study, mats, h, progress=None):
     """Eine Rechnung mit Netzgroesse h. Liefert alles, was fuer Ergebnis und Pruefungen nötig ist."""
     names = [p["name"] for p in parts]
+    index = {n: i for i, n in enumerate(names)}
     nodes, tets, epart, bc_faces = _mesh(parts, study.bcs, h, progress)
     _check_edges(nodes, tets)
+    diag = float(np.linalg.norm(nodes.max(axis=0) - nodes.min(axis=0)))
+    # Beruehrflaechen fuer den Bericht, vor dem Trennen
+    inter = _interfaces(tets, epart)
+    touching = {key: _faces_area(nodes, _tri6(nodes, tets, v[0], v[1])) for key, v in inter.items()}
+    # Kontakt: Knoten der Beruehrflaeche trennen. Das weichere Teil ist die Slave-Seite (bei gleichem E das zweite)
+    contacts, splits, links = [], [], []
+    for c in study.contacts:
+        a, b = index[c["a"]], index[c["b"]]
+        key = (min(a, b), max(a, b))
+        if key not in inter:
+            raise FemError(f"contact({c['a']!r}, {c['b']!r}): the parts do not touch (no common faces in the mesh). A contact "
+                           "needs faces that lie on each other; a gap or a part that only touches along a line or a point "
+                           "does not count. Model the parts touching, or leave out contact().")
+        ea, ka, eb, kb = inter[key]
+        lo, hi = key
+        if mats[lo]["E"] < mats[hi]["E"]:
+            slave, sf, master, mf = lo, (ea, ka), hi, (eb, kb)
+        else:
+            slave, sf, master, mf = hi, (eb, kb), lo, (ea, ka)
+        nodes, tets, remap, pairs = _split(nodes, tets, epart, sf, slave)
+        splits.append((slave, remap))
+        if c["friction"] > 0:
+            links.append(pairs)
+        e_min = min(mats[lo]["E"], mats[hi]["E"])
+        # Kontaktgesetz (soma.ccx.write_input): linear mit dem Zehnfachen des E-Moduls (Empfehlung von CalculiX: 5 bis 50),
+        # Rueckfall exponentiell mit Spalt c0 und Druck p0 bei Spalt 0 (beides klein gegen Netz und Werkstoff)
+        contacts.append(dict(spec=c, slave=slave, master=master, sf=sf, mf=mf, key=key, stiffness=10.0 * e_min, stick=e_min,
+                             c0=min(0.05, max(0.002, 1e-4 * diag)), p0=max(0.1, e_min / 70000)))
+    # Flaechen der Randbedingungen in der Nummerierung nach dem Trennen
+    for bc, bf in zip(study.bcs, bc_faces):
+        for side, remap in splits:
+            if bc["part_index"] == side and len(bf["tris"]):
+                bf["tris"] = np.sort(remap[bf["tris"]], axis=1)
     E = np.array([mats[p]["E"] for p in epart])
     nu = np.array([mats[p]["nu"] for p in epart])
     D = _dmat(E, nu)
     if progress:
         progress.total += len(tets)  # Fortschritt nach Elementen, sobald ihre Zahl bekannt ist
-    K, bad = _assemble(nodes, tets, D, progress)
+    use_ccx = os.environ.get("SOMA_FEM_SOLVER", "").lower() != "builtin" and ccx.find() is not None
+    if contacts and not use_ccx:
+        raise FemError("contact() needs CalculiX (ccx), which was not found. It comes with SOMA (in the folder ccx next to "
+                       "the Python environment); without it, leave out contact() so the parts are bonded.")
+    K = None
+    if use_ccx:
+        bad = _check_jacobians(nodes, tets)
+    else:
+        K, bad = _assemble(nodes, tets, D, progress)
     if bad:
         raise FemError(f"{bad} distorted elements in the mesh (very small or sharp spots). Choose a finer mesh: Study(mesh=...)")
     el, k = _boundary(tets)
@@ -690,17 +859,167 @@ def _analyse(parts, study, mats, h, progress=None):
         fg = _gravity_load(nodes, tets, dens, study.gravity_vec)
         f += fg
         applied += fg.reshape(-1, 3).sum(axis=0)
-    _check_held(nodes, tets, fixed, names, epart)
-    u, method = _solve(K, f, fixed, nodes)
-    r = K @ u - f
+    # Kontaktflaechen als Dreiecke mit 6 Knoten (nach dem Trennen), ohne Reibung halten sie nur senkrecht
+    nrm_nodes, nrm_vec = [], []
+    for c in contacts:
+        c["s6"] = _tri6(nodes, tets, *c["sf"])
+        c["m6"] = _tri6(nodes, tets, *c["mf"])
+        if c["spec"]["friction"] == 0:
+            for t6 in (c["s6"], c["m6"]):
+                p = nodes[t6[:, :3]]
+                nv = np.cross(p[:, 1] - p[:, 0], p[:, 2] - p[:, 0])
+                nv /= np.maximum(np.linalg.norm(nv, axis=1, keepdims=True), 1e-30)
+                nrm_nodes.append(t6[:, :3].reshape(-1))
+                nrm_vec.append(np.repeat(nv, 3, axis=0))
+    _check_held(nodes, tets, fixed, names, epart, links=np.concatenate(links) if links else None,
+                normals=(np.concatenate(nrm_nodes), np.concatenate(nrm_vec)) if nrm_nodes else None)
+    notes = []
+    cvals = None
+    u = None
+    if use_ccx:
+        done = [0]
+
+        def step(frac):
+            if progress:
+                n = int(frac * len(tets)) - done[0]
+                if n > 0:
+                    progress.step(n)
+                    done[0] += n
+        spec = [dict(slave=list(zip(*c["sf"])), master=list(zip(*c["mf"])), friction=c["spec"]["friction"],
+                     stiffness=c["stiffness"], stick=c["stick"], c0=c["c0"], p0=c["p0"]) for c in contacts]
+        try:
+            try:
+                res = ccx.run(nodes, tets, epart, mats, f, fixed, spec, size=diag, progress=step)
+            except ccx.CcxError as e:
+                if e.kind != "chatter":
+                    raise
+                # Pendelt der Kontakt, mit dem weichen Gesetz noch einmal (gemeldet, nicht still)
+                res = ccx.run(nodes, tets, epart, mats, f, fixed, spec, size=diag, progress=step, law="exponential")
+                notes.append(f"The contact did not settle with the stiff contact law and was calculated with a softer one "
+                             f"(pressure starts {contacts[0]['c0']:.2g} mm before touching). Pressure peaks at edges are "
+                             "smoothed, the parts sink into each other by about that much.")
+            u, cvals = res["u"].reshape(-1), res["contact"]
+            r = _reactions(nodes, tets, D, u, f, fixed)
+            method = f"CalculiX {res['version'] or ''}".strip() + f", {res['threads']} threads"
+            if contacts:
+                method += f", {res['increments']} load step{'s' if res['increments'] != 1 else ''}"
+        except ccx.CcxError as e:
+            if contacts:
+                raise FemError(_contact_failure(e, study.contacts)) from None
+            notes.append(f"CalculiX failed ({e}). Calculated with the built-in solver instead.")
+            K, _bad = _assemble(nodes, tets, D, None)
+        if progress and done[0] < len(tets):
+            progress.step(len(tets) - done[0])
+    elif os.environ.get("SOMA_FEM_SOLVER", "").lower() != "builtin":
+        notes.append("CalculiX (ccx) was not found, calculated with the built-in solver (no contact possible).")
+    if u is None:
+        u, method = _solve(K, f, fixed, nodes)
+        r = K @ u - f
     for b in bcs_out:
         if b["kind"] == "fix":
             nd = np.unique(b["tri"].reshape(-1))
             b["reaction"] = r.reshape(-1, 3)[nd].sum(axis=0) * np.array([a in b["axes"] for a in "xyz"])
     vm = _stresses(nodes, tets, epart, D, u, len(parts))
+    press, contacts_out = (_contact_results(nodes, u.reshape(-1, 3), contacts, cvals, f, np.where(fixed, r, 0.0), tets, epart) if contacts
+                           else (None, []))
     return dict(nodes=nodes, tets=tets, epart=epart, tri6=tri6, el=el, u=u.reshape(-1, 3), vm=vm, bcs=bcs_out,
                 applied=applied, reaction=np.where(fixed, r, 0.0).reshape(-1, 3).sum(axis=0), method=method,
-                dofs=int((~fixed).sum()))
+                dofs=int((~fixed).sum()), touching=touching, contacts=contacts_out, press=press, notes=notes)
+
+
+def _contact_failure(e, specs):
+    pairs = ", ".join(f"{c['a']} – {c['b']}" + (f" (friction {c['friction']:g})" if c["friction"] else " (no friction)") for c in specs)
+    if e.kind == "diverged":
+        return (f"The calculation with contact does not hold together: a part moves without limit. Contact: {pairs}. "
+                "Usually a part held only by a contact slides (friction too low for the sideways force, or no friction) "
+                "or lifts off (the load pulls it away). Add friction, a fix() on that part, or leave the parts bonded.")
+    if e.kind == "increments":
+        return (f"The calculation with contact does not converge ({e}). Contact: {pairs}. Check that the parts are held, "
+                "try friction=, a coarser mesh (Study(mesh=...)), or leave the parts bonded.")
+    return f"CalculiX failed with contact ({pairs}): {e}"
+
+
+def _face_integrals(nodes, tri6, vals):
+    """Je Dreieck mit 6 Knoten die Flaeche und das Integral eines Knotenwerts (vals: (n, 6)), mit den Formfunktionen."""
+    x = nodes[tri6]
+    area = np.zeros(len(tri6))
+    integral = np.zeros(len(tri6))
+    for (r, s), w in TRI_GAUSS:
+        n, d = _tri_shape(r, s)
+        tr = np.einsum("eni,nj->eji", x, d)
+        ja = np.linalg.norm(np.cross(tr[:, 0], tr[:, 1]), axis=1)
+        area += w * ja
+        integral += w * ja * (vals @ n)
+    return area, integral
+
+
+def _contact_results(nodes, u, contacts, cvals, f, r, tets, epart):
+    """Je Kontaktpaar Kennzahlen, dazu die Pressung je Knoten auf beiden Seiten (fuer das Bild).
+
+    Pressung und Schub kommen von CalculiX (an der Slave-Seite). Spalt und Gleitweg rechnet soma selbst aus den
+    Verschiebungen: Gegenueberliegende Knoten liegen am Anfang an derselben Stelle (das Netz ist dort deckungsgleich).
+    CalculiX gibt die Oeffnung nur nahe der Flaeche aus, bei 16 mm Spalt stand dort 0.
+
+    Getragene Kraft: Hat das Slave-Teil nur diesen Kontakt, ist sie genau das Negative aus Lasten und Lagerkraeften auf
+    diesem Teil (Gleichgewicht). Die Pressungen an den Knoten haben an Kanten Spitzen, ihr Integral lag 6 % daneben
+    (1058 statt 1000 N). Sonst bleibt nur dieses Integral."""
+    from scipy.spatial import cKDTree
+    press = np.zeros(len(nodes))
+    p_all, tau_all = np.maximum(cvals[:, 3], 0.0), np.hypot(cvals[:, 4], cvals[:, 5])
+    out = []
+    for c in contacts:
+        s6, m6 = c["s6"], c["m6"]
+        nd = np.unique(s6.reshape(-1))
+        mn = np.unique(m6.reshape(-1))
+        _d, near = cKDTree(nodes[mn]).query(nodes[nd])
+        partner = mn[near]
+        # Normale je Knoten der Slave-Seite (zur Gegenseite hin), gemittelt ueber die anliegenden Flaechen
+        pts = nodes[s6[:, :3]]
+        fn = np.cross(pts[:, 1] - pts[:, 0], pts[:, 2] - pts[:, 0])
+        acc = np.zeros((len(nodes), 3))
+        np.add.at(acc, s6.reshape(-1), np.repeat(fn, 6, axis=0))
+        nrm = acc[nd] / np.maximum(np.linalg.norm(acc[nd], axis=1, keepdims=True), 1e-30)
+        rel = u[partner] - u[nd]
+        gap_n = np.einsum("ij,ij->i", rel, nrm)  # positiv: die Gegenseite entfernt sich
+        slip_n = np.linalg.norm(rel - gap_n[:, None] * nrm, axis=1)
+        gap = np.zeros(len(nodes))
+        gap[nd] = gap_n
+        p = np.zeros(len(nodes))
+        p[nd] = p_all[nd]
+        press[nd] = p[nd]
+        _d, back = cKDTree(nodes[nd]).query(nodes[mn])
+        press[mn] = np.maximum(press[mn], p[nd][back])
+        area, total = _face_integrals(nodes, s6, p[s6])
+        a_all = float(area.sum())
+        force, shear = float(total.sum()), None
+        if sum(1 for o in contacts if c["slave"] in (o["slave"], o["master"])) == 1:
+            own = np.unique(tets[epart == c["slave"]].reshape(-1))
+            F = -(f.reshape(-1, 3)[own].sum(axis=0) + r.reshape(-1, 3)[own].sum(axis=0))  # Kraft der Gegenseite auf das Teil
+            n_avg = (fn / 2).sum(axis=0)
+            n_avg /= max(np.linalg.norm(n_avg), 1e-30)
+            fn_n = float(-F @ n_avg)
+            # Nur fuer ebene Beruehrflaechen ist die Richtung eindeutig: sonst (Welle in Bohrung) bleibt das Integral
+            if np.linalg.norm(fn / 2, axis=1).sum() * 0.98 <= np.linalg.norm((fn / 2).sum(axis=0)):
+                force, shear = fn_n, float(np.linalg.norm(F + fn_n * n_avg))
+        # Offen: deutlich getrennt (mehr als die Weichheit des Kontaktgesetzes) an allen Ecken der Flaeche
+        open_f = (gap[s6[:, :3]] > 2 * c["c0"]).all(axis=1)
+        w = nd[int(np.argmax(p[nd]))]
+        mu = c["spec"]["friction"]
+        entry = dict(a=c["spec"]["a"], b=c["spec"]["b"], friction=mu, area=round(a_all, 3), force=round(force, 3),
+                     maxPressure=dict(value=round(float(p[w]), 4), at=[round(float(x), 3) for x in nodes[w]]),
+                     openArea=round(float(area[open_f].sum()), 3), maxGap=round(float(max(gap_n.max(initial=0.0), 0.0)), 5),
+                     maxSlip=round(float(slip_n.max(initial=0.0)), 5))
+        if mu > 0:
+            # Gleiten, wo die Schubspannung die Haftgrenze erreicht (die Haftsteigung laesst auch beim Haften kleine Wege zu)
+            tau = np.zeros(len(nodes))
+            tau[nd] = tau_all[nd]
+            pc = p[s6]
+            sl = (pc > 1e-3) & (tau[s6] >= 0.95 * mu * pc)
+            entry["slideArea"] = round(float(area[sl.mean(axis=1) >= 0.5].sum()), 3)
+        if shear is not None:
+            entry["shear"] = round(shear, 3)
+        out.append(entry)
+    return press, out
 
 
 # ---- Ablauf -------------------------------------------------------------------------------------------------------
@@ -725,7 +1044,8 @@ def run(root, study_rel, name=None, threshold=None):
     by_name = {}
     for p in all_parts:
         by_name.setdefault(p["name"], p)
-    wanted = list(dict.fromkeys([b["part"] for b in study.bcs] + [str(x) for x in study.extra_parts] + list(study.materials)))
+    wanted = list(dict.fromkeys([b["part"] for b in study.bcs] + [c[x] for c in study.contacts for x in ("a", "b")]
+                                + [str(x) for x in study.extra_parts] + list(study.materials)))
     missing = [w for w in wanted if w not in by_name]
     if missing:
         names = ", ".join(repr(p["name"]) for p in all_parts[:30])
@@ -765,7 +1085,8 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
     fixed_nodes = np.unique(np.concatenate([b["tri"].reshape(-1) for b in fine["bcs"] if b["kind"] == "fix"]))
     load_nodes = [np.unique(b["tri"].reshape(-1)) for b in fine["bcs"] if b["kind"] != "fix"]
     load_nodes = np.unique(np.concatenate(load_nodes)) if load_nodes else np.zeros(0, int)
-    notes, part_fem = [], []
+    notes, part_fem = list(fine.get("notes") or []), []
+    press = fine.get("press")
     for pi, p in enumerate(parts):
         t6 = fine["tri6"][epart_b == pi]
         if not len(t6):
@@ -826,6 +1147,8 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
             POSITION=g.accessor(nodes[flat], "VEC3", gltf.ARRAY_BUFFER, True), NORMAL=g.accessor(np.repeat(inrm, 3, axis=0), "VEC3", gltf.ARRAY_BUFFER),
             _VALUE=g.accessor(sf[flat], "SCALAR", gltf.ARRAY_BUFFER), _STRESS=g.accessor(node_vm[flat], "SCALAR", gltf.ARRAY_BUFFER),
             _DISP=g.accessor(u[flat], "VEC3", gltf.ARRAY_BUFFER)))]
+        if press is not None:
+            prims[0]["attributes"]["_PRESS"] = g.accessor(press[flat], "SCALAR", gltf.ARRAY_BUFFER)
         m = mesher.mesh_shape(p["shape"], tol, 0.3)
         if m["lines"].size:
             lines = np.asarray(m["lines"], dtype=float).reshape(-1, 3)
@@ -860,6 +1183,23 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
             if b["kind"] == "pressure":
                 entry["value"] = b["value"]
         bcs_meta.append(entry)
+    # Beruehrende Teile: verklebt, sofern die Studie keinen Kontakt nennt
+    joined = {frozenset((c["a"], c["b"])): c for c in study.contacts}
+    touching = []
+    for (a, b), area in sorted(fine["touching"].items()):
+        c = joined.get(frozenset((parts[a]["name"], parts[b]["name"])))
+        touching.append(dict(a=parts[a]["name"], b=parts[b]["name"], area=round(float(area), 2),
+                             joint="contact" if c else "bonded", friction=c["friction"] if c else None))
+    if any(t["joint"] == "bonded" for t in touching):
+        notes.append("Touching parts are bonded (glued) where they touch. If a part only rests on another or can slide, "
+                     "add study.contact(\"A\", \"B\") (with friction=0.2 or so when clamped or screwed together).")
+    for c in fine["contacts"]:
+        if c["openArea"] > 0.5 * c["area"]:
+            notes.append(f"Contact {c['a']} – {c['b']}: open on {100 * c['openArea'] / c['area']:.0f} % of the touching faces "
+                         "(lifts off there). Check that the load really presses the parts together.")
+        if c.get("slideArea", 0) > 0.5 * c["area"]:
+            notes.append(f"Contact {c['a']} – {c['b']}: slides on {100 * c['slideArea'] / c['area']:.0f} % of the touching "
+                         f"faces (friction {c['friction']:g} at its limit). It may start to slip in reality.")
     max_disp = float(disp.max())
     if max_disp > 0.05 * diag:  # ab etwa 5 % der Modellgröße aendert die Verformung die Lastwege merklich
         notes.append(f"The deformation is large ({max_disp:.2f} mm, {100 * max_disp / diag:.1f} % of the model size). The linear "
@@ -867,11 +1207,13 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
     for st in stats:
         ch = st.get("coarse", {}).get("change")
         where = " and ".join(st["peakAt"])
-        if ch is not None and abs(ch) > 0.15:
+        # Kaum belastete Teile (etwa die Gegenseite eines Kontakts, der abhebt) nicht melden: Dort ist jede Spitze klein
+        loaded = st["stress"]["value"] > 0.02 * st["material"]["strength"]
+        if ch is not None and abs(ch) > 0.15 and loaded:
             notes.append(f"{st['name']}: The peak stress depends on the mesh ({st['coarse']['stress']:.1f} MPa coarse, {st['stress']['value']:.1f} MPa fine)"
                          + (f", it is {where}" if where else ", probably at a sharp inner edge")
                          + ". The value is not reliable there: add a radius or judge the spot from a little distance.")
-        elif where:
+        elif where and loaded:
             notes.append(f"{st['name']}: The peak stress is {where}. A rigid fixed support or a load on a small face "
                          "often gives too high a peak there: judge values a little away from it.")
         if st["material"]["note"]:
@@ -891,6 +1233,7 @@ def _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safe
                 fem=dict(study=rel, bcs=bcs_meta, applied=[round(float(x), 3) + 0.0 for x in applied],
                          reaction=[round(float(x), 3) + 0.0 for x in reaction], balance=round(balance, 6),
                          gravity=study.gravity_vec, maxDisp=round(max_disp, 4), diag=round(diag, 3),
+                         touching=touching, contacts=fine["contacts"],
                          # auto: Die Studie gibt keine Netzgroesse vor, sie folgt der Modellgroesse (der Bericht sagt das dazu)
                          mesh=dict(size=h, auto=not study.mesh, nodes=int(len(nodes)), elements=int(len(fine["tets"])), dofs=fine["dofs"],
                                    solver=fine["method"]),
@@ -913,7 +1256,8 @@ def _v(v, unit="N"):
 def summary_text(meta):
     fe = meta["fem"]
     safety = meta["threshold"]
-    lines = [f"FEM \"{meta['title']}\" ({fe['study']}, linear elastic, safety factor {safety:g} required, critical below):"]
+    kind = "linear elastic, with contact" if fe.get("contacts") else "linear elastic"
+    lines = [f"FEM \"{meta['title']}\" ({fe['study']}, {kind}, safety factor {safety:g} required, critical below):"]
     for b in fe["bcs"]:
         if b["kind"] == "fix":
             ax = "" if b["axes"] == "xyz" else f" only in {', '.join(b['axes'].upper())}"
@@ -924,6 +1268,21 @@ def summary_text(meta):
             lines.append(f"  pressure: {b['label']} ({b['area']:.1f} mm²), {b['value']:g} MPa, in total {_v(b['total'])}")
     if fe.get("gravity"):
         lines.append(f"  self-weight: {_v(fe['gravity'], 'm/s²')}")
+    contacts = {frozenset((c["a"], c["b"])): c for c in fe.get("contacts") or []}
+    for t in fe.get("touching") or []:
+        c = contacts.get(frozenset((t["a"], t["b"])))
+        if c is None:
+            lines.append(f"  touching: {t['a']} – {t['b']} ({t['area']:.1f} mm²), bonded")
+            continue
+        fr = f"friction {c['friction']:g}" if c["friction"] else "no friction"
+        mp = c["maxPressure"]
+        state = [f"open on {100 * c['openArea'] / max(c['area'], 1e-12):.0f} % (gap up to {c['maxGap']:.3f} mm)" if c["openArea"] > 0 else "closed everywhere"]
+        if c.get("slideArea"):
+            state.append(f"slides on {100 * c['slideArea'] / max(c['area'], 1e-12):.0f} %")
+        state.append(f"slip up to {c['maxSlip']:.3f} mm")
+        side = f" and {c['shear']:.1f} N sideways" if c.get("shear") is not None and c["friction"] else ""
+        lines.append(f"  contact: {c['a']} – {c['b']} ({c['area']:.1f} mm², {fr}), carries {c['force']:.1f} N{side}, highest pressure "
+                     f"{mp['value']:.2f} MPa at {analysis._where(mp['at'])}, {', '.join(state)}")
     for st in meta["parts"]:
         mat = st["material"]
         s, d, w = st["stress"], st["displacement"], st["worst"]
