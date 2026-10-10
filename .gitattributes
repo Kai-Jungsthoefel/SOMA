@@ -1,0 +1,3 @@
+# Textdateien immer mit LF auschecken, auch unter Windows mit core.autocrlf=true. Vorlage und Skills werden
+# so, wie sie hier liegen, in Nutzerprojekte kopiert, und die Tests vergleichen Texte mit \n.
+* text=auto eol=lf
