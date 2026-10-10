@@ -31,6 +31,7 @@ export const SHOTS = [
       { label: 'Open', sel: '#start-open', at: 'tr', box: true },
       { label: 'Recent', sel: '#start-recent', at: 'tr', box: true },
       { label: 'Agents on this computer', sel: '.start-side .panel-card', at: 'tr', box: true },
+      { label: 'Help', sel: '#btn-start-help', at: 'b' },
       { label: 'Settings', sel: '#btn-start-settings', at: 'b' },
       { label: 'Back to the model', sel: '#btn-start-close', at: 'b' },
     ],

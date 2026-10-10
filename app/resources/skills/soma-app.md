@@ -48,8 +48,9 @@ The logo at the top left opens the start page.
 2. **Open**: opens a .soma or ZIP file (Ctrl O).
 3. **Recent**: models you worked on. The bin on a card removes the model from this computer, a saved .soma file stays.
 4. **Agents on this computer**: the agents SOMA found. You install them yourself, SOMA does not bring one.
-5. **Settings**: viewer, shortcuts, skills, storage and version.
-6. **Back to the model**: returns to the open model.
+5. **Help**: this guide (F1).
+6. **Settings**: viewer, shortcuts, skills, storage and version.
+7. **Back to the model**: returns to the open model.
 
 ## The agent
 
