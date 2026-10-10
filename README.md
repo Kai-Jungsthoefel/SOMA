@@ -3,7 +3,7 @@
 **Solid Object Modeling with Agents.** A desktop app for designing parametric 3D models together with a coding agent.
 
 
-![SOMA with a four-axis hot-wire foam cutter (294 parts) and the agent terminal on the right](docs/images/hero.png)
+![SOMA with a small robot rover (79 parts), its structure tree and the agent terminal on the right](docs/images/hero.png)
 
 You tell the agent what you need. It writes the model as Python code with [CadQuery](https://github.com/CadQuery/cadquery), SOMA builds it and shows the result. You look at it, measure it, point at what is wrong, and the agent changes the code.
 
@@ -68,9 +68,9 @@ Click a part and SOMA shows where it comes from in the code.
 
 Exploded view. SOMA works out in which direction each part can be removed.
 
-![Exploded view of the hot-wire cutter](docs/images/explode.png)
+![Exploded view of the rover](docs/images/explode.png)
 
-Overhang analysis of a 3D printed part. The agent ran `soma analyze` in the terminal, the critical underside is marked red.
+Overhang analysis of a 3D printed part, the lid of a Raspberry Pi 5 case seen from below. The agent ran `soma analyze` in the terminal, the critical underside is marked red.
 
 ![Overhang analysis of a printed part](docs/images/analysis.png)
 
