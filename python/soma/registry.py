@@ -112,7 +112,7 @@ def add_part(name, obj, role=None, color=None, group=None):
         return
     if any(p["name"] == name for p in REGISTRY):
         raise ValueError(f"Part name {name!r} is already taken (names must be unique)")
-    _register(name, to_shape(obj), role, color, groups, where, axis=_axis(obj))
+    _register(name, to_shape(obj), role, color, groups, where, axis=_axis(obj), fastener=obj if standard_part else None)
 
 
 def _axis(obj):
@@ -130,7 +130,7 @@ def _axis(obj):
     return tuple(round(-x / n, 6) + 0.0 for x in d)  # + 0.0: kein "-0.0" in den Metadaten
 
 
-def _register(name, shape, role, color, groups, where, unique_step=False, axis=None):
+def _register(name, shape, role, color, groups, where, unique_step=False, axis=None, fastener=None):
     step_name = ascii_name(name)
     if any(p["step_name"] == step_name for p in REGISTRY):
         if not unique_step:
@@ -143,6 +143,8 @@ def _register(name, shape, role, color, groups, where, unique_step=False, axis=N
     REGISTRY.append(dict(
         name=name, step_name=step_name, role=role, shape=shape, group=tuple(groups),
         color=(*rgb, REFERENCE_ALPHA if role == "reference" else 1.0), axis=axis, **where,
+        # Das Normteil selbst (Screw, Nut ...), nur im Speicher: soma.fem liest daraus Groesse, Kopf und Lage (bolt())
+        fastener=fastener,
     ))
 
 
