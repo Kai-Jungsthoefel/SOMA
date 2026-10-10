@@ -3,7 +3,7 @@ import type { WebContents } from 'electron';
 import * as pty from 'node-pty';
 import { bridgeEnv } from './bridge';
 import { envPaths } from './packages';
-import { gitCmdDir, pythonBinDir } from './paths';
+import { gitCmdDir, pythonBinDirs } from './paths';
 
 /**
  * Umgebung fuer Terminals: vorn im PATH die Projektumgebung (E67, `python` sieht Basis und Zusatzpakete), dahinter die
@@ -17,8 +17,7 @@ export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
   const front: string[] = [pe.scripts];
   env.VIRTUAL_ENV = pe.env;
   env.PIP_PYTHON = pe.python;
-  const bin = pythonBinDir();
-  if (bin) front.push(bin);
+  front.push(...pythonBinDirs());
   const git = gitCmdDir(); // das mitgelieferte Git hat Vorrang vor einem Git des Systems
   if (git) front.push(git);
   env[key] = [...front, env[key] ?? ''].join(path.delimiter);

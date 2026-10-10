@@ -11,7 +11,7 @@ import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntr
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
 import { readHelp, readHelpImage } from './help';
-import { appIcon, editBackupsDir, helpDir, libraryBackupsDir, skillDirs, skillsDir, thumbnailsDir, userSkillsDir } from './paths';
+import { adoptLoginShellPath, appIcon, editBackupsDir, helpDir, libraryBackupsDir, skillDirs, skillsDir, thumbnailsDir, userSkillsDir } from './paths';
 import { readSettings, writeSettings } from './settings';
 import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, renameOldSkillFiles, saveLibrarySkill } from './skilllibrary';
@@ -357,6 +357,7 @@ function createWindow(): void {
 
 // Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
 app.whenReady().then(async () => {
+  adoptLoginShellPath(); // macOS und Linux: PATH wie im Terminal, sonst fehlen die Agenten
   // Python schon jetzt vorwärmen: Bis das Fenster steht und das letzte Modell offen ist, ist cadquery geladen (build.ts)
   warmUp();
   sweepDiscarded(); // Reste verworfener Modelle (E69) vom letzten Mal
