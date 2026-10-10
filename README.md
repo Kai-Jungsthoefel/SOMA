@@ -123,7 +123,6 @@ More in [app/README.md](app/README.md).
 | `app/` | Electron app (TypeScript): terminal, viewer, project format, tests |
 | `python/soma/` | Helper library and command line tool used by the agent |
 | `design/` | UI drafts |
-| `PLAN.md`, `DECISIONS.md` | Plan and decision log (German) |
 
 ## License
 

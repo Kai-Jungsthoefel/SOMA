@@ -10,13 +10,16 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 - FEM mit Schrauben: `study.bolt("Schraube 1")` spannt eine Schraube aus `soma.fasteners` vor, dann wirken die Lasten. Das Ergebnis nennt je Schraube Vorspannung, Zug und Querkraft am Ende und die Auslastung der Streckgrenze, der Kontakt der Fuge zeigt, ob sie klafft oder rutscht. Ohne Angabe 70 % der Streckgrenze, bei Kunststoffteilen begrenzt auf das, was die Fläche unter dem Kopf trägt. Mutter, Scheibe und verschraubte Teile rechnen von selbst mit (E84).
 
+### Geändert
+
+- Die mitgelieferten Skills haben englische Dateinamen, etwa `3d-printing.md` statt `3d-druck.md`. Ältere Modelle behalten ihre Kopien unter dem alten Namen, die App erkennt sie weiter als denselben Skill. Eigene Fassungen mitgelieferter Skills in den Einstellungen ziehen beim Start mit um (E87).
+
 ### Behoben
 
 - Ein Klick auf Analysis oder Animation in der Leiste links zeigt die Liste, statt gleich ein Ergebnis zu öffnen (E86).
 - FEM: Die Kraft, die ein Kontakt trägt, stimmt jetzt auch, wenn das Teil zusätzlich an etwas hängt oder der Kontakt auf die Kante eines Lagers drückt. Vorher konnten Kontaktkraft und Gleichgewicht der Lagerkräfte dort deutlich danebenliegen.
 - FEM: Netze mit einzelnen umgeklappten Elementen in engen Spalten (etwa zwischen Scheibe und Mutter) werden geglättet, statt mit „distorted elements“ abzubrechen.
 - FEM: Kein „-0.0“ mehr in Kräften im Ergebnis.
-
 - FEM mit Kontakt: Eine Platte, die nur über den Kontakt gehalten wird (etwa ein Halter mit Arm), brach mit „a part moves without limit“ oder „The contact does not settle“ ab. SOMA hielt das Suchen der Berührfläche zu früh für Pendeln, und das weiche Ersatzgesetz drückte die Teile auseinander. Jetzt rechnet der Kontakt weicher (Steifigkeit gleich dem E-Modul statt dem Zehnfachen, Verschiebungen 0.4 % anders), darf länger suchen, und das Ersatzgesetz richtet sich nach der Last (E84).
 - Skill „Strength with FEM“: Reibung zwischen verschraubten Teilen hält nur mit `bolt()`, der Skill sagt das jetzt.
 

@@ -1,5 +1,5 @@
 // Test für Git-Verlauf, Speichern als .soma (innen eine ZIP), Öffnen von .soma und .zip, Export als ZIP (E79), Vorschau und
-// Wiederherstellen, dazu die Störfälle aus PLAN.md Abschnitt 9.
+// Wiederherstellen, dazu Störfälle im Arbeitsordner (Robustheit).
 // Aufruf: npm run test:versions (baut vorher).
 import { exec } from 'dugite';
 import fs from 'node:fs';

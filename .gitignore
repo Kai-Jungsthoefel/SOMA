@@ -21,5 +21,10 @@ app/test/shots/
 
 examples/
 
+# Arbeitsdokumente der Entwicklung, nur lokal (E88)
+PLAN.md
+DECISIONS.md
+IDEA.md
+
 # Trailer (Remotion-Projekt, Aufnahmen und Renderings)
 video/

@@ -6,6 +6,7 @@ Anweisungen für Claude Code bei der Entwicklung von SOMA (*Solid Object Modelin
 
 Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten seiner Wahl (Claude Code, OpenCode …) 3D-Modelle in CadQuery entwirft. Wir bauen **keinen eigenen Harness**. Die App liefert Terminal, 3D-Viewer, Projektformat (`.soma`, eine ZIP mit Git, E79) und die Hilfsbibliothek `soma`.
 
+- `PLAN.md`, `DECISIONS.md` und `IDEA.md` liegen nur lokal, nicht im Repo (E88, in `.gitignore`, im Git-Verlauf bis `v0.5.0`). Fehlen sie, gibt es keinen Plan und kein Log nachzuziehen.
 - `PLAN.md` ist der gültige Plan mit Phasenstand (Abschnitt 10) und offenen Punkten (Abschnitt 11). Er geht vor `IDEA.md`.
 - `DECISIONS.md` ist das Entscheidungslog. `(E12)` in Plan und Code verweist darauf. Neue Entscheidungen des Nutzers kommen als neue Zeile ans Ende, alte Zeilen werden nicht umgeschrieben.
 - `IDEA.md` ist die Ursprungsidee und bleibt unverändert.
@@ -77,6 +78,7 @@ node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run bu
 - CadQuery-Versionen fest pinnen: cadquery 2.8.0 braucht `cadquery-ocp<8` und `multimethod<2`, ungepinnt kommt Inkompatibles.
 - `dugite` bleibt im esbuild-Bundle extern (sein Git-Pfad ist relativ zum Paket).
 - Windows-Kurznamen (`NAME~1`) in Temp-Pfaden: Pfade nicht als Strings vergleichen.
+- Zeilenenden: `.gitattributes` checkt alle Textdateien mit LF aus, auch bei `core.autocrlf=true`. Vorlage und Skills gehen so in Nutzerprojekte, Tests vergleichen mit `\n`.
 
 ## Doku und Arbeitsweise
 

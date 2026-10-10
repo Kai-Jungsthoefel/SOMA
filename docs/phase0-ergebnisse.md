@@ -1,6 +1,6 @@
 # Phase 0: Ergebnisse des technischen Prototyps
 
-> Stand: 2026-09-29 · Plan: [PLAN.md](../PLAN.md), Abschnitt 10 · Alles gemessen auf **Windows 11**, Python 3.12.0, CadQuery 2.8.0, OCP 7.9.3.1.1, three.js 0.180, Edge (headless).
+> Stand: 2026-09-29 · Alles gemessen auf **Windows 11**, Python 3.12.0, CadQuery 2.8.0, OCP 7.9.3.1.1, three.js 0.180, Edge (headless).
 > Der Code des Prototyps (die unten genannten Skripte und Tests) ist nicht mehr im Repo. Er liegt im Git-Verlauf, zuletzt im Tag `v0.5.0` unter `prototype/phase0/`.
 
 ## Kurzfassung
