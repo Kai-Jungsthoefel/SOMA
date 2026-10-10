@@ -200,10 +200,10 @@ try {
   const SKD = { bundled: path.join(APP, 'resources', 'skills'), user: path.join(tmp, 'keine-eigenen-skills') };
   const dm = defaultModes(SKD, {});
   check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise (mit Parametrik) und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'konstruktionsablauf,cadquery,parametrik,normteile'
-    && dm.demand.join(',') === '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm));
+    && dm.demand.join(',') === 'soma-app,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm));
   const dm2 = defaultModes(SKD, { konstruktionsablauf: 'demand', toleranzen: 'always', '3d-druck': 'always', laser: 'off' });
   check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,parametrik,3d-druck,toleranzen,normteile'
-    && dm2.demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm2));
+    && dm2.demand.join(',') === 'konstruktionsablauf,soma-app,harz-pulver,cnc,blech,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung', JSON.stringify(dm2));
   // Bei Bedarf (E55): Hinweis unter der ersten Überschrift, Werte als Standard der App, vom Nutzer gesetzte mit Namen
   const rd = renderSkill(SRC, {}, 'demand');
   check('Bei Bedarf: Hinweis direkt unter der Überschrift, mit Leerzeilen, Werte als Standard der App, NOTES.md', rd.includes('# Skill\n\n> **On demand:**')
@@ -511,6 +511,37 @@ try {
   const lg = Object.fromEntries(S.navLegend('soma').map((l) => [l.action, l.how]));
   check('Legende: erst ohne Taste, dann mit, Umschalt und Strg zusammengefasst, Zoom mit Mausrad vorn', lg.pan === 'right drag, Shift or Ctrl + left drag'
     && lg.zoom === 'wheel, middle drag, Shift or Ctrl + middle drag' && S.navLegend('fusion').find((l) => l.action === 'zoom').how === 'wheel', JSON.stringify(lg));
+
+  // Anleitung (E83): eine Quelle für Hilfe und Skill. Bilder vorhanden und benutzt, Nummern wie in test/helpshots-spec.mjs
+  const hOut = path.join(tmp, 'help.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'shared', 'help.ts')], outfile: hOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const H = await import(pathToFileURL(hOut).href);
+  const guide = fs.readFileSync(path.join(APP, 'resources', 'skills', 'soma-app.md'), 'utf8');
+  const secs = H.helpSections(guide);
+  check('Anleitung für die App: Abschnitte je ##, ohne Kopf, ohne Teile für den Agenten, Einleitung im ersten Abschnitt',
+    secs.length >= 8 && secs[0].title === 'The window' && secs.every((s) => !/<!--|For the agent|^---/m.test(s.text)) && /AI agent/.test(secs[0].text)
+    && /For the agent/.test(guide), secs.map((s) => s.title).join(', '));
+  const cut = H.helpSections('---\r\ntitle: x\r\n---\r\n# T\r\n\r\nIntro\r\n<!-- agent -->\r\nnur Agent\r\n<!-- /agent -->\r\n## A\r\nText a\r\n## B\r\n');
+  check('Zerlegen (auch mit CRLF): Einleitung vor A, Agent-Teil weg, leerer Abschnitt B bleibt', cut.length === 2 && cut[0].text === 'Intro\n\nText a'
+    && cut[1].title === 'B' && cut[1].text === '', JSON.stringify(cut));
+  const imgs = H.helpImages(guide);
+  const files = fs.readdirSync(path.join(APP, 'resources', 'help')).filter((n) => n.endsWith('.png')).sort();
+  check('Jedes Bild der Anleitung liegt in resources/help/, jedes dort wird benutzt, Namen erlaubt', JSON.stringify([...imgs].sort()) === JSON.stringify(files)
+    && imgs.every((n) => H.HELP_IMAGE.test(n)), `${imgs.join(',')} | ${files.join(',')}`);
+  const { SHOTS } = await import(pathToFileURL(path.join(APP, 'test', 'helpshots-spec.mjs')).href);
+  const lists = Object.fromEntries(imgs.map((n) => {
+    const after = guide.slice(guide.indexOf(`(../help/${n})`)).split(/\r?\n/).slice(1);
+    const items = [];
+    for (const line of after) { const m = /^(\d+)\. \*\*(.+?)\*\*/.exec(line); if (m) items.push(m[2]); else if (items.length && line.trim()) break; }
+    return [n, items];
+  }));
+  const badShots = SHOTS.filter((s) => JSON.stringify(lists[s.file]) !== JSON.stringify(s.marks.map((m) => m.label)));
+  check('Nummern der Bilder: Liste unter jedem Bild nennt dieselben Bezeichnungen in derselben Reihenfolge wie die Markierungen',
+    !badShots.length && SHOTS.length === imgs.length, badShots.map((s) => `${s.file}: ${JSON.stringify(lists[s.file])}`).join(' | '));
+  const SK = await import(pathToFileURL(sk).href);
+  const hc = SK.checkSkillText(guide);
+  check('Anleitung ist ein gültiger Skill ohne Hinweise, Bei Bedarf für neue Modelle', !hc.errors.length && !hc.warnings.length && SK.parseSkill('soma-app', guide).defaultMode === 'demand',
+    [...hc.errors, ...hc.warnings].join(' | '));
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

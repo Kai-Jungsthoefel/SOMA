@@ -15,7 +15,9 @@ import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
 import { checkParamValue, isParamValue, readUserParams, writeUserParams } from './params';
-import { previewsDir, skillBackupsDir, skillDirs } from './paths';
+import { helpDir, previewsDir, skillBackupsDir, skillDirs } from './paths';
+import { syncHelpImages } from './help';
+import { HELP_SKILL } from '../shared/help';
 import { storeBuildAsPreview } from './previews';
 import {
   agentsEntries, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
@@ -117,6 +119,7 @@ export class ProjectController {
     const terminals = new TerminalManager(this.wc, dir);
     const git = new GitRepo(dir);
     void git.ensureIgnored(); // ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten
+    syncHelpImages(dir, helpDir()); // Bilder der Anleitung (E83) fehlen nach dem Öffnen einer .soma-Datei oder sind von einer älteren App
     const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
     const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'),
       (rel) => this.animFileChanged(rel));
@@ -722,6 +725,7 @@ export class ProjectController {
       const backup = mode === 'off'
         ? removeSkill(s.dir, skillDirs(), skill, skillBackupsDir(s.id), values)
         : copySkill(s.dir, skillDirs(), skill, skillBackupsDir(s.id), values, mode, was === 'off' ? undefined : values);
+      if (skill === HELP_SKILL && mode !== 'off') syncHelpImages(s.dir, helpDir());
       const next = withMode(modes, skill, mode);
       updateProjectSkills(s.id, { modes: next });
       const warning = writeAgentsList(s.dir, agentsEntries(s.dir, skillDirs(), next));

@@ -224,7 +224,8 @@ print(json.dumps(dict(errors=len(aud.errors), types=types, layers=layers, detail
   fs.mkdirSync(path.join(proj.dir, 'drawings'), { recursive: true });
   fs.writeFileSync(path.join(proj.dir, 'drawings', 'bracket.py'), block + '\n');
   await waitFor('Modell gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000).catch(() => {});
-  await waitFor('Speicherstand', () => !!window.__t.saveState(), 10000).catch(() => {});
+  // Erst wenn der Speicherstand model.py und drawings/ zählt: Er kommt aus einer Abfrage im Takt, sonst vergleicht der Test mit einem alten Stand
+  await waitFor('Speicherstand', () => (window.__t.saveState()?.dirtyFiles ?? 0) >= 2, 10000).catch(() => {});
   const dirty0 = (await ev(() => window.__t.saveState())).dirtyFiles;
   const ab = soma(proj.dir, 'drawing', 'build');
   check('Im Projekt der App gebaut', ab.status === 0 && fs.existsSync(path.join(proj.dir, 'output', 'drawings', 'Bracket.pdf')), (ab.stderr || ab.stdout).slice(-200));

@@ -10,7 +10,8 @@ import { viewDxf } from './dxf';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
-import { appIcon, editBackupsDir, libraryBackupsDir, skillDirs, thumbnailsDir, userSkillsDir } from './paths';
+import { readHelp, readHelpImage } from './help';
+import { appIcon, editBackupsDir, helpDir, libraryBackupsDir, skillDirs, skillsDir, thumbnailsDir, userSkillsDir } from './paths';
 import { readSettings, writeSettings } from './settings';
 import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, saveLibrarySkill } from './skilllibrary';
@@ -140,6 +141,9 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('params:state', () => ctl.paramState());
   ipcMain.handle('params:set', (_e, values: unknown) => ctl.setParams(values));
   ipcMain.handle('params:resetAll', () => ctl.resetAllParams());
+  // Anleitung (E83): Text aus dem mitgelieferten Skill, Bilder aus resources/help/
+  ipcMain.handle('help:read', () => readHelp(skillsDir()));
+  ipcMain.handle('help:image', (_e, name: unknown) => readHelpImage(helpDir(), name));
   ipcMain.handle('skills:list', () => ctl.skills());
   ipcMain.handle('skills:set', (_e, id: unknown, mode: unknown) => ctl.setSkill(id, mode));
   ipcMain.handle('skills:configure', (_e, id: unknown, values: unknown) => ctl.configureSkill(id, values));
@@ -250,8 +254,15 @@ function registerIpc(ctl: ProjectController): void {
     // Fenster schließen wie mit dem Kreuz (mit Rückfrage und Verlassen des Modells). window.close() der Seite umgeht das
     ipcMain.handle('test:close', (e) => { BrowserWindow.fromWebContents(e.sender)?.close(); });
     // Screenshot auch aus unsichtbaren Fenstern (CDP liefert dort kein Bild)
-    ipcMain.handle('test:screenshot', async (e, file: string) => {
-      const img = await e.sender.capturePage();
+    // `rect` (in CSS-Pixeln): nur dieser Ausschnitt, etwa für die Bilder der Hilfe (test/helpshots.mjs)
+    // capturePage(rect) liefert bei Fenstern außerhalb des Bildschirms das ganze Bild, deshalb danach zuschneiden
+    ipcMain.handle('test:screenshot', async (e, file: string, rect?: Electron.Rectangle) => {
+      let img = await e.sender.capturePage();
+      const css = BrowserWindow.fromWebContents(e.sender)?.getContentBounds().width;
+      if (rect && css) {
+        const f = img.getSize().width / css;
+        img = img.crop({ x: Math.round(rect.x * f), y: Math.round(rect.y * f), width: Math.round(rect.width * f), height: Math.round(rect.height * f) });
+      }
       fs.writeFileSync(file, img.toPNG());
       return img.getSize();
     });

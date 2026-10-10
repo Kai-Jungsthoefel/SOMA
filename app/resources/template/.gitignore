@@ -21,3 +21,6 @@ renders/
 
 # Environment with the model's extra packages (only requirements.txt is versioned)
 .soma/env/
+
+# Pictures of the app's user guide (copied by the app)
+.soma/help/

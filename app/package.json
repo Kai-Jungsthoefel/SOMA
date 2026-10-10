@@ -25,6 +25,7 @@
     "test:packages": "npm run build && node test/packages.mjs",
     "test:settings": "npm run build && node test/settings.mjs",
     "test:unit": "node test/unit.mjs",
+    "help:shots": "npm run build && node test/helpshots.mjs",
     "test": "npm run build && node test/run-all.mjs"
   },
   "dependencies": {

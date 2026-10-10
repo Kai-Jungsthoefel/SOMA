@@ -371,7 +371,7 @@ export interface SomaApi {
   };
   /** Nur im Testmodus (SOMA_TEST=1) vorhanden. */
   test?: {
-    answers(a: unknown[]): Promise<void>; screenshot(file: string): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>>; close(): Promise<void>;
+    answers(a: unknown[]): Promise<void>; screenshot(file: string, rect?: { x: number; y: number; width: number; height: number }): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>>; close(): Promise<void>;
     /** Was die App in die Zwischenablage legen wollte (im Test bleibt die echte unberührt). */
     clipboard(): Promise<string>;
   };
@@ -440,6 +440,8 @@ export interface SomaApi {
     /** Alle Werte des Nutzers entfernen: Es gelten wieder die Werte aus dem Code. */
     resetAll(): Promise<ParamResult>;
   };
+  /** Anleitung (E83): Text (der mitgelieferte Skill soma-app.md, null wenn er fehlt) und ein Bild daraus nach Dateiname. */
+  help: { read(): Promise<string | null>; image(name: string): Promise<Uint8Array | null> };
   /** Skills des offenen Modells (E17): auflisten, Stufe wählen (E55). */
   skills: {
     list(): Promise<SkillInfo[]>;

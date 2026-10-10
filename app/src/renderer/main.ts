@@ -14,6 +14,7 @@ import { MAX_QUOTE } from './pdfview';
 import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
+import { HelpDialog } from './help';
 import { SettingsDialog } from './settings';
 import { AboutPage, ShortcutsPage, StoragePage, ViewerPage } from './settingspages';
 import { SkillsPanel } from './skills';
@@ -235,6 +236,18 @@ const settings = new SettingsDialog({
   changed: () => { if (project && skills.isLoaded) void skills.refresh(); },
   modelMode: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id)?.mode ?? 'off' : null),
   pages: { viewer: viewerPage, keys: shortcutsPage, storage: storagePage, about: aboutPage },
+});
+// Hilfe (E83): Knopf in der Leiste und auf der Startseite, F1 überall außer in den Einstellungen
+const help = new HelpDialog({ root: $('help'), nav: $('help-nav'), body: $('help-body'), close: $('btn-help-close') as HTMLButtonElement, background: [$('topbar'), $('body'), $('start')] }, {
+  help: api.help,
+  openUrl: (href) => void api.openUrl(href).then((r) => { if (!r.ok) toast(r.error ?? `${href} could not be opened.`, 'error'); }),
+});
+$('btn-help').addEventListener('click', () => void help.open());
+$('btn-start-help').addEventListener('click', () => void help.open());
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'F1' || e.ctrlKey || e.altKey || e.metaKey || settings.isOpen) return;
+  e.preventDefault();
+  if (help.isOpen) help.close(); else void help.open();
 });
 $('btn-settings').addEventListener('click', () => void settings.open());
 $('btn-start-settings').addEventListener('click', () => void settings.open());
@@ -808,7 +821,7 @@ function selectionAction(a: 'hide' | 'showAll' | 'isolate' | 'ghost'): void {
 // Tasten für die Auswahl (wie in CAD): H ausblenden, Shift H alles einblenden, I isolieren, T transparent, Esc Auswahl aufheben.
 // Nicht beim Schreiben (Code, Terminal, Felder) und nicht, solange Markierung, Video, Einstellungen oder die Startseite offen sind
 window.addEventListener('keydown', (e) => {
-  if (!project || e.ctrlKey || e.altKey || e.metaKey || e.repeat || settings.isOpen || !$('start').hidden) return;
+  if (!project || e.ctrlKey || e.altKey || e.metaKey || e.repeat || settings.isOpen || help.isOpen || !$('start').hidden) return;
   if ((e.target as HTMLElement | null)?.closest?.('#terminals, #code-view, input, textarea, select, [contenteditable=true]')) return;
   if (markup.active || !$('videoview').hidden) return;
   const k = e.key.toLowerCase();
@@ -1129,7 +1142,7 @@ const openProject = async (id: string) => { if (await leaveEditor('Open model'))
 
 // F3 klappt den Strukturbaum auf und zu wie in CATIA (E82, Vorschlag aus dem Entwurf). Nicht beim Schreiben in Code, Terminal oder Feldern
 window.addEventListener('keydown', (e) => {
-  if (e.key !== 'F3' || e.ctrlKey || e.altKey || e.shiftKey || !project || settings.isOpen || !$('start').hidden) return;
+  if (e.key !== 'F3' || e.ctrlKey || e.altKey || e.shiftKey || !project || settings.isOpen || help.isOpen || !$('start').hidden) return;
   if ((e.target as HTMLElement | null)?.closest?.('#terminals, #code-view, input, textarea, select, [contenteditable=true]')) return;
   e.preventDefault();
   tree.setOpen(!tree.isOpen);
@@ -1137,8 +1150,8 @@ window.addEventListener('keydown', (e) => {
 
 // Kurzbefehle gelten nicht im Terminal: dort gehören Strg+S/Strg+O den Programmen (Claude Code nutzt Strg+O selbst)
 window.addEventListener('keydown', (e) => {
-  // Die Einstellungen liegen über allem und haben eigene Kurzbefehle (Strg+S speichert den Skill)
-  if (settings.isOpen || (e.target as HTMLElement | null)?.closest?.('#terminals') || !e.ctrlKey || e.altKey) return;
+  // Die Einstellungen liegen über allem und haben eigene Kurzbefehle (Strg+S speichert den Skill), die Hilfe ebenso
+  if (settings.isOpen || help.isOpen || (e.target as HTMLElement | null)?.closest?.('#terminals') || !e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   // Ohne offenes Modell (Startseite beim Start, E69) gibt es nur Neu und Öffnen
   if (!project && k !== 'n' && k !== 'o') return;
@@ -1591,6 +1604,9 @@ if (api.testMode) {
     layout: () => ({ side: panel, code: codeOpen, agent: !$('terminals').classList.contains('collapsed') }),
     refreshViewLists: () => refreshViewLists(),
     openSkill: (id: string | null) => skills.openDetail(id),
+    help: () => help.state(),
+    openHelp: (title?: string) => help.open(title),
+    closeHelp: () => help.close(),
     settings: () => settings.state(),
     openSettings: (id?: string) => settings.open(id),
     closeSettings: () => settings.close(),

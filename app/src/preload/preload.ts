@@ -74,6 +74,10 @@ const api: SomaApi = {
     set: (values) => ipcRenderer.invoke('params:set', values),
     resetAll: () => ipcRenderer.invoke('params:resetAll'),
   },
+  help: {
+    read: () => ipcRenderer.invoke('help:read'),
+    image: (name) => ipcRenderer.invoke('help:image', name),
+  },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     set: (id, mode) => ipcRenderer.invoke('skills:set', id, mode),
@@ -123,7 +127,7 @@ const api: SomaApi = {
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'
     ? {
-      answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f) => ipcRenderer.invoke('test:screenshot', f), bridge: () => ipcRenderer.invoke('test:bridge'),
+      answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f, rect) => ipcRenderer.invoke('test:screenshot', f, rect), bridge: () => ipcRenderer.invoke('test:bridge'),
       close: () => ipcRenderer.invoke('test:close'), clipboard: () => ipcRenderer.invoke('test:clipboard'),
     }
     : undefined,

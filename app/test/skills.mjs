@@ -60,13 +60,13 @@ try {
   /** Die beiden Listen des Abschnitts: Immer vor „Read when relevant“, Bei Bedarf danach. */
   const always = () => (block() ?? '').split('### Read when relevant')[0];
   const demand = () => (block() ?? '').split('### Read when relevant')[1] ?? '';
-  const DEMAND_NEW = '3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung';
+  const DEMAND_NEW = 'soma-app,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung';
 
   // 1) Panel: die mitgelieferten Skills nach Kategorien und `order`
   await ev(() => document.querySelector('#rail [data-panel="skills"]').click());
   await waitFor('Skills geladen', () => window.__t.skills().skills.length >= 3, 10000);
   let s = await st();
-  const ORDER = 'konstruktionsablauf,cadquery,parametrik,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,normteile,festigkeit,baugruppen,analyse,animation,fem,zeichnung';
+  const ORDER = 'konstruktionsablauf,cadquery,parametrik,soma-app,3d-druck,harz-pulver,cnc,laser,blech,toleranzen,verbindungen,normteile,festigkeit,baugruppen,analyse,animation,fem,zeichnung';
   const heads = await ev(() => [...document.querySelectorAll('#skills-list .sk-cat')].map((h) => h.textContent).join(','));
   check('Panel „Skills": Überschriften Way of working, Manufacturing, Design knowledge, Check and present, darunter die Skills nach `order`',
     s.skills.map((x) => x.id).join(',') === ORDER && heads === 'Way of working,Manufacturing,Design knowledge,Check and present'
@@ -92,8 +92,37 @@ try {
     && always().includes('- `.soma/skills/parametrik.md`: Parametric models') && !always().includes('3d-druck')
     && demand().includes('- `.soma/skills/3d-druck.md`: 3D printing (FDM). Read when the parts will be 3D printed on a filament printer (FDM).')
     && DEMAND_NEW.split(',').every((id) => demand().includes(`.soma/skills/${id}.md`))
-    && (await g('ls-files', '.soma/skills')).split('\n').length === 17
+    && (await g('ls-files', '.soma/skills')).split('\n').length === 18
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, `${String((await ev(() => window.__t.saveState())).dirtyFiles)} | ${String(block()).slice(0, 200)}`);
+  // Anleitung (E83): Skill „Using the app“ bei Bedarf, Bilder in .soma/help/ (nicht im Verlauf), Hilfe-Fenster aus derselben Quelle
+  const helpPngs = fs.readdirSync(path.join(APP, 'resources', 'help')).filter((n) => n.endsWith('.png'));
+  const helpCopy = read('.soma/skills/soma-app.md') ?? '';
+  check('Anleitung als Skill: Kopie mit Bildpfaden ../help/, alle Bilder in .soma/help/, nicht in Git, nichts ungespeichert',
+    helpCopy.includes('](../help/window.png)') && helpCopy.includes('For the agent') && helpPngs.length >= 8
+    && helpPngs.every((n) => fs.existsSync(path.join(dir, '.soma', 'help', n))) && !(await g('ls-files', '.soma/help'))
+    && (await ev(() => window.__t.saveState())).dirtyFiles === 0, helpPngs.join(','));
+  fs.rmSync(path.join(dir, '.soma', 'help', 'window.png'));
+  await setMode('soma-app', 'always');
+  check('Stufe neu gesetzt: fehlendes Bild kommt wieder', fs.existsSync(path.join(dir, '.soma', 'help', 'window.png')));
+  await setMode('soma-app', 'demand');
+  await domClick('btn-help');
+  await waitFor('Hilfe offen', () => window.__t.help().open && window.__t.help().loadedImages > 0, 15000);
+  let hs = await ev(() => window.__t.help());
+  check('Help in der Leiste: Fenster mit den Abschnitten der Anleitung, Bild geladen, ohne Teile für den Agenten',
+    hs.sections[0] === 'The window' && hs.sections.includes('Export') && hs.current === 'The window' && hs.images === 1 && hs.loadedImages === 1
+    && hs.text.includes('Model menu') && !hs.text.includes('For the agent') && await ev(() => document.getElementById('topbar').inert), JSON.stringify(hs).slice(0, 200));
+  await ev(() => document.querySelector('#help-nav button[data-help="4"]').click());
+  hs = await ev(() => window.__t.help());
+  check('Abschnitt wechseln: Tools mit Bild und Liste', hs.current === 'Tools' && hs.text.includes('Section') && hs.images === 1, hs.current);
+  await shot('skills-0-hilfe');
+  await ev(() => document.querySelector('#help-nav button[aria-current=page]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  const closed = await ev(() => !window.__t.help().open && !document.getElementById('topbar').inert);
+  await ev(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', bubbles: true })));
+  await waitFor('F1', () => window.__t.help().open, 5000).catch(() => {});
+  hs = await ev(() => window.__t.help());
+  check('Escape schließt, F1 öffnet wieder beim zuletzt gezeigten Abschnitt', closed && hs.open && hs.current === 'Tools', JSON.stringify({ closed, open: hs.open, cur: hs.current }));
+  await ev(() => window.__t.closeHelp());
+
   check('Zeile mit Stufen-Schalter, Klick auf die Zeile öffnet die Karte mit drei Stufen, die eingestellte gewählt', await ev(() => {
     document.querySelector('#skills-list .sk-row[data-id="3d-druck"] .sk-open').click();
     const row = document.querySelector('#skills-list .sk-row[data-id="3d-druck"]'); // die Liste wird neu gezeichnet
@@ -346,12 +375,12 @@ try {
   const fdm2 = fs.readFileSync(path.join(p2.dir, '.soma', 'skills', '3d-druck.md'), 'utf8');
   const ka2 = fs.readFileSync(path.join(p2.dir, '.soma', 'skills', 'konstruktionsablauf.md'), 'utf8');
   check('Neues Modell nach der Vorgabe: immer Sauber modellieren, Parametrik, 3D-Druck, Normteile, Laser aus, Konstruktionsablauf bei Bedarf, Standardwerte statt 55° und PETG',
-    JSON.stringify(pj2.skills) === '["cadquery","parametrik","3d-druck","normteile"]' && pj2.skills_on_demand.join(',') === 'konstruktionsablauf,harz-pulver,cnc,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung'
+    JSON.stringify(pj2.skills) === '["cadquery","parametrik","3d-druck","normteile"]' && pj2.skills_on_demand.join(',') === 'konstruktionsablauf,soma-app,harz-pulver,cnc,blech,toleranzen,verbindungen,festigkeit,baugruppen,analyse,animation,fem,zeichnung'
     && !pj2.skill_settings && fdm2.includes('Overhangs up to 45°') && fdm2.includes('| Material | PLA |') && !fdm2.includes('On demand') && ka2.includes('> **On demand:**')
     && !fs.existsSync(path.join(p2.dir, '.soma', 'skills', 'laser.md'))
     && norm(fs.readFileSync(path.join(p2.dir, 'AGENTS.md'), 'utf8')).includes('- `.soma/skills/3d-druck.md`: 3D printing (FDM)\n'), JSON.stringify(pj2));
   await waitFor('Speicherstand neu', () => window.__t.saveState() && !window.__t.saveState().unsaved, 10000).catch(() => {});
-  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 16
+  check('Neues Modell: Skills im Startcommit, nichts ungespeichert', (await exec(['ls-files', '.soma/skills'], p2.dir)).stdout.trim().split('\n').length === 17
     && (await ev(() => window.__t.saveState())).dirtyFiles === 0, String((await ev(() => window.__t.saveState())).dirtyFiles));
 
   // 11) Einstellungen (E78): eigene Skills anlegen, mitgelieferte bearbeiten und zurücksetzen, löschen, importieren
@@ -370,9 +399,9 @@ try {
   // Beim ersten Öffnen steht das Fenster im Reiter Viewer (E81), die Skills sind ein Reiter daneben
   await waitFor('Einstellungen offen', () => window.__t.settings().open && window.__t.settings().section === 'viewer', 10000);
   await ev(() => document.querySelector('#st-nav [data-sec="skills"]').click());
-  await waitFor('Reiter Skills', () => window.__t.settings().section === 'skills' && window.__t.settings().skills.length >= 17, 10000);
+  await waitFor('Reiter Skills', () => window.__t.settings().section === 'skills' && window.__t.settings().skills.length >= 18, 10000);
   let us = await ust();
-  check('Einstellungen: alle mitgelieferten Skills nach Kategorien, keiner gewählt, Hintergrund gesperrt', us.skills.length === 17 && us.skills.every((s) => s.source === 'builtin') && us.selected === null
+  check('Einstellungen: alle mitgelieferten Skills nach Kategorien, keiner gewählt, Hintergrund gesperrt', us.skills.length === 18 && us.skills.every((s) => s.source === 'builtin') && us.selected === null
     && us.list.includes('3D printing (FDM)') && /way of working/i.test(us.list) && await ev(() => {
       // Echte Klicks: Das Fenster selbst darf nicht gesperrt sein, der Knopf liegt oben (Treffertest)
       const b = document.getElementById('btn-st-new').getBoundingClientRect();

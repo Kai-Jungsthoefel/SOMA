@@ -46,7 +46,7 @@
       <span class="rail-sep"></span>
       <button data-panel="skills" aria-pressed="false" title="Skills: rules for the agent, set per model (3D printing, tolerances …)"><i data-icon="book" data-size="20" data-stroke="1.7"></i><span>Skills</span></button>
       <span class="grow"></span>
-      <button disabled title="Help is coming in a later version"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Help</span></button>
+      <button id="btn-help" title="Help: how the app works (F1)"><i data-icon="help" data-size="20" data-stroke="1.7"></i><span>Help</span></button>
       <button id="btn-settings" title="Settings: viewer, skills, storage and version"><i data-icon="cog" data-size="20" data-stroke="1.6"></i><span>Settings</span></button>
     </nav>
 
@@ -487,6 +487,7 @@
 
   <div id="start" class="start" hidden>
     <header class="top"><span class="logo"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></span><b class="brand">SOMA</b><span id="start-version" class="c3 small"></span><span class="grow"></span>
+      <button id="btn-start-help" class="btn" title="Help: how the app works (F1)"><i data-icon="help" data-size="15" data-stroke="1.7"></i>Help</button>
       <button id="btn-start-settings" class="btn" title="Settings: viewer, skills, storage and version"><i data-icon="cog" data-size="15" data-stroke="1.7"></i>Settings</button>
       <button id="btn-start-close" class="btn">Back to the model</button></header>
     <div class="start-body">
@@ -551,6 +552,18 @@
     </div>
   </div>
   <div id="menu-skill-name" class="menu wide st-namepop" role="dialog" aria-label="Name of the skill" hidden></div>
+
+  <!-- Hilfe (E83): die Anleitung aus dem Skill soma-app.md, links die Abschnitte. Inhalt baut help.ts -->
+  <div id="help" class="st-scrim" hidden>
+    <div class="st-dlg" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <header class="st-hd"><i data-icon="help" data-size="18" data-stroke="1.7"></i><b id="help-title">Help</b><span class="c3 small">How SOMA works. The agent knows this guide too: just ask it.</span><span class="grow"></span>
+        <button id="btn-help-close" class="ibtn" aria-label="Close help" title="Close (Escape)"><i data-icon="x" data-size="16" data-stroke="2"></i></button></header>
+      <div class="st-body">
+        <nav id="help-nav" class="st-nav help-nav" aria-label="Help"></nav>
+        <section id="help-body" class="st-sec help-body" aria-label="Guide"></section>
+      </div>
+    </div>
+  </div>
 
   <div id="toast" role="status" hidden></div>
 </div>

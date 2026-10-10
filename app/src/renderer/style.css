@@ -1030,6 +1030,16 @@ code { font-family:var(--mono); font-size:.95em; }
 .st-name-file { font-family:var(--mono); font-size:11.5px; }
 .st-name-actions { display:flex; justify-content:flex-end; gap:6px; padding:4px 10px 6px; }
 
+/* Hilfe (E83): wie die Einstellungen, rechts die Anleitung. Bilder in voller Breite, Klick zeigt sie in Originalgröße */
+#help { z-index:36; }
+.help-nav button { height:auto; min-height:30px; padding-top:5px; padding-bottom:5px; line-height:1.35; }
+.help-body { display:block; overflow:auto; }
+.help-doc { max-width:1000px; padding:20px 30px 48px; }
+.help-doc h2 { margin-top:0; }
+.help-doc .md-img { display:block; margin:6px 0 4px; border:1px solid var(--line); cursor:zoom-in; }
+.help-doc .md-img.full { max-width:none; cursor:zoom-out; }
+.help-doc ol li::marker { color:#ffd23f; font-weight:600; }
+
 /* Einstellungen, Reiter Viewer, Speicher und Info (E81) */
 .st-sec.st-page { display:block; overflow:auto; }
 .st-pg { max-width:800px; padding:22px 32px 40px; }

@@ -77,8 +77,8 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
     domClick: (id) => ev((i) => document.getElementById(i).click(), id),
     /** Antworten für die nächsten nativen Dialoge (Pfade, Knopf-Indizes). */
     answers: (list) => ev((a) => window.soma.test.answers(a), list),
-    /** Screenshot des Fensters (über Electron, funktioniert auch bei unsichtbarem Fenster). */
-    screenshot: (file) => ev((f) => window.soma.test.screenshot(f), file),
+    /** Screenshot des Fensters (über Electron, funktioniert auch bei unsichtbarem Fenster), mit `rect` nur ein Ausschnitt in CSS-Pixeln. */
+    screenshot: (file, rect) => ev(([f, r]) => window.soma.test.screenshot(f, r ?? undefined), [file, rect ?? null]),
     /** Beendet die App hart (wie ein Absturz). */
     crash() { clearTimeout(dog); page.close(); kill(); },
     async stop() { clearTimeout(dog); page.close(); kill(); await sleep(600); },

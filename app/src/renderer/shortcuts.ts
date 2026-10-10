@@ -44,6 +44,7 @@ export function shortcutGroups(nav: NavPreset): ShortcutGroup[] {
         { keys: ['Ctrl', '1'], what: 'Show or hide the sidebar' },
         { keys: ['Ctrl', '2'], what: 'Show or hide the code' },
         { keys: ['Ctrl', '3'], what: 'Expand or collapse the agent' },
+        { keys: ['F1'], what: 'Help: how the app works' },
       ],
     },
     {

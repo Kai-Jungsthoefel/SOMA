@@ -35,6 +35,8 @@ export const templateDir = () => path.join(app.getAppPath(), 'resources', 'templ
 
 /** Mitgelieferte Skills (E17), je einer als Markdown. */
 export const skillsDir = () => path.join(app.getAppPath(), 'resources', 'skills');
+/** Bilder der Anleitung (E83), der Text ist der mitgelieferte Skill `soma-app.md`. */
+export const helpDir = () => path.join(app.getAppPath(), 'resources', 'help');
 /** Eigene und bearbeitete Skills des Nutzers (E78), gelten für die ganze App. */
 export const userSkillsDir = () => path.join(userDataDir(), 'skills');
 /** Beide Ordner der Bibliothek der Skills. */
