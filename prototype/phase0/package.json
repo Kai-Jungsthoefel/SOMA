@@ -1,2 +1,0 @@
-{ "name": "cadide-phase0", "private": true, "type": "module",
-  "dependencies": { "three": "^0.180.0" }, "devDependencies": { "puppeteer-core": "^24.0.0" } }

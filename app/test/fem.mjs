@@ -13,7 +13,7 @@ const t = checker();
 const { check } = t;
 let app;
 
-const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'cadide-phase0', 'venv-full', 'Scripts', 'python.exe');
+const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'soma-dev', 'venv', 'Scripts', 'python.exe');
 
 // Kragbalken 100 x 10 x 10 entlang +X (Formel: w = 4 F L³ / (E b h³)), ein Winkel aus zwei Teilen, die sich berühren, und die
 // Konsole aus dem Beispiel im Skill

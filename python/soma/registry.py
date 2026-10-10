@@ -17,7 +17,7 @@ _TRANSLIT = {"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "
 
 
 def ascii_name(name):
-    """STEP-Namen nur ASCII: der OCCT-Export kodiert Nicht-ASCII doppelt (Phase 0, ERGEBNISSE.md)."""
+    """STEP-Namen nur ASCII: der OCCT-Export kodiert Nicht-ASCII doppelt (Phase 0, docs/phase0-ergebnisse.md)."""
     s = "".join(_TRANSLIT.get(ch, ch) for ch in name)
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
     s = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in s.strip()).strip("_")

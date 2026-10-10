@@ -15,7 +15,7 @@ const t = checker();
 const { check } = t;
 let app;
 const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-params-'));
-const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'cadide-phase0', 'venv-full', 'Scripts', 'python.exe');
+const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'soma-dev', 'venv', 'Scripts', 'python.exe');
 
 const listZip = (p) => new Promise((resolve, reject) => yauzl.open(p, { lazyEntries: true }, (e, z) => {
   if (e) return reject(e);

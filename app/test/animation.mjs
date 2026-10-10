@@ -14,7 +14,7 @@ const t = checker();
 const { check } = t;
 let app;
 
-const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'cadide-phase0', 'venv-full', 'Scripts', 'python.exe');
+const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'soma-dev', 'venv', 'Scripts', 'python.exe');
 
 // Kasten mit Deckel (Scharnier hinten oben), dazu Teile für die Auswertungen: Halter mit Bohrung 6,4 und Stift 6 darin (Spalt 0,2),
 // Konsole mit waagerechter Unterseite in 10 mm Höhe (Überhang), Lasche 1 mm dünn, Störer 2 mm im Halter (Überschneidung)

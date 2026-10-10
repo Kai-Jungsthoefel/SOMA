@@ -48,13 +48,13 @@ export const libraryBackupsDir = () => path.join(backupsDir(), 'skills-library')
 export const appIcon = () => path.join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
 /**
- * Python der Basisumgebung. Reihenfolge: SOMA_PYTHON, Entwicklungs-Umgebung aus Phase 0, sonst `python` im PATH.
+ * Python der Basisumgebung. Reihenfolge: SOMA_PYTHON, Entwicklungs-Umgebung (python/scripts/setup_env.ps1), sonst `python` im PATH.
  * Die mitgelieferte Basisumgebung ersetzt das spaeter (Auslieferung ist noch offen).
  */
 export function pythonExe(): string {
   if (process.env.SOMA_PYTHON) return process.env.SOMA_PYTHON;
   if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    const dev = path.join(process.env.LOCALAPPDATA, 'cadide-phase0', 'venv-full', 'Scripts', 'python.exe');
+    const dev = path.join(process.env.LOCALAPPDATA, 'soma-dev', 'venv', 'Scripts', 'python.exe');
     if (fs.existsSync(dev)) return dev;
   }
   return process.platform === 'win32' ? 'python.exe' : 'python3';

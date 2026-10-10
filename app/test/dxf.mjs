@@ -15,7 +15,7 @@ const t = checker();
 const { check } = t;
 let app;
 
-const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'cadide-phase0', 'venv-full', 'Scripts', 'python.exe');
+const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'soma-dev', 'venv', 'Scripts', 'python.exe');
 const py = (args, opts = {}) => spawnSync(PY, args, { encoding: 'utf8', env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, ...opts });
 
 // Platte w x 100 mm mit allem, was in DXF-Dateien üblich ist. Der Layer „Helpers“ ist in der Datei ausgeschaltet, der
