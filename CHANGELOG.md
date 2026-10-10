@@ -6,6 +6,11 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Behoben
+
+- FEM mit Kontakt: Eine Platte, die nur über den Kontakt gehalten wird (etwa ein Halter mit Arm), brach mit „a part moves without limit“ oder „The contact does not settle“ ab. SOMA hielt das Suchen der Berührfläche zu früh für Pendeln, und das weiche Ersatzgesetz drückte die Teile auseinander. Jetzt rechnet der Kontakt weicher (Steifigkeit gleich dem E-Modul statt dem Zehnfachen, Verschiebungen 0.4 % anders), darf länger suchen, und das Ersatzgesetz richtet sich nach der Last (E84).
+- Skill „Strength with FEM“: Reibung unter Schraubenköpfen hält ohne Vorspannung nichts, der Skill sagt das jetzt.
+
 ## [0.5.0] - 2026-10-10
 
 Die FEM rechnet mit CalculiX und kennt Kontakt zwischen Teilen: abheben, gleiten, mit und ohne Reibung.
