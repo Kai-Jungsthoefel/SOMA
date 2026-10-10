@@ -67,7 +67,7 @@ node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run bu
 ## Entwicklung unter Windows
 
 - **Netzlaufwerke:** Liegt das Repo auf einem Netzlaufwerk, starten die sandboxed Prozesse von Electron nicht (schwarzes Fenster, `launch-failed` Code 18). Electron läuft deshalb aus einer lokalen Kopie (`app/scripts/electron-local.mjs`). Nie `node_modules/electron/dist/electron.exe` direkt starten. Die Python-Umgebung liegt lokal unter `%LOCALAPPDATA%\cadide-phase0\venv-full`.
-- **Proxy:** Node-Downloads (Electron-Binary, dugite) brauchen `NODE_USE_ENV_PROXY=1`.
+- **Proxy:** Hinter einem Proxy brauchen Node-Downloads (Electron-Binary, dugite) `NODE_USE_ENV_PROXY=1`.
 - **Ports:** Feste Ports können von anderen Programmen belegt sein. Eigene Ports: 8791 (Phase 0), 9333 (Tests einzeln ohne `SOMA_TEST_PORT`; `run-all.mjs` holt freie Ports). Laufen mehrere Sessions gleichzeitig, braucht jede eigene Ports, und Testprozesse nur die eigenen beenden.
 - Prozesse nur gezielt beenden (Pfad des Repos oder `soma-dev` in der Kommandozeile), nie pauschal alle `electron.exe` oder `node.exe`.
 
