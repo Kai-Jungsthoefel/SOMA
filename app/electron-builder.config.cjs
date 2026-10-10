@@ -36,10 +36,17 @@ module.exports = {
     '!node_modules/node-pty/{src,deps,scripts,third_party,typings}/**',
     '!node_modules/node-pty/build/**/*.{obj,pdb,lib,iobj,ipdb,tlog}',
   ],
-  // electron-builder lässt .gitignore immer weg, auch über `files`. Die Vorlage für neue Projekte braucht ihre aber.
   afterPack: async (ctx) => {
     const res = ctx.packager.getResourcesDir(ctx.appOutDir);
+    // electron-builder lässt .gitignore immer weg, auch über `files`. Die Vorlage für neue Projekte braucht ihre aber.
     for (const rel of ['resources/template/.gitignore']) fs.copyFileSync(path.join(__dirname, rel), path.join(res, 'app', rel));
+    // node-pty startet unter macOS jede Shell über spawn-helper, das npm-Paket bringt es ohne Ausführungsrecht mit
+    // (sonst „posix_spawnp failed“, kein Terminal). Läuft vor dem Signieren.
+    const pty = path.join(res, 'app', 'node_modules', 'node-pty');
+    for (const dir of ['prebuilds/darwin-arm64', 'prebuilds/darwin-x64', 'build/Release']) {
+      const helper = path.join(pty, dir, 'spawn-helper');
+      if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
+    }
   },
   extraResources: [
     { from: runtime, to: 'python', filter: ['**/*', '!**/__pycache__/*.opt-?.pyc'] },
