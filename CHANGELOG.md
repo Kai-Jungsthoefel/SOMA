@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Neu
+
+- Hilfe: Der Knopf „Help“ in der Leiste (auch auf der Startseite, Taste F1) öffnet eine kurze Anleitung zu allen Bereichen der App, mit Screenshots, auf denen die Elemente nummeriert sind. Dieselbe Anleitung bekommt der Agent als Skill „Using the app“ (ab Werk „On demand“) samt Bildern, damit er Fragen zur Bedienung beantworten kann (E83).
+
 ### Behoben
 
 - Markup: Die Zeichenfläche passt sich dem Viewer an. Wird er größer, etwa weil die PDF daneben geschlossen wird, wächst sie mit, statt klein in der Ecke zu bleiben. Mausrad zoomt um den Zeiger (bis 8-fach), Ziehen mit der rechten oder mittleren Maustaste verschiebt, Ctrl+0 passt wieder ein. Das Bild für den Agenten bleibt dabei in voller Auflösung.

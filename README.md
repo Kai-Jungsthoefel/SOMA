@@ -52,6 +52,7 @@ Any CLI agent that can read files and run commands works: Claude Code, OpenCode,
 - Draw on the 3D view, or drop in a photo of a hand sketch and draw on that, then hand the image to the agent
 - `soma render` lets the agent look at its own work as images or contact sheets
 - Skills: optional rule sets per model (3D printing, CNC, sheet metal, tolerances, joints, FEM …), switched on always or on demand. Edit them or add your own in the settings
+- A short built-in guide with numbered screenshots (F1). The agent gets the same guide as a skill, so you can also just ask it how the app works
 
 **Project**
 - A model is a single `.soma` file (a ZIP archive) with code, result and history. ZIP files open too, and the export menu writes the whole model as a ZIP
