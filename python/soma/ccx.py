@@ -205,10 +205,12 @@ def _errors(log):
     return ("Messages: " + " | ".join(dict.fromkeys(errs))[:600]) if errs else ""
 
 
-# Iterationen je Laststufe und insgesamt, ab denen die Rechnung als pendelnd gilt. Konvergente Kontaktrechnungen brauchten
-# 4 bis 6 je Stufe
-MAX_ITERATIONS = 12
-MAX_TOTAL_ITERATIONS = 80
+# Iterationen je Laststufe und insgesamt, ab denen die Rechnung als pendelnd gilt (dann rechnet fem.py mit dem weichen
+# Gesetz). Wenn sich die Beruehrflaeche erst finden muss, gibt CalculiX sie Iteration fuer Iteration frei: Eine Platte, die
+# zur Haelfte abhebt, brauchte 11 bis 18, eine, die fast ganz abhebt, 88 (das weiche Gesetz dort 4). Mit 12 brach SOMA
+# die erste ab und das weiche Gesetz drueckte die Teile auseinander
+MAX_ITERATIONS = 30
+MAX_TOTAL_ITERATIONS = 60
 
 
 def _execute(exe, tmp, n_thr, size, progress):

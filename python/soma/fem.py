@@ -790,10 +790,12 @@ def _analyse(parts, study, mats, h, progress=None):
         if c["friction"] > 0:
             links.append(pairs)
         e_min = min(mats[lo]["E"], mats[hi]["E"])
-        # Kontaktgesetz (soma.ccx.write_input): linear mit dem Zehnfachen des E-Moduls (Empfehlung von CalculiX: 5 bis 50),
-        # Rueckfall exponentiell mit Spalt c0 und Druck p0 bei Spalt 0 (beides klein gegen Netz und Werkstoff)
-        contacts.append(dict(spec=c, slave=slave, master=master, sf=sf, mf=mf, key=key, stiffness=10.0 * e_min, stick=e_min,
-                             c0=min(0.05, max(0.002, 1e-4 * diag)), p0=max(0.1, e_min / 70000)))
+        # Kontaktgesetz (soma.ccx.write_input): linear mit dem E-Modul. Das Zehnfache (Empfehlung von CalculiX: 5 bis 50)
+        # brauchte bei einer Platte, die zum Teil abhebt, 18 statt 11 Iterationen und pendelte bei einer, die fast ganz
+        # abhebt, ohne Ende; die Verschiebungen unterschieden sich um 0.4 %. Rueckfall exponentiell mit Spalt c0 und Druck
+        # p0 bei Spalt 0 (p0 folgt unten aus der Last)
+        contacts.append(dict(spec=c, slave=slave, master=master, sf=sf, mf=mf, key=key, stiffness=e_min, stick=e_min,
+                             c0=min(0.05, max(0.002, 1e-4 * diag)), e_min=e_min))
     # Flaechen der Randbedingungen in der Nummerierung nach dem Trennen
     for bc, bf in zip(study.bcs, bc_faces):
         for side, remap in splits:
@@ -861,9 +863,14 @@ def _analyse(parts, study, mats, h, progress=None):
         applied += fg.reshape(-1, 3).sum(axis=0)
     # Kontaktflaechen als Dreiecke mit 6 Knoten (nach dem Trennen), ohne Reibung halten sie nur senkrecht
     nrm_nodes, nrm_vec = [], []
+    load = float(np.linalg.norm(f.reshape(-1, 3), axis=1).sum())
     for c in contacts:
         c["s6"] = _tri6(nodes, tets, *c["sf"])
         c["m6"] = _tri6(nodes, tets, *c["mf"])
+        # Druck bei Spalt 0 im weichen Gesetz: ein Zwanzigstel der mittleren Pressung, wenn die ganze Last ueber diese
+        # Flaeche ginge. Vorher E/70000 (3 MPa bei Stahl): Bei 200 N auf 3600 mm² (0.06 MPa) drueckte das die Teile
+        # auseinander, die Rechnung lief davon
+        c["p0"] = float(np.clip(0.05 * load / max(touching[c["key"]], 1e-9), 1e-6, max(0.1, c["e_min"] / 70000)))
         if c["spec"]["friction"] == 0:
             for t6 in (c["s6"], c["m6"]):
                 p = nodes[t6[:, :3]]
