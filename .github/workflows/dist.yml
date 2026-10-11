@@ -82,12 +82,15 @@ jobs:
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
       # Erste Prüfung der gepackten App mit der Smoke-Suite. Nur Windows ist bisher getestet: Unter Linux und macOS
-      # bricht der Lauf nicht ab, das Protokoll zeigt, was dort noch fehlt.
+      # bricht der Lauf nicht ab, das Protokoll zeigt, was dort noch fehlt. macOS: Der Bildschirm des Runners lässt sich
+      # nicht vergrößern, die Prüfungen mit Koordinaten im Viewer (Würfel, Raster, Doppelklick) scheitern dort.
+      # Linux: xvfb hat nur den Software-Renderer llvmpipe, für den Chromium WebGL2 sperrt.
       - name: Smoke-Test der gepackten App
         working-directory: app
         continue-on-error: ${{ runner.os != 'Windows' }}
         env:
           SOMA_TEST_EXE: ${{ github.workspace }}/app/${{ matrix.exe }}
+          SOMA_TEST_ARGS: ${{ runner.os == 'Linux' && '--ignore-gpu-blocklist' || '' }}
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a --server-args='-screen 0 1920x1080x24' node test/smoke.mjs; else node test/smoke.mjs; fi
 
