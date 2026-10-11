@@ -5,7 +5,7 @@ Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. 
 ## Voraussetzungen
 
 - Node.js 22 oder neuer, Python 3.12 mit CadQuery (Basisumgebung), `soma` darin installiert.
-- Entwicklung: `powershell -File ../python/scripts/setup_env.ps1` baut die Basisumgebung aus `python/requirements-base.txt` (mit pip, E67), installiert `soma` darin editierbar und holt CalculiX mit `python/scripts/fetch_ccx.py` nach `venv\ccx` (E84). Die App findet sie unter `%LOCALAPPDATA%\soma-dev\venv` oder über `SOMA_PYTHON`. Jedes Modell bekommt daneben eine kleine Projektumgebung unter `.soma/env` für Zusatzpakete (E67).
+- Entwicklung: `powershell -File ../python/scripts/setup_env.ps1` baut die Basisumgebung aus `python/requirements-base.txt` (mit uv, braucht uv und Python 3.12, E67), installiert `soma` darin editierbar und holt CalculiX mit `python/scripts/fetch_ccx.py` nach `venv\ccx` (E84). Die App findet sie unter `%LOCALAPPDATA%\soma-dev\venv` oder über `SOMA_PYTHON`. Jedes Modell bekommt daneben eine kleine Projektumgebung unter `.soma/env` für Zusatzpakete (E67).
 - Hinter einem Proxy lädt Node den Electron-Download nur mit `NODE_USE_ENV_PROXY=1`:
   `NODE_USE_ENV_PROXY=1 node node_modules/electron/install.js` (falls `npm install` das Binary nicht geholt hat).
 
@@ -83,4 +83,4 @@ SOMA_TEST_EXE="$LOCALAPPDATA/soma-dev/release/win-unpacked/SOMA.exe" node test/s
 
 ## Noch nicht enthalten
 
-Panel „Pakete“, weitere Bereiche der Einstellungen, Varianten und abgeleitete Werte im Parameter-Panel, Auto-Start des Agenten, `soma check`, Bündelung von Python und Installer, macOS und Linux (nur Windows getestet).
+Panel „Pakete“, weitere Bereiche der Einstellungen, Varianten und abgeleitete Werte im Parameter-Panel, Auto-Start des Agenten, `soma check`, Signatur der Installationspakete. Linux und macOS laufen nur in der CI-Smoke-Suite, auf echten Rechnern noch nicht ausprobiert.

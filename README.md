@@ -51,7 +51,7 @@ Any CLI agent that can read files and run commands works: Claude Code, OpenCode,
 - Send a selection, a measurement or a section to the agent with one click
 - Draw on the 3D view, or drop in a photo of a hand sketch and draw on that, then hand the image to the agent
 - `soma render` lets the agent look at its own work as images or contact sheets
-- Skills: optional rule sets per model (3D printing, CNC, sheet metal, tolerances, joints, FEM …), switched on always or on demand. Edit them or add your own in the settings
+- Skills: optional rule sets per model (3D printing, resin and powder printing, CNC, laser cutting, sheet metal, tolerances, joints, FEM …), switched on always or on demand. Edit them or add your own in the settings
 - A short built-in guide with numbered screenshots (F1). The agent gets the same guide as a skill, so you can also just ask it how the app works
 
 **Project**
@@ -94,18 +94,24 @@ add_part("Body", body, color=(0.25, 0.45, 0.75))
 
 `soma build` runs the file and writes `output/model.step` with every part named, plus the data for the viewer. `param()` puts a value into the Parameters panel of the app.
 
+## Install
+
+Download the package for your system from the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases): an installer for Windows, an AppImage or tar.gz for Linux, a dmg for macOS (Apple Silicon). Python, CadQuery, Git and CalculiX are included. You only need a CLI agent.
+
+- The packages are not signed yet. On macOS, open the app the first time with right-click > Open
+- Linux needs glibc 2.31 or newer
+
 ## Status
 
 Early prototype, version 0.6.1. See [CHANGELOG.md](CHANGELOG.md).
 
-- Developed and tested on Windows only
-- No installer yet. Python, CadQuery and Git are meant to ship with the app, for now you set them up yourself
+- Developed and tested on Windows. Linux and macOS pass the automated smoke tests, but have barely been tried on real machines
 
 > **Note:** SOMA itself is vibe coded. Most of the code was written by coding agents (mainly Claude Code) under human direction and review. It has tests, but expect rough edges.
 
 ## Running from source
 
-Requirements: Windows, Node.js 22, Python 3.12 and [uv](https://github.com/astral-sh/uv).
+For development. The setup script is for Windows only. Requirements: Windows, Node.js 22, Python 3.12 and [uv](https://github.com/astral-sh/uv).
 
 ```
 powershell -File python/scripts/setup_env.ps1
@@ -123,6 +129,8 @@ More in [app/README.md](app/README.md).
 | `app/` | Electron app (TypeScript): terminal, viewer, project format, tests |
 | `python/soma/` | Helper library and command line tool used by the agent |
 | `design/` | UI drafts |
+| `docs/` | Images for this page, results of the first prototype |
+| `.github/workflows/` | Builds, tests and releases for Windows, Linux and macOS |
 
 ## License
 
