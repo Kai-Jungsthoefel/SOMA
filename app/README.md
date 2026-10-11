@@ -1,6 +1,6 @@
 # SOMA: Desktop-App
 
-Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. Version **0.6.0** (Major.minor.bugfix, E68, steht in `package.json` und `../python/soma/__init__.py`). Oberfläche nach den Entwürfen in [../design/](../design/), Änderungen in [../CHANGELOG.md](../CHANGELOG.md). Die Kennungen `E12` in Code und Doku verweisen auf das Entscheidungslog der Entwicklung, das nicht im Repo liegt.
+Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. Version **0.6.1** (Major.minor.bugfix, E68, steht in `package.json` und `../python/soma/__init__.py`). Oberfläche nach den Entwürfen in [../design/](../design/), Änderungen in [../CHANGELOG.md](../CHANGELOG.md). Die Kennungen `E12` in Code und Doku verweisen auf das Entscheidungslog der Entwicklung, das nicht im Repo liegt.
 
 ## Voraussetzungen
 
@@ -45,7 +45,7 @@ npm run help:shots      # Bilder der Anleitung neu aufnehmen (resources/help/), 
 
 ## Installationspakete
 
-Jedes Betriebssystem baut sein eigenes Paket, die Python-Basisumgebung, CalculiX und das Git von dugite sind plattformabhängig. Die CI macht das für alle drei Systeme ([../.github/workflows/dist.yml](../.github/workflows/dist.yml), von Hand oder mit einem Tag `vX.Y.Z`, Pakete als Artefakte am Lauf). Lokal:
+Jedes Betriebssystem baut sein eigenes Paket, die Python-Basisumgebung, CalculiX und das Git von dugite sind plattformabhängig. Die CI macht das für alle drei Systeme ([../.github/workflows/dist.yml](../.github/workflows/dist.yml), von Hand oder mit einem Tag `vX.Y.Z`, Pakete als Artefakte am Lauf, bei einem Tag zusätzlich als GitHub-Release, solange 0.x als Vorabversion). Lokal:
 
 ```
 # 1. Python-Basisumgebung: eigenständiges Python 3.12 (python-build-standalone über uv) mit requirements-base.txt, soma und CalculiX

@@ -6,9 +6,21 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+## [0.6.1] - 2026-10-11
+
+### Neu
+
+- Installationspakete zum Herunterladen unter den Releases auf GitHub, für Windows, Linux und macOS (Apple Silicon).
+- Linux ohne nutzbaren Grafiktreiber (virtuelle Maschine, Remote-Desktop): Die App startet sich einmal mit Software-Rendering neu, statt ohne 3D-Ansicht stehen zu bleiben. Geht es auch dann nicht, sagt sie, dass WebGL fehlt.
+
 ### Geändert
 
 - Beim Start zeigt die App einen kurzen Ladebildschirm, bis die Startseite steht. Vorher blitzte kurz die leere Oberfläche auf.
+
+### Behoben
+
+- macOS: Das Terminal ging im Installationspaket nicht auf. Startet eine Shell nicht, nennt die App jetzt auf allen Systemen den Grund.
+- Linux: Das Paket bringt die Bibliotheken mit, die gmsh für die FEM braucht (libGLU und einige X11-Bibliotheken). Ohne sie brach der Import auf vielen Systemen ab.
 
 ## [0.6.0] - 2026-10-10
 
@@ -151,7 +163,8 @@ Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
 - Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
 - Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.0...HEAD
+[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.0...v0.4.1
