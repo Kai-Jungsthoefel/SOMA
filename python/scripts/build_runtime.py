@@ -114,7 +114,9 @@ LINUX_BUNDLE = ["libGLU.so.1", "libXft.so.2", "libXinerama.so.1", "libXcursor.so
 
 
 def bundle_linux_libs(rt):
-    cache = subprocess.run(["ldconfig", "-p"], check=True, capture_output=True, text=True).stdout
+    # ldconfig liegt in /sbin bzw. /usr/sbin, das fehlt im PATH normaler Nutzer oft
+    ldconfig = shutil.which("ldconfig") or next((p for p in ("/sbin/ldconfig", "/usr/sbin/ldconfig") if os.path.exists(p)), "ldconfig")
+    cache = subprocess.run([ldconfig, "-p"], check=True, capture_output=True, text=True).stdout
     for soname in LINUX_BUNDLE:
         m = re.search(rf"^\s*{re.escape(soname)} \(libc6,x86-64[^)]*\) => (\S+)$", cache, re.M)
         if not m:
