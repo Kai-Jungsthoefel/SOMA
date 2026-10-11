@@ -2,7 +2,7 @@
 # und das Git von dugite sind plattformabhängig. Ablauf und Grenzen in app/README.md („Installationspakete“).
 #
 # Start von Hand (Actions > Installers > Run workflow) oder mit einem Versions-Tag (vX.Y.Z). Die Pakete liegen danach als
-# Artefakte am Lauf. Ohne Zertifikate: Windows unsigniert (SmartScreen warnt), macOS nur ad-hoc signiert, nicht notarisiert.
+# Artefakte am Lauf, bei einem Tag zusätzlich als GitHub-Release (Job release unten). Ohne Zertifikate: Windows unsigniert (SmartScreen warnt), macOS nur ad-hoc signiert, nicht notarisiert.
 name: Installers
 
 on:
@@ -81,14 +81,13 @@ jobs:
         shell: pwsh
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
-      # Erste Prüfung der gepackten App mit der Smoke-Suite. Nur Windows ist bisher getestet: Unter Linux und macOS
-      # bricht der Lauf nicht ab, das Protokoll zeigt, was dort noch fehlt. macOS: Der Bildschirm des Runners lässt sich
+      # Prüfung der gepackten App mit der Smoke-Suite. Unter macOS bricht der Lauf nicht ab. macOS: Der Bildschirm des Runners lässt sich
       # nicht vergrößern, die Prüfungen mit Koordinaten im Viewer (Würfel, Raster, Doppelklick) scheitern dort.
       # Linux: xvfb hat nur den Software-Renderer llvmpipe, für den Chromium WebGL2 sperrt. Die App startet sich dann
       # selbst mit --ignore-gpu-blocklist neu (main.ts), das prüft dieser Lauf mit.
       - name: Smoke-Test der gepackten App
         working-directory: app
-        continue-on-error: ${{ runner.os != 'Windows' }}
+        continue-on-error: ${{ runner.os == 'macOS' }}
         env:
           SOMA_TEST_EXE: ${{ github.workspace }}/app/${{ matrix.exe }}
         run: |
@@ -100,3 +99,48 @@ jobs:
           path: ${{ matrix.files }}
           retention-days: 14
           compression-level: 0
+
+  # Bei einem Versions-Tag: GitHub-Release mit den Paketen aller Systeme. Läuft nur, wenn alle drei gebaut und Windows und
+  # Linux ihren Smoke-Test bestanden haben. Als Vorabversion, solange SOMA bei 0.x ist und die Pakete unsigniert sind.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: dist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      # Text der Release-Seite auf Englisch (E73), die Änderungen stehen im Changelog
+      - name: Release-Text
+        run: |
+          ls -l packages
+          cat > notes.md <<EOF
+          Early prototype of SOMA, version ${GITHUB_REF_NAME#v}. Changes: [CHANGELOG.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md).
+
+          Each package brings Python with CadQuery, the \`soma\` library, CalculiX and Git. You only need a CLI agent of your choice (for example Claude Code or OpenCode).
+
+          | System | File |
+          |---|---|
+          | Windows 10/11, x64 | \`SOMA-*-win-x64.exe\` (installer) |
+          | macOS 11 or later, Apple Silicon | \`SOMA-*-mac-arm64.dmg\` |
+          | Linux x64, glibc 2.31 or later | \`SOMA-*-linux-*.AppImage\` or \`SOMA-*-linux-*.tar.gz\` |
+
+          The packages are not signed yet:
+
+          - **Windows:** SmartScreen warns on the first start. Choose "More info", then "Run anyway". The installer needs no admin rights.
+          - **macOS:** Move SOMA to Applications, then right-click it and choose "Open", or run \`xattr -cr /Applications/SOMA.app\` once.
+          - **Linux:** Make the AppImage executable (\`chmod +x\`). Without a working graphics driver SOMA falls back to software rendering, which is slow for large models.
+          EOF
+          cat notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: SOMA ${{ github.ref_name }}
+          body_path: notes.md
+          prerelease: true
+          files: packages/*
+          fail_on_unmatched_files: true
