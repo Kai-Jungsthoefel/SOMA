@@ -31,7 +31,22 @@ import { PickResult, Viewer, ViewName } from './viewer';
 hydrateIcons();
 const api = window.soma;
 
-const viewer = new Viewer($('viewer'));
+/**
+ * Ohne WebGL gibt es keine 3D-Ansicht, und die ganze Oberfläche hängt am Viewer. Unter Linux hat der Hauptprozess dann
+ * schon Software-Rendering versucht (main/main.ts). Klar sagen, was fehlt, statt mit leerem Fenster stehen zu bleiben.
+ */
+function createViewer(): Viewer {
+  try {
+    return new Viewer($('viewer'));
+  } catch (e) {
+    document.body.replaceChildren(el('div', { className: 'fatal' },
+      el('h1', {}, '3D view unavailable'),
+      el('p', {}, 'SOMA needs WebGL 2 for the 3D view, but this system could not provide it. Install or update the graphics driver, or start SOMA on a machine with graphics acceleration.'),
+      el('pre', {}, String(e instanceof Error ? e.message : e))));
+    throw e;
+  }
+}
+const viewer = createViewer();
 viewer.attachCube($('cube-view'));
 const terminals = new TerminalTabs($('term-tabs'), $('term-panes'), $('btn-term-add'), $('strip-tabs'));
 

@@ -355,8 +355,27 @@ function createWindow(): void {
   win.on('closed', () => { ctl.close(); ctl.renders.close(); controller = null; win = null; });
 }
 
+/**
+ * Linux ohne nutzbaren Grafiktreiber (VM, Remote-Desktop, xvfb): Chromium sperrt WebGL2 auf dem Software-Renderer
+ * llvmpipe, ohne WebGL gibt es keinen Viewer. Dann einmal neu starten und die Sperrliste übergehen. Rechner mit
+ * funktionierendem Treiber bleiben unberührt. Der Schalter wirkt nur beim Start, deshalb der Neustart, und zwar vor dem
+ * ersten Fenster. Scheitert WebGL danach noch, meldet es das Fenster (renderer/main.ts).
+ */
+async function relaunchForSoftwareGl(): Promise<boolean> {
+  if (process.platform !== 'linux' || app.commandLine.hasSwitch('ignore-gpu-blocklist')) return false;
+  // Der Status gilt erst, wenn der GPU-Prozess Auskunft gegeben hat
+  await Promise.race([app.getGPUInfo('basic').catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
+  const status = app.getGPUFeatureStatus().webgl2;
+  if (status.startsWith('enabled')) return false;
+  console.log(`[gpu] WebGL2 ${status}, restarting with --ignore-gpu-blocklist (software rendering)`);
+  app.relaunch({ args: [...process.argv.slice(1), '--ignore-gpu-blocklist'] });
+  app.exit(0);
+  return true;
+}
+
 // Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
 app.whenReady().then(async () => {
+  if (await relaunchForSoftwareGl()) return;
   adoptLoginShellPath(); // macOS und Linux: PATH wie im Terminal, sonst fehlen die Agenten
   // Python schon jetzt vorwärmen: Bis das Fenster steht und das letzte Modell offen ist, ist cadquery geladen (build.ts)
   warmUp();

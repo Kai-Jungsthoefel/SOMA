@@ -1097,3 +1097,9 @@ code { font-family:var(--mono); font-size:.95em; }
 .st-comp-grid .n { color:var(--tx); }
 .st-comp-grid .ver { font-family:var(--mono); color:var(--tx2); }
 .st-comp-grid .lic { color:var(--tx3); }
+
+/* Ohne WebGL kein Viewer: Meldung statt leerer Oberfläche (renderer/main.ts) */
+.fatal { max-width:640px; margin:15vh auto 0; padding:0 24px; }
+.fatal h1 { font-size:18px; font-weight:600; color:var(--err); margin:0 0 12px; }
+.fatal p { color:var(--tx2); margin:0 0 16px; }
+.fatal pre { font-family:var(--mono); font-size:12px; color:var(--tx3); white-space:pre-wrap; background:var(--s2); border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin:0; }
