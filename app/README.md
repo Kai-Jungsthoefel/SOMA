@@ -1,6 +1,6 @@
 # SOMA: Desktop-App
 
-Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. Version **0.6.1** (Major.minor.bugfix, E68, steht in `package.json` und `../python/soma/__init__.py`). Oberfläche nach den Entwürfen in [../design/](../design/), Änderungen in [../CHANGELOG.md](../CHANGELOG.md). Die Kennungen `E12` in Code und Doku verweisen auf das Entscheidungslog der Entwicklung, das nicht im Repo liegt.
+Electron-App (TypeScript) für 3D-Modelle mit einem Coding-Agenten im Terminal. Version **0.6.2** (Major.minor.bugfix, E68, steht in `package.json` und `../python/soma/__init__.py`). Oberfläche nach den Entwürfen in [../design/](../design/), Änderungen in [../CHANGELOG.md](../CHANGELOG.md). Die Kennungen `E12` in Code und Doku verweisen auf das Entscheidungslog der Entwicklung, das nicht im Repo liegt.
 
 ## Voraussetzungen
 

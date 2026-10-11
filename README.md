@@ -103,7 +103,7 @@ Download the package for your system from the [releases](https://github.com/Kai-
 
 ## Status
 
-Early prototype, version 0.6.1. See [CHANGELOG.md](CHANGELOG.md).
+Early prototype, version 0.6.2. See [CHANGELOG.md](CHANGELOG.md).
 
 - Developed and mainly tested on Windows. The packages also run on Linux (Kubuntu) and macOS (Apple Silicon), but have seen much less use there
 

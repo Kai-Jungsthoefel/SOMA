@@ -6,6 +6,8 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+## [0.6.2] - 2026-10-11
+
 ### Behoben
 
 - Linux: Auf Rechnern mit Grafikkarte schaltete die App beim Start fälschlich auf Software-Rendering um und startete dann nicht mehr. Jetzt schaltet sie nur um, wenn die 3D-Ansicht wirklich kein WebGL bekommt, merkt sich das und startet einmal neu.
@@ -167,7 +169,8 @@ Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
 - Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
 - Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.1...HEAD
+[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.4.1...v0.5.0
