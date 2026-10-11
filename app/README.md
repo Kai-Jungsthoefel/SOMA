@@ -63,7 +63,7 @@ SOMA_TEST_EXE="$LOCALAPPDATA/soma-dev/release/win-unpacked/SOMA.exe" node test/s
 - **Windows:** Installation für den Nutzer nach `%LOCALAPPDATA%\Programs\SOMA` ohne Adminrechte, unsigniert (SmartScreen warnt beim ersten Start).
 - **macOS:** nur Apple Silicon (für Intel fehlt `cryptography` als Wheel), ad-hoc signiert, nicht notarisiert: Gatekeeper lässt die App erst nach Rechtsklick > Öffnen oder `xattr -cr /Applications/SOMA.app` starten. Die installierte App übernimmt beim Start den PATH einer Login-Shell, sonst fänden Agenten-Erkennung und Terminals nichts aus Homebrew oder npm.
 - **Linux:** gebaut unter Ubuntu 22.04, braucht glibc 2.31 oder neuer (cadquery-ocp). gmsh braucht libGLU, libXft, libXinerama und libXcursor, `build_runtime.py` liefert sie mit. Ohne nutzbaren Grafiktreiber (VM, Remote-Desktop, xvfb) sperrt Chromium WebGL, bekommt der Viewer deshalb kein WebGL, merkt die App sich das in den App-Daten (`software-gl`) und startet mit `--ignore-gpu-blocklist` neu (Software-Rendering, `main.ts`). Die Tests legen den Merker unter xvfb vorab an (`SOMA_TEST_SOFTWARE_GL=1`). Unter Ubuntu 24.04 und neuer kann AppArmor die Sandbox von Electron im AppImage blockieren.
-- Geprüft mit der Smoke-Suite: Windows (lokal und CI), Linux unter WSL mit Ubuntu 24.04 und xvfb, macOS in der CI (dort scheitern nur die Prüfungen mit Koordinaten im Viewer, der Bildschirm des Runners ist zu klein). Auf echten Rechnern mit Linux und macOS noch nicht ausprobiert.
+- Geprüft mit der Smoke-Suite: Windows (lokal und CI), Linux unter WSL mit Ubuntu 24.04 und xvfb, macOS in der CI (dort scheitern nur die Prüfungen mit Koordinaten im Viewer, der Bildschirm des Runners ist zu klein). Auf echten Rechnern kurz ausprobiert (2026-10-11): Linux unter Kubuntu mit Grafikkarte, macOS mit Apple Silicon, beide starten mit 3D-Ansicht.
 
 ## Aufbau
 
@@ -83,4 +83,4 @@ SOMA_TEST_EXE="$LOCALAPPDATA/soma-dev/release/win-unpacked/SOMA.exe" node test/s
 
 ## Noch nicht enthalten
 
-Panel „Pakete“, weitere Bereiche der Einstellungen, Varianten und abgeleitete Werte im Parameter-Panel, Auto-Start des Agenten, `soma check`, Signatur der Installationspakete. Linux und macOS laufen nur in der CI-Smoke-Suite, auf echten Rechnern noch nicht ausprobiert.
+Panel „Pakete“, weitere Bereiche der Einstellungen, Varianten und abgeleitete Werte im Parameter-Panel, Auto-Start des Agenten, `soma check`, Signatur der Installationspakete. Linux und macOS auf echten Rechnern nur kurz ausprobiert (Start und 3D-Ansicht).

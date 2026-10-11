@@ -105,7 +105,7 @@ Download the package for your system from the [releases](https://github.com/Kai-
 
 Early prototype, version 0.6.1. See [CHANGELOG.md](CHANGELOG.md).
 
-- Developed and tested on Windows. Linux and macOS pass the automated smoke tests, but have barely been tried on real machines
+- Developed and mainly tested on Windows. The packages also run on Linux (Kubuntu) and macOS (Apple Silicon), but have seen much less use there
 
 > **Note:** SOMA itself is vibe coded. Most of the code was written by coding agents (mainly Claude Code) under human direction and review. It has tests, but expect rough edges.
 
