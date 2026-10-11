@@ -30,6 +30,38 @@ const components = Object.keys(dependencies).sort().map((name) => {
 });
 fs.writeFileSync('dist/main/components.json', `${JSON.stringify(components, null, 2)}\n`);
 
+// Lizenztexte der npm-Pakete nach dist/licenses/<paket>/ (THIRD_PARTY_NOTICES.md). esbuild übernimmt beim Bündeln nur
+// Kommentare mit @license, MIT und Co. verlangen aber den Text bei jeder Weitergabe. Gesammelt werden alle Laufzeit-
+// Abhängigkeiten samt ihren eigenen, aufgelöst wie Node (erst verschachtelt, dann flach). Optionale, die npm auf diesem
+// System nicht installiert hat, fehlen eben. Lieber ein Paket zu viel als eins zu wenig.
+fs.rmSync('dist/licenses', { recursive: true, force: true });
+const licensed = new Set();
+const appDir = path.resolve('.');
+const collect = (name, from) => {
+  let dir = from;
+  while (!fs.existsSync(path.join(dir, 'node_modules', name, 'package.json'))) {
+    if (dir === appDir) return;
+    dir = path.dirname(dir);
+  }
+  const pkgDir = path.join(dir, 'node_modules', name);
+  if (licensed.has(pkgDir)) return;
+  licensed.add(pkgDir);
+  const p = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
+  const out = path.join('dist/licenses', `${name.replace('/', '__')}@${p.version}`);
+  for (const f of fs.readdirSync(pkgDir).filter((f) => /^(licen[cs]e|copying|notice)/i.test(f))) {
+    fs.mkdirSync(out, { recursive: true });
+    fs.copyFileSync(path.join(pkgDir, f), path.join(out, f));
+  }
+  for (const dep of Object.keys({ ...p.dependencies, ...p.optionalDependencies })) collect(dep, pkgDir);
+};
+for (const name of Object.keys(dependencies)) collect(name, appDir);
+// winpty liegt in node-pty unter deps/, das die Paketierung weglässt (electron-builder.config.cjs)
+const winpty = path.join('node_modules', 'node-pty', 'deps', 'winpty', 'LICENSE');
+if (fs.existsSync(winpty)) {
+  fs.mkdirSync('dist/licenses/node-pty__winpty', { recursive: true });
+  fs.copyFileSync(winpty, 'dist/licenses/node-pty__winpty/LICENSE');
+}
+
 fs.mkdirSync('dist/renderer', { recursive: true });
 fs.copyFileSync('src/renderer/index.html', 'dist/renderer/index.html');
 fs.copyFileSync('src/renderer/render.html', 'dist/renderer/render.html');

@@ -52,6 +52,9 @@ module.exports = {
     { from: runtime, to: 'python', filter: ['**/*', '!**/__pycache__/*.opt-?.pyc'] },
     { from: '../LICENSE', to: 'LICENSE.txt' },
     { from: '../MODEL-EXCEPTION.md', to: 'MODEL-EXCEPTION.md' },
+    // Übersicht der mitgelieferten Komponenten mit Lizenz und Fundort der Lizenztexte im Paket. Die Texte der npm-Pakete
+    // sammelt esbuild.config.mjs nach dist/licenses/, Electron legt LICENSE.electron.txt und LICENSES.chromium.html selbst bei.
+    { from: '../THIRD_PARTY_NOTICES.md', to: 'THIRD_PARTY_NOTICES.md' },
   ],
 
   win: {
