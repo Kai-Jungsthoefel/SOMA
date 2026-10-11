@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Geändert
+
+- Beim Start zeigt die App einen kurzen Ladebildschirm, bis die Startseite steht. Vorher blitzte kurz die leere Oberfläche auf.
+
 ## [0.6.0] - 2026-10-10
 
 ### Neu
