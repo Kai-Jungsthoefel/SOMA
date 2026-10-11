@@ -915,6 +915,11 @@ code { font-family:var(--mono); font-size:.95em; }
 #toast.info .ti { color:var(--vio); }
 
 /* ---- Startseite ------------------------------------------------------------------------------------------------ */
+/* Ladebildschirm beim Start, verschwindet mit kurzem Überblenden (main.ts) */
+.boot { position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; transition:opacity .15s; }
+.boot b { font-size:22px; font-weight:600; letter-spacing:.12em; color:var(--tx); }
+.boot-spin { width:22px; height:22px; border:2px solid var(--line2); border-top-color:var(--acc); border-radius:50%; animation:spin .8s linear infinite; }
+.boot.gone { opacity:0; pointer-events:none; }
 .start { position:fixed; inset:0; z-index:30; background:var(--bg); display:flex; flex-direction:column; }
 .start .brand { font-size:14px; }
 .start-body { flex:1; overflow:auto; display:flex; justify-content:center; }

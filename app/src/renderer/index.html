@@ -8,6 +8,8 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<!-- Ladebildschirm: deckt die Oberfläche ab, bis main.js die Startseite (oder das Modell) aufgebaut hat. Ohne JS, daher das App-Icon als Bild (beim Build kopiert). -->
+<div id="boot" class="boot" role="status" aria-label="Loading"><img src="logo.svg" width="72" height="72" alt=""><b>SOMA</b><span class="boot-spin"></span></div>
 <div id="app">
   <header id="topbar" class="top">
     <button id="btn-home" class="logo" title="Start page" aria-label="Start page"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></button>

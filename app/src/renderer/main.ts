@@ -31,6 +31,15 @@ import { PickResult, Viewer, ViewName } from './viewer';
 hydrateIcons();
 const api = window.soma;
 
+/** Ladebildschirm aus index.html ausblenden. Auch bei einem Fehler im Aufbau, sonst bliebe er für immer stehen. */
+function hideBoot(): void {
+  const boot = document.getElementById('boot');
+  if (!boot || boot.classList.contains('gone')) return;
+  boot.classList.add('gone');
+  setTimeout(() => boot.remove(), 200);
+}
+window.addEventListener('error', hideBoot, { once: true });
+
 /**
  * Ohne WebGL gibt es keine 3D-Ansicht, und die ganze Oberfläche hängt am Viewer. Unter Linux hat der Hauptprozess dann
  * schon Software-Rendering versucht (main/main.ts). Klar sagen, was fehlt, statt mit leerem Fenster stehen zu bleiben.
@@ -1554,6 +1563,8 @@ if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
 }
 // Die App beginnt auf der Startseite (E69), der Hauptprozess öffnet kein Modell. Nur im Testmodus öffnet er gleich eins.
 if (api.startsHome) void showStart(true);
+// Erst jetzt steht, was der Nutzer sehen soll, die Startseite liegt schon über der Oberfläche
+requestAnimationFrame(() => hideBoot());
 
 // Prüfschnittstelle, nur im Testmodus
 if (api.testMode) {
