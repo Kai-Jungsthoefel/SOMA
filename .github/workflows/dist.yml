@@ -83,13 +83,15 @@ jobs:
 
       # Prüfung der gepackten App mit der Smoke-Suite. Unter macOS bricht der Lauf nicht ab. macOS: Der Bildschirm des Runners lässt sich
       # nicht vergrößern, die Prüfungen mit Koordinaten im Viewer (Würfel, Raster, Doppelklick) scheitern dort.
-      # Linux: xvfb hat nur den Software-Renderer llvmpipe, für den Chromium WebGL2 sperrt. Die App startet sich dann
-      # selbst mit --ignore-gpu-blocklist neu (main.ts), das prüft dieser Lauf mit.
+      # Linux: xvfb hat nur den Software-Renderer llvmpipe, für den Chromium WebGL sperrt. Die App startet sich dann einmal
+      # mit --ignore-gpu-blocklist neu und merkt sich das (main.ts). Der Test legt den Merker vorab an, über einen Neustart
+      # hinweg kann er dem Fenster nicht folgen.
       - name: Smoke-Test der gepackten App
         working-directory: app
         continue-on-error: ${{ runner.os == 'macOS' }}
         env:
           SOMA_TEST_EXE: ${{ github.workspace }}/app/${{ matrix.exe }}
+          SOMA_TEST_SOFTWARE_GL: ${{ runner.os == 'Linux' && '1' || '' }}
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a --server-args='-screen 0 1920x1080x24' node test/smoke.mjs; else node test/smoke.mjs; fi
 

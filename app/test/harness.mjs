@@ -27,6 +27,9 @@ export async function startApp({ port = Number(process.env.SOMA_TEST_PORT) || 93
   const mode = process.env.SMOKE_VISIBLE;
   const visible = mode === '1';
   const ud = userData ?? fs.mkdtempSync(path.join(os.tmpdir(), `soma-${name}-`));
+  // SOMA_TEST_SOFTWARE_GL=1: Merker für Software-Rendering vorab (main.ts), sonst startet die App unter xvfb einmal neu und
+  // der Test verlöre die Verbindung zum ersten Fenster
+  if (process.env.SOMA_TEST_SOFTWARE_GL === '1') fs.writeFileSync(path.join(ud, 'software-gl'), 'test\n');
   // Nach einem harten Beenden kann ein Kindprozess der alten App den Debug-Port noch kurz halten (geerbter Socket):
   // warten, sonst startet Electron ohne Debug-Port und der Test findet kein Fenster
   for (const t0 = Date.now(); !(await portFree(port)) && Date.now() - t0 < 30000;) await sleep(300);
