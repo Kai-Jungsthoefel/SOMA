@@ -1,175 +1,183 @@
 # Changelog
 
-Alle nennenswerten Änderungen an SOMA. Aufbau nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionsnummern
-nach Major.minor.bugfix (E68). Neues sammelt sich unter „Unveröffentlicht“ und wandert beim Hochzählen der Version in einen
-eigenen Abschnitt mit Datum und Git-Tag.
+All notable changes to SOMA. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), version numbers
+are major.minor.bugfix. New entries collect under "Unreleased" and move into their own section with date and Git tag when
+the version is bumped.
 
-## [Unveröffentlicht]
+## [Unreleased]
+
+### Added
+
+- The packages include `THIRD_PARTY_NOTICES.md` and the license texts of all bundled npm packages.
+- `SECURITY.md` explains how to report vulnerabilities privately, and issue templates ask for the system info from Settings > About.
+
+### Changed
+
+- This changelog is now in English, also for older versions.
 
 ## [0.6.2] - 2026-10-11
 
-### Behoben
+### Fixed
 
-- Linux: Auf Rechnern mit Grafikkarte schaltete die App beim Start fälschlich auf Software-Rendering um und startete dann nicht mehr. Jetzt schaltet sie nur um, wenn die 3D-Ansicht wirklich kein WebGL bekommt, merkt sich das und startet einmal neu.
+- Linux: On machines with a graphics card the app wrongly switched to software rendering at startup and then no longer started. Now it only switches when the 3D view really gets no WebGL, remembers that and restarts once.
 
 ## [0.6.1] - 2026-10-11
 
-### Neu
+### Added
 
-- Installationspakete zum Herunterladen unter den Releases auf GitHub, für Windows, Linux und macOS (Apple Silicon).
-- Linux ohne nutzbaren Grafiktreiber (virtuelle Maschine, Remote-Desktop): Die App startet sich einmal mit Software-Rendering neu, statt ohne 3D-Ansicht stehen zu bleiben. Geht es auch dann nicht, sagt sie, dass WebGL fehlt.
+- Installation packages for download under the GitHub releases, for Windows, Linux and macOS (Apple Silicon).
+- Linux without a usable graphics driver (virtual machine, remote desktop): the app restarts once with software rendering instead of staying without a 3D view. If that fails too, it says that WebGL is missing.
 
-### Geändert
+### Changed
 
-- Beim Start zeigt die App einen kurzen Ladebildschirm, bis die Startseite steht. Vorher blitzte kurz die leere Oberfläche auf.
+- At startup the app shows a short loading screen until the start page is ready. Before, the empty interface flashed up briefly.
 
-### Behoben
+### Fixed
 
-- macOS: Das Terminal ging im Installationspaket nicht auf. Startet eine Shell nicht, nennt die App jetzt auf allen Systemen den Grund.
-- Linux: Das Paket bringt die Bibliotheken mit, die gmsh für die FEM braucht (libGLU und einige X11-Bibliotheken). Ohne sie brach der Import auf vielen Systemen ab.
+- macOS: The terminal did not open in the installation package. If a shell does not start, the app now names the reason on all systems.
+- Linux: The package brings the libraries gmsh needs for FEM (libGLU and a few X11 libraries). Without them the import failed on many systems.
 
 ## [0.6.0] - 2026-10-10
 
-### Neu
+### Added
 
-- Installationspakete: Installer für Windows, AppImage und tar.gz für Linux, dmg für macOS mit Apple Silicon, mit Python, CadQuery, `soma`, CalculiX und Git an Bord. Bisher nur unter Windows getestet, die Pakete sind noch nicht signiert.
-- FEM mit Schrauben: `study.bolt("Schraube 1")` spannt eine Schraube aus `soma.fasteners` vor, dann wirken die Lasten. Das Ergebnis nennt je Schraube Vorspannung, Zug und Querkraft am Ende und die Auslastung der Streckgrenze, der Kontakt der Fuge zeigt, ob sie klafft oder rutscht. Ohne Angabe 70 % der Streckgrenze, bei Kunststoffteilen begrenzt auf das, was die Fläche unter dem Kopf trägt. Mutter, Scheibe und verschraubte Teile rechnen von selbst mit (E84).
+- Installation packages: installer for Windows, AppImage and tar.gz for Linux, dmg for macOS with Apple Silicon, with Python, CadQuery, `soma`, CalculiX and Git included. So far only tested on Windows, the packages are not signed yet.
+- FEM with bolts: `study.bolt("Bolt 1")` preloads a bolt from `soma.fasteners`, then the loads act. The result lists preload, tension and shear force at the end and the utilization of the yield strength for each bolt, the contact of the joint shows whether it opens or slips. Without a value 70 % of the yield strength, for plastic parts limited to what the area under the head can carry. Nut, washer and clamped parts are included automatically.
 
-### Geändert
+### Changed
 
-- Die mitgelieferten Skills haben englische Dateinamen, etwa `3d-printing.md` statt `3d-druck.md`. Ältere Modelle behalten ihre Kopien unter dem alten Namen, die App erkennt sie weiter als denselben Skill. Eigene Fassungen mitgelieferter Skills in den Einstellungen ziehen beim Start mit um (E87).
+- The bundled skills have English file names, for example `3d-printing.md` instead of `3d-druck.md`. Older models keep their copies under the old name, the app still recognizes them as the same skill. Your own versions of bundled skills in the settings move along at startup.
 
-### Behoben
+### Fixed
 
-- Überhang im Viewer: Die schlimmste Stelle heißt „Max“ statt „Min“.
-- Ein Klick auf Analysis oder Animation in der Leiste links zeigt die Liste, statt gleich ein Ergebnis zu öffnen (E86).
-- FEM: Die Kraft, die ein Kontakt trägt, stimmt jetzt auch, wenn das Teil zusätzlich an etwas hängt oder der Kontakt auf die Kante eines Lagers drückt. Vorher konnten Kontaktkraft und Gleichgewicht der Lagerkräfte dort deutlich danebenliegen.
-- FEM: Netze mit einzelnen umgeklappten Elementen in engen Spalten (etwa zwischen Scheibe und Mutter) werden geglättet, statt mit „distorted elements“ abzubrechen.
-- FEM: Kein „-0.0“ mehr in Kräften im Ergebnis.
-- FEM mit Kontakt: Eine Platte, die nur über den Kontakt gehalten wird (etwa ein Halter mit Arm), brach mit „a part moves without limit“ oder „The contact does not settle“ ab. SOMA hielt das Suchen der Berührfläche zu früh für Pendeln, und das weiche Ersatzgesetz drückte die Teile auseinander. Jetzt rechnet der Kontakt weicher (Steifigkeit gleich dem E-Modul statt dem Zehnfachen, Verschiebungen 0.4 % anders), darf länger suchen, und das Ersatzgesetz richtet sich nach der Last (E84).
-- Skill „Strength with FEM“: Reibung zwischen verschraubten Teilen hält nur mit `bolt()`, der Skill sagt das jetzt.
+- Overhang in the viewer: the worst spot is labeled "Max" instead of "Min".
+- A click on Analysis or Animation in the left bar shows the list instead of opening a result right away.
+- FEM: The force carried by a contact is now correct even when the part is also supported elsewhere or the contact presses on the edge of a support. Before, contact force and the balance of the reaction forces could be clearly off there.
+- FEM: Meshes with single inverted elements in narrow gaps (for example between washer and nut) are smoothed instead of failing with "distorted elements".
+- FEM: No more "-0.0" in forces in the result.
+- FEM with contact: A plate held only by the contact (for example a holder with an arm) failed with "a part moves without limit" or "The contact does not settle". SOMA took the search for the contact area for oscillation too early, and the soft fallback law pushed the parts apart. Now the contact is softer (stiffness equal to the Young's modulus instead of ten times, displacements differ by 0.4 %), may search longer, and the fallback law follows the load.
+- Skill "Strength with FEM": friction between bolted parts only holds with `bolt()`, the skill now says so.
 
 ## [0.5.0] - 2026-10-10
 
-Die FEM rechnet mit CalculiX und kennt Kontakt zwischen Teilen: abheben, gleiten, mit und ohne Reibung.
+FEM runs on CalculiX and knows contact between parts: lifting off, sliding, with and without friction.
 
-### Neu
+### Added
 
-- FEM mit Kontakt: `study.contact("Deckel", "Gehäuse")` macht die Berührfläche zweier Teile zu einem Kontakt, der abheben und gleiten kann, mit `friction=` auch mit Reibung. Das Ergebnis nennt je Kontakt die getragene Kraft, die höchste Pressung, wo er offen ist und wo er gleitet. Im Bild gibt es die Größe „Contact pressure“, im Bericht je Kontakt eine Zeile (E84).
-- FEM nennt alle Teile, die sich berühren, mit Fläche und ob sie verklebt sind, und weist auf `contact()` hin (E84).
-- Die FEM rechnet mit CalculiX statt mit dem eigenen Solver, bei üblichen Modellgrößen zwei- bis dreimal schneller mit denselben Zahlen. CalculiX kommt mit SOMA (Windows: 53 MB), ohne CalculiX rechnet der eigene Solver weiter, nur ohne Kontakt (E84).
-- Einstellungen, Reiter „About“: nennt gmsh und CalculiX mit Version.
+- FEM with contact: `study.contact("Lid", "Housing")` turns the touching area of two parts into a contact that can lift off and slide, with `friction=` also with friction. The result lists the force carried, the highest pressure, where it is open and where it slides for each contact. The image has the quantity "Contact pressure", the report one line per contact.
+- FEM lists all parts that touch each other, with area and whether they are bonded, and points to `contact()`.
+- FEM runs on CalculiX instead of the built-in solver, two to three times faster at usual model sizes with the same numbers. CalculiX comes with SOMA (Windows: 53 MB). Without CalculiX the built-in solver still works, only without contact.
+- Settings, "About" tab: lists gmsh and CalculiX with version.
 
-### Geändert
+### Changed
 
-- FEM: Der Hinweis, dass die Spitzenspannung vom Netz abhängt, entfällt bei kaum belasteten Teilen (unter 2 % der Festigkeit).
+- FEM: The note that the peak stress depends on the mesh is left out for barely loaded parts (below 2 % of the strength).
 
 ## [0.4.1] - 2026-10-10
 
-Hilfe mit nummerierten Screenshots, die der Agent als Skill kennt, dazu Verbesserungen aus der Kritik eines Agenten: `soma render` mit freier Richtung und Ausblenden, PDFs lesen, Zeichnungen mit Textmaß.
+Help with numbered screenshots that the agent knows as a skill, plus improvements from an agent's review: `soma render` with free direction and hiding, reading PDFs, drawings with text measurement.
 
-### Neu
+### Added
 
-- Hilfe: Der Knopf „Help“ in der Leiste (auch auf der Startseite, Taste F1) öffnet eine kurze Anleitung zu allen Bereichen der App, mit Screenshots, auf denen die Elemente nummeriert sind. Dieselbe Anleitung bekommt der Agent als Skill „Using the app“ (ab Werk „On demand“) samt Bildern, damit er Fragen zur Bedienung beantworten kann (E83).
-- Einstellungen, Reiter „About“: nennt Kai Jungsthöfel als Autor.
-- `soma render`: freie Blickrichtung (`--view=1,-2,1`), Teile oder Gruppen ausblenden (`--hide`) oder nur sie zeigen (`--only`), auf Teile einpassen (`--fit`) und `--zoom`. Der Agent kann so in ein Modell hineinsehen, ohne eine Animation zu schreiben (E85).
-- PDFs aus `inputs/` kann der Agent lesen: pdfplumber (MIT) liegt in der Basisumgebung, mit Text, Linien und Koordinaten (E85).
-- Technische Zeichnungen: `sh.text_width()` misst Texte vor dem Bauen, `leader(..., side="left"/"right")` legt die Seite des Hinweistexts fest, `sh.table()` ohne `widths` passt die Spalten den Texten an (E85).
-- Animationen sprechen Teile auch mit ihrer Gruppe an (`"Gehäuse/Deckel"`) (E85).
+- Help: The "Help" button in the bar (also on the start page, key F1) opens a short guide to all areas of the app, with screenshots on which the elements are numbered. The agent gets the same guide as the skill "Using the app" (by default "On demand") with images, so it can answer questions about using the app.
+- Settings, "About" tab: names Kai Jungsthöfel as author.
+- `soma render`: free view direction (`--view=1,-2,1`), hide parts or groups (`--hide`) or show only them (`--only`), fit to parts (`--fit`) and `--zoom`. The agent can look inside a model this way without writing an animation.
+- The agent can read PDFs from `inputs/`: pdfplumber (MIT) is in the base environment, with text, lines and coordinates.
+- Technical drawings: `sh.text_width()` measures text before building, `leader(..., side="left"/"right")` sets the side of the note, `sh.table()` without `widths` fits the columns to the text.
+- Animations also address parts by their group (`"Housing/Lid"`).
 
-### Geändert
+### Changed
 
-- `AGENTS.md`: Die Vorderseite eines Modells zeigt nach −Y (Vorderansicht von −Y, X nach rechts), damit Agenten Modelle von Anfang an richtig ausrichten (E85).
+- `AGENTS.md`: The front of a model faces −Y (front view from −Y, X to the right), so agents orient models correctly from the start.
 
-### Behoben
+### Fixed
 
-- Technische Zeichnungen: Der Docstring von `Sheet` nannte das Bild `.soma/drawings/<name>.png`, die Datei heißt nach der ASCII-Kennung (`Scheibe_klein.png`) (E85).
-- Markup: Die Zeichenfläche passt sich dem Viewer an. Wird er größer, etwa weil die PDF daneben geschlossen wird, wächst sie mit, statt klein in der Ecke zu bleiben. Mausrad zoomt um den Zeiger (bis 8-fach), Ziehen mit der rechten oder mittleren Maustaste verschiebt, Ctrl+0 passt wieder ein. Das Bild für den Agenten bleibt dabei in voller Auflösung.
+- Technical drawings: The docstring of `Sheet` named the image `.soma/drawings/<name>.png`, the file is named after the ASCII identifier (`Washer_small.png`).
+- Markup: The drawing area adapts to the viewer. When it grows, for example because the PDF next to it is closed, the area grows with it instead of staying small in the corner. The mouse wheel zooms around the pointer (up to 8x), dragging with the right or middle mouse button pans, Ctrl+0 fits again. The image for the agent keeps its full resolution.
 
 ## [0.4.0] - 2026-10-09
 
-Strukturbaum im Viewer, Reiter Analysis und Animation mit ruhigem Bericht, Mehrfachauswahl und Tasten, Einstellungen Viewer, Shortcuts, Storage und About.
+Structure tree in the viewer, Analysis and Animation tabs with a calm report, multi-selection and keys, settings for Viewer, Shortcuts, Storage and About.
 
-### Neu
+### Added
 
-- Strukturbaum im Viewer: Die Bauteile stehen ganz oben links im Bild wie in CATIA, ohne Hintergrund. Eingeklappt nur der Name des Modells (mit „· 2 hidden“, wenn etwas ausgeblendet ist), aufgeklappt eine Ebene der Gruppen (die nächste klappt man bei Bedarf auf) mit Baumstrichen, Auge und Halbkreis direkt vor jedem Namen, Referenzen als Gruppe am Ende, Suche, „Show all“ im Fuß. F3 klappt ihn auf und zu. Ein Klick ins Modell markiert das Teil im Baum, in einer zugeklappten Gruppe die Gruppe. Derselbe Baum gilt im Modell, in der Analyse (nur die gerechneten Körper) und in der Animation (E82).
-- Mehrfachauswahl im Viewer und im Baum: Strg+Klick und Shift+Klick, im Baum Bereiche mit Shift, im Viewer Rahmenauswahl mit Alt + Ziehen (links nach rechts ganz darin, rechts nach links angeschnitten). Über die Augen im Baum ziehen blendet mehrere Teile auf einmal aus. Tasten H (ausblenden), Shift+H (alles einblenden), I (isolieren), T (transparent), Esc (Auswahl aufheben). Rechtsklick geht jetzt auch im Bild, für ein Teil oder die ganze Auswahl. Neuer Reiter „Shortcuts“ in den Einstellungen listet alle Tasten (E82).
-- Reiter „Analysis“ und „Animation“ in der linken Leiste, ein Punkt meldet Neues vom Agenten. Analysis zeigt die Liste der Ergebnisse und einen ruhigen Bericht: eine Zahl groß, ob es hält, die kritischen Teile mit Sprung zur Stelle, die Annahmen je eine Zeile zum Aufklappen (Lager, Kräfte, Werkstoff, Netz), die Teile als Tabelle, Berechnung und Hinweise. Animation zeigt Animationen und Videos, die Schritte aus den Untertiteln (Klick springt hin) und die Videos der Animation (E82).
-- Analyse im Bild: schmale Legende unten rechts, die Skala stellt der Knopf „Auto ▾“ darin ein, Darstellung in einer Leiste unten (Sicherheit, Spannung und neu die Verschiebung, Überhöhung, Lastfall), Kraft und kleinster Wert als Beschriftung an ihrer Stelle. Animation: Abspielleiste unten mit Marken der Schritte. Das × in der Leiste führt zurück zum Modell (E82).
+- Structure tree in the viewer: the parts sit at the top left of the view like in CATIA, without background. Collapsed it shows only the model name (with "· 2 hidden" when something is hidden), expanded one level of groups (the next opens on demand) with tree lines, eye and half circle right before each name, references as a group at the end, search, "Show all" at the bottom. F3 opens and closes it. A click in the model highlights the part in the tree, in a collapsed group the group. The same tree applies to the model, the analysis (only the computed bodies) and the animation.
+- Multi-selection in the viewer and the tree: Ctrl+click and Shift+click, ranges with Shift in the tree, box selection with Alt + drag in the viewer (left to right fully inside, right to left touching). Dragging across the eyes in the tree hides several parts at once. Keys H (hide), Shift+H (show all), I (isolate), T (transparent), Esc (clear selection). Right-click now also works in the view, for one part or the whole selection. A new "Shortcuts" tab in the settings lists all keys.
+- "Analysis" and "Animation" tabs in the left bar, a dot signals something new from the agent. Analysis shows the list of results and a calm report: one big number, whether it holds, the critical parts with a jump to the spot, the assumptions one line each to expand (supports, forces, material, mesh), the parts as a table, computation and notes. Animation shows animations and videos, the steps from the subtitles (a click jumps there) and the videos of the animation.
+- Analysis in the view: narrow legend at the bottom right, the scale is set with the "Auto ▾" button in it, display options in a bar at the bottom (safety factor, stress and now displacement, exaggeration, load case), force and minimum value as labels at their place. Animation: playback bar at the bottom with markers for the steps. The × in the bar returns to the model.
+- Settings, "Viewer" tab: mouse bindings like SolidWorks, Fusion 360 and Inventor, Onshape, Creo, NX and Blender or Rhino, with legend. Reversible zoom direction. Orthographic view without vanishing points, the image stays put when switching. Display when a model opens (edges, wireframe, transparent). Decimal places for measuring (0 to 4), the text for the agent keeps three. Everything applies immediately.
+- Settings, "Storage" tab: how much space SOMA uses on the computer, split into models, backups, preview cache, start page images and your own skills, with a button to open the folder. The preview cache can be cleared.
+- Settings, "About" tab: versions of SOMA, soma, Python, CadQuery, OCP, Electron and Git, detected agents, folders and all components with license. "Copy system info" puts the details for a bug report on the clipboard.
 
-- Einstellungen, Reiter „Viewer“: Mausbelegung wie in SolidWorks, Fusion 360 und Inventor, Onshape, Creo, NX und Blender oder Rhino, mit Legende. Zoomrichtung umkehrbar. Orthografische Ansicht ohne Fluchtpunkte, beim Umschalten bleibt das Bild stehen. Darstellung beim Öffnen eines Modells (Kanten, Drahtgitter, Transparent). Nachkommastellen beim Messen (0 bis 4), der Text für den Agenten behält drei. Alles gilt sofort (E81).
-- Einstellungen, Reiter „Storage“: wie viel Platz SOMA auf dem Rechner belegt, aufgeteilt in Modelle, Sicherungen, Vorschau-Cache, Bilder der Startseite und eigene Skills, mit Knopf zum Öffnen des Ordners. Der Vorschau-Cache lässt sich leeren (E81).
-- Einstellungen, Reiter „About“: Versionen von SOMA, soma, Python, CadQuery, OCP, Electron und Git, gefundene Agenten, Ordner und alle Komponenten mit Lizenz. „Copy system info“ legt die Angaben für eine Fehlermeldung in die Zwischenablage (E81).
+### Changed
 
-### Geändert
-
-- Der Reiter „Parts“ und der Umschalter oben links im Viewer sind weg: Bauteile stehen im Strukturbaum, Analysen und Animationen in ihren Reitern. Die Seitenleiste ist beim ersten Start zu (E82).
-- `soma analyze fem` schreibt je Werkstoff auch Querdehnzahl und Dichte ins Ergebnis und ob die Netzgröße automatisch gewählt wurde, für den Bericht.
-- Im Viewer wählt nur noch ein Klick mit der linken Maustaste aus, nicht mehr auch mit der rechten oder mittleren. So wählt kurzes Drehen oder Verschieben mit diesen Tasten nichts aus.
+- The "Parts" tab and the switch at the top left of the viewer are gone: parts are in the structure tree, analyses and animations in their tabs. The sidebar is closed on first start.
+- `soma analyze fem` also writes Poisson's ratio and density per material into the result, and whether the mesh size was chosen automatically, for the report.
+- In the viewer only a left click selects, no longer also the right or middle button. So briefly rotating or panning with these buttons selects nothing.
 
 ## [0.3.0] - 2026-10-09
 
-Technische Zeichnungen, eigene Skills, das Dateiformat `.soma` und die DXF-Ansicht.
+Technical drawings, your own skills, the `.soma` file format and the DXF view.
 
-### Neu
+### Added
 
-- DXF-Ansicht: DXF-Dateien öffnen per Klick im Dateibaum im Code-Panel, gezeichnet wie die technischen Zeichnungen (Linientypen, Schraffuren, Maße, Texte). Zoomen mit dem Mausrad, Verschieben durch Ziehen, Layer ein- und ausblenden, Größe und Koordinaten unter dem Zeiger. „Mark up view“ gibt den sichtbaren Ausschnitt mit seinen Koordinaten an den Agenten. Ändert der Agent die Datei, zeichnet die Ansicht neu und behält den Ausschnitt. Was sich nicht zeichnen lässt (etwa 3D-Körper), nennt ein Hinweis (E80).
-- Eigene Skills: „Settings“ unten in der linken Leiste (bisher ausgegraut) und auf der Startseite öffnet die Einstellungen. Dort lassen sich mitgelieferte Skills ändern und eigene anlegen, duplizieren, aus Markdown-Dateien importieren und löschen. Der Editor mit Vorschau prüft beim Tippen Kopf, Einstellungen und Platzhalter. Eigene Skills gelten für alle Modelle auf diesem Rechner und werden im Panel „Skills“ ein- und ausgeschaltet wie die mitgelieferten. Geänderte mitgelieferte Skills lassen sich jederzeit zurücksetzen, Gelöschtes und Ersetztes kommt in die Sicherung (E78).
-- Technische Zeichnungen: Der Agent beschreibt eine Zeichnung in `drawings/*.py` (`soma.drawing`) mit Ansichten, Schnitten, Einzelheiten, Maßen, Texten und Stückliste, `soma drawing build` schreibt PDF und DXF nach `output/drawings/`, alle Blätter zusammen nach `output/drawings.pdf`, und ein Bild, mit dem der Agent sein Ergebnis prüft. Lange Teile lassen sich unterbrochen zeichnen, Schnitte auch mit geknicktem Schnittverlauf. Die Maße werden immer am Modell gemessen, eine Prüfung meldet Überschneidungen von Texten mit Kanten, Maßen und Stückliste, zu lange Einträge im Schriftfeld, Maße neben Kanten und getippte Zahlen. Dazu der Skill „Technical drawings“ mit den Regeln nach ISO (E76).
-- Skill „Parametric models“, bei neuen Modellen immer an: Der Agent legt erst fest, was die Größe bestimmt und was beim Ändern stehen bleibt, gibt wenige unabhängige Werte als Parameter frei, leitet den Rest daraus ab und baut das Modell an den Grenzen jedes Bereichs zur Probe. Einstellbar sind die Höchstzahl der Parameter und der Umfang dieser Prüfung (E77).
+- DXF view: DXF files open in the code panel with a click in the file tree, drawn like the technical drawings (line types, hatches, dimensions, text). Zoom with the mouse wheel, pan by dragging, show and hide layers, size and coordinates under the pointer. "Mark up view" gives the visible area with its coordinates to the agent. When the agent changes the file, the view redraws and keeps the area. What cannot be drawn (for example 3D solids) is named in a note.
+- Your own skills: "Settings" at the bottom of the left bar (grayed out before) and on the start page opens the settings. There you can change bundled skills and create, duplicate, import from Markdown files and delete your own. The editor with preview checks header, settings and placeholders as you type. Your own skills apply to all models on this computer and are switched on and off in the "Skills" panel like the bundled ones. Changed bundled skills can be reset at any time, deleted and replaced files go to the backup.
+- Technical drawings: the agent describes a drawing in `drawings/*.py` (`soma.drawing`) with views, sections, details, dimensions, text and parts list, `soma drawing build` writes PDF and DXF to `output/drawings/`, all sheets together to `output/drawings.pdf`, and an image the agent uses to check its result. Long parts can be drawn broken, sections also with a stepped section line. Dimensions are always measured on the model, a check reports text overlapping edges, dimensions and parts list, entries too long for the title block, dimensions next to edges and typed numbers. Plus the skill "Technical drawings" with the rules according to ISO.
+- Skill "Parametric models", always on for new models: the agent first decides what determines the size and what stays fixed when changing it, exposes a few independent values as parameters, derives the rest from them and test-builds the model at the limits of each range. The maximum number of parameters and the extent of this check are configurable.
 
-### Geändert
+### Changed
 
-- Modelle werden als `.soma`-Datei gespeichert statt als `.zip`. ZIP-Dateien öffnet die App weiter. Ein Modell aus einer ZIP wird beim nächsten Speichern als `.soma` daneben abgelegt, die ZIP bleibt. Wer das ganze Modell als ZIP braucht, findet „Everything as ZIP“ im Export-Menü (E79).
-- Der Dateibaum zeigt die Kopien der Skills aus `.soma/skills/` als eigene Gruppe „Skills“, eingeklappt und nur zum Lesen. Ein- und ausgeschaltet werden sie weiter im Panel „Skills“.
-- Jede Zeile im Panel „Parameters“ zeigt den Bereich, den der Agent gesetzt hat, ohne Aufklappen („30–200 mm“, „3 options“), rot, wenn der Wert außerhalb liegt (E74).
-- Kleinere ZIP beim Speichern: Bilder und Videos aus `renders/` kommen nicht mehr mit, und die Versionsgeschichte wird vorher gepackt, sodass ähnliche Fassungen des Modells kaum zusätzlichen Platz brauchen. Am Modellmotor schrumpft der Verlauf von 81 auf 35 MB (E75).
+- Models are saved as a `.soma` file instead of `.zip`. The app still opens ZIP files. A model from a ZIP is saved as `.soma` next to it on the next save, the ZIP stays. If you need the whole model as a ZIP, you find "Everything as ZIP" in the export menu.
+- The file tree shows the copies of the skills from `.soma/skills/` as their own group "Skills", collapsed and read-only. They are still switched on and off in the "Skills" panel.
+- Every row in the "Parameters" panel shows the range the agent set without expanding ("30–200 mm", "3 options"), red when the value is outside.
+- Smaller ZIP on save: images and videos from `renders/` are no longer included, and the version history is packed first, so similar versions of the model take hardly any extra space. For the engine model the history shrinks from 81 to 35 MB.
 
-### Behoben
+### Fixed
 
-- Im Editor erschien der Kopf eines Skills (zwischen zwei `---`) fett wie eine Überschrift. Er steht jetzt gedämpft als eigener Block.
-- Fetter Text im Terminal (etwa Überschriften des Agenten) wirkte wackelig, runde Buchstaben saßen einen Pixel tiefer als gerade. Die App bringt jetzt den echten fetten Schnitt der Terminalschrift mit, statt das Fett nachrechnen zu lassen.
-- Skills und andere Markdown-Dateien mit einem Kopf zwischen zwei `---` (Front Matter) zeigten diesen Kopf in der Dokumentansicht als riesige Überschrift. Er steht jetzt klein als Quelltext oben.
-- Nach dem Ändern eines Parameters hielten `soma anim` und `soma render --result` Animationen und Ergebnisse noch für aktuell. Jetzt zählt `parameters.json` wie in der App zum Modell (E74).
+- In the editor the header of a skill (between two `---`) appeared bold like a heading. It now shows dimmed as its own block.
+- Bold text in the terminal (for example the agent's headings) looked shaky, round letters sat one pixel lower than straight ones. The app now brings the real bold face of the terminal font instead of having bold synthesized.
+- Skills and other Markdown files with a header between two `---` (front matter) showed this header as a huge heading in the document view. It now shows small as source text at the top.
+- After changing a parameter, `soma anim` and `soma render --result` still considered animations and results up to date. Now `parameters.json` counts as part of the model, as in the app.
 
 ## [0.2.0] - 2026-10-08
 
-Parameter für den Nutzer, die App auf Englisch, Start auf der Startseite und die Lizenz.
+Parameters for the user, the app in English, start on the start page and the license.
 
-### Neu
+### Added
 
-- Die App beginnt auf der Startseite. Ein neues Modell, das noch der Vorlage entspricht und nie gespeichert wurde, verschwindet beim Verlassen wieder. Andere Modelle lassen sich auf der Startseite entfernen, der Arbeitsordner kommt in den Papierkorb (E69).
-- README auf Englisch mit Bildern für die Startseite des Repos, dazu dieser Changelog (E70).
-- Lizenz: GPL-3.0 oder später, Text in `LICENSE` (E71). Die Modelle der Nutzer sind davon frei (`MODEL-EXCEPTION.md`, E72).
-- Parameter: Der Agent gibt mit `param()` einzelne Werte frei, etwa Maße, Anzahlen, Optionen oder einen Winkel. Im neuen Panel „Parameters“ ändert man sie selbst, das Modell baut neu. Die eigenen Werte stehen in `parameters.json`, der Wert des Agenten bleibt im Code, und jedes Feld lässt sich auf ihn zurücksetzen. Werte außerhalb des Bereichs werden gemeldet und trotzdem gebaut. Die Vorlage für neue Modelle hat vier Parameter (E74).
+- The app starts on the start page. A new model that still matches the template and was never saved disappears when you leave it. Other models can be removed on the start page, the working folder goes to the recycle bin.
+- README in English with images for the start page of the repository, plus this changelog.
+- License: GPL-3.0 or later, text in `LICENSE`. Users' models are exempt from it (`MODEL-EXCEPTION.md`).
+- Parameters: with `param()` the agent exposes single values, for example dimensions, counts, options or an angle. In the new "Parameters" panel you change them yourself, the model rebuilds. Your values are stored in `parameters.json`, the agent's value stays in the code, and every field can be reset to it. Values outside the range are reported and built anyway. The template for new models has four parameters.
 
-### Geändert
+### Changed
 
-- Die App ist jetzt auf Englisch: Oberfläche, Meldungen, Ausgaben und Fehlermeldungen von `soma`, Skills und die Notizen an den Agenten. Zahlen stehen mit Dezimalpunkt. Ältere Modelle öffnen wie bisher (E73).
+- The app is now in English: interface, messages, output and error messages of `soma`, skills and the notes to the agent. Numbers use a decimal point. Older models open as before.
 
 ## [0.1.0] - 2026-10-08
 
-Erste Version mit Nummer. Sie fasst den Stand des Prototyps zusammen.
+First numbered version. It sums up the state of the prototype.
 
-### Neu
+### Added
 
-- Desktop-App mit Terminal neben dem 3D-Viewer. Der Agent ist frei wählbar (Claude Code, OpenCode, Codex, Gemini CLI …), die App erkennt verbreitete Agenten und startet sie.
-- Modelle als Python-Code mit CadQuery (`model.py`, `parts/`), Hilfsbibliothek `soma` mit `add_part`, Gruppen und Rollen, STEP-Import einzelner Teile und ganzer Baugruppen.
-- Bauen bei jeder Änderung (abschaltbar), Fehler mit Datei und Zeile, ein vorgewärmter Python-Prozess, Öffnen ohne Neubau.
-- Viewer mit Auswahl und Sprung in den Code, Ansichtswürfel, Drehpunkt, Bauteilbaum mit Gruppen, Transparenz und Isolieren.
-- Messen auf der exakten Geometrie: Flächen, Kanten, Abstände, Bohrungsabstände.
-- Schnitt und Explosionsansicht mit Demontage-Analyse, Abspielen Schritt für Schritt.
-- Übergabe an den Agenten: Auswahl, Messwerte, Schnitt und Markierungen (Zeichnen auf der Ansicht) als Text oder Bild ins Terminal.
-- Editor für Code und Markdown, PDF-Ansicht mit Zitat an den Agenten.
-- Modell als ZIP-Datei mit Git-Verlauf, Zeitleiste mit Vorschau und Wiederherstellen, Speichern nur ausdrücklich.
-- Skills: 15 mitgelieferte Regelwerke (3D-Druck, CNC, Blech, Toleranzen, Festigkeit mit FEM …), je Modell aus, bei Bedarf oder immer, mit Einstellungen.
-- Normteile nach ISO und DIN mit passenden Bohrungen, Senkungen und Mutternfallen (`soma.fasteners`).
-- Animationen in Python, Auswertungen (Überhang, Wandstärke, Abstand, Festigkeit mit FEM), Bilder und Videos über `soma render`.
-- Export in STEP, STL, 3MF, glTF, DXF, SVG und weitere Formate.
-- Zusatzpakete: `pip install` im Terminal landet in einer kleinen Umgebung je Modell, `requirements.txt` wandert mit dem Modell, auf einem anderen Rechner installiert die App die Pakete nach (E67).
-- Versionsnummer auf der Startseite, am Logo und in `project.json` (E68).
+- Desktop app with a terminal next to the 3D viewer. The agent is your choice (Claude Code, OpenCode, Codex, Gemini CLI …), the app detects common agents and starts them.
+- Models as Python code with CadQuery (`model.py`, `parts/`), helper library `soma` with `add_part`, groups and roles, STEP import of single parts and whole assemblies.
+- Build on every change (can be turned off), errors with file and line, a prewarmed Python process, opening without rebuilding.
+- Viewer with selection and jump to the code, view cube, pivot point, part tree with groups, transparency and isolation.
+- Measuring on the exact geometry: faces, edges, distances, hole spacing.
+- Section and exploded view with disassembly analysis, step-by-step playback.
+- Handing over to the agent: selection, measurements, section and markup (drawing on the view) as text or image into the terminal.
+- Editor for code and Markdown, PDF view with quoting to the agent.
+- Model as a ZIP file with Git history, timeline with preview and restore, saving only explicitly.
+- Skills: 15 bundled rule sets (3D printing, CNC, sheet metal, tolerances, strength with FEM …), per model off, on demand or always, with settings.
+- Standard parts according to ISO and DIN with matching holes, countersinks and nut traps (`soma.fasteners`).
+- Animations in Python, analyses (overhang, wall thickness, clearance, strength with FEM), images and videos via `soma render`.
+- Export to STEP, STL, 3MF, glTF, DXF, SVG and other formats.
+- Extra packages: `pip install` in the terminal goes into a small environment per model, `requirements.txt` travels with the model, on another computer the app reinstalls the packages.
+- Version number on the start page, on the logo and in `project.json`.
 
-[Unveröffentlicht]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.2...HEAD
 [0.6.2]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.5.0...v0.6.0

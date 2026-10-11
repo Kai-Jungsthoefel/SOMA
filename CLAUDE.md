@@ -1,121 +1,124 @@
 # CLAUDE.md
 
-Anweisungen für Claude Code bei der Entwicklung von SOMA (*Solid Object Modeling with Agents*). Nicht verwechseln mit `app/resources/template/CLAUDE.md`, der Vorlage für Nutzerprojekte.
+Instructions for Claude Code when developing SOMA (*Solid Object Modeling with Agents*). Not to be confused with `app/resources/template/CLAUDE.md`, the template for user projects.
 
-## Worum es geht
+## What it is about
 
-Eine Desktop-App (Electron, TypeScript), in der ein Nutzer mit einem CLI-Agenten seiner Wahl (Claude Code, OpenCode …) 3D-Modelle in CadQuery entwirft. Wir bauen **keinen eigenen Harness**. Die App liefert Terminal, 3D-Viewer, das Projektformat `.soma` (eine ZIP mit Git, E79) und die Python-Hilfsbibliothek `soma`.
+A desktop app (Electron, TypeScript) in which a user designs 3D models in CadQuery together with a CLI agent of their choice (Claude Code, OpenCode …). We do **not build our own harness**. The app provides the terminal, 3D viewer, the project format `.soma` (a ZIP with Git, E79) and the Python helper library `soma`.
 
-### Arbeitsdokumente (nur lokal, E88)
+### Working documents (local only, E88)
 
-`PLAN.md`, `DECISIONS.md` und `IDEA.md` stehen in `.gitignore` (im Git-Verlauf bis `v0.5.0`). Fehlen sie, gibt es nichts nachzuziehen.
+`PLAN.md`, `DECISIONS.md` and `IDEA.md` are in `.gitignore` (in the Git history up to `v0.5.0`). If they are missing, there is nothing to update.
 
-- `PLAN.md`: gültiger Plan, Phasenstand (Abschnitt 10), offene Punkte (Abschnitt 11). Geht vor `IDEA.md`.
-- `DECISIONS.md`: Entscheidungslog. `(E12)` in Plan und Code verweist darauf. Neue Entscheidungen des Nutzers als neue Zeile ans Ende, alte Zeilen nie umschreiben.
-- `IDEA.md`: Ursprungsidee, bleibt unverändert.
+- `PLAN.md`: current plan, phase status (section 10), open points (section 11). Takes precedence over `IDEA.md`.
+- `DECISIONS.md`: decision log. `(E12)` in plan and code refers to it. New decisions of the user go as a new row at the end, old rows are never rewritten.
+- `IDEA.md`: original idea, stays unchanged.
 
-## Aufbau
+## Structure
 
 Details in `app/README.md`.
 
-**`app/`** Electron-App
-- `src/main/` Hauptprozess. Projekte: `projects.ts` (Speichern, Öffnen, Verlauf, Export), `git.ts`, `zip.ts`, `workspace.ts`, `files.ts`, `watcher.ts`. Bauen und Anzeigen: `build.ts` (vorgewärmter Python-Prozess), `previews.ts`, `measure.ts`, `dxf.ts` (E80), `render.ts` + `bridge.ts` (`soma render`), `animations.ts`. Agent und Skills: `terminals.ts`, `agents.ts`, `skills.ts`, `skilllibrary.ts` (eigene Skills, E78). Umgebung: `packages.ts` (Projektumgebung, E67), `params.ts` (Parameter-Panel, E74). App: `settings.ts`, `storage.ts`, `about.ts` (E81), `help.ts` (E83), `dialogs.ts`.
-- `src/preload/` einzige Brücke zum Renderer.
-- `src/renderer/` Oberfläche, verdrahtet in `main.ts`. Viewer: `viewer.ts`, `viewcube.ts`, `tree.ts` (Strukturbaum, E82), Werkzeuge `sectiontool.ts`, `explodetool.ts`, `measuretool.ts`, `markup.ts`. Panels: `code.ts`, `pdfview.ts`, `dxfview.ts`, `markdown.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `params.ts`, `skills.ts`, `help.ts`, `settings.ts` + `settingspages.ts`. Animation und Analyse: `animtool.ts`, `animpanel.ts`, `animdata.ts`, `overlay.ts`, `resulttool.ts`, `resultview.ts`, `analysispanel.ts`, `videoview.ts`. Render-Fenster: `render.ts`/`render.html`. Allgemein: `ui.ts`, `icons.ts`, `busy.ts`, `shortcuts.ts`, `style.css`.
-- `src/shared/` `types.ts` (IPC-Vertrag), `settings.ts` (Vorgaben, Prüfung, Mausbelegungen, E81), `editable.ts`, `help.ts`, `skillname.ts`, `version.ts`.
-- `resources/` `template/` (Vorlage für Nutzerprojekte inkl. `AGENTS.md`), `skills/` (mitgelieferte Skills, darunter `soma-app.md` als Nutzeranleitung für Hilfe und Agent, E83), `help/` (Bilder der Anleitung), `icon.*` (erzeugt mit `scripts/make-icon.py`).
-- `test/` Testsuiten, CDP-Client, Screenshots. `SOMA_TEST_EXE` lässt sie gegen eine gepackte App laufen.
-- `electron-builder.config.cjs` Installationspakete, `build-resources/` großes Icon dafür. CI für alle drei Systeme in `.github/workflows/dist.yml`.
+**`app/`** Electron app
+- `src/main/` main process. Projects: `projects.ts` (save, open, history, export), `git.ts`, `zip.ts`, `workspace.ts`, `files.ts`, `watcher.ts`. Building and display: `build.ts` (prewarmed Python process), `previews.ts`, `measure.ts`, `dxf.ts` (E80), `render.ts` + `bridge.ts` (`soma render`), `animations.ts`. Agent and skills: `terminals.ts`, `agents.ts`, `skills.ts`, `skilllibrary.ts` (own skills, E78). Environment: `packages.ts` (project environment, E67), `params.ts` (parameter panel, E74). App: `settings.ts`, `storage.ts`, `about.ts` (E81), `help.ts` (E83), `dialogs.ts`.
+- `src/preload/` the only bridge to the renderer.
+- `src/renderer/` interface, wired up in `main.ts`. Viewer: `viewer.ts`, `viewcube.ts`, `tree.ts` (structure tree, E82), tools `sectiontool.ts`, `explodetool.ts`, `measuretool.ts`, `markup.ts`. Panels: `code.ts`, `pdfview.ts`, `dxfview.ts`, `markdown.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `params.ts`, `skills.ts`, `help.ts`, `settings.ts` + `settingspages.ts`. Animation and analysis: `animtool.ts`, `animpanel.ts`, `animdata.ts`, `overlay.ts`, `resulttool.ts`, `resultview.ts`, `analysispanel.ts`, `videoview.ts`. Render window: `render.ts`/`render.html`. General: `ui.ts`, `icons.ts`, `busy.ts`, `shortcuts.ts`, `style.css`.
+- `src/shared/` `types.ts` (IPC contract), `settings.ts` (defaults, validation, mouse bindings, E81), `editable.ts`, `help.ts`, `skillname.ts`, `version.ts`.
+- `resources/` `template/` (template for user projects incl. `AGENTS.md`), `skills/` (bundled skills, among them `soma-app.md` as the user guide for help and agent, E83), `help/` (images of the guide), `icon.*` (generated with `scripts/make-icon.py`).
+- `test/` test suites, CDP client, screenshots. `SOMA_TEST_EXE` runs them against a packaged app.
+- `electron-builder.config.cjs` installation packages, `build-resources/` large icon for them. CI for all three systems in `.github/workflows/dist.yml`.
 
-**`python/soma/`** Hilfsbibliothek und CLI
-- API: `add_part` (mit `group=`, `role=`), `param` (`params.py`, E74), `import_step`, `import_assembly`, Normteile in `fasteners.py` (Maßtabellen aus bd_warehouse in `data/fasteners/`).
-- CLI: `soma build`, `export`, `glb`, `serve` (Messdienst, `measure.py`), `anim` (`anim.py`, `animrun.py`), `analyze` (`analysis.py`, FEM in `fem.py`, CalculiX über `ccx.py`, E84), `drawing` (`drawing.py`, `drawrun.py`, E76), `dxfview` (E80), `render` (nur über die App), `env` (`env.py`, `.soma/env` und `requirements.txt`, E67).
-- `python/scripts/`: `setup_env.ps1` (Entwicklungsumgebung aus `python/requirements-base.txt`), `fetch_ccx.py` (CalculiX), `build_runtime.py` (eigenständige Basisumgebung für die Installationspakete).
+**`python/soma/`** helper library and CLI
+- API: `add_part` (with `group=`, `role=`), `param` (`params.py`, E74), `import_step`, `import_assembly`, standard parts in `fasteners.py` (dimension tables from bd_warehouse in `data/fasteners/`).
+- CLI: `soma build`, `export`, `glb`, `serve` (measuring service, `measure.py`), `anim` (`anim.py`, `animrun.py`), `analyze` (`analysis.py`, FEM in `fem.py`, CalculiX via `ccx.py`, E84), `drawing` (`drawing.py`, `drawrun.py`, E76), `dxfview` (E80), `render` (only via the app), `env` (`env.py`, `.soma/env` and `requirements.txt`, E67).
+- `python/scripts/`: `setup_env.ps1` (development environment from `python/requirements-base.txt`), `fetch_ccx.py` (CalculiX), `build_runtime.py` (standalone base environment for the installation packages).
 
-**`design/`** freigegebene Oberflächenentwürfe, im Browser öffnen, Pfeiltasten blättern
-- `ui-entwurf-2.html` „Aufgeräumt“ (E62): Maßstab für Aufbau, Farben und Texte. Bild 6 ist das Parameter-Panel (E74).
-- `strukturbaum-entwurf.html` (E82, umgesetzt): Strukturbaum, Reiter Analysis und Animation, Bericht der Analyse. Ersetzt in Entwurf 2 den Reiter Bauteile und den Umschalter oben links.
-- `ui-entwurf.html` (E38): erster Entwurf, Farben und Bausteine gelten weiter, der Aufbau nicht mehr.
+**`design/`** approved UI drafts, open in a browser, arrow keys to page
+- `ui-entwurf-2.html` "Aufgeräumt" (E62): reference for layout, colors and texts. Image 6 is the parameter panel (E74).
+- `strukturbaum-entwurf.html` (E82, implemented): structure tree, Analysis and Animation tabs, analysis report. Replaces the Parts tab and the switch at the top left in draft 2.
+- `ui-entwurf.html` (E38): first draft, colors and building blocks still apply, the layout no longer does.
 
-**`docs/`** `images/` für die README, `phase0-ergebnisse.md` (abgeschlossener Prototyp, Code im Git-Verlauf bis `v0.5.0`).
+**`docs/`** `images/` for the README, `phase0-ergebnisse.md` (finished prototype, code in the Git history up to `v0.5.0`).
 
-## Befehle
+**Root:** `README.md`, `CHANGELOG.md`, `LICENSE`, `MODEL-EXCEPTION.md`, `THIRD_PARTY_NOTICES.md` (licenses of bundled components, shipped with the packages), `SECURITY.md`. Issue templates in `.github/ISSUE_TEMPLATE/`.
+
+## Commands
 
 ```
-# einmalig: Python-Umgebung unter %LOCALAPPDATA%\soma-dev\venv mit soma, holt CalculiX nach venv/ccx
+# once: Python environment under %LOCALAPPDATA%\soma-dev\venv with soma, fetches CalculiX into venv/ccx
 powershell -File python/scripts/setup_env.ps1
 
-# App (in app/)
+# app (in app/)
 npm install
-npm start                            # baut und startet
+npm start                            # builds and starts
 npm run typecheck
-npm test                             # baut, dann alle Suiten parallel über test/run-all.mjs
-node test/run-all.mjs smoke editor   # einzelne Suiten parallel, nach npm run build
-npm run test:unit                    # ohne Build, prüft u. a. die Versionsnummer
-npm run help:shots                   # Bilder der Nutzeranleitung neu erzeugen
-npm run dist                         # Installationspaket für dieses System, vorher build_runtime.py (app/README.md)
+npm test                             # builds, then all suites in parallel via test/run-all.mjs
+node test/run-all.mjs smoke editor   # single suites in parallel, after npm run build
+npm run test:unit                    # without build, checks the version number among other things
+npm run help:shots                   # regenerate the images of the user guide
+npm run dist                         # installation package for this system, run build_runtime.py first (app/README.md)
 
-# soma direkt
-"$LOCALAPPDATA/soma-dev/venv/Scripts/soma.exe" build --project <ordner>
+# soma directly
+"$LOCALAPPDATA/soma-dev/venv/Scripts/soma.exe" build --project <folder>
 ```
 
-## Grundsätze für den Code
+## Code principles
 
-- **Robustheit:** Arbeitsordner und Agent sind nicht vertrauenswürdig. Jede Konvention braucht einen Rückfallweg, Fehler werden erkannt und erklärt statt abzustürzen.
-- **Melden statt reparieren (E28):** keine automatischen Reparaturen und keine Reparier-Knöpfe ohne Rücksprache mit dem Nutzer.
-- **Nichts still überschreiben oder löschen:** Was ersetzt wird, wandert in eine Sicherung (z. B. `workspace-backups/`).
-- **Git in Nutzerprojekten nur vorwärts (E35):** neue Commits, kein Reset, Checkout, Rebase oder Branch. Schreibende Git-Aufrufe laufen über `GitRepo` nacheinander.
-- **Renderer ohne Node-Zugriff:** alles über `preload.ts` und `src/shared/types.ts`. Dateizugriffe nur über `resolveInside`. Texte aus dem Projekt nie per `innerHTML`.
-- **STEP-Namen nur ASCII** (`ascii_name`), Anzeigenamen stehen in `model.map.json`. `output/` zählt nicht als ungespeicherte Änderung (STEP-Dateien sind nicht byte-stabil).
-- **Erst die volle Variante (E37):** im Prototyp erst vollständig und funktionierend, nicht früh optimieren.
-- Kommentare erklären das Warum, im Stil des umgebenden Codes.
+- **Robustness:** working folder and agent are not trustworthy. Every convention needs a fallback, errors are detected and explained instead of crashing.
+- **Report instead of repair (E28):** no automatic repairs and no repair buttons without asking the user.
+- **Never silently overwrite or delete:** whatever is replaced goes into a backup (e.g. `workspace-backups/`).
+- **Git in user projects only forward (E35):** new commits, no reset, checkout, rebase or branch. Writing Git calls go through `GitRepo` one after another.
+- **Renderer without Node access:** everything via `preload.ts` and `src/shared/types.ts`. File access only via `resolveInside`. Text from the project never via `innerHTML`.
+- **STEP names ASCII only** (`ascii_name`), display names are in `model.map.json`. `output/` does not count as an unsaved change (STEP files are not byte-stable).
+- **Full version first (E37):** in the prototype, first complete and working, no early optimization.
+- Comments explain the why, in the style of the surrounding code.
 
-### Sprache (E73)
+### Language (E73, E89)
 
-- **Englisch:** alles, was Nutzer oder Agent sehen: Oberfläche, Meldungen, Dialoge, Ausgaben und Fehler von `soma`, Docstrings der öffentlichen API, Skills samt Kopf, Übergabe-Notizen an den Agenten, `AGENTS.md` und `model.py` der Vorlage. Zahlen mit Dezimalpunkt.
-- **Deutsch:** Doku, Code-Kommentare, Commit-Nachrichten, Testbeschreibungen.
-- Was die App aus älteren Projekten wiedererkennt (Commit-Betreffe, Trailer), erkennt sie auch in der alten deutschen Form.
-- `README.md` im Hauptordner ist die Startseite auf GitHub (E70): Englisch, schlicht und knapp, ohne Emojis, Bilder in `docs/images/`.
+- **English:** everything users, contributors or the agent see: interface, messages, dialogs, output and errors of `soma`, docstrings of the public API, skills including their header, handover notes to the agent, `AGENTS.md` and `model.py` of the template. Also all public documents in the repo: `README.md`, `CHANGELOG.md`, this `CLAUDE.md`, `THIRD_PARTY_NOTICES.md`, `SECURITY.md`, issue templates, release texts. Numbers with a decimal point.
+- **German:** internal docs (`app/README.md`, `docs/phase0-ergebnisse.md`, the local working documents), code comments, commit messages, test descriptions.
+- What the app recognizes from older projects (commit subjects, trailers) it also recognizes in the old German form.
+- `README.md` in the root is the start page on GitHub (E70): plain and short, no emojis, images in `docs/images/`.
 
-### Oberfläche
+### Interface
 
-- Farben mit fester Bedeutung: Orange Aktion und Auswahl, Violett Vorschau, Grün/Gelb/Rot Status. Tokens oben in `style.css`.
-- Symbole nur über `icons.ts`, keine Emoji.
-- Menüeinträge, die Tests oder Kurzbefehle brauchen, stehen fest in `index.html`.
+- Colors with a fixed meaning: orange for action and selection, violet for preview, green/yellow/red for status. Tokens at the top of `style.css`.
+- Icons only via `icons.ts`, no emoji.
+- Menu entries that tests or shortcuts need are fixed in `index.html`.
 
 ## Tests
 
-- Nach Änderungen `npm run typecheck` und `npm test`. Die npm-Skripte bauen vorher, `node test/*.mjs` ohne Build testet veraltete `dist/`-Dateien.
-- Die Suiten starten die echte App. Fenster bleiben unsichtbar (`SOMA_HIDDEN=1`), sonst blitzen sie beim Nutzer auf. Unsichtbare Fenster zeichnen nicht neu: für Screenshots `SMOKE_VISIBLE=offscreen`, bei Änderungen an der Oberfläche zusätzlich `SMOKE_SHOTS=1` und die Bilder in `app/test/shots/` ansehen.
-- **Nutzeranleitung (E83):** Ändert sich die Oberfläche, `npm run help:shots` laufen lassen, die Bilder in `app/resources/help/` ansehen und `app/resources/skills/soma-app.md` nachziehen. Ausschnitte und Nummern stehen in `app/test/helpshots-spec.mjs`, die Bezeichnungen dort und unter den Bildern müssen gleich sein.
-- Native Dialoge über `app.answers([...])` beantworten (`src/main/dialogs.ts`).
-- Steuerung per eigenem CDP-Client (`test/cdp.mjs`). puppeteer-core geht mit Electron 44 nicht (`Input.dispatchMouseEvent` und `Page.captureScreenshot` hängen in unsichtbaren Fenstern).
-- Lange Läufe in eine Datei umleiten statt durch `grep` zu pipen (Pufferung verdeckt Hänger).
-- Getestet ist nur Windows. Das beim Berichten dazusagen.
+- After changes run `npm run typecheck` and `npm test`. The npm scripts build first, `node test/*.mjs` without a build tests stale `dist/` files.
+- The suites start the real app. Windows stay invisible (`SOMA_HIDDEN=1`), otherwise they flash up for the user. Invisible windows do not repaint: for screenshots use `SMOKE_VISIBLE=offscreen`, for UI changes also `SMOKE_SHOTS=1`, and look at the images in `app/test/shots/`.
+- **User guide (E83):** when the interface changes, run `npm run help:shots`, look at the images in `app/resources/help/` and update `app/resources/skills/soma-app.md`. Crops and numbers are in `app/test/helpshots-spec.mjs`, the labels there and under the images must match.
+- Answer native dialogs via `app.answers([...])` (`src/main/dialogs.ts`).
+- Control via our own CDP client (`test/cdp.mjs`). puppeteer-core does not work with Electron 44 (`Input.dispatchMouseEvent` and `Page.captureScreenshot` hang in invisible windows).
+- Redirect long runs to a file instead of piping through `grep` (buffering hides hangs).
+- Locally only Windows is tested. Say so when reporting.
 
-## Entwicklung unter Windows
+## Development on Windows
 
-- **Netzlaufwerke:** Dort starten die sandboxed Prozesse von Electron nicht (schwarzes Fenster, `launch-failed` Code 18). Electron läuft deshalb aus einer lokalen Kopie (`app/scripts/electron-local.mjs`), nie `node_modules/electron/dist/electron.exe` direkt starten. Die Python-Umgebung liegt aus demselben Grund lokal.
-- **Proxy:** Node-Downloads (Electron-Binary, dugite) brauchen `NODE_USE_ENV_PROXY=1`.
-- **Ports:** Einzeltests ohne `SOMA_TEST_PORT` nutzen 9333, `run-all.mjs` holt freie Ports. Bei mehreren gleichzeitigen Sessions braucht jede eigene Ports.
-- **Prozesse** nur gezielt beenden (Pfad des Repos oder `soma-dev` in der Kommandozeile), nie pauschal alle `electron.exe` oder `node.exe`.
-- **Kurznamen** (`NAME~1`) in Temp-Pfaden: Pfade nicht als Strings vergleichen.
+- **Network drives:** Electron's sandboxed processes do not start there (black window, `launch-failed` code 18). Electron therefore runs from a local copy (`app/scripts/electron-local.mjs`), never start `node_modules/electron/dist/electron.exe` directly. The Python environment is local for the same reason.
+- **Proxy:** Node downloads (Electron binary, dugite) need `NODE_USE_ENV_PROXY=1`.
+- **Ports:** single tests without `SOMA_TEST_PORT` use 9333, `run-all.mjs` picks free ports. With several sessions at once each needs its own ports.
+- **Processes:** only end them selectively (repo path or `soma-dev` in the command line), never all `electron.exe` or `node.exe` across the board.
+- **Short names** (`NAME~1`) in temp paths: do not compare paths as strings.
 
-## Stolpersteine
+## Pitfalls
 
-- Dateien mit Backslash-Escapes (`\n` in Strings) nicht per Bash-Heredoc schreiben, die Escapes werden zu echten Zeilenumbrüchen. Edit- oder Write-Werkzeug nutzen.
-- Python-Patches: `pathlib.Path.write_text(..., newline="\n")` statt `open(..., "w")` (sonst CRLF), jede Ersetzung mit `assert s.count(old) == 1` absichern.
-- Zeilenenden: `.gitattributes` checkt alle Textdateien mit LF aus, auch bei `core.autocrlf=true`. Vorlage und Skills gehen so in Nutzerprojekte, Tests vergleichen mit `\n`.
-- CadQuery fest pinnen: cadquery 2.8.0 braucht `cadquery-ocp<8` und `multimethod<2`.
-- `dugite` bleibt im esbuild-Bundle extern (sein Git-Pfad ist relativ zum Paket).
+- Do not write files with backslash escapes (`\n` in strings) via a Bash heredoc, the escapes turn into real line breaks. Use the Edit or Write tool.
+- Python patches: `pathlib.Path.write_text(..., newline="\n")` instead of `open(..., "w")` (otherwise CRLF), guard every replacement with `assert s.count(old) == 1`.
+- Line endings: `.gitattributes` checks out all text files with LF, even with `core.autocrlf=true`. Template and skills go into user projects that way, tests compare with `\n`.
+- Pin CadQuery exactly: cadquery 2.8.0 needs `cadquery-ocp<8` and `multimethod<2`.
+- `dugite` stays external in the esbuild bundle (its Git path is relative to the package).
 
-## Doku und Arbeitsweise
+## Docs and way of working
 
-- Der Nutzer spricht Deutsch. Ist eine Entscheidung wirklich seine, eine einzelne Frage stellen. Was ich ohne Rückfrage entscheide, kommt in `PLAN.md` unter „Noch nicht ausdrücklich bestätigt“.
-- Nach einem Schritt nachziehen:
-  - `PLAN.md`: Phasenstand, offene Punkte, Risiken.
-  - `app/README.md`, wenn sich Befehle oder Aufbau ändern, und dieser Aufbau hier.
-  - `CHANGELOG.md`: was der Nutzer merkt, kurz unter „Unveröffentlicht“ (E70).
-  - `README.md` nur bei neuen großen Funktionen.
-- Commits nur auf Wunsch, thematisch aufgeteilt (z. B. `python/`, `app/`, Doku), mit deutscher Nachricht.
-- **Versionsnummer (E68):** Major.minor.bugfix, eine für App und `soma`, in `app/package.json` und `python/soma/__init__.py` (beide gleich ändern, `npm run test:unit` prüft es). Hochzählen nur auf Wunsch: bugfix für Fehlerbehebungen, minor für neue Funktionen, major für Brüche mit älteren Modellen oder Agenten-Anweisungen. Dabei wird „Unveröffentlicht“ im Changelog zur neuen Version mit Datum, dazu ein annotiertes Tag `vX.Y.Z`.
+- The maintainer speaks German: answer in German. If a decision is really theirs, ask a single question. What I decide without asking goes into `PLAN.md` under "Noch nicht ausdrücklich bestätigt".
+- After a step, update:
+  - `PLAN.md`: phase status, open points, risks.
+  - `app/README.md` when commands or structure change, and the structure here.
+  - `CHANGELOG.md`: what the user notices, briefly under "Unreleased", in English (E70, E89).
+  - `README.md` only for big new features.
+  - `THIRD_PARTY_NOTICES.md` when a bundled component is added, removed or changes its license.
+- Commits only on request, split by topic (e.g. `python/`, `app/`, docs), with a German message.
+- **Version number (E68):** major.minor.bugfix, one for app and `soma`, in `app/package.json` and `python/soma/__init__.py` (change both the same, `npm run test:unit` checks it). Bump only on request: bugfix for fixes, minor for new features, major for breaks with older models or agent instructions. "Unreleased" in the changelog then becomes the new version with date, plus an annotated tag `vX.Y.Z`.

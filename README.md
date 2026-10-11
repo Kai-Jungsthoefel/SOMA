@@ -98,14 +98,19 @@ add_part("Body", body, color=(0.25, 0.45, 0.75))
 
 Download the package for your system from the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases): an installer for Windows, an AppImage or tar.gz for Linux, a dmg for macOS (Apple Silicon). Python, CadQuery, Git and CalculiX are included. You only need a CLI agent.
 
-- The packages are not signed yet. On macOS, open the app the first time with right-click > Open
+- You need a CLI agent installed and logged in, for example Claude Code, OpenCode, Codex CLI or Gemini CLI. SOMA does not bring one
+- The installed app takes over 1 GB of disk space, most of it for Python, CadQuery and OpenCascade
+- The packages are not signed yet. On Windows, SmartScreen warns on the first start ("More info" > "Run anyway"). On macOS, open the app the first time with right-click > Open
 - Linux needs glibc 2.31 or newer
+- There is no automatic update. Download a new version from the releases page
 
 ## Status
 
 Early prototype, version 0.6.2. See [CHANGELOG.md](CHANGELOG.md).
 
 - Developed and mainly tested on Windows. The packages also run on Linux (Kubuntu) and macOS (Apple Silicon), but have seen much less use there
+- Mostly tested with Claude Code and Claude Opus 5.5 as the agent's model, with very good results. Other agents and models work too
+- File formats and the `soma` API may still change between 0.x versions
 
 > **Note:** SOMA itself is vibe coded. Most of the code was written by coding agents (mainly Claude Code) under human direction and review. It has tests, but expect rough edges.
 
