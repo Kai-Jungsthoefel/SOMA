@@ -363,10 +363,18 @@ function createWindow(): void {
  */
 async function relaunchForSoftwareGl(): Promise<boolean> {
   if (process.platform !== 'linux' || app.commandLine.hasSwitch('ignore-gpu-blocklist')) return false;
-  // Der Status gilt erst, wenn der GPU-Prozess Auskunft gegeben hat
-  await Promise.race([app.getGPUInfo('basic').catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
-  const status = app.getGPUFeatureStatus().webgl2;
-  if (status.startsWith('enabled')) return false;
+  let status: string;
+  try {
+    // Der Status gilt erst, wenn der GPU-Prozess Auskunft gegeben hat
+    await Promise.race([app.getGPUInfo('basic').catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
+    const all = app.getGPUFeatureStatus() as unknown as Record<string, string | undefined>;
+    console.log('[gpu]', JSON.stringify(all));
+    status = String(all.webgl2 ?? all.webgl ?? '');
+  } catch (e) {
+    console.log('[gpu] status unknown:', e); // im Zweifel normal starten, das Fenster meldet ein Scheitern des Viewers
+    return false;
+  }
+  if (!status || status.startsWith('enabled')) return false;
   console.log(`[gpu] WebGL2 ${status}, restarting with --ignore-gpu-blocklist (software rendering)`);
   app.relaunch({ args: [...process.argv.slice(1), '--ignore-gpu-blocklist'] });
   app.exit(0);
