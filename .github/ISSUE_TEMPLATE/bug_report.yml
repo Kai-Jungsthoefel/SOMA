@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in SOMA does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Security problems please not here, see [SECURITY.md](https://github.com/Kai-Jungsthoefel/SOMA/blob/main/SECURITY.md).
+        Before sharing a model, screenshot or log, check that it contains nothing private.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a new model
+        2. Ask the agent to ...
+        3. Click on ...
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Installation or start
+        - Viewer, measuring, section, exploded view
+        - Building a model (soma build, errors)
+        - Agent terminal
+        - Saving, opening, versions
+        - Analysis (FEM, overhang, wall thickness)
+        - Animation or rendering
+        - Technical drawings or DXF
+        - Export
+        - Skills or AGENTS.md
+        - Parameters
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: system
+    attributes:
+      label: System info
+      description: In SOMA open Settings > About and click "Copy system info", then paste it here. It contains the versions of SOMA, Python, CadQuery, Electron and your system.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and model
+      description: Only if the agent is involved.
+      placeholder: e.g. Claude Code with Claude Opus 5.5
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or output
+      description: Build errors, terminal output or the text of an error dialog.
+      render: text
+  - type: textarea
+    id: files
+    attributes:
+      label: Screenshots or model
+      description: Drag images or a small `.soma` file here (rename it to `.zip` if GitHub does not accept it). Only if you are fine with it being public.

@@ -1,0 +1,32 @@
+name: Feature request
+description: An idea for SOMA, the soma library or the skills
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: Describe the situation and what is missing or tedious today. A real example (the part you were designing) helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How could SOMA help? Rough is fine.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - App (viewer, panels, workflow)
+        - soma library or command line
+        - Skills or AGENTS.md (instructions for the agent)
+        - Analysis, animation or drawings
+        - Installation and packages
+        - Something else
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Sketches, screenshots, links to other tools that do it well.
