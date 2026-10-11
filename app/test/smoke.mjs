@@ -122,8 +122,9 @@ try {
   await ev((id) => window.soma.term.write(id, 'soma --version\r'), tid);
   const gotVersion = await waitFor('soma --version im Terminal', (id) => /^soma \d/m.test(window.__t.termText(id)), 20000, tid).catch(() => false);
   check('Im Terminal läuft `soma` (PATH der Basisumgebung)', !!gotVersion);
-  await ev((id) => window.soma.term.write(id, 'Get-Location\r'), tid);
-  await waitFor('Get-Location', (id) => window.__t.termText(id).includes('workspaces'), 20000, tid).catch(() => {});
+  // pwd gibt es in PowerShell (Alias von Get-Location) und in den Shells von macOS und Linux
+  await ev((id) => window.soma.term.write(id, 'pwd\r'), tid);
+  await waitFor('pwd', (id) => window.__t.termText(id).includes('workspaces'), 20000, tid).catch(() => {});
   check('Terminal startet im Projektordner', (await ev((id) => window.__t.termText(id), tid)).includes('workspaces'));
   // Übergabe an den Agenten: Text landet in der Eingabezeile, abgeschickt wird nicht (E11)
   await ev((t) => window.__t.insert(t), selText);
