@@ -503,6 +503,8 @@ export interface SomaApi {
     clearPreviews(): Promise<StorageClear>;
   };
   /** Angaben für „About“ (E81). `copy` legt sie als Text in die Zwischenablage. */
+  /** Der Viewer bekam keinen WebGL-Kontext. true: Die App startet mit Software-Rendering neu (nur Linux, einmal). */
+  gpu: { webglFailed(): Promise<boolean> };
   about: { info(): Promise<AboutInfo>; copy(): Promise<FileOpResult> };
   /** Animationen (E58): Liste aus .soma/anim/index.json, bauen über `soma anim build`. */
   anim: {

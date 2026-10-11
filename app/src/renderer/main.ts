@@ -41,17 +41,21 @@ function hideBoot(): void {
 window.addEventListener('error', hideBoot, { once: true });
 
 /**
- * Ohne WebGL gibt es keine 3D-Ansicht, und die ganze Oberfläche hängt am Viewer. Unter Linux hat der Hauptprozess dann
- * schon Software-Rendering versucht (main/main.ts). Klar sagen, was fehlt, statt mit leerem Fenster stehen zu bleiben.
+ * Ohne WebGL gibt es keine 3D-Ansicht, und die ganze Oberfläche hängt am Viewer. Unter Linux startet der Hauptprozess dann
+ * mit Software-Rendering neu (main/main.ts), sonst klar sagen, was fehlt, statt mit leerem Fenster stehen zu bleiben.
  */
 function createViewer(): Viewer {
   try {
     return new Viewer($('viewer'));
   } catch (e) {
-    document.body.replaceChildren(el('div', { className: 'fatal' },
-      el('h1', {}, '3D view unavailable'),
-      el('p', {}, 'SOMA needs WebGL 2 for the 3D view, but this system could not provide it. Install or update the graphics driver, or start SOMA on a machine with graphics acceleration.'),
-      el('pre', {}, String(e instanceof Error ? e.message : e))));
+    const title = el('h1', {}, '3D view unavailable');
+    const text = el('p', {}, 'SOMA needs WebGL 2 for the 3D view, but this system could not provide it. Install or update the graphics driver, or start SOMA on a machine with graphics acceleration.');
+    document.body.replaceChildren(el('div', { className: 'fatal' }, title, text, el('pre', {}, String(e instanceof Error ? e.message : e))));
+    void window.soma.gpu.webglFailed().then((restarting) => {
+      if (!restarting) return;
+      title.textContent = 'Restarting with software rendering';
+      text.textContent = 'No graphics acceleration is available, so SOMA restarts and draws the 3D view in software. This is slower for large models. If no window appears, start SOMA again.';
+    }).catch(() => { /* Meldung bleibt */ });
     throw e;
   }
 }

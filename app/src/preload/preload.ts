@@ -104,6 +104,9 @@ const api: SomaApi = {
     open: (area) => ipcRenderer.invoke('storage:open', area),
     clearPreviews: () => ipcRenderer.invoke('storage:clearPreviews'),
   },
+  gpu: {
+    webglFailed: () => ipcRenderer.invoke('gpu:webglFailed'),
+  },
   about: {
     info: () => ipcRenderer.invoke('about:info'),
     copy: () => ipcRenderer.invoke('about:copy'),

@@ -25,6 +25,16 @@ import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProje
 if (process.env.SOMA_USER_DATA) app.setPath('userData', process.env.SOMA_USER_DATA);
 else if (process.platform === 'win32' && process.env.LOCALAPPDATA) app.setPath('userData', path.join(process.env.LOCALAPPDATA, 'soma'));
 
+/**
+ * Linux ohne nutzbaren Grafiktreiber (VM, Remote-Desktop, xvfb): Chromium sperrt WebGL auf dem Software-Renderer llvmpipe,
+ * ohne WebGL gibt es keinen Viewer. Bekommt der Viewer keinen Kontext, meldet das Fenster es (gpu:webglFailed), die App
+ * merkt es sich in den App-Daten und übergeht ab dann bei jedem Start die Sperrliste. Der Merker statt einer Prüfung beim
+ * Start: Der Status von Electron ist vor dem ersten Fenster nicht verlässlich (auf einem Rechner mit Grafikkarte meldete er
+ * alles als aus). Ein Rechner, der den Merker zu Unrecht hat, verliert nichts: Ohne Sperre rendert die Grafikkarte weiter.
+ */
+const softwareGlFlag = () => path.join(app.getPath('userData'), 'software-gl');
+if (process.platform === 'linux' && fs.existsSync(softwareGlFlag())) app.commandLine.appendSwitch('ignore-gpu-blocklist');
+
 let win: BrowserWindow | null = null;
 /** Für Anfragen aus den Terminals (bridge.ts): das Projekt des Fensters. */
 let controller: ProjectController | null = null;
@@ -226,6 +236,14 @@ function registerIpc(ctl: ProjectController): void {
       return { ok: !r.failed, freed: r.freed, kept: r.kept, stats: await storageStats(), ...(r.failed ? { error: `${r.failed} folder${r.failed === 1 ? '' : 's'} could not be removed (still in use).` } : {}) };
     } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   });
+  // Antwort true: Die App startet mit Software-Rendering neu. false: Das hilft hier nicht (anderes System, schon versucht).
+  ipcMain.handle('gpu:webglFailed', () => {
+    if (process.platform !== 'linux' || app.commandLine.hasSwitch('ignore-gpu-blocklist')) return false;
+    try { fs.writeFileSync(softwareGlFlag(), 'WebGL was unavailable, SOMA starts with --ignore-gpu-blocklist.\n'); } catch { return false; }
+    console.log('[gpu] no WebGL context, restarting with --ignore-gpu-blocklist (software rendering)');
+    setTimeout(() => { app.relaunch(); app.exit(0); }, 1500); // Zeit, die Meldung im Fenster zu lesen
+    return true;
+  });
   ipcMain.handle('about:info', () => aboutInfo(agents));
   ipcMain.handle('about:copy', async (): Promise<FileOpResult> => {
     const text = aboutText(await aboutInfo(agents));
@@ -355,35 +373,8 @@ function createWindow(): void {
   win.on('closed', () => { ctl.close(); ctl.renders.close(); controller = null; win = null; });
 }
 
-/**
- * Linux ohne nutzbaren Grafiktreiber (VM, Remote-Desktop, xvfb): Chromium sperrt WebGL2 auf dem Software-Renderer
- * llvmpipe, ohne WebGL gibt es keinen Viewer. Dann einmal neu starten und die Sperrliste übergehen. Rechner mit
- * funktionierendem Treiber bleiben unberührt. Der Schalter wirkt nur beim Start, deshalb der Neustart, und zwar vor dem
- * ersten Fenster. Scheitert WebGL danach noch, meldet es das Fenster (renderer/main.ts).
- */
-async function relaunchForSoftwareGl(): Promise<boolean> {
-  if (process.platform !== 'linux' || app.commandLine.hasSwitch('ignore-gpu-blocklist')) return false;
-  let status: string;
-  try {
-    // Der Status gilt erst, wenn der GPU-Prozess Auskunft gegeben hat
-    await Promise.race([app.getGPUInfo('basic').catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
-    const all = app.getGPUFeatureStatus() as unknown as Record<string, string | undefined>;
-    console.log('[gpu]', JSON.stringify(all));
-    status = String(all.webgl2 ?? all.webgl ?? '');
-  } catch (e) {
-    console.log('[gpu] status unknown:', e); // im Zweifel normal starten, das Fenster meldet ein Scheitern des Viewers
-    return false;
-  }
-  if (!status || status.startsWith('enabled')) return false;
-  console.log(`[gpu] WebGL2 ${status}, restarting with --ignore-gpu-blocklist (software rendering)`);
-  app.relaunch({ args: [...process.argv.slice(1), '--ignore-gpu-blocklist'] });
-  app.exit(0);
-  return true;
-}
-
 // Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
 app.whenReady().then(async () => {
-  if (await relaunchForSoftwareGl()) return;
   adoptLoginShellPath(); // macOS und Linux: PATH wie im Terminal, sonst fehlen die Agenten
   // Python schon jetzt vorwärmen: Bis das Fenster steht und das letzte Modell offen ist, ist cadquery geladen (build.ts)
   warmUp();
