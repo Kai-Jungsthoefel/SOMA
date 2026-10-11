@@ -62,8 +62,8 @@ SOMA_TEST_EXE="$LOCALAPPDATA/soma-dev/release/win-unpacked/SOMA.exe" node test/s
 - **Im Paket:** `resources/python` (Basisumgebung, `paths.ts` findet sie vor der Entwicklungsumgebung), `resources/app` mit `dist/`, `resources/` und nur `dugite` und `node-pty` aus `node_modules` (alles andere bündelt esbuild), ohne asar. Dazu `LICENSE.txt` und `MODEL-EXCEPTION.md`.
 - **Windows:** Installation für den Nutzer nach `%LOCALAPPDATA%\Programs\SOMA` ohne Adminrechte, unsigniert (SmartScreen warnt beim ersten Start).
 - **macOS:** nur Apple Silicon (für Intel fehlt `cryptography` als Wheel), ad-hoc signiert, nicht notarisiert: Gatekeeper lässt die App erst nach Rechtsklick > Öffnen oder `xattr -cr /Applications/SOMA.app` starten. Die installierte App übernimmt beim Start den PATH einer Login-Shell, sonst fänden Agenten-Erkennung und Terminals nichts aus Homebrew oder npm.
-- **Linux:** gebaut unter Ubuntu 22.04, braucht glibc 2.31 oder neuer (cadquery-ocp). Unter Ubuntu 24.04 und neuer kann AppArmor die Sandbox von Electron im AppImage blockieren.
-- Getestet ist das Paket nur unter Windows. Für Linux und macOS gibt es bisher nur die CI, deren Smoke-Test dort noch nicht blockiert.
+- **Linux:** gebaut unter Ubuntu 22.04, braucht glibc 2.31 oder neuer (cadquery-ocp). gmsh braucht libGLU, libXft, libXinerama und libXcursor, `build_runtime.py` liefert sie mit. Ohne nutzbaren Grafiktreiber (VM, Remote-Desktop, xvfb) sperrt Chromium WebGL, die App startet sich dann einmal mit `--ignore-gpu-blocklist` neu (Software-Rendering, `main.ts`). Unter Ubuntu 24.04 und neuer kann AppArmor die Sandbox von Electron im AppImage blockieren.
+- Geprüft mit der Smoke-Suite: Windows (lokal und CI), Linux unter WSL mit Ubuntu 24.04 und xvfb, macOS in der CI (dort scheitern nur die Prüfungen mit Koordinaten im Viewer, der Bildschirm des Runners ist zu klein). Auf echten Rechnern mit Linux und macOS noch nicht ausprobiert.
 
 ## Aufbau
 
