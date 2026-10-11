@@ -6,6 +6,10 @@ eigenen Abschnitt mit Datum und Git-Tag.
 
 ## [Unveröffentlicht]
 
+### Behoben
+
+- Linux: Auf Rechnern mit Grafikkarte schaltete die App beim Start fälschlich auf Software-Rendering um und startete dann nicht mehr. Jetzt schaltet sie nur um, wenn die 3D-Ansicht wirklich kein WebGL bekommt, merkt sich das und startet einmal neu.
+
 ## [0.6.1] - 2026-10-11
 
 ### Neu
