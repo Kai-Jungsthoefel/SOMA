@@ -3,7 +3,10 @@
 **Solid Object Modeling with Agents.** A desktop app for designing parametric 3D models together with a coding agent.
 
 <!-- Trailer: upload the MP4 in the GitHub web editor and put the user-attachments link here, the hero image moves to Screenshots -->
-![SOMA with a small robot rover (79 parts), its structure tree and the agent terminal on the right](docs/images/hero.png)
+
+https://github.com/user-attachments/assets/51166ca7-8dda-4e50-99f9-f1b372a019f4
+
+
 
 You tell the agent what you need. It writes the model as Python code with [CadQuery](https://github.com/CadQuery/cadquery), SOMA builds it and shows the result. You look at it, measure it, point at what is wrong, and the agent changes the code.
 
