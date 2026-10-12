@@ -39,7 +39,7 @@ Details in `app/README.md`.
 
 **`docs/`** `images/` for the README, `phase0-ergebnisse.md` (finished prototype, code in the Git history up to `v0.5.0`).
 
-**Root:** `README.md`, `CHANGELOG.md`, `LICENSE`, `MODEL-EXCEPTION.md`, `THIRD_PARTY_NOTICES.md` (licenses of bundled components, shipped with the packages), `SECURITY.md`. Issue templates in `.github/ISSUE_TEMPLATE/`.
+**Root:** `README.md`, `CHANGELOG.md`, `LICENSE`, `MODEL-EXCEPTION.md`, `THIRD_PARTY_NOTICES.md` (licenses of bundled components, shipped with the packages), `SECURITY.md`, `CONTRIBUTING.md` (issues only, no pull requests for now). Issue templates in `.github/ISSUE_TEMPLATE/`.
 
 ## Commands
 
