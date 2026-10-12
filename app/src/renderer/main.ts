@@ -24,7 +24,7 @@ import { Tour, tourSteps, type TourContext } from './tutorial';
 import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
 import { TerminalTabs } from './terminals';
-import { $, el, fmtWhen, menuItem, menus, toast } from './ui';
+import { $, ask, el, fmtWhen, menuItem, menus, toast } from './ui';
 import { VersionsBar } from './versions';
 import { VideoView } from './videoview';
 import { PickResult, Viewer, ViewName } from './viewer';
@@ -1544,6 +1544,8 @@ api.fs.onEditorRequest(async (action) => {
   if (action === 'save') return { ok: (await code.saveAll()).ok };
   return { ok: await code.discardAll() };
 });
+// Rückfragen des Hauptprozesses (etwa „Save the model?“ beim Schließen) im Stil der App statt als weißer Dialog des Systems
+api.dialog.onShow((o) => ask(o));
 api.versions.onChanged(() => void versions.refresh());
 api.anim.onChanged(() => { void animTool.refresh(); scheduleViewLists(); });
 api.render.onProgress((f) => animTool.progress(f));

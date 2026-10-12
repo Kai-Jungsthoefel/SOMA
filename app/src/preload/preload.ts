@@ -125,7 +125,14 @@ const api: SomaApi = {
     onProgress: (cb) => { ipcRenderer.on('render:progress', (_e, f) => cb(f)); },
     onNotice: (cb) => { ipcRenderer.on('render:notice', (_e, n) => cb(n)); },
   },
-  dialog: { choose: (o) => ipcRenderer.invoke('dialog:choose', o) },
+  dialog: {
+    choose: (o) => ipcRenderer.invoke('dialog:choose', o),
+    // Erst ab hier zeigt der Hauptprozess Rückfragen in der App, vorher (oder ohne Antwort) als Dialog des Systems
+    onShow: (cb) => {
+      ipcRenderer.on('dialog:show', async (_e, id: number, o) => ipcRenderer.send('dialog:res', id, await cb(o).catch(() => null)));
+      ipcRenderer.send('dialog:ready');
+    },
+  },
   openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'

@@ -1,11 +1,11 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { aboutInfo, aboutText } from './about';
 import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
-import { choose, chooseSkillFiles, setTestAnswers, trashItem } from './dialogs';
+import { choose, chooseSkillFiles, setDialogHost, setTestAnswers, trashItem, type ChooseOptions } from './dialogs';
 import { viewDxf } from './dxf';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
@@ -372,10 +372,44 @@ function createWindow(): void {
     })();
   });
   win.on('closed', () => { ctl.close(); ctl.renders.close(); controller = null; win = null; });
+  hostDialogs(wc);
+}
+
+/**
+ * Rückfragen (dialogs.ts choose) zeigt der Renderer selbst an, sobald er sich bereit meldet. Lädt er neu oder stürzt ab,
+ * bekommen offene Fragen `null` und landen im Dialog des Systems: Eine Rückfrage darf nie ohne Antwort hängen bleiben.
+ */
+function hostDialogs(wc: WebContents): void {
+  let next = 0;
+  const pending = new Map<number, (i: number | null) => void>();
+  const drop = () => { setDialogHost(null); for (const r of pending.values()) r(null); pending.clear(); };
+  const onReady = (e: Electron.IpcMainEvent) => {
+    if (e.sender !== wc) return;
+    setDialogHost((o: ChooseOptions) => new Promise((resolve) => {
+      if (wc.isDestroyed()) { resolve(null); return; }
+      const id = ++next;
+      pending.set(id, resolve);
+      wc.send('dialog:show', id, o);
+    }));
+  };
+  const onRes = (e: Electron.IpcMainEvent, id: unknown, i: unknown) => {
+    if (e.sender !== wc) return;
+    const r = pending.get(Number(id));
+    if (!r) return;
+    pending.delete(Number(id));
+    r(typeof i === 'number' ? i : null);
+  };
+  ipcMain.on('dialog:ready', onReady);
+  ipcMain.on('dialog:res', onRes);
+  wc.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) drop(); });
+  wc.on('render-process-gone', drop);
+  wc.once('destroyed', () => { drop(); ipcMain.removeListener('dialog:ready', onReady); ipcMain.removeListener('dialog:res', onRes); });
 }
 
 // Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
 app.whenReady().then(async () => {
+  // Dunkel wie die Oberfläche: unter Windows sonst eine weiße Titelleiste, ebenso die Dialoge zum Öffnen und Speichern
+  nativeTheme.themeSource = 'dark';
   adoptLoginShellPath(); // macOS und Linux: PATH wie im Terminal, sonst fehlen die Agenten
   // Python schon jetzt vorwärmen: Bis das Fenster steht und das letzte Modell offen ist, ist cadquery geladen (build.ts)
   warmUp();

@@ -105,3 +105,53 @@ export function menuItem(label: string, opts: { icon?: string; kbd?: string; sub
   if (opts.onClick) b.addEventListener('click', opts.onClick);
   return b;
 }
+
+export interface AskOptions { title: string; message: string; detail?: string; buttons: string[] }
+
+/**
+ * Rückfrage als Fenster in der App statt als weißer Dialog des Systems. Liefert den Index des Knopfs; der erste ist
+ * der Standard (Enter), der letzte gilt als Abbrechen (Escape). Mehrere Rückfragen kommen nacheinander.
+ */
+let askQueue: Promise<unknown> = Promise.resolve();
+export function ask(o: AskOptions): Promise<number> {
+  const run = askQueue.then(() => showAsk(o));
+  askQueue = run.catch(() => {});
+  return run;
+}
+
+function showAsk(o: AskOptions): Promise<number> {
+  return new Promise((resolve) => {
+    const before = document.activeElement as HTMLElement | null;
+    const cancel = o.buttons.length - 1;
+    const btns = o.buttons.map((label, i) => el('button', { className: i === 0 ? 'btn primary' : 'btn', textContent: label, onclick: () => done(i) }));
+    const dlg = el('div', { className: 'ask-dlg' },
+      el('div', { className: 'ask-title' }, o.title),
+      el('div', { className: 'ask-msg' }, o.message),
+      o.detail ? el('div', { className: 'ask-detail' }, o.detail) : null,
+      el('div', { className: 'ask-btns' }, ...btns));
+    dlg.setAttribute('role', 'alertdialog');
+    dlg.setAttribute('aria-modal', 'true');
+    dlg.setAttribute('aria-label', o.title);
+    const scrim = el('div', { className: 'ask-scrim' }, dlg);
+    // Tasten gehören solange nur dem Dialog: Escape soll nicht zusätzlich Einstellungen oder Werkzeuge schließen
+    const onKey = (e: KeyboardEvent) => {
+      e.stopImmediatePropagation();
+      if (e.key === 'Escape') { e.preventDefault(); done(cancel); }
+      else if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement && dlg.contains(e.target))) { e.preventDefault(); done(0); }
+      else if (e.key === 'Tab') {
+        e.preventDefault();
+        const at = btns.indexOf(document.activeElement as HTMLButtonElement);
+        btns[(at + (e.shiftKey ? -1 : 1) + btns.length) % btns.length].focus();
+      }
+    };
+    function done(i: number): void {
+      window.removeEventListener('keydown', onKey, true);
+      scrim.remove();
+      before?.focus?.();
+      resolve(i);
+    }
+    window.addEventListener('keydown', onKey, true);
+    document.body.append(scrim);
+    btns[0].focus();
+  });
+}

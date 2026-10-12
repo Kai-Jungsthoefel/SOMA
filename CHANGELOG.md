@@ -15,6 +15,8 @@ the version is bumped.
 ### Changed
 
 - This changelog is now in English, also for older versions.
+- Questions such as "Save the model before closing?" appear as a dark window inside the app instead of a white system dialog. Enter picks the highlighted button, Escape cancels.
+- Windows: the title bar of the window is dark instead of white.
 
 ### Fixed
 

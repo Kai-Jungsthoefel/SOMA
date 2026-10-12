@@ -60,9 +60,21 @@ export async function chooseSkillFiles(win: BrowserWindow | null): Promise<strin
   return r.canceled ? [] : r.filePaths;
 }
 
+export type ChooseOptions = { title: string; message: string; detail?: string; buttons: string[] };
+/** Zeigt Rückfragen im Fenster der App. `null`: geht gerade nicht (Fenster lädt, abgestürzt), dann der Dialog des Systems. */
+type DialogHost = (o: ChooseOptions) => Promise<number | null>;
+let host: DialogHost | null = null;
+export const setDialogHost = (h: DialogHost | null) => { host = h; };
+
 /** Liefert den Index des gewählten Knopfs. Der letzte Knopf gilt als Abbrechen (Esc, Fenster schließen). */
-export async function choose(win: BrowserWindow | null, o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> {
-  if (testMode()) return nextAnswer<number>(o.title);
+export async function choose(win: BrowserWindow | null, o: ChooseOptions): Promise<number> {
+  // Tests: Die Antwort 'ui' zeigt die Rückfrage wirklich in der App, der Test klickt dort selbst
+  if (testMode()) { const a = nextAnswer<number | 'ui'>(o.title); if (a !== 'ui') return a; if (!host) throw new Error('Test mode: the window shows no questions.'); }
+  // Die Dialoge des Systems sind unter Windows weiß und passen nicht zur dunklen App
+  if (host) {
+    const i = await host(o).catch(() => null);
+    if (typeof i === 'number' && Number.isInteger(i) && i >= 0 && i < o.buttons.length) return i;
+  }
   const opts = { type: 'question' as const, title: o.title, message: o.message, detail: o.detail, buttons: o.buttons, defaultId: 0, cancelId: o.buttons.length - 1, noLink: true };
   const r = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
   return r.response;

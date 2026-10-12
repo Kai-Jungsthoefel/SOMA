@@ -526,8 +526,14 @@ export interface SomaApi {
     onProgress(cb: (fraction: number) => void): void;
     onNotice(cb: (n: RenderNotice) => void): void;
   };
-  /** Nativer Dialog mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar. */
-  dialog: { choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number> };
+  /**
+   * Rückfrage mit Knöpfen, liefert den Index. Der letzte Knopf gilt als Abbrechen. Im Test über `test.answers` beantwortbar.
+   * `onShow`: Der Renderer zeigt die Rückfragen selbst an (dunkel, im Stil der App), sonst nimmt der Hauptprozess den Dialog des Systems.
+   */
+  dialog: {
+    choose(o: { title: string; message: string; detail?: string; buttons: string[] }): Promise<number>;
+    onShow(cb: (o: { title: string; message: string; detail?: string; buttons: string[] }) => Promise<number>): void;
+  };
   /** Öffnet eine Web-Adresse (http, https, mailto) im Browser des Systems. Andere Adressen lehnt der Hauptprozess ab. */
   openUrl(url: string): Promise<FileOpResult>;
 }

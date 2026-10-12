@@ -250,6 +250,17 @@ try {
   await ev(() => document.querySelector('#st-storage [data-area="previews"] [data-act="clear"]').click());
   await waitFor('Abgebrochen', () => !window.__t.settingsPages().storage.busy, 10000);
   check('Leeren abgebrochen: nichts entfernt', fs.existsSync(path.join(ud, 'previews', fakeId)));
+  // Rückfrage in der App statt als weißer Dialog des Systems: Text, Knöpfe, Fokus, Escape bricht ab und lässt die Einstellungen offen
+  const askDlg = () => ev(() => { const d = document.querySelector('.ask-dlg'); return d && { text: d.textContent, btns: [...d.querySelectorAll('button')].map((b) => b.textContent), focus: document.activeElement?.textContent, primary: d.querySelector('button.primary')?.textContent }; });
+  await app.answers(['ui']);
+  await ev(() => document.querySelector('#st-storage [data-area="previews"] [data-act="clear"]').click());
+  await waitFor('Rückfrage in der App', () => !!document.querySelector('.ask-dlg'), 10000).catch(() => {});
+  const asked = await askDlg();
+  check('Rückfrage in der App: Text, Knöpfe, Fokus auf dem ersten', !!asked && asked.btns.length === 2 && asked.btns.at(-1) === 'Cancel' && asked.focus === asked.btns[0] && asked.primary === asked.btns[0], JSON.stringify(asked));
+  await shot('settings-ask');
+  await ev(() => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await waitFor('Rückfrage zu', () => !document.querySelector('.ask-dlg') && !window.__t.settingsPages().storage.busy, 10000).catch(() => {});
+  check('Escape bricht ab: nichts entfernt, Einstellungen bleiben offen', !(await askDlg()) && fs.existsSync(path.join(ud, 'previews', fakeId)) && !(await ev(() => document.getElementById('settings').hidden)));
   await app.answers([0]);
   await ev(() => document.querySelector('#st-storage [data-area="previews"] [data-act="clear"]').click());
   await waitFor('Geleert', () => !window.__t.settingsPages().storage.busy && /Preview cache cleared/.test(window.__t.toast().text), 20000).catch(() => {});

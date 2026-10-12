@@ -1133,3 +1133,11 @@ code { font-family:var(--mono); font-size:.95em; }
 .tour-acts .btn.ghost { padding:0 4px; color:var(--tx3); }
 .tour-acts .btn.ghost:hover { color:var(--tx); background:none; }
 .tour-acts .btn:disabled { visibility:hidden; }
+
+/* Rückfragen (ui.ts ask): ersetzen die weißen Dialoge des Systems */
+.ask-scrim { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(8,9,11,.6); }
+.ask-dlg { width:min(460px, 100%); display:flex; flex-direction:column; gap:8px; padding:16px 18px 14px; background:var(--s1); border:1px solid var(--line2); border-radius:12px; box-shadow:0 24px 70px rgba(0,0,0,.55); }
+.ask-title { font-size:12px; font-weight:500; color:var(--tx3); }
+.ask-msg { font-size:14px; font-weight:500; white-space:pre-wrap; overflow-wrap:anywhere; }
+.ask-detail { color:var(--tx2); white-space:pre-wrap; overflow-wrap:anywhere; max-height:40vh; overflow:auto; }
+.ask-btns { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:8px; }
