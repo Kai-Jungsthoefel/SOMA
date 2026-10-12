@@ -24,20 +24,27 @@ PARALLEL = 1e-6  # Winkeltoleranz (rad) fuer "parallel"
 
 
 class MeasureError(Exception):
-    """Fehler mit verstaendlicher Meldung. `stale`: die Anfrage gehoert zu einem aelteren Build."""
+    """Fehler mit verstaendlicher Meldung. `stale`: die Anfrage gehoert zu einem aelteren Build. `rebuilt`: auf der Platte
+    liegt ein neuerer Build als im Viewer (etwa `soma build` im Terminal), die App muss ihn erst laden."""
 
-    def __init__(self, message, stale=False):
+    def __init__(self, message, stale=False, rebuilt=False):
         super().__init__(message)
-        self.stale = stale
+        self.stale = stale or rebuilt
+        self.rebuilt = rebuilt
 
 
 def write_geometry(folder, shapes, build_id):
-    """Legt die Bauteile als ein BREP ab (Reihenfolge = Reihenfolge in model.map.json) und raeumt alte Staende weg."""
+    """Legt die Bauteile als ein BREP ab (Reihenfolge = Reihenfolge in model.map.json). Alte Staende raeumt erst
+    remove_old_geometry weg, nachdem model.map.json auf den neuen zeigt: Bis dahin misst der Dienst noch den alten."""
     geo = Path(folder) / "geometry"
     geo.mkdir(parents=True, exist_ok=True)
     cq.Compound.makeCompound(list(shapes)).exportBrep(str(geo / f"{build_id}.brep"))
-    for old in geo.glob("*.brep"):
-        if old.stem != build_id:
+
+
+def remove_old_geometry(folder, build_id):
+    """Alles ausser dem Stand `build_id` aus geometry/ entfernen, auch Zwischendateien abgebrochener Builds."""
+    for old in (Path(folder) / "geometry").glob("*"):
+        if old.suffix in (".brep", ".tmp") and not old.name.startswith(build_id):
             try:
                 old.unlink()
             except OSError:
@@ -279,7 +286,7 @@ def measure(model, req):
 
 
 def serve(stdin=sys.stdin, stdout=sys.stdout):
-    """Anfragen als JSON-Zeilen: {"id", "folder", "build", "a", "b"?}. Antwort: {"id", "ok", "result"|"error", "stale"?}.
+    """Anfragen als JSON-Zeilen: {"id", "folder", "build", "a", "b"?}. Antwort: {"id", "ok", "result"|"error", "stale"?, "rebuilt"?}.
     Geladene Staende bleiben im Speicher, bis sich die Kennung in model.map.json aendert. {"prepare": true} statt "a" laedt
     nur den Stand (bei grossen Baugruppen dauert das), damit der erste Klick nicht darauf warten muss."""
     models = {}
@@ -296,7 +303,7 @@ def serve(stdin=sys.stdin, stdout=sys.stdout):
             folder = str(req["folder"])
             current = json.loads((Path(folder) / "model.map.json").read_text(encoding="utf-8")).get("build")
             if req.get("build") and req["build"] != current:
-                raise MeasureError("The model has been rebuilt in the meantime. Please click again.", stale=True)
+                raise MeasureError("The model has been rebuilt in the meantime. Please click again.", rebuilt=True)
             m = models.get(folder)
             if m is None or m.build != current:
                 m = models[folder] = Model(folder)
@@ -305,7 +312,7 @@ def serve(stdin=sys.stdin, stdout=sys.stdout):
             else:
                 out = dict(id=rid, ok=True, result=measure(m, req))
         except MeasureError as e:
-            out = dict(id=rid, ok=False, error=str(e), stale=e.stale)
+            out = dict(id=rid, ok=False, error=str(e), stale=e.stale, rebuilt=e.rebuilt)
         except Exception as e:  # nie abstuerzen: der Dienst bedient auch die naechste Anfrage
             out = dict(id=rid, ok=False, error=f"{type(e).__name__}: {e}")
         stdout.write(json.dumps(out) + "\n")

@@ -3,6 +3,7 @@
 Einmal-Prozess, funktioniert ohne App (E24). Jeder Lauf schreibt build.json, auch bei Fehlern, damit App und
 Agent dieselbe strukturierte Rueckmeldung bekommen (Status, Fehlerort, Warnungen).
 """
+import contextlib
 import json
 import os
 import runpy
@@ -22,6 +23,9 @@ DEFAULT_ENTRY = "model.py"
 # das der Viewer braucht: dann baut die App jedes Projekt beim naechsten Oeffnen einmal neu.
 OUTPUT_FORMAT = 1
 REFERENCE_GROUP = "Reference"  # Baugruppe der Referenzteile in output/model.step
+# So lange wartet ein Build auf einen anderen desselben Modells. Unter dem Zeitlimit der App (10 min, app/src/main/build.ts),
+# damit sie eine verstaendliche Meldung bekommt statt eines abgebrochenen Prozesses
+LOCK_WAIT_S = float(os.environ.get("SOMA_BUILD_LOCK_WAIT_S") or 540)
 
 
 class BuildError(Exception):
@@ -30,6 +34,93 @@ class BuildError(Exception):
     def __init__(self, message, file=None, line=None, kind="BuildError", tb=""):
         super().__init__(message)
         self.message, self.file, self.line, self.kind, self.tb = message, file, line, kind, tb
+
+
+if os.name == "nt":
+    import msvcrt
+
+    def _try_lock(f):
+        f.seek(0)
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            return True
+        except OSError:
+            return False
+
+    def _unlock(f):
+        f.seek(0)
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+else:
+    import fcntl
+
+    def _try_lock(f):
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError:
+            return False
+
+    def _unlock(f):
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+
+
+@contextlib.contextmanager
+def build_lock(root, wait=None):
+    """Nur ein Build je Modell zur selben Zeit. Die App baut nach jeder Aenderung, der Agent ruft danach `soma build` im
+    Terminal: Gleichzeitig schrieben beide in dieselben Dateien, und model.map.json konnte auf ein BREP zeigen, das der
+    andere Build schon geloescht hatte. Die Sperre gehoert dem Betriebssystem und endet mit dem Prozess, auch nach einem
+    Absturz bleibt also nichts haengen. Laesst sich die Sperrdatei nicht anlegen, wird ohne Sperre gebaut wie bisher."""
+    wait = LOCK_WAIT_S if wait is None else wait
+    geo = Path(root) / ".soma" / "geometry"  # in .gitignore und nie in der ZIP
+    try:
+        geo.mkdir(parents=True, exist_ok=True)
+        f = open(geo / "build.lock", "a+b")
+    except OSError:
+        yield
+        return
+    try:
+        t0 = time.monotonic()
+        told = False
+        while not _try_lock(f):
+            if not told:
+                print("Waiting for another build of this model to finish (the app or another terminal) ...", file=sys.stderr, flush=True)
+                told = True
+            if time.monotonic() - t0 > wait:
+                raise BuildError(f"Another build of this model has been running for more than {wait:.0f} s (the app or "
+                                 "soma build in a terminal). Build again once it has finished.", kind="BuildBusy")
+            time.sleep(0.2)
+        try:
+            yield
+        finally:
+            _unlock(f)
+    finally:
+        f.close()
+
+
+def write_atomic(path, write, tmp_dir):
+    """Datei ueber eine Zwischendatei ersetzen: Wer sie gerade liest (Viewer, Messdienst), sieht nie eine halbe.
+    `write(tmp)` schreibt den Inhalt. Haelt jemand die Datei so offen, dass Windows das Ersetzen verweigert (Python oeffnet
+    ohne FILE_SHARE_DELETE, ebenso Virenscanner), kurz nochmal versuchen, zuletzt direkt schreiben wie frueher."""
+    path, tmp = Path(path), Path(tmp_dir) / f"{uuid.uuid4().hex}.{Path(path).name}.tmp"
+    result = write(tmp)
+    for _ in range(30):
+        try:
+            os.replace(tmp, path)
+            return result
+        except PermissionError:
+            time.sleep(0.1)
+    result = write(path)
+    try:
+        tmp.unlink()
+    except OSError:
+        pass
+    return result
 
 
 def read_project_json(root):
@@ -185,16 +276,28 @@ def write_outputs(root, parts, project_name):
         if p.get("axis"):
             meta["axis"] = list(p["axis"])
         glb_parts.append(dict(meta=meta, mesh=mesher.mesh_shape(p["shape"], tol, 0.3), color=p["color"]))
-    glb_size = mesher.write_glb(root / ".soma" / "model.glb", glb_parts)
-    (root / ".soma" / "model.map.json").write_text(
-        json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
+    soma, geo = root / ".soma", root / ".soma" / "geometry"
+    glb_size = write_atomic(soma / "model.glb", lambda p: mesher.write_glb(p, glb_parts), geo)
+    text = json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False)
+    write_atomic(soma / "model.map.json", lambda p: p.write_text(text, encoding="utf-8"), geo)
+    measure.remove_old_geometry(soma, build_id)  # erst jetzt: model.map.json zeigt auf den neuen Stand
     timings["glb"] = time.perf_counter() - t
     return dict(glb_bytes=glb_size, tolerance=round(tol, 4), timings=timings, map_parts=map_parts)
 
 
 def run_build(project_dir):
-    """Kompletter Build. Schreibt .soma/build.json und gibt das Ergebnis-Dict zurueck (status ok/error)."""
+    """Kompletter Build. Schreibt .soma/build.json und gibt das Ergebnis-Dict zurueck (status ok/error). Laeuft schon ein
+    Build dieses Modells, wartet er darauf (build_lock) und liest den Code erst danach, baut also den neuesten Stand."""
     root = Path(project_dir).resolve()
+    try:
+        with build_lock(root):
+            return _run_build(root)
+    except BuildError as e:  # nur die Sperre. build.json bleibt die des anderen Builds, der noch laeuft
+        return dict(status="error", format=OUTPUT_FORMAT, warnings=[], timings={},
+                    error=dict(kind=e.kind, message=e.message, file=None, line=None, traceback=""))
+
+
+def _run_build(root):
     started = time.time()
     timings = {}
     result = dict(status="ok", format=OUTPUT_FORMAT, started=started, warnings=[])
@@ -228,8 +331,10 @@ def run_build(project_dir):
     result["timings"] = {k: round(v, 3) for k, v in timings.items()}
     result["finished"] = time.time()
     try:
-        (root / ".soma").mkdir(exist_ok=True)
-        (root / ".soma" / "build.json").write_text(json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8")
+        geo = root / ".soma" / "geometry"
+        geo.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(result, indent=1, ensure_ascii=False)
+        write_atomic(root / ".soma" / "build.json", lambda p: p.write_text(text, encoding="utf-8"), geo)
     except OSError as e:
         result["warnings"].append(f"build.json could not be written: {e}")
     return result

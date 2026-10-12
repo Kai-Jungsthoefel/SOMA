@@ -52,4 +52,5 @@ def step_to_glb(step_path, out_dir):
                               mesh=mesher.mesh_shape(shape, tol, 0.3), color=rgba))
     mesher.write_glb(out / "model.glb", glb_parts)
     (out / "model.map.json").write_text(json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
+    measure.remove_old_geometry(out, build_id)
     return map_parts
