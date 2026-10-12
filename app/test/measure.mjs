@@ -174,7 +174,7 @@ try {
   await clickAt(lidTop.screen);
   await result(() => !!window.__t.measure().result || !!window.__t.measure().error);
   s = await ms();
-  check('In der Vorschau: Oberseite des Deckels vermessen (Deckel 60 × 40, Radius 3 in den Ecken)', s.result?.a.type === 'PLANE' && Math.abs(s.result.a.area - (60 * 40 - (4 - Math.PI) * 9)) < 1e-6,
+  check('In der Vorschau: Oberseite des Deckels vermessen (Deckel 60 × 40, Radius 4 in den Ecken: Wand 2 + 2)', s.result?.a.type === 'PLANE' && Math.abs(s.result.a.area - (60 * 40 - (4 - Math.PI) * 16)) < 1e-6,
     s.error || `${s.result?.a.area}`);
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));

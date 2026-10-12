@@ -15,6 +15,10 @@ the version is bumped.
 
 - This changelog is now in English, also for older versions.
 
+### Fixed
+
+- New models: the box of the template failed to build with a wall of exactly 3 mm, although the Parameters panel allows 1.2 to 4 mm. The corner radius now grows with the wall.
+
 ## [0.6.2] - 2026-10-11
 
 ### Fixed
