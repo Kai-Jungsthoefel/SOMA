@@ -28,6 +28,7 @@
     "test:settings": "npm run build && node test/settings.mjs",
     "test:tutorial": "npm run build && node test/tutorial.mjs",
     "test:unit": "node test/unit.mjs",
+    "test:buildlock": "node test/buildlock.mjs",
     "help:shots": "npm run build && node test/helpshots.mjs",
     "dist": "npm run build && electron-builder --config electron-builder.config.cjs --publish never",
     "dist:dir": "npm run build && electron-builder --config electron-builder.config.cjs --publish never --dir",

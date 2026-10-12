@@ -3,11 +3,15 @@
 // Aufruf: npm run test:measure (baut vorher). SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 legt Bilder in test/shots/ ab.
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
 import { APP, checker, cleanup, sleep, startApp } from './harness.mjs';
 
 const t = checker();
 const { check } = t;
 let app;
+
+const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'soma-dev', 'venv', 'Scripts', 'python.exe');
+const soma = (dir, ...args) => spawnSync(PY, ['-m', 'soma', ...args, '--project', dir], { encoding: 'utf8', env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } });
 
 // Bekannte Maße: Platte 40 × 30 × 5 mit zwei Bohrungen Ø 6 bei x = ±10, Block 20 × 20 × 5 auf z = 15..20
 const MODEL = `import cadquery as cq
@@ -159,6 +163,50 @@ try {
   await result(() => !!window.__t.measure().result?.pair);
   s = await ms();
   check('Nach dem Build misst der Dienst den neuen Stand (Abstand jetzt 18,00 mm)', Math.abs((s.result?.pair?.planes?.value ?? 0) - 18) < 1e-9, s.error || s.text.replace(/\s+/g, ' ').slice(0, 80));
+
+  // 8b) Der Agent baut im Terminal (`soma build`), an der App vorbei: Neue Kennung auf der Platte, der Viewer muss sie
+  // übernehmen. Früher blieb jeder Klick bei „rebuilt in the meantime" hängen.
+  await waitFor('Messdienst bereit', () => !window.__t.measure().preparing, 60000).catch(() => {});
+  const before = await ev(() => window.__t.mapBuild());
+  // Fallback im Dienst: Eine Anfrage mit fremder Kennung meldet `rebuilt`, damit die Oberfläche nachlädt
+  const old = await ev(() => window.soma.measure.query('live', { build: '0'.repeat(32), a: { part: 'x', kind: 'face', id: 0 } }));
+  check('Messdienst: Anfrage zu einem anderen Build als auf der Platte meldet rebuilt', !old.ok && old.stale === true && old.rebuilt === true, JSON.stringify(old).slice(0, 120));
+  const tb = soma(proj.dir, 'build');
+  check('soma build im Terminal: Build ok', tb.status === 0, (tb.stderr || tb.stdout).slice(-200));
+  await waitFor('Viewer übernimmt den Build aus dem Terminal', (b) => { const m = window.__t.mapBuild(); return !!m && m !== b && !window.__t.measure().preparing; }, 30000, before).catch(() => {});
+  const after = await ev(() => window.__t.mapBuild());
+  const disk = JSON.parse(fs.readFileSync(path.join(proj.dir, '.soma', 'model.map.json'), 'utf8')).build;
+  check('Viewer zeigt den Build aus dem Terminal (Kennung wie auf der Platte)', after === disk && after !== before, `${before} → ${after}, Platte ${disk}`);
+  await clickAt(plateTop.screen);
+  await result(() => !!window.__t.measure().result || !!window.__t.measure().error);
+  s = await ms();
+  check('Nach dem Build im Terminal misst der Klick wieder', !!s.result && !s.error, s.error);
+
+  // 8c) Der übliche Ablauf beim Agenten: Er ändert model.py (die App baut von selbst) und ruft gleich danach `soma build`.
+  // Beide Builds laufen nacheinander (Sperre), am Ende zeigen Viewer, Platte und Messdienst denselben Stand
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL.replace('translate((45, 0, 15))', 'translate((45, 0, 21))'));
+  const term = await new Promise((resolve) => {
+    const c = spawn(PY, ['-m', 'soma', 'build', '--project', proj.dir], { env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }, windowsHide: true });
+    let err = '';
+    c.stderr.on('data', (d) => { err += d; });
+    c.on('close', (code) => resolve({ code, err }));
+  });
+  check('App und Terminal bauen gleichzeitig: Build im Terminal ok', term.code === 0, term.err.slice(-200));
+  const diskId = () => JSON.parse(fs.readFileSync(path.join(proj.dir, '.soma', 'model.map.json'), 'utf8')).build;
+  await waitFor('Viewer auf dem Stand der Platte', (id) => window.__t.status().state === 'ok' && window.__t.mapBuild() === id && !window.__t.measure().preparing, 60000, diskId()).catch(() => {});
+  await sleep(1000); // ein Build der App, der noch nachkommt
+  await waitFor('Viewer auf dem Stand der Platte', (id) => window.__t.status().state === 'ok' && window.__t.mapBuild() === id && !window.__t.measure().preparing, 60000, diskId()).catch(() => {});
+  const geoFiles = fs.readdirSync(path.join(proj.dir, '.soma', 'geometry'));
+  check('Danach: Viewer zeigt den Build auf der Platte, dessen Geometrie liegt da, keine Zwischendateien',
+    (await ev(() => window.__t.mapBuild())) === diskId() && geoFiles.includes(`${diskId()}.brep`) && !geoFiles.some((f) => f.endsWith('.tmp')), geoFiles.join(', '));
+  const blockTop3 = await topFace('Block', 26);
+  await clickAt(plateTop.screen);
+  await result(() => !!window.__t.measure().result || !!window.__t.measure().error);
+  await clickAt(blockTop3.screen);
+  await result(() => !!window.__t.measure().result?.pair || !!window.__t.measure().error);
+  s = await ms();
+  check('Messen danach: Abstand 21.00 mm', Math.abs((s.result?.pair?.planes?.value ?? 0) - 21) < 1e-9, s.error || s.text.replace(/\s+/g, ' ').slice(0, 80));
 
   // 9) Vorschau eines alten Stands (Startcommit, Vorlagenmodell) lässt sich ebenfalls vermessen
   await ev(() => document.querySelectorAll('#vdots .vdot')[0].click());

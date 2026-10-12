@@ -1,4 +1,4 @@
-import type { MeasureInfo, MeasureResponse, MeasureResult, MeasureSource, MeasureSpan, PartMap } from '../shared/types';
+import type { MeasureInfo, MeasurePrepared, MeasureResponse, MeasureResult, MeasureSource, MeasureSpan, PartMap } from '../shared/types';
 import { icon } from './icons';
 import { el } from './ui';
 import type { MeasureMarks, ProbeHit, Viewer } from './viewer';
@@ -16,6 +16,8 @@ interface Deps {
   source(): MeasureSource;
   /** Kennung des angezeigten Builds (aus model.map.json). */
   build(): string | null;
+  /** Den Build von der Platte in den Viewer laden. Danach ruft der Viewer reset(). */
+  reload(): void;
   part(id: string): PartMap | undefined;
   insert(text: string): void;
 }
@@ -137,7 +139,7 @@ export class MeasureTool {
     this.phase = 'Starting the measuring service …';
     this.prep = (async () => {
       // Läuft der Dienst schon, ist start() gleich fertig
-      let r = await window.soma.measure.start().catch((e: unknown) => ({ ok: false, error: String(e), stale: false }));
+      let r: MeasurePrepared = await window.soma.measure.start().catch((e: unknown) => ({ ok: false, error: String(e), stale: false }));
       if (seq !== this.prepSeq) return;
       if (r.ok) {
         this.phase = `Loading geometry (${n} ${n === 1 ? 'part' : 'parts'}) …`;
@@ -145,7 +147,9 @@ export class MeasureTool {
         r = await window.soma.measure.prepare(source, build).catch((e: unknown) => ({ ok: false, error: String(e), stale: false }));
         if (seq !== this.prepSeq) return;
       }
-      // Ein veralteter Stand ist kein Fehler: Der neue Build ruft reset() und lädt selbst
+      // Ein veralteter Stand ist kein Fehler: Der neue Build ruft reset() und lädt selbst. Kam der neue Build an der App
+      // vorbei auf die Platte (`soma build` im Terminal), erfährt der Viewer sonst nie davon: dann selbst nachladen
+      if (r.rebuilt) { this.endPrepare(); this.render(); this.deps.reload(); return; }
       if (r.ok) this.warm = true;
       else if (!r.stale && !this.a) this.error = r.error ?? 'The measuring service could not be prepared.';
       this.endPrepare();
@@ -200,7 +204,13 @@ export class MeasureTool {
     this.busy = false;
     this.warm = true;
     if (r.ok && r.result) { this.result = r.result; this.drawMarks(); }
-    else {
+    else if (r.rebuilt) {
+      // Der Viewer zeigt einen älteren Build als den auf der Platte: Ohne Nachladen bliebe jeder weitere Klick genauso veraltet
+      this.a = this.b = null;
+      this.deps.viewer.setMeasureMarks(null);
+      this.note = 'The model was rebuilt outside the app (for example by the agent). The new version is loaded now, please click again.';
+      this.deps.reload();
+    } else {
       this.error = r.error ?? 'The measurement failed.';
       if (r.stale) { this.a = this.b = null; this.deps.viewer.setMeasureMarks(null); }
     }

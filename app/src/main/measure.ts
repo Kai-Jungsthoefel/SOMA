@@ -38,7 +38,7 @@ export class MeasureService {
   /** Einen Stand vorab laden. Der Dienst arbeitet der Reihe nach: Messungen danach warten, bis er geladen ist. */
   async prepare(folder: string, build: string): Promise<MeasurePrepared> {
     const r = await this.send({ prepare: true, build, folder }, PREPARE_TIMEOUT_MS);
-    return { ok: r.ok, error: r.error, stale: r.stale };
+    return { ok: r.ok, error: r.error, stale: r.stale, rebuilt: r.rebuilt };
   }
 
   private async send(payload: Record<string, unknown>, timeoutMs: number): Promise<MeasureResponse> {
@@ -86,7 +86,7 @@ export class MeasureService {
           if (!p) continue;
           this.pending.delete(msg.id!);
           clearTimeout(p.timer);
-          p.resolve({ ok: !!msg.ok, result: msg.result, error: msg.error, stale: msg.stale });
+          p.resolve({ ok: !!msg.ok, result: msg.result, error: msg.error, stale: msg.stale, rebuilt: msg.rebuilt });
         }
       });
       child.stderr!.on('data', (d: Buffer) => { err = (err + d.toString('utf8')).slice(-2000); });

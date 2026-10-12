@@ -152,9 +152,12 @@ export interface MeasurePair {
   toPlane?: MeasureSpan; toAxis?: MeasureSpan; toLine?: MeasureSpan; angle?: number;
 }
 export interface MeasureResult { build: string; a: MeasureInfo; b?: MeasureInfo; pair?: MeasurePair }
-/** `stale`: Die Anfrage gehört zu einem älteren Build, die Auswahl ist neu zu treffen. */
-export interface MeasureResponse { ok: boolean; result?: MeasureResult; error?: string; stale?: boolean }
-export interface MeasurePrepared { ok: boolean; error?: string; stale?: boolean }
+/**
+ * `stale`: Die Anfrage gehört zu einem älteren Build, die Auswahl ist neu zu treffen. `rebuilt`: Auf der Platte liegt ein
+ * neuerer Build als im Viewer (`soma build` im Terminal), der Viewer muss ihn erst laden.
+ */
+export interface MeasureResponse { ok: boolean; result?: MeasureResult; error?: string; stale?: boolean; rebuilt?: boolean }
+export interface MeasurePrepared { ok: boolean; error?: string; stale?: boolean; rebuilt?: boolean }
 
 /** Wert einer Einstellung eines Skills: Zahl oder gewählter Eintrag. */
 export type SkillValue = number | string;

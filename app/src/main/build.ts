@@ -8,7 +8,7 @@ import { pythonExe, warmDir } from './paths';
 import { IGNORED_TOP } from './watcher';
 
 const DEBOUNCE_MS = 700;
-const TIMEOUT_MS = 5 * 60 * 1000;
+const TIMEOUT_MS = 10 * 60 * 1000;
 /**
  * Fassung von model.glb, model.map.json und geometry/, gleich OUTPUT_FORMAT in python/soma/build.py. Nur ein Build mit
  * dieser Nummer wird beim Öffnen ohne Neubau gezeigt (currentBuild).
@@ -45,6 +45,9 @@ export class BuildManager extends EventEmitter {
    */
   params: ParamInfo[] | null = null;
   paramsStale = false;
+  /** Kennung (model.map.json) des Builds, den der Viewer zuletzt gemeldet bekam. Ein anderer auf der Platte kam von außen. */
+  private shown: string | null = null;
+  private externalTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly dir: string) {
     super();
@@ -114,6 +117,7 @@ export class BuildManager extends EventEmitter {
       this.proc = null;
       if (this.disposed) return;
       this.takeParams(result);
+      if (result.status === 'ok') this.shown = mapBuildId(this.dir);
       this.setStatus({ state: result.status === 'ok' ? 'ok' : 'error', result, seconds: (Date.now() - startedAt) / 1000, builtAt: Date.now() });
       if (this.rerun) { this.rerun = false; this.start('change during the build'); }
     };
@@ -135,13 +139,36 @@ export class BuildManager extends EventEmitter {
    * Den letzten Build übernehmen, ohne neu zu bauen (beim Öffnen, wenn er noch gilt, siehe currentBuild). Der Viewer lädt
    * dann gleich, was auf der Platte liegt. Läuft schon ein Build oder steht einer an, zählt dessen Ergebnis.
    */
-  adopt(last: LastBuild): void {
+  adopt(last: LastBuild, reason = 'last build'): void {
     if (this.disposed || this.busy) return;
     const result: BuildResult = { status: 'ok', parts: last.parts, timings: last.timings, warnings: last.warnings, params: last.params };
     this.takeParams(result);
+    this.shown = mapBuildId(this.dir);
     const seconds = typeof last.started === 'number' && typeof last.finished === 'number' ? Math.max(0, last.finished - last.started) : undefined;
     const builtAt = typeof last.finished === 'number' ? last.finished * 1000 : undefined;
-    this.setStatus({ state: 'ok', result, reason: 'last build', seconds, builtAt });
+    this.setStatus({ state: 'ok', result, reason, seconds, builtAt });
+  }
+
+  /**
+   * build.json hat sich geändert. Meist ist es der eigene Build, dessen Ergebnis schon gemeldet ist. Hat aber jemand an der
+   * App vorbei gebaut (der Agent mit `soma build` im Terminal), liegen jetzt model.glb, model.map.json und die Geometrie
+   * eines anderen Builds auf der Platte als im Viewer: Das Messen fände dann nichts mehr wieder. Diesen Build übernehmen.
+   * Läuft ein eigener Build oder steht einer an, kommt dessen Ergebnis ohnehin.
+   */
+  externalResult(): void {
+    if (this.externalTimer) clearTimeout(this.externalTimer);
+    // Entprellt: Der Watcher meldet eine Datei oft mehrfach, und das eigene Ergebnis kommt eventuell erst danach
+    this.externalTimer = setTimeout(() => {
+      this.externalTimer = null;
+      if (this.disposed || this.busy) return;
+      const id = mapBuildId(this.dir);
+      if (!id || id === this.shown) return;
+      const last = validBuild(this.dir);
+      if (!last) return;
+      this.adopt(last, 'built outside the app');
+      // Ohne Auto-Build: Ist der Code neuer als dieser Build, bleibt das sichtbar
+      if (!this.autoBuild && buildIsStale(this.dir)) this.setStatus({ ...this.status, stale: true });
+    }, 300);
   }
 
   /**
@@ -193,6 +220,7 @@ export class BuildManager extends EventEmitter {
 
   dispose(): void {
     this.disposed = true;
+    if (this.externalTimer) clearTimeout(this.externalTimer);
     this.cancel();
     this.removeAllListeners();
   }
@@ -378,13 +406,27 @@ export function buildIsStale(dir: string): boolean {
  * Die Geometrie zum Messen hat die Kennung aus model.map.json im Namen. Fehlt sie, ist ein Build mittendrin abgebrochen.
  */
 export function currentBuild(dir: string): LastBuild | null {
+  const last = validBuild(dir);
+  return !last || buildIsStale(dir) ? null : last;
+}
+
+/** Der letzte Build, wenn er vollständig auf der Platte liegt (wie currentBuild, nur ohne den Vergleich mit dem Quelltext). */
+export function validBuild(dir: string): LastBuild | null {
   const last = readLastBuild(dir);
   if (!last || last.status !== 'ok' || last.format !== OUTPUT_FORMAT) return null;
   const soma = path.join(dir, '.soma');
+  const id = mapBuildId(dir);
+  if (!id) return null;
   try {
-    const map = JSON.parse(fs.readFileSync(path.join(soma, 'model.map.json'), 'utf8')) as { build?: unknown };
-    if (typeof map.build !== 'string' || !/^[0-9a-f]{32}$/.test(map.build)) return null;
-    if (!fs.statSync(path.join(soma, 'model.glb')).isFile() || !fs.statSync(path.join(soma, 'geometry', `${map.build}.brep`)).isFile()) return null;
+    if (!fs.statSync(path.join(soma, 'model.glb')).isFile() || !fs.statSync(path.join(soma, 'geometry', `${id}.brep`)).isFile()) return null;
   } catch { return null; }
-  return buildIsStale(dir) ? null : last;
+  return last;
+}
+
+/** Kennung des Builds in .soma/model.map.json, null ohne gültige. */
+function mapBuildId(dir: string): string | null {
+  try {
+    const map = JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'model.map.json'), 'utf8')) as { build?: unknown };
+    return typeof map.build === 'string' && /^[0-9a-f]{32}$/.test(map.build) ? map.build : null;
+  } catch { return null; }
 }

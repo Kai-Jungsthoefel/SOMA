@@ -86,7 +86,7 @@ export class AnimBuilder {
     try {
       const errors: string[] = [];
       for (const f of files ?? [null]) {
-        const r = await runSoma(['anim', 'build', ...(f ? [f] : []), '--project', this.dir, '--json'], this.dir, 5 * 60 * 1000);
+        const r = await runSoma(['anim', 'build', ...(f ? [f] : []), '--project', this.dir, '--json'], this.dir, 10 * 60 * 1000);
         if (!r.out.trim().startsWith('{')) errors.push((r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n') || 'soma anim build returned no result');
       }
       res = { ...readAnimList(this.dir), ok: errors.length === 0, ...(errors.length ? { error: errors.join('\n') } : {}) };
@@ -150,7 +150,8 @@ export async function rerunResult(dir: string, id: string): Promise<{ ok: boolea
     if (!m) return { ok: false, error: `Unexpected argument in the file: ${a.slice(0, 60)}` };
     args.push(a);
   }
-  const res = await runSoma([...args, '--project', dir, '--json'], dir, 5 * 60 * 1000);
+  // FEM an großen Modellen rechnet gut eine halbe Stunde
+  const res = await runSoma([...args, '--project', dir, '--json'], dir, 60 * 60 * 1000);
   if (res.ok) return { ok: true };
   return { ok: false, error: (res.err || res.out).trim().split(/\r?\n/).slice(-3).join('\n') || 'Analysis failed' };
 }

@@ -563,6 +563,7 @@ const measureTool = new MeasureTool({
   viewer,
   source: () => (versions.previewed ? { preview: versions.previewed.hash } : 'live'),
   build: () => map?.build ?? null,
+  reload: () => void loadModel(),
   part: (id) => partEntry(id),
   insert: (t) => insertToAgent(t),
 });
@@ -1674,6 +1675,7 @@ if (api.testMode) {
     selectionText, errorText,
     markup: () => markup.state(),
     measure: () => measureTool.state(),
+    mapBuild: () => map?.build ?? null,
     section: () => sectionTool.state(),
     explode: () => explodeTool.state(),
     busy: () => busy.state(),

@@ -122,7 +122,7 @@ export class ProjectController {
     syncHelpImages(dir, helpDir()); // Bilder der Anleitung (E83) fehlen nach dem Öffnen einer .soma-Datei oder sind von einer älteren App
     const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
     const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'),
-      (rel) => this.animFileChanged(rel));
+      (rel) => this.animFileChanged(rel), () => builds.externalResult());
     // Projektumgebung (E67): Meist steht sie schon, sonst legt `soma env` sie in rund 0,5 s an. Die Terminals kennen ihre
     // Pfade vorab, gewartet wird nur vor dem Installieren von Paketen
     const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
@@ -241,7 +241,7 @@ export class ProjectController {
       tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-export-'));
       // `--` vor dem Namen: Bauteilnamen dürfen mit einem Minus beginnen, ohne als Option zu gelten
       const args = ['export', '--format', format, '--project', s.dir, '--out', tmp, ...(part ? ['--', part] : ['--all'])];
-      const r = await runSoma(args, s.dir, 5 * 60 * 1000);
+      const r = await runSoma(args, s.dir, 10 * 60 * 1000);
       if (!r.ok) {
         const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
         return { ok: false, files: [], error: msg || 'Export failed' };
