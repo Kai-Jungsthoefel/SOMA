@@ -6,6 +6,17 @@ the version is bumped.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-12
+
+### Fixed
+
+- Measuring no longer gets stuck at "The model has been rebuilt in the meantime" after the agent ran `soma build` in the terminal. The viewer now picks up builds made outside the app, and the measuring tool reloads the model itself if it still finds an older one.
+- Two builds of the same model (the app's automatic build and `soma build` in the terminal) no longer write into the same files at once. The second one waits and says so in the terminal. Viewer files are replaced in one step, so the viewer and the measuring service never read a half-written file.
+
+### Changed
+
+- Time limits in the app: builds, animations and exports may take 10 minutes (was 5), analyses run again from the app 60 minutes (was 5).
+
 ## [0.7.0] - 2026-10-12
 
 ### Added
@@ -186,7 +197,8 @@ First numbered version. It sums up the state of the prototype.
 - Extra packages: `pip install` in the terminal goes into a small environment per model, `requirements.txt` travels with the model, on another computer the app reinstalls the packages.
 - Version number on the start page, on the logo and in `project.json`.
 
-[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.0...v0.6.1
