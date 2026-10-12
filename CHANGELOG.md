@@ -6,6 +6,8 @@ the version is bumped.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-12
+
 ### Added
 
 - The packages include `THIRD_PARTY_NOTICES.md` and the license texts of all bundled npm packages.
@@ -184,7 +186,8 @@ First numbered version. It sums up the state of the prototype.
 - Extra packages: `pip install` in the terminal goes into a small environment per model, `requirements.txt` travels with the model, on another computer the app reinstalls the packages.
 - Version number on the start page, on the logo and in `project.json`.
 
-[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.5.0...v0.6.0
