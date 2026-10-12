@@ -7,7 +7,7 @@ const api: SomaApi = {
   startsHome: process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_START === 'home',
   project: {
     current: () => ipcRenderer.invoke('project:current'),
-    create: () => ipcRenderer.invoke('project:create'),
+    create: (kind) => ipcRenderer.invoke('project:create', kind),
     list: () => ipcRenderer.invoke('project:list'),
     open: (id) => ipcRenderer.invoke('project:open', id),
     onChanged: (cb) => { ipcRenderer.on('project:changed', (_e, p) => cb(p)); },

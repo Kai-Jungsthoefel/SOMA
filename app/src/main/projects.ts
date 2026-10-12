@@ -146,8 +146,8 @@ export class ProjectController {
     return info;
   }
 
-  async create(): Promise<ProjectInfo> {
-    const { id } = await createProject();
+  async create(name?: string): Promise<ProjectInfo> {
+    const { id } = await createProject(name);
     return this.open(id);
   }
 

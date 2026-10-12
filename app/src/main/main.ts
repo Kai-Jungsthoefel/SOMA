@@ -45,7 +45,8 @@ function registerIpc(ctl: ProjectController): void {
   const dir = () => ctl.need().dir;
 
   ipcMain.handle('project:current', () => ctl.info());
-  ipcMain.handle('project:create', () => ctl.create());
+  // Nur der feste Name fürs Tutorial (E94), kein freier Text aus dem Renderer
+  ipcMain.handle('project:create', (_e, kind?: unknown) => ctl.create(kind === 'tutorial' ? 'Tutorial' : undefined));
   ipcMain.handle('project:list', async () => (await import('./workspace')).listProjects());
   ipcMain.handle('project:open', (_e, id: string) => ctl.open(id));
   ipcMain.handle('project:saveState', () => ctl.saveState());

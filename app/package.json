@@ -26,6 +26,7 @@
     "test:animation": "npm run build && node test/animation.mjs",
     "test:packages": "npm run build && node test/packages.mjs",
     "test:settings": "npm run build && node test/settings.mjs",
+    "test:tutorial": "npm run build && node test/tutorial.mjs",
     "test:unit": "node test/unit.mjs",
     "help:shots": "npm run build && node test/helpshots.mjs",
     "dist": "npm run build && electron-builder --config electron-builder.config.cjs --publish never",

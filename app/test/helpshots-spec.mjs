@@ -27,6 +27,7 @@ export const SHOTS = [
   {
     file: 'start.png',
     marks: [
+      { label: 'Tutorial', sel: '#start-tour', at: 'tr', box: true },
       { label: 'New model', sel: '#start-new', at: 'tr', box: true },
       { label: 'Open', sel: '#start-open', at: 'tr', box: true },
       { label: 'Recent', sel: '#start-recent', at: 'tr', box: true },

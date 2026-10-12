@@ -497,6 +497,15 @@
         <div>
           <h1>Models</h1>
           <p class="c2 lead">A model is a .soma file with code, result and history. You can move it and share it freely.</p>
+          <!-- Tutorial (E94): bis „Got it“ (gespeichert in settings.json). Die Tour führt durch ein Beispielmodell, ohne Agent -->
+          <section id="start-tour" class="tour-intro" aria-label="Tutorial" hidden>
+            <span class="ico"><i data-icon="route" data-size="22" data-stroke="1.8"></i></span>
+            <div class="ti-text"><b>New to SOMA?</b><span class="c2">Learn the basics in a few minutes with an example model. No agent needed.</span></div>
+            <div class="ti-acts">
+              <button id="btn-tour-start" class="btn primary">Start tutorial</button>
+              <button id="btn-tour-dismiss" class="btn" title="Hide this card. Help can start the tutorial at any time.">Got it</button>
+            </div>
+          </section>
           <div class="bigcards">
             <button id="start-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="22" data-stroke="2.2"></i></span><b>New model</b><span class="c2">Template with an example part, plus a terminal in the model folder</span><span class="c3 small">Ctrl N</span></button>
             <button id="start-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="22"></i></span><b>Open …</b><span class="c2">.soma or ZIP file from this or another computer</span><span class="c3 small">Ctrl O</span></button>
@@ -559,6 +568,7 @@
   <div id="help" class="st-scrim" hidden>
     <div class="st-dlg" role="dialog" aria-modal="true" aria-labelledby="help-title">
       <header class="st-hd"><i data-icon="help" data-size="18" data-stroke="1.7"></i><b id="help-title">Help</b><span class="c3 small">How SOMA works. The agent knows this guide too: just ask it.</span><span class="grow"></span>
+        <button id="btn-help-tour" class="btn sm acc" title="A short guided tour with an example model"><i data-icon="route" data-size="14" data-stroke="1.9"></i>Start tutorial</button>
         <button id="btn-help-close" class="ibtn" aria-label="Close help" title="Close (Escape)"><i data-icon="x" data-size="16" data-stroke="2"></i></button></header>
       <div class="st-body">
         <nav id="help-nav" class="st-nav help-nav" aria-label="Help"></nav>

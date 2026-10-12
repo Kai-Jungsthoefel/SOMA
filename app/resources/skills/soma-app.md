@@ -6,7 +6,7 @@ order: 9
 category: Way of working
 default: on-demand
 when: the user asks how to do something in the SOMA app, cannot find a button or panel, or asks what a part of the window does
-topics: The window; Start page; The agent; Viewer; Tools; Mark up; Sidebar; Files and code; Saving and history; Export; Settings; When something goes wrong
+topics: The window; Start page; Tutorial; The agent; Viewer; Tools; Mark up; Sidebar; Files and code; Saving and history; Export; Settings; When something goes wrong
 ---
 # Using SOMA
 
@@ -44,13 +44,20 @@ The logo at the top left opens the start page.
 
 ![The start page](../help/start.png)
 
-1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N).
-2. **Open**: opens a .soma or ZIP file (Ctrl O).
-3. **Recent**: models you worked on. The bin on a card removes the model from this computer, a saved .soma file stays.
-4. **Agents on this computer**: the agents SOMA found. You install them yourself, SOMA does not bring one.
-5. **Help**: this guide (F1).
-6. **Settings**: viewer, shortcuts, skills, storage and version.
-7. **Back to the model**: returns to the open model.
+1. **Tutorial**: a short guided tour of the app with an example model. No agent needed. "Got it" hides the card.
+2. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N).
+3. **Open**: opens a .soma or ZIP file (Ctrl O).
+4. **Recent**: models you worked on. The bin on a card removes the model from this computer, a saved .soma file stays.
+5. **Agents on this computer**: the agents SOMA found. You install them yourself, SOMA does not bring one.
+6. **Help**: this guide (F1).
+7. **Settings**: viewer, shortcuts, skills, storage and version.
+8. **Back to the model**: returns to the open model.
+
+**Start tutorial** opens a new example model called "Tutorial" and walks you through the window in ten steps: starting
+the agent, the code, clicking a part, measuring, marking up, parameters, history, saving and export, and help. An orange
+frame shows where to look, and you can try everything right away. Back, Skip and Next move through the steps, Esc ends
+the tour. To see it again, click **Start tutorial** at the top of Help. If you leave the example model unchanged, it
+disappears like any new model you did not change.
 
 ## The agent
 

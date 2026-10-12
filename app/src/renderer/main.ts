@@ -20,6 +20,7 @@ import { AboutPage, ShortcutsPage, StoragePage, ViewerPage } from './settingspag
 import { SkillsPanel } from './skills';
 import { ParamsPanel } from './params';
 import { StructureTree } from './tree';
+import { Tour, tourSteps, type TourContext } from './tutorial';
 import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
 import { TerminalTabs } from './terminals';
@@ -1013,6 +1014,8 @@ const versions = new VersionsBar({
 
 async function onProject(p: ProjectInfo): Promise<void> {
   project = p;
+  // Ein anderes Modell geöffnet (Menü, Startseite): Die Tour gehört zum Tutorial-Modell und endet
+  if (tour.active && p.id !== tourProject) tour.stop(false, false);
   loadSeq++; // laufende Ladevorgänge des vorherigen Projekts verwerfen
   map = null;
   lastOkAt = null;
@@ -1487,6 +1490,7 @@ async function showStart(on: boolean): Promise<void> {
   menus.close();
   $('btn-start-close').hidden = !project;
   $('start-note').hidden = store.get('soma.noteSeen') === '1';
+  renderTourCard();
   let list: ProjectListEntry[] = [];
   try { list = await api.project.list(); } catch { /* ohne Liste */ }
   list.sort((a, b) => b.modified - a.modified);
@@ -1557,7 +1561,80 @@ api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (Startseite, Menü, im Testmodus öffnet es der Hauptprozess beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
 // Einstellungen der App (E81): Ein Modell, das schon offen ist, bekommt auch die Darstellung beim Öffnen
-void api.settings.get().then((st) => { appSettings = st; applySettings(); applyDisplayDefaults(); }).catch(() => { /* es gelten die Vorgaben */ });
+void api.settings.get().then((st) => { appSettings = st; applySettings(); applyDisplayDefaults(); renderTourCard(); }).catch(() => { /* es gelten die Vorgaben */ });
+
+// ---- Tutorial (E94) ---------------------------------------------------------------------------------------------
+// Erst hier angelegt: Seine Escape-Taste kommt nach Menüs, Messen und Markierung, die Escape zuerst für sich nutzen
+
+const tourCtx: TourContext = {
+  showPanel: (p) => showPanel(p),
+  showCode: (on) => showCode(on),
+  openCode: (f) => void openCode(f),
+  expandAgent: () => setAgentCollapsed(false),
+  // Die Liste nennt alle bekannten Agenten mit „found“. Leer heißt: Suche läuft noch
+  agentsFound: () => (agents.length ? agents.filter((a) => a.found).map((a) => a.label) : null),
+  selected: () => !!selection,
+  measuring: () => measureTool.isActive,
+  stopMeasure: () => { if (measureTool.isActive) measureTool.setActive(false); },
+  marking: () => markup.active,
+  closeEmptyMarkup: () => { if (markup.active && !markup.drawn) markup.close(); },
+  // Läuft in jedem Frame: nur nachsehen, ob eine Zeile als geändert markiert ist (state() misst den ganzen Text)
+  paramsChanged: () => !!document.querySelector('#params-list .prm.chg'),
+};
+/** Modell, zu dem die laufende Tour gehört. */
+let tourProject: string | null = null;
+const tour = new Tour({
+  covered: () => !$('start').hidden || help.isOpen || settings.isOpen,
+  // Durchlaufen blendet die Karte der Startseite aus (wie „Got it“), Überspringen nicht: Wer abbricht, findet sie dort wieder
+  ended: (finished) => {
+    if (finished) void hideTourCard();
+    toast(finished ? 'That’s the basics. Help (F1) has the whole guide and can start the tutorial again.' : 'Tutorial ended. Help (F1) can start it again.', 'info');
+  },
+});
+
+function renderTourCard(): void {
+  $('start-tour').hidden = !appSettings.settings.start.tutorialCard;
+}
+
+/** Karte „New to SOMA?“ dauerhaft ausblenden (settings.json). Klappt das Schreiben nicht, bleibt sie für diese Sitzung weg. */
+async function hideTourCard(): Promise<void> {
+  $('start-tour').hidden = true;
+  if (!appSettings.settings.start.tutorialCard) return;
+  try {
+    const r = await changeSettings({ start: { tutorialCard: false } });
+    if (!r.ok) toast(r.error ?? 'The setting could not be saved.', 'error');
+  } catch (e) { toast(`The setting could not be saved: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
+  $('start-tour').hidden = true;
+}
+
+/**
+ * Tutorial starten: Es legt wie „New model“ ein neues Modell aus der Vorlage an, nur mit dem Namen „Tutorial“, und führt
+ * daran durch die Oberfläche. Ein offenes Modell bleibt, wie es ist (unter Recent), nach einer Rückfrage, weil seine
+ * Terminals dabei schließen. Bleibt das Tutorial-Modell unverändert, verschwindet es beim Wechsel wie jedes neue (E69).
+ */
+async function startTutorial(): Promise<void> {
+  if (project) {
+    const c = await api.dialog.choose({
+      title: 'Tutorial', message: 'Start the tutorial with a new example model?',
+      detail: `Your model “${project.name}” stays on the start page under Recent. Its terminals close.`, buttons: ['Start tutorial', 'Cancel'],
+    });
+    if (c !== 0) return;
+  }
+  if (!(await leaveEditor('Start tutorial'))) return;
+  help.close();
+  tour.stop(false, false);
+  void showStart(false);
+  let info: ProjectInfo;
+  try { info = await api.project.create('tutorial'); } catch (e) {
+    toast(`The example model could not be created: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    return;
+  }
+  tourProject = info.id;
+  tour.start(tourSteps(tourCtx));
+}
+$('btn-tour-start').addEventListener('click', () => void startTutorial());
+$('btn-tour-dismiss').addEventListener('click', () => void hideTourCard());
+$('btn-help-tour').addEventListener('click', () => void startTutorial());
 
 if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
 // Seitenleiste wie beim letzten Mal, beim ersten Start zu: Die Bauteile stehen im Baum im Viewer (E82)
@@ -1649,6 +1726,8 @@ if (api.testMode) {
     /** „Everything as ZIP“ im Export-Menü (E79). */
     exportZip: () => doExportZip(),
     showStart: (on: boolean) => showStart(on),
+    tour: () => tour.state(),
+    tourGo: (n: number) => tour.goTo(n),
     setAgentCollapsed,
     fileRows: () => [...document.querySelectorAll('#tab-files .frow .fn')].map((x) => x.textContent),
     codeText: () => code.text(),

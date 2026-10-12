@@ -10,6 +10,7 @@ the version is bumped.
 
 - The packages include `THIRD_PARTY_NOTICES.md` and the license texts of all bundled npm packages.
 - `SECURITY.md` explains how to report vulnerabilities privately, and issue templates ask for the system info from Settings > About.
+- Tutorial for new users: the start page shows "New to SOMA?" with "Start tutorial" and "Got it". The tutorial opens an example model and walks through the window in ten steps (agent, code, selecting, measuring, mark up, parameters, history, saving and export, help), with the right button highlighted. Help can start it again at any time.
 
 ### Changed
 

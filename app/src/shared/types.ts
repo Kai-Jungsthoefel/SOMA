@@ -367,7 +367,8 @@ export interface SomaApi {
   startsHome: boolean;
   project: {
     current(): Promise<ProjectInfo>;
-    create(): Promise<ProjectInfo>;
+    /** Neues Modell aus der Vorlage. `tutorial` (E94): dieselbe Vorlage unter dem Namen „Tutorial“. */
+    create(kind?: 'tutorial'): Promise<ProjectInfo>;
     list(): Promise<ProjectListEntry[]>;
     open(id: string): Promise<ProjectInfo>;
     onChanged(cb: (p: ProjectInfo) => void): void;

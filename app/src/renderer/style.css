@@ -1108,3 +1108,28 @@ code { font-family:var(--mono); font-size:.95em; }
 .fatal h1 { font-size:18px; font-weight:600; color:var(--err); margin:0 0 12px; }
 .fatal p { color:var(--tx2); margin:0 0 16px; }
 .fatal pre { font-family:var(--mono); font-size:12px; color:var(--tx3); white-space:pre-wrap; background:var(--s2); border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin:0; }
+
+/* ---- Tutorial (E94, tutorial.ts) ------------------------------------------------------------------------------------
+   Startseite: Karte „New to SOMA?“ über New model und Open. In der Tour ein oranger Rahmen um das Element des Schritts,
+   der Rest leicht abgedunkelt (vier Flächen um das Element). Beides lässt Klicks durch, nur die Karte fängt sie. Unter den Menüs
+   (z-index 40), damit ein geöffnetes Menü hell bleibt, über Startseite und Viewer. */
+.tour-intro { display:flex; align-items:center; gap:16px; margin:0 0 14px; padding:16px 18px; border:1px solid var(--acc-line); border-radius:12px; background:linear-gradient(90deg, var(--acc-tint), var(--s2) 60%); }
+.tour-intro .ico { width:40px; height:40px; flex-shrink:0; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--s3); color:var(--acc); }
+.tour-intro .ti-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.tour-intro .ti-text b { font-size:15px; }
+.tour-intro .ti-acts { display:flex; gap:8px; flex-shrink:0; }
+.tour { position:fixed; inset:0; z-index:38; pointer-events:none; }
+.tour.covered { display:none; }
+.tour.free { background:rgba(8,9,11,.35); }
+.tour-dim { position:fixed; background:rgba(8,9,11,.4); }
+.tour-spot { position:fixed; border:2px solid var(--acc); border-radius:6px; box-shadow:0 0 0 5px rgba(242,154,56,.18); }
+.tour-card { position:fixed; width:330px; pointer-events:auto; display:flex; flex-direction:column; gap:6px; padding:14px 16px 12px; background:var(--s2); border:1px solid var(--acc-line); border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.55); }
+.tour-hd { display:flex; align-items:center; gap:8px; min-height:18px; }
+.tour-n { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--acc-tx); font-weight:500; }
+.tour-ok { display:flex; align-items:center; gap:4px; margin-left:auto; font-size:12px; color:var(--ok); }
+.tour-t { font-size:15px; font-weight:600; }
+.tour-x { margin:0 0 6px; color:var(--tx2); font-size:12.5px; line-height:1.5; }
+.tour-acts { display:flex; align-items:center; gap:6px; }
+.tour-acts .btn.ghost { padding:0 4px; color:var(--tx3); }
+.tour-acts .btn.ghost:hover { color:var(--tx); background:none; }
+.tour-acts .btn:disabled { visibility:hidden; }

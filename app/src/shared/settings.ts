@@ -22,9 +22,11 @@ export interface ViewerPrefs {
   /** Nachkommastellen der Messwerte in der Oberfläche. Der Text für den Agenten hat immer drei. */
   decimals: number;
 }
-export interface AppSettings { viewer: ViewerPrefs }
+/** Startseite (E94): Karte „New to SOMA?“ mit dem Tutorial. „Got it“ blendet sie aus. */
+export interface StartPrefs { tutorialCard: boolean }
+export interface AppSettings { viewer: ViewerPrefs; start: StartPrefs }
 /** Änderung aus dem Renderer: nur die Werte, die sich ändern sollen. */
-export interface SettingsPatch { viewer?: Partial<ViewerPrefs> }
+export interface SettingsPatch { viewer?: Partial<ViewerPrefs>; start?: Partial<StartPrefs> }
 /** `problem`: settings.json war nicht lesbar oder enthielt Unbekanntes, es gelten (teils) die Vorgaben. */
 export interface SettingsState { settings: AppSettings; problem?: string }
 export interface SettingsResult extends SettingsState { ok: boolean; error?: string; backup?: string | null }
@@ -32,6 +34,7 @@ export interface SettingsResult extends SettingsState { ok: boolean; error?: str
 export const DECIMALS = { min: 0, max: 4 };
 export const DEFAULT_SETTINGS: AppSettings = {
   viewer: { navigation: 'soma', invertZoom: false, projection: 'perspective', edges: true, wireframe: false, transparent: false, decimals: 2 },
+  start: { tutorialCard: true },
 };
 
 const NAV = (spec: string): NavBinding[] => spec.split(',').map((s) => {
@@ -88,6 +91,10 @@ const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 const VIEWER_CHECKS: { [K in keyof ViewerPrefs]: (v: unknown) => boolean } = {
   navigation: isNav, invertZoom: isBool, projection: isProjection, edges: isBool, wireframe: isBool, transparent: isBool, decimals: isDecimals,
 };
+const START_CHECKS: { [K in keyof StartPrefs]: (v: unknown) => boolean } = { tutorialCard: isBool };
+/** Bereiche der Einstellungen mit der Prüfung je Wert. */
+const SECTIONS: Record<keyof AppSettings, Record<string, (v: unknown) => boolean>> = { viewer: VIEWER_CHECKS, start: START_CHECKS };
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /**
  * Gelesene Einstellungen (nicht vertrauenswürdig) auf gültige Werte bringen: Fehlendes bekommt die Vorgabe, Ungültiges
@@ -95,33 +102,41 @@ const VIEWER_CHECKS: { [K in keyof ViewerPrefs]: (v: unknown) => boolean } = {
  */
 export function cleanSettings(raw: unknown): { settings: AppSettings; ignored: string[] } {
   const ignored: string[] = [];
-  const v = (raw && typeof raw === 'object' ? (raw as Record<string, unknown>).viewer : undefined) as Record<string, unknown> | undefined;
-  const viewer = { ...DEFAULT_SETTINGS.viewer } as Record<string, unknown>;
-  if (v !== undefined && (!v || typeof v !== 'object' || Array.isArray(v))) ignored.push('viewer');
-  else if (v) {
-    for (const [k, check] of Object.entries(VIEWER_CHECKS)) {
-      if (!(k in v)) continue;
-      if (check(v[k])) viewer[k] = v[k]; else ignored.push(`viewer.${k}`);
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [sec, checks] of Object.entries(SECTIONS)) {
+    const v = raw && typeof raw === 'object' ? (raw as Record<string, unknown>)[sec] : undefined;
+    const cur = { ...(DEFAULT_SETTINGS as unknown as Record<string, Record<string, unknown>>)[sec] };
+    if (v !== undefined && !isObj(v)) ignored.push(sec);
+    else if (v) {
+      for (const [k, check] of Object.entries(checks)) {
+        if (!(k in v)) continue;
+        if (check(v[k])) cur[k] = v[k]; else ignored.push(`${sec}.${k}`);
+      }
     }
+    out[sec] = cur;
   }
-  return { settings: { viewer: viewer as unknown as ViewerPrefs }, ignored };
+  return { settings: out as unknown as AppSettings, ignored };
 }
 
 /** Änderung prüfen und anwenden. Ein ungültiger Wert verhindert die ganze Änderung (Rückgabe: Fehlertext). */
 export function applyPatch(cur: AppSettings, patch: unknown): { settings: AppSettings } | { error: string } {
   if (!patch || typeof patch !== 'object') return { error: 'No settings to change.' };
   const p = patch as Record<string, unknown>;
-  const unknown = Object.keys(p).filter((k) => k !== 'viewer');
+  const unknown = Object.keys(p).filter((k) => !(k in SECTIONS));
   if (unknown.length) return { error: `Unknown setting “${unknown[0]}”.` };
-  const v = p.viewer;
-  if (v === undefined) return { settings: cur };
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return { error: 'Invalid viewer settings.' };
-  const viewer = { ...cur.viewer } as Record<string, unknown>;
-  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-    const check = (VIEWER_CHECKS as Record<string, (x: unknown) => boolean>)[k];
-    if (!check) return { error: `Unknown setting “viewer.${k}”.` };
-    if (!check(val)) return { error: `Invalid value for “viewer.${k}”: ${JSON.stringify(val)}.` };
-    viewer[k] = val;
+  const next = { ...cur } as unknown as Record<string, Record<string, unknown>>;
+  for (const [sec, v] of Object.entries(p)) {
+    if (v === undefined) continue;
+    if (!isObj(v)) return { error: `Invalid ${sec} settings.` };
+    const checks = SECTIONS[sec as keyof AppSettings];
+    const vals = { ...next[sec] };
+    for (const [k, val] of Object.entries(v)) {
+      const check = checks[k];
+      if (!check) return { error: `Unknown setting “${sec}.${k}”.` };
+      if (!check(val)) return { error: `Invalid value for “${sec}.${k}”: ${JSON.stringify(val)}.` };
+      vals[k] = val;
+    }
+    next[sec] = vals;
   }
-  return { settings: { ...cur, viewer: viewer as unknown as ViewerPrefs } };
+  return { settings: next as unknown as AppSettings };
 }
