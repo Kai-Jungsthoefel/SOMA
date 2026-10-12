@@ -65,6 +65,16 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libglu1-mesa libxft2 libxinerama1 libxcursor1
 
+      # Der Linux-Runner hat nur rund 14 GB frei. Die Basisumgebung (1,4 GB) liegt beim Packen mehrfach auf der Platte
+      # (python-runtime, linux-unpacked, AppImage-Zwischenordner, AppImage und tar.gz), mksquashfs brach in 0.7.0 mit
+      # „No space left on device“ ab. Vorinstallierte Werkzeuge, die SOMA nicht braucht, schaffen rund 20 GB Platz.
+      - name: Speicherplatz freigeben (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: Python-Basisumgebung
         run: uv run --no-project --python 3.12 python python/scripts/build_runtime.py
 
@@ -72,7 +82,9 @@ jobs:
         working-directory: app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run dist
+        run: |
+          npm run dist
+          df -h . || true
 
       # Das Fenster der App ist 1600 × 950 groß, Windows begrenzt es auf den Bildschirm (Runner: 1024 × 768). Prüfungen
       # mit Koordinaten im Viewer (Ansichtswürfel, Raster, Doppelklick) brauchen die volle Größe.
