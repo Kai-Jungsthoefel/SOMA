@@ -9,6 +9,16 @@ the version is bumped.
 ### Added
 
 - "Import" button next to Export: choose files in a file dialog to add them to `inputs/`, the same as dragging them into the window.
+- "Drawings" on the left: all technical drawings in one view next to the 3D viewer, with size, scale, warnings and "older than the code" above each sheet, and buttons to open the code or DXF, rebuild or send a sheet to the agent.
+- Click a view on a drawing to look at the model from that direction (a section sets the section tool to the same plane, a detail zooms in), click a dimension to see its points and value on the model.
+- PDF viewer: single page or all pages, page previews on the left, fit the whole page.
+- Text in drawing PDFs can be selected and quoted to the agent (it was drawn as outlines only). Rebuild older drawings to get it.
+- Export drawings from the "Drawings" view: all sheets as one PDF, each sheet as PDF, DXF or both into a folder, or a single sheet.
+
+### Changed
+
+- PDF viewer: no floating "Quote to agent" button next to selected text any more; the button in the bar turns orange instead.
+- `soma drawing build` writes more to `.soma/drawings/index.json` (parts, axes and section planes of the views, model points and positions of the dimensions, positions of warnings), so the app can link sheet and model.
 
 ## [0.7.2] - 2026-10-13
 
