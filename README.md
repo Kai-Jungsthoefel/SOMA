@@ -62,7 +62,7 @@ Press F1 in the app for a short guide with numbered screenshots. The agent knows
 
 ## Status
 
-Early prototype, version 0.7.1. See [CHANGELOG.md](CHANGELOG.md).
+Early prototype, version 0.7.2. See [CHANGELOG.md](CHANGELOG.md).
 
 - Developed and mainly tested on Windows. The packages also run on Linux (Kubuntu) and macOS (Apple Silicon), but have seen much less use there
 - Mostly tested with Claude Code and Claude Opus 5.5 as the agent's model, with very good results. Other agents and models work too
