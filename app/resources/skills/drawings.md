@@ -136,7 +136,8 @@ sh.text("Deburr all edges", (30, 30))
 
 - `sh.msp` is the ezdxf model space in sheet millimetres: lines, arcs, polylines, hatches, texts, blocks. Layers
   VISIBLE (0.5 mm), THIN, CENTER, HIDDEN, PHANTOM, HATCH, CUT, DIM, TEXT, text style and dimension style "ISO". Own
-  ezdxf dimensions in a view need `override={"dimlfac": 1 / view.scale}`.
+  ezdxf dimensions in a view need `override={"dimlfac": 1 / view.scale}`. Prefer `view.dim()`, `diameter()`,
+  `radius()` and `angle()`: only those are checked and shown on the model in the app.
 - `view.pt((x, y, z))` is the sheet point of a model point. Draw what soma does not offer yourself: surface and weld
   symbols, datum triangles, a different title block.
 - `sh.text(text, at, height=3.5, align=, rotation=)`. Several lines with `\n`: the first line at `at`, the others below,

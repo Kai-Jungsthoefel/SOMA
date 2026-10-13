@@ -23,6 +23,8 @@ DRAW_DIR = "drawings"
 OUT_DIR = Path("output") / "drawings"
 SET_PDF = Path("output") / "drawings.pdf"  # alle Blaetter in einer Datei
 CACHE_DIR = Path(".soma") / "drawings"
+# 2: Ansichten, Maße und Hinweise mit Lage im Modell und auf dem Blatt fuer die App (Zeichnungsansicht)
+INDEX_VERSION = 2
 DPI = 200
 MAX_PX = 7000  # laengste Seite des Bildes, A0 mit 200 dpi waeren 9400 px und 250 MB im Speicher
 ON_EDGE = 0.05  # mm auf dem Blatt: so nah muss ein Maßpunkt an einer Kante der Ansicht liegen
@@ -45,7 +47,7 @@ def read_index(root):
     try:
         return json.loads((Path(root) / CACHE_DIR / "index.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return dict(version=1, drawings=[], errors=[])
+        return dict(version=INDEX_VERSION, drawings=[], errors=[])
 
 
 # ---- Ausfuehren -----------------------------------------------------------------------------------------------------
@@ -239,6 +241,44 @@ def _dim_parts(d):
     return np.array(a, dtype=float).reshape(-1, 2), np.array(b, dtype=float).reshape(-1, 2), rects
 
 
+def _union(boxes):
+    boxes = [b for b in boxes if b]
+    if not boxes:
+        return None
+    return (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+
+
+def _round_box(b):
+    return [round(float(x), 2) + 0.0 for x in b] if b else None
+
+
+def _dim_boxes(d):
+    """Platz eines Maßes auf dem Blatt: (ganzes Maß mit Maß- und Hilfslinien, Pfeilen und Text, nur der Text), je
+    (x0, y0, x1, y1) oder None. Fuer die App (Klick auf ein Maß) und fuer den Ort von Hinweisen; einmal je Maß gerechnet."""
+    if "_boxes" in d:
+        return d["_boxes"]
+    try:
+        parts = list(d["entity"].virtual_entities())
+    except Exception:
+        parts = []
+    whole, text = [], []
+    for e in parts:
+        if e.dxftype() in ("MTEXT", "TEXT"):
+            r = _text_rect(e)
+            if r:
+                text.append(r.aabb())
+        else:
+            whole.append(_box(e))
+    tb = _union(text)
+    d["_boxes"] = (_union(whole + [tb]), tb)
+    return d["_boxes"]
+
+
+def _pt_box(q, r=1.5):
+    """Kleines Feld um einen Punkt auf dem Blatt, als Ort eines Hinweises."""
+    return (float(q[0]) - r, float(q[1]) - r, float(q[0]) + r, float(q[1]) + r)
+
+
 def _fits(entities, cell):
     """Breite des Texts und Platz in der Zelle (x0, y0, x1, y1), wenn er nicht hineinpasst, sonst None."""
     boxes = [b for b in (_box(e) for e in entities) if b]
@@ -252,12 +292,16 @@ def _fits(entities, cell):
 
 
 def check(sheet):
-    """Hinweise zum Blatt: nur melden, nichts aendern. Liefert [dict(message, file, line)]."""
+    """Hinweise zum Blatt: nur melden, nichts aendern. Liefert [dict(message, file, line)], dazu box (x0, y0, x1, y1)
+    in Blatt-mm, wenn der Hinweis einen Ort auf dem Blatt hat (die App markiert ihn dort)."""
     _fonts()  # Texte mit der Schrift messen, mit der sie gezeichnet werden
     warn = []
 
-    def add(msg, file=None, line=None):
-        warn.append(dict(message=msg, file=file, line=line))
+    def add(msg, file=None, line=None, box=None):
+        w = dict(message=msg, file=file, line=line)
+        if box:
+            w["box"] = _round_box(box)
+        warn.append(w)
 
     x0, y0, x1, y1 = sheet.area
     tb = sheet.titleblock
@@ -273,14 +317,15 @@ def check(sheet):
         if not pts:
             return
         pts = np.concatenate(pts)
+        box = (float(pts[:, 0].min()), float(pts[:, 1].min()), float(pts[:, 0].max()), float(pts[:, 1].max()))
         out = max(x0 - pts[:, 0].min(), y0 - pts[:, 1].min(), pts[:, 0].max() - x1, pts[:, 1].max() - y1)
         if out > 0.05:
-            add(f"{what} reaches {out:.1f} mm beyond the frame.", file, line)
+            add(f"{what} reaches {out:.1f} mm beyond the frame.", file, line, box)
         for r, desc, own in blocked:
             if own is not None and own == owner:
                 continue
             if any(q.overlaps(r, 0.05) for q in rects) or (a is not None and r.hits(a, b, 0.05).any()):
-                add(f"{what} overlaps {desc}.", file, line)
+                add(f"{what} overlaps {desc}.", file, line, box)
 
     for v in sheet.views:
         place(f"View {v.name}", v.file, v.line, [_Rect.box(v.bbox)])
@@ -289,7 +334,9 @@ def check(sheet):
             if v.phantom or w.phantom:
                 continue  # Nachbarteile liegen absichtlich ueber einer anderen Ansicht
             if _overlap(v.bbox, w.bbox, 0.5):
-                add(f"View {v.name} (line {v.line}) and view {w.name} (line {w.line}) overlap.", w.file, w.line)
+                # Ort: die Flaeche, auf der sich beide ueberdecken
+                add(f"View {v.name} (line {v.line}) and view {w.name} (line {w.line}) overlap.", w.file, w.line,
+                    (max(v.bbox[0], w.bbox[0]), max(v.bbox[1], w.bbox[1]), min(v.bbox[2], w.bbox[2]), min(v.bbox[3], w.bbox[3])))
     for t in sheet._tables:
         place("The table", t["file"], t["line"], [_Rect.box(t["box"])], owner=t["owner"])
     for an in sheet._annot:
@@ -304,7 +351,8 @@ def check(sheet):
             place(t["what"], t["file"], t["line"], [r], owner=t.get("owner"))
             texts.append((r, t["what"], t["file"], t["line"], t.get("owner"), t.get("hint")))
         if t["height"] < 2.5:
-            add(f"{t['what']} is {t['height']:g} mm high, use at least 2.5 mm (ISO 3098).", t["file"], t["line"])
+            add(f"{t['what']} is {t['height']:g} mm high, use at least 2.5 mm (ISO 3098).", t["file"], t["line"],
+                r.aabb() if r else None)
     dim_lines = []  # (a, b, Besitzer, Beschreibung)
     for i, d in enumerate(sheet._dims):
         what = f"Dimension {_dim_label(d)}"
@@ -325,7 +373,7 @@ def check(sheet):
             if oa is not None and oa == ob and oa[0] in ("dim", "table"):
                 continue  # Maßzahl und Toleranz eines Maßes, Zellen einer Tabelle (dort meldet die Zellenpruefung)
             if ra.overlaps(rb, 0.2):
-                add(f"{wb} overlaps {wa} (line {la}).{moves(hb, ha)}", fb, lb)
+                add(f"{wb} overlaps {wa} (line {la}).{moves(hb, ha)}", fb, lb, _union([ra.aabb(), rb.aabb()]))
 
     # Texte auf Kanten der Ansichten und auf Linien der Beschriftung
     segs = _segments(sheet.views)
@@ -335,7 +383,7 @@ def check(sheet):
         hit = [f"edges of view {', '.join(views)}"] if views else []
         hit += list(dict.fromkeys(desc for a, b, own, desc in lines if own != owner and r.hits(a, b, 0.3).any()))
         if hit:
-            add(f"{what} lies on {' and on '.join(hit)}.{moves(hint)}", f, ln)
+            add(f"{what} lies on {' and on '.join(hit)}.{moves(hint)}", f, ln, r.aabb())
 
     # Texte in Tabellen und im Schriftfeld muessen in ihre Zelle passen
     for t in sheet._tables:
@@ -345,27 +393,28 @@ def check(sheet):
                 w, room, tall = res
                 add(f"Text \"{drawing._short(c['text'])}\" does not fit its cell of the table: "
                     + ("too high for the row." if tall else f"{w:.1f} mm long, room for {max(room, 0):.1f} mm."),
-                    t["file"], t["line"])
+                    t["file"], t["line"], c["cell"])
     for fd in sheet._fields:
         res = _fits(fd["entities"], fd["cell"])
         if res:
             w, room, tall = res
             add(f"Title block: \"{drawing._short(fd['text'])}\" does not fit the field {fd['caption']}: "
                 + ("too high." if tall else f"{w:.1f} mm long, room for {max(room, 0):.1f} mm.")
-                + " Shorten it, or draw your own title block (titleblock=False).", sheet.file, sheet.line)
+                + " Shorten it, or draw your own title block (titleblock=False).", sheet.file, sheet.line, fd["cell"])
 
     # Maße: Punkte auf Kanten, Kreise vorhanden, feste Zahlen wie gemessen
     for d in sheet._dims:
         v = d["view"]
         what = f"Dimension {_dim_label(d)}"
         vsegs = [s for s in segs if s[2] is v]
+        dbox, tbox = _dim_boxes(d)
         if d["kind"] in ("diameter", "radius"):
             c = np.array(d["points"][0])
             found = any(np.allclose(np.array(cc), c, atol=1e-3) and abs(r - d["radius"]) < 1e-3
                         for cc, r in v.circles(arcs=True))
             if not found:
                 add(f"{what}: view {v.name} has no circle with radius {drawing.num(d['radius'], 3)} around "
-                    f"{_p3(c)}.", d["file"], d["line"])
+                    f"{_p3(c)}.", d["file"], d["line"], dbox)
         else:
             centers = None
             for p in d["points"]:
@@ -384,19 +433,19 @@ def check(sheet):
                     continue
                 if dist["hidden"] <= ON_EDGE:
                     add(f"{what}: the point {_p3(p)} lies only on a hidden edge (dimension visible edges, ISO 129).",
-                        d["file"], d["line"])
+                        d["file"], d["line"], _pt_box(q))
                 else:
                     add(f"{what}: the point {_p3(p)} lies on no edge of view {v.name} "
                         f"({min(dist.values()):.2f} mm away on the sheet). A rounded or chamfered corner? Then take a "
                         "point on the straight edge. A position that is not in the model? Mark it with "
-                        "view.center_mark() or view.centerline() first.", d["file"], d["line"])
+                        "view.center_mark() or view.centerline() first.", d["file"], d["line"], _pt_box(q))
         t = d["text"]
         if t is not None and "<>" not in t:
             nums = [float(x.replace(",", ".")) for x in re.findall(r"\d+(?:[.,]\d+)?", t)]
             value = round(d["value"], 2)
             if nums and not any(abs(x - value) < 0.005 for x in nums):
                 add(f"{what}: the text \"{t}\" differs from the measured {drawing.num(d['value'])}. Use \"<>\" for the "
-                    "measured value.", d["file"], d["line"])
+                    "measured value.", d["file"], d["line"], tbox or dbox)
 
     scales = sorted({v.scale for v in sheet.views} | {sheet.scale})
     for s in scales:
@@ -429,13 +478,65 @@ def _fonts():
     drawing.setup_fonts()
 
 
+def _plain_texts(entities, depth=0):
+    """TEXT und MTEXT des Blatts, auch in Maßen, Tabellen und Bloecken (deren Teile als virtuelle Objekte)."""
+    for e in entities:
+        t = e.dxftype()
+        if t in ("TEXT", "MTEXT"):
+            yield e
+        elif t in ("DIMENSION", "INSERT") and depth < 4:
+            try:
+                parts = list(e.virtual_entities())
+            except Exception:
+                continue
+            yield from _plain_texts(parts, depth + 1)
+
+
+def _text_layer(fig, msp):
+    """Unsichtbarer Text ueber dem gezeichneten (wie OCR ueber einem Scan): Das Zeichenmodul legt Schrift als Konturen
+    ab, ohne diese Ebene liesse sich in der PDF nichts markieren, suchen oder zitieren. Jede Zeile sitzt mittig auf dem
+    Rechteck ihres Texts, die Groesse so, dass die Breite stimmt (dann deckt die Markierung die sichtbaren Zeichen)."""
+    from matplotlib.font_manager import FontProperties
+    from matplotlib.textpath import TextPath
+    ax = fig.axes[0]
+    prop = FontProperties(family="DejaVu Sans")
+    for e in _plain_texts(msp):
+        try:
+            raw = e.plain_text()
+            r = _text_rect(e)
+        except Exception:
+            continue
+        lines = [x.strip() for x in str(raw).replace("\r", "").split("\n")]
+        lines = [x for x in lines if x]
+        if not r or not lines or r.hx <= 0 or r.hy <= 0:
+            continue
+        ex = np.asarray(r.ex, dtype=float)
+        ey = np.array([-ex[1], ex[0]])
+        deg = math.degrees(math.atan2(ex[1], ex[0]))
+        step = 2 * r.hy / len(lines)
+        for i, s in enumerate(lines):
+            c = np.asarray(r.c, dtype=float) + ey * (r.hy - step * (i + 0.5))
+            try:
+                w1 = TextPath((0, 0), s, size=1, prop=prop).get_extents().width
+            except Exception:
+                continue
+            if w1 <= 0:
+                continue
+            # Breite der Zeile: bei mehreren Zeilen die laengste am Rechteck, die anderen im selben Verhaeltnis
+            longest = max(TextPath((0, 0), x, size=1, prop=prop).get_extents().width for x in lines)
+            size_pt = min(2 * r.hx * 72 / 25.4 / max(longest, 1e-9), step * 72 / 25.4 * 1.3)
+            ax.text(float(c[0]), float(c[1]), s, fontproperties=prop, fontsize=size_pt, rotation=deg, rotation_mode="anchor",
+                    ha="center", va="center", color=(0, 0, 0, 0), zorder=1e6)
+
+
 def render(sheet, pdf_path, png_path, dpi):
     """PDF und PNG aus derselben DXF (Zeichenmodul von ezdxf mit matplotlib), Papier exakt im Format des Blatts.
     Liefert die Groesse des Bilds in Pixeln und die Seite fuer output/drawings.pdf."""
     fig = _figure(sheet.doc, sheet.width, sheet.height)
     w, h = sheet.width, sheet.height
     dpi = min(float(dpi), MAX_PX / (max(w, h) / 25.4))
-    _atomic(pdf_path, lambda p: fig.savefig(p, format="pdf", metadata={"CreationDate": None}))
+    _text_layer(fig, sheet.msp)
+    _atomic(pdf_path, lambda p: _save_pdf(fig, p))
     _atomic(png_path, lambda p: fig.savefig(p, format="png", dpi=dpi, facecolor="white"))
     return (round(w / 25.4 * dpi), round(h / 25.4 * dpi)), fig
 
@@ -499,6 +600,18 @@ def _figure(doc, w, h):
     return fig
 
 
+def _pdf_fonts():
+    """Schrift als TrueType einbetten: Mit Typ-3-Schriften (Vorgabe von matplotlib) liefern PDF-Leser fuer Zeichen wie
+    Ø keinen Text."""
+    import matplotlib
+    return matplotlib.rc_context({"pdf.fonttype": 42})
+
+
+def _save_pdf(fig, path):
+    with _pdf_fonts():
+        fig.savefig(path, format="pdf", metadata={"CreationDate": None})
+
+
 def write_set(root, drawings, figs):
     """Alle Blaetter in einer PDF (output/drawings.pdf), in der Reihenfolge des Index (Datei, dann Zeile). Blaetter, die
     in diesem Lauf nicht gebaut wurden, kommen aus ihrer DXF. Liefert dict(pdf, sheets, missing) oder None."""
@@ -509,7 +622,9 @@ def write_set(root, drawings, figs):
         fig = figs.get(x["id"])
         if fig is None:
             try:
-                fig = _figure(ezdxf.readfile(Path(root) / x["dxf"]), x["width"], x["height"])
+                doc = ezdxf.readfile(Path(root) / x["dxf"])
+                fig = _figure(doc, x["width"], x["height"])
+                _text_layer(fig, doc.modelspace())
             except (OSError, ezdxf.DXFError):
                 missing.append(x["name"])
                 continue
@@ -518,7 +633,7 @@ def write_set(root, drawings, figs):
         return None
 
     def write(p):
-        with PdfPages(p, metadata={"CreationDate": None}) as pdf:
+        with _pdf_fonts(), PdfPages(p, metadata={"CreationDate": None}) as pdf:
             for fig in pages:
                 pdf.savefig(fig)
 
@@ -555,6 +670,57 @@ def save_dxf(sheet, path):
         ezdxf.options.write_fixed_meta_data_for_testing = old
 
 
+def _v3(v):
+    return [round(float(x), 4) + 0.0 for x in v]
+
+
+def _view_3d(v):
+    """Was die App braucht, um eine Ansicht im 3D-Viewer nachzustellen. Alle Punkte und Richtungen im Modell (mm, globale
+    Lage wie in output/model.step, Z oben wie in CadQuery). direction zeigt vom Teil zum Betrachter, right und up sind
+    die Richtungen im Modell, die auf dem Blatt nach rechts und nach oben zeigen."""
+    g = v._geo
+    out = dict(parts=list(g.names), right=_v3(g.x), up=_v3(g.y))
+    if v._detail is not None:
+        c, r, parent = v._detail
+        out["center"] = _v3(c)
+    else:
+        out["center"] = _v3(g.center)
+    # Grobe Ausdehnung im Modell (mm), damit die Kamera die Ansicht einpassen kann
+    b = v.bbox
+    out["size"] = round(max(b[2] - b[0], b[3] - b[1]) / v.scale, 3)
+    # Blattpunkt (sx, sy) -> Ansichtskoordinaten: u = (sx - at[0]) / scale + o[0], v entsprechend. Bei Unterbrechungen
+    # [Achse 0 = u / 1 = v, von, bis] (aufsteigend) ist das die verkuerzte Lage: der Reihe nach, wenn u >= von + gap,
+    # kommt (bis - von - gap) dazu; davor zwischen von und von + gap liegt die Luecke. Modellpunkt = u * right + v * up
+    # + w * direction mit unbekannter Tiefe w
+    out["map"] = dict(at=[round(float(x), 4) for x in v.at], o=[round(float(x), 4) + 0.0 for x in v._o],
+                      scale=round(float(v.scale), 6))
+    if v.breaks:
+        out["map"]["breaks"] = [[ax, round(lo, 4), round(hi, 4)] for ax, lo, hi in v.breaks]
+        out["map"]["gap"] = round(float(v._gap), 4)
+    if v.kind == "section" and v._section is not None:
+        s = v._section
+        # Ebener Schnitt: weggeschnitten ist der Halbraum, in den normal zeigt (zum Betrachter, gleich direction).
+        # Stufen- und Halbschnitte (path) und Ausbrueche (region) haben keine einzelne Ebene
+        out["section"] = dict(kind="plane", point=_v3(s["point"]), normal=_v3(s["normal"])) if s["kind"] == "plane" \
+            else dict(kind=s["kind"])
+    if v._detail is not None:
+        c, r, parent = v._detail
+        out["detail"] = dict(center=_v3(c), radius=round(float(r), 4), parent=parent.name)
+    return out
+
+
+def _dim_3d(d):
+    """Maßpunkte im Modell und Platz des Maßes auf dem Blatt, fuer die App (Klick auf ein Maß zeigt es im 3D-Viewer)."""
+    box, text_box = _dim_boxes(d)
+    out = dict(points=[_v3(p) for p in d["points"]])
+    if d.get("radius") is not None:
+        out["radius"] = round(float(d["radius"]), 4)
+    out["box"] = _round_box(box)
+    if text_box:
+        out["text_box"] = _round_box(text_box)
+    return out
+
+
 def _entry(root, sheet, warnings, px):
     rel = lambda p: p.relative_to(root).as_posix()
     views = []
@@ -564,9 +730,9 @@ def _entry(root, sheet, warnings, px):
                           file=_rel(v.file, root) if v.file else None, direction=[round(x, 4) + 0.0 for x in v.direction],
                           at=[round(float(x), 2) for x in v.at], bbox=[round(x, 2) for x in v.bbox],
                           circles=[dict(center=list(c), diameter=round(2 * r, 4), arc=not full) for c, r, full in circles[:60]],
-                          circles_total=len(circles)))
+                          circles_total=len(circles), **_view_3d(v)))
     dims = [dict(kind=d["kind"], value=round(d["value"], 4), text=d["text"], label=_dim_label(d), view=d["view"].name,
-                 line=d["line"], file=_rel(d["file"], root) if d["file"] else None) for d in sheet._dims]
+                 line=d["line"], file=_rel(d["file"], root) if d["file"] else None, **_dim_3d(d)) for d in sheet._dims]
     return dict(id=sheet.id, name=sheet.name, file=_rel(sheet.file, root) if sheet.file else None, line=sheet.line,
                 size=sheet.size, width=sheet.width, height=sheet.height, scale=drawing.fmt_scale(sheet.scale),
                 area=[round(x, 2) for x in sheet.area], titleblock=[round(x, 2) for x in sheet.titleblock] if sheet.titleblock else None,
@@ -588,7 +754,8 @@ def build_all(root, only=None, dpi=DPI):
                            + (f" ({e.file}:{e.line})" if e.file and e.line else "")) from None
     drawing._PARTS = parts
     files = drawing_files(root)
-    if only is not None:
+    # Ein Index aelterer Fassung: alle Blaetter neu bauen, sonst fehlten den uebrigen Eintraegen die neuen Felder
+    if only is not None and (old.get("version", 1) >= INDEX_VERSION or not old.get("drawings")):
         files = [f for f in files if f.resolve() == Path(only).resolve()]
     done_files = {_rel(f, root) for f in files}
     keep = [x for x in old.get("drawings", []) if x.get("file") not in done_files and (root / x.get("file", "")).is_file()]
@@ -633,7 +800,7 @@ def build_all(root, only=None, dpi=DPI):
         except OSError:
             pass
         orphans += [p for p in (x.get("pdf"), x.get("dxf")) if p and (root / p).is_file()]
-    index = dict(version=1, drawings=sorted(keep + built, key=lambda x: (x["file"] or "", x["line"] or 0)), errors=old_errors + errors)
+    index = dict(version=INDEX_VERSION, drawings=sorted(keep + built, key=lambda x: (x["file"] or "", x["line"] or 0)), errors=old_errors + errors)
     (root / CACHE_DIR).mkdir(parents=True, exist_ok=True)
     (root / CACHE_DIR / "index.json").write_text(json.dumps(index, indent=1, ensure_ascii=False), encoding="utf-8")
     # Alle Blaetter in einer PDF, aber nur vollstaendig: Mit Fehlern bliebe ein Blatt still weg

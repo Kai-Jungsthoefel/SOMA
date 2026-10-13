@@ -112,6 +112,41 @@ try {
   check('Ansicht von oben kennt die Bohrungen: 4 x Ø8 mit Mitten, Ø10 in der Mitte', draw?.circles.filter((c) => c.diameter === 8 && !c.arc).length === 4
     && draw.circles.some((c) => c.diameter === 10 && c.center.join(',') === '0,0,12'), JSON.stringify(draw?.circles)?.slice(0, 160));
 
+  // Index Version 2 für die Zeichnungsansicht der App: Ansichten, Maße und Hinweise mit Lage im Modell und auf dem Blatt
+  let idx = null;
+  try { idx = JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'drawings', 'index.json'), 'utf8')); } catch { /* unten */ }
+  check('index.json hat Version 2', idx?.version === 2, JSON.stringify(idx?.version));
+  const j = (v) => JSON.stringify(v);
+  const bv = Object.fromEntries((br?.views ?? []).map((v) => [v.name, v]));
+  check('Ansicht: Teile, rechts/oben im Modell, Mitte und Größe (front: X rechts, Z oben; top: Y oben)',
+    j(bv.front?.parts) === '["Bracket"]' && j(bv.front?.right) === '[1,0,0]' && j(bv.front?.up) === '[0,0,1]' && j(bv.front?.center) === '[0,0,6]'
+    && bv.front.size === 120 && j(bv.top?.up) === '[0,1,0]' && j(bv.front.map) === '{"at":[140,190],"o":[0,6],"scale":0.5}',
+    j(bv.front && { parts: bv.front.parts, right: bv.front.right, up: bv.front.up, center: bv.front.center, size: bv.front.size, map: bv.front.map }));
+  check('Schnitt A-A: Ebene durch (0, 0, 0), Normale zur weggeschnittenen Seite = Blickrichtung', j(bv['A-A']?.section) === '{"kind":"plane","point":[0,0,0],"normal":[-1,0,0]}'
+    && j(bv['A-A'].section.normal) === j(bv['A-A'].direction), j(bv['A-A']?.section));
+  check('Einzelheit B: Mitte, Radius, Ausgangsansicht, Teile der Ausgangsansicht', j(bv.B?.detail) === '{"center":[20,0,12],"radius":4,"parent":"front"}'
+    && j(bv.B.center) === '[20,0,12]' && j(bv.B.parts) === '["Bracket"]' && bv.B.size === 8, j(bv.B && { detail: bv.B.detail, size: bv.B.size }));
+  const inside = (b, w, h) => Array.isArray(b) && b.length === 4 && b[0] >= 0 && b[1] >= 0 && b[2] <= w && b[3] <= h && b[0] < b[2] && b[1] < b[3];
+  const within = (a, b) => a[0] >= b[0] - 0.01 && a[1] >= b[1] - 0.01 && a[2] <= b[2] + 0.01 && a[3] <= b[3] + 0.01;
+  const d120 = br?.dims.find((d) => d.label === '120');
+  const dDia = br?.dims.find((d) => d.kind === 'diameter');
+  check('Maße: 3D-Punkte, Radius, Platz auf dem Blatt und Platz des Texts darin', j(d120?.points) === '[[-60,-30,12],[60,-30,12]]' && j(dDia?.points) === '[[45,17.5,12]]'
+    && dDia.radius === 4 && br.dims.every((d) => inside(d.box, br.width, br.height) && inside(d.text_box, br.width, br.height) && within(d.text_box, d.box)),
+    j(br?.dims.map((d) => ({ p: d.points, box: d.box, t: d.text_box }))));
+  // Das Maß 120 liegt unter der Draufsicht (offset=-10): Box zwischen den Maßpunkten auf dem Blatt
+  check('Maß 120: Box von x 110 bis 170 unter der Ansicht', d120 && Math.abs(d120.box[0] - 110) < 0.01 && Math.abs(d120.box[2] - 170) < 0.01 && d120.box[3] <= 80.01, j(d120?.box));
+  const ck = by.Checks;
+  const cw = (line, part) => ck?.warnings.find((x) => x.line === line && x.message.includes(part));
+  check('Hinweise mit Ort auf dem Blatt (Maßtext, Punkt, Texte übereinander), Maßstab ohne Ort', inside(cw(4, 'differs')?.box, 420, 297) && inside(cw(5, 'lies on no edge')?.box, 420, 297)
+    && inside(cw(9, 'overlaps')?.box, 420, 297) && !('box' in (cw(2, 'Scale 1:3') ?? { box: 1 })), j(ck?.warnings.map((x) => [x.line, x.box])));
+  check('Ansicht mit eigener Liste: beide Teile', j(ck?.views.find((v) => v.name === 'front')?.parts) === '["Bracket","Pin"]');
+  const fv = Object.fromEntries((by.Feedback?.views ?? []).map((v) => [v.name, v]));
+  check('Stufenschnitt ohne Ebene, unterbrochene Ansicht mit breaks und gap in map', j(fv['A-A']?.section) === '{"kind":"path"}'
+    && j(fv.front?.map?.breaks) === '[[0,-30,30]]' && fv.front.map.gap === 6, j({ s: fv['A-A']?.section, m: fv.front?.map }));
+  // Die PDF-Seite ist genau das Blatt (Ursprung unten links, keine Ränder): MediaBox = Breite x Höhe in pt
+  const media = /\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]/.exec(fs.readFileSync(path.join(dir, 'output', 'drawings', 'Bracket.pdf')).toString('latin1'));
+  check('PDF-Seite genau 420 x 297 mm', !!media && Math.abs(+media[1] / 72 * 25.4 - 420) < 0.01 && Math.abs(+media[2] / 72 * 25.4 - 297) < 0.01, media?.[0]);
+
   const w = (by.Checks?.warnings ?? []).map((x) => `${x.line}: ${x.message}`);
   const has = (line, part) => w.some((m) => m.startsWith(`${line}: `) && m.includes(part));
   check('Prüfung: getippte Zahl "125" statt gemessener 120', has(4, 'differs from the measured 120'), w.join(' | ').slice(0, 200));
@@ -250,6 +285,9 @@ print(json.dumps(dict(errors=len(aud.errors), types=types, layers=layers, detail
     return n;
   });
   check('PDF öffnet im Code-Panel: eine Seite im Querformat, mit Linien gezeichnet', pdf?.pages === 1 && dark > 1000, `${JSON.stringify(pdf)?.slice(0, 100)} dark=${dark}`);
+  // Schrift ist als Kontur gezeichnet, darüber liegt unsichtbarer Text: markieren und zitieren geht wie in jeder PDF
+  const ptext = (pdf?.text?.[0] ?? '').replace(/\s+/g, ' ');
+  check('PDF hat eine Textebene: Name im Schriftfeld, Maßzahl und Ø lesbar', /Bracket/.test(ptext) && /120/.test(ptext) && /Ø/.test(ptext), ptext.slice(0, 160));
   await sleep(1500); // Dateibeobachtung und Speicherstand nachziehen lassen
   const dirty1 = (await ev(() => window.__t.saveState())).dirtyFiles;
   check('PDF, DXF und Bild zählen nicht als ungespeicherte Änderung', dirty1 === dirty0, `${dirty0} -> ${dirty1}`);

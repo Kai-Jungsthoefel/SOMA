@@ -384,13 +384,16 @@ class _Geometry:
     """Projizierte Geometrie einer Ansicht in Ansichtskoordinaten (mm im Modell, unabhaengig vom Maßstab).
     Einzelheiten schneiden daraus nur einen Kreis aus, statt neu zu projizieren."""
 
-    def __init__(self, n, x, y, edges, hatch, shapes, center, bounds):
+    def __init__(self, n, x, y, edges, hatch, shapes, center, bounds, names=()):
         self.n, self.x, self.y = n, x, y
         self.edges = edges        # {"visible": [TopoDS_Edge], "hidden": [...], "tangent": [...]}
         self.hatch = hatch        # [(TopoDS_Face in Ansichtskoordinaten, Stil)]
         self.shapes = shapes      # gezeigte Formen im Modell (fuer circles())
         self.center = center      # Mitte der Begrenzung im Modell, Standard fuer origin
         self.bounds = bounds      # die 8 Ecken der Begrenzung im Modell (Ausdehnung einer unterbrochenen Ansicht)
+        # Namen der gezeigten Bauteile wie im Register (add_part), fuer die App (index.json). Eigene Formen ohne Namen
+        # fehlen, ganz weggeschnittene Teile eines Schnitts auch
+        self.names = tuple(names)
 
     def clip(self, cu, cv, r):
         """Nur was im Kreis um (cu, cv) liegt (Einzelheit)."""
@@ -414,7 +417,7 @@ class _Geometry:
             res = _common(face, disc)
             if res is not None and not res.IsNull():
                 hatch += [(f.wrapped, style) for f in cq.Shape.cast(res).Faces()]
-        return _Geometry(self.n, self.x, self.y, edges, hatch, self.shapes, self.center, self.bounds)
+        return _Geometry(self.n, self.x, self.y, edges, hatch, self.shapes, self.center, self.bounds, self.names)
 
 
 def _on_region(region, face):
@@ -463,17 +466,21 @@ def _drop_borders(edges, faces, x, y):
 def _project(items, n, x, y, hidden, tangent, region=None, unhatched=(), hatch=None, borders=False):
     """items: [(Name, Form)]. region: Koerper, der weggeschnitten wird (Schnitt), sonst None. borders: Kanten von
     Schnittflaechen, die der Betrachter nur von der Seite sieht, weglassen (Schnittverlauf, Halbschnitt, Ausbruch)."""
-    shapes, faces, edge_on = [], [], []
+    shapes, faces, edge_on, names = [], [], [], []
     styles = _hatch_styles(hatch, [nm for nm, _s in items if nm not in unhatched])
     k = 0
     for nm, s in items:
         if region is None or (nm is not None and nm in unhatched):
             shapes.append(s)
+            if nm is not None:
+                names.append(nm)
             continue
         cut = s.cut(region)
         if not cut.Solids() and not cut.Faces():
             continue  # ganz im weggeschnittenen Bereich
         shapes.append(cut)
+        if nm is not None:
+            names.append(nm)
         style = styles[k] if nm not in unhatched else None
         k += 1
         for f in cut.Faces():
@@ -499,7 +506,7 @@ def _project(items, n, x, y, hidden, tangent, region=None, unhatched=(), hatch=N
     bb = _bbox([s for _n, s in items])
     center = np.array([(bb.xmin + bb.xmax) / 2, (bb.ymin + bb.ymax) / 2, (bb.zmin + bb.zmax) / 2])
     bounds = np.array([(a, b, c) for a in (bb.xmin, bb.xmax) for b in (bb.ymin, bb.ymax) for c in (bb.zmin, bb.zmax)])
-    return _Geometry(n, x, y, edges, faces, shapes, center, bounds)
+    return _Geometry(n, x, y, edges, faces, shapes, center, bounds, names)
 
 
 def _hatch_styles(hatch, names):
@@ -652,6 +659,9 @@ class View:
         self._off = np.zeros(2)  # Versatz des gerade gezeichneten Stuecks einer unterbrochenen Ansicht
         self._lines = []  # [(Punkte auf dem Blatt, "visible" | "hidden" | "tangent")] fuer die Pruefung
         self._refs = []   # Mittenkreuze und Mittellinien des Agenten (Punkte auf dem Blatt): gueltige Bezugspunkte für Maße
+        # Fuer die App (index.json): Schnittebene eines Schnitts, Kreis und Ausgangsansicht einer Einzelheit
+        self._section = None  # dict(kind="plane", point, normal) | dict(kind="path") | dict(kind="region")
+        self._detail = None   # (Mitte im Modell, Radius, Ausgangsansicht)
         self._emit(layer)
         pts = np.concatenate([p for p, _k in self._lines]) if self._lines else self.at.reshape(1, 2)
         self.bbox = (float(pts[:, 0].min()), float(pts[:, 1].min()), float(pts[:, 0].max()), float(pts[:, 1].max()))
@@ -1281,6 +1291,13 @@ class Sheet:
         v = self._add_view(geo, "section", direction, at, scale, origin, None, None, lab, file, line,
                            label_at=label_at, breaks=_breaks(breaks, x, y))
         v.name = f"{name}-{name}" if name else v.name
+        if custom:
+            v._section = dict(kind="region")
+        elif pts is not None:
+            v._section = dict(kind="path")
+        else:
+            # Weggeschnitten wird der Halbraum auf der Seite von n (zum Betrachter): die Normale zeigt auf ihn
+            v._section = dict(kind="plane", point=p, normal=n)
         if parent is not None:
             self._cutting_line(parent, n, _vec(through, "through") if pts is None else None, pts, name, letters_at)
         return v
@@ -1312,6 +1329,7 @@ class Sheet:
             raise ValueError("letter_at= places the letter of the detail: give it a name")
         v = View(self, geo, "detail", name or f"detail {len(self.views) + 1}", _pt2(at, "at"), sc, c,
                  (cu, cv, r), None, file, line)
+        v._detail = (c, r, parent)
         self.views.append(v)
         if border:
             self.msp.add_circle(tuple(v.at), r * sc, dxfattribs={"layer": "THIN"})
