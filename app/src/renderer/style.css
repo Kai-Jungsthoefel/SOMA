@@ -279,21 +279,50 @@ code { font-family:var(--mono); font-size:.95em; }
 .codeview .hint { color:var(--tx3); padding:14px; }
 
 /* PDF-Ansicht (E54): Seiten auf dunklem Grund, Textebene von pdf.js darüber (unsichtbarer Text, nur zum Markieren) */
-.pdfview { position:absolute; inset:0; display:flex; flex-direction:column; font-family:var(--sans); }
-.pdf-bar { display:flex; align-items:center; gap:2px; flex-shrink:0; padding:4px 8px 4px 14px; border-bottom:1px solid var(--line); background:var(--term); font:12px var(--sans); }
+.pdfview { position:absolute; inset:0; display:flex; flex-direction:column; font-family:var(--sans); container:pdfview / inline-size; }
+.pdf-bar { display:flex; align-items:center; gap:2px; flex-shrink:0; min-width:0; padding:4px 8px 4px 8px; border-bottom:1px solid var(--line); background:var(--term); font:12px var(--sans); }
 .pdf-bar .btn { height:24px; }
+.pdf-bar .btn.ico { padding:0 5px; }
 .pdf-bar .btn:disabled { opacity:.45; }
-.pdf-zoom { min-width:44px; text-align:center; }
-.pdf-sep { width:1px; height:16px; background:var(--line2); margin:0 6px; }
+.pdf-bar .btn[aria-pressed=true] { background:var(--acc-tint); color:var(--acc-tx); box-shadow:inset 0 0 0 1px var(--acc-line); }
+.pdf-bar .pdf-seg { margin:0 2px; }
+.pdf-bar .pdf-seg button { width:26px; }
+.pdf-zoom { min-width:44px; text-align:center; font-variant-numeric:tabular-nums; }
+.pdf-page-no { padding:0 6px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.pdf-sep { width:1px; height:16px; background:var(--line2); margin:0 6px; flex-shrink:0; }
+/* Schmale Ansicht: Knöpfe nur noch als Symbol, ganz schmal auch ohne Prozentanzeige */
+@container pdfview (max-width: 640px) { .pdf-bar .lbl { display:none; } .pdf-bar .btn { padding:0 5px; } }
+@container pdfview (max-width: 470px) { .pdf-zoom { display:none; } .pdf-sep { margin:0 3px; } }
+.pdf-body { flex:1; min-height:0; display:flex; }
+/* Vorschauleiste: schmal, eigene Scrollleiste, aktuelle Seite orange umrandet */
+.pdf-thumbs { width:118px; flex-shrink:0; position:relative; overflow:hidden auto; scrollbar-width:thin; display:flex; flex-direction:column; align-items:center; gap:6px; padding:10px 0 16px; background:var(--term); border-right:1px solid var(--line); }
+.pdf-thumb { display:flex; flex-direction:column; align-items:center; gap:5px; width:104px; padding:6px 4px 4px; border-radius:6px; flex-shrink:0; }
+.pdf-thumb:hover { background:var(--s2); }
+.pdf-thumb-img { width:84px; flex-shrink:0; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.pdf-thumb-img canvas { display:block; width:100%; height:100%; }
+.pdf-thumb-img.err { background:var(--s2); color:var(--err); box-shadow:inset 0 0 0 1px rgba(240,116,112,.45); }
+.pdf-thumb-label { max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:11px/1.3 var(--sans); color:var(--tx3); }
+.pdf-thumb.on .pdf-thumb-img { box-shadow:0 0 0 2px var(--acc); }
+.pdf-thumb.on .pdf-thumb-label { color:var(--acc-tx); font-weight:500; }
 /* Platz für die Scrollleiste immer frei: Sonst wird die Breite beim Erscheinen der Leiste schmaler, die Seiten werden neu
    eingepasst und neu gezeichnet, und eine Textauswahl ginge verloren */
-.pdf-scroll { flex:1; min-height:0; overflow:auto; scrollbar-gutter:stable; outline:none; background:var(--bg); }
+.pdf-scroll { position:relative; flex:1; min-width:0; min-height:0; overflow:auto; scrollbar-gutter:stable; outline:none; background:var(--bg); }
 .pdf-pages { display:flex; flex-direction:column; align-items:center; gap:14px; padding:16px; width:max-content; min-width:100%; box-sizing:border-box; }
-.pdf-page { position:relative; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.45); --scale-round-x:1px; --scale-round-y:1px; }
+/* Einzelansicht: die Seite mittig, wenn sie kleiner als die Ansicht ist */
+.pdfview.single .pdf-pages { min-height:100%; justify-content:center; }
+/* Hülle je Seite: Kopf des Decorators (gleich breit wie die Seite) über der Seite */
+.pdf-sheet { display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
+.pdf-page { position:relative; flex-shrink:0; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.45); --scale-round-x:1px; --scale-round-y:1px; }
 .pdf-page .pdf-canvas { position:absolute; inset:0; width:100%; height:100%; }
 .pdf-page .pdf-pnum { position:absolute; left:-30px; top:0; font:11px var(--mono); color:var(--tx3); }
+/* Überlagerung des Decorators über Leinwand und Textebene: selbst ohne Mauswirkung, damit Text markierbar bleibt */
+.pdf-overlay { position:absolute; inset:0; z-index:2; pointer-events:none; }
+.pdf-page.pdf-errpage { background:var(--s2); box-shadow:inset 0 0 0 1px rgba(240,116,112,.45); display:flex; align-items:center; justify-content:center; }
+.pdf-errpage-msg { display:flex; align-items:flex-start; gap:10px; max-width:min(80%, 520px); color:var(--tx2); font:13px/1.5 var(--sans); overflow-wrap:anywhere; }
+.pdf-errpage-msg svg.ic, .pdf-err svg.ic { color:var(--err); margin-top:1px; }
+.pdf-err { display:flex; align-items:flex-start; gap:9px; width:min(100%, 560px); padding:9px 12px; border-radius:6px; background:var(--err-tint); color:var(--tx2); font:13px/1.5 var(--sans); overflow-wrap:anywhere; }
+.pdf-err b { color:var(--tx); font-weight:500; }
 .pdf-msg { color:var(--tx2); padding:20px; max-width:420px; font:13px/1.5 var(--sans); }
-.pdf-float { position:absolute; z-index:5; height:26px; font:500 12px var(--sans); box-shadow:var(--shadow); }
 
 /* DXF-Ansicht (E80): Leiste wie bei der PDF, darunter eine Zeichenfläche auf dem Grund der App (wie der Modellbereich im CAD) */
 .dxfview { position:absolute; inset:0; display:flex; flex-direction:column; font-family:var(--sans); }
@@ -1141,3 +1170,55 @@ code { font-family:var(--mono); font-size:.95em; }
 .ask-msg { font-size:14px; font-weight:500; white-space:pre-wrap; overflow-wrap:anywhere; }
 .ask-detail { color:var(--tx2); white-space:pre-wrap; overflow-wrap:anywhere; max-height:40vh; overflow:auto; }
 .ask-btns { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:8px; }
+
+/* Dokument „Drawings“ (E76, drawings.ts): alle Blätter in der PDF-Ansicht, Kopf je Blatt, Ansichten und Maße anklickbar */
+.ctab.pane { font-family:var(--sans); }
+.ctab.pane svg { color:var(--tx3); }
+.ctab.pane.on svg { color:var(--acc-tx); }
+.dwview { position:absolute; inset:0; display:flex; flex-direction:column; font-family:var(--sans); }
+.dw-bar { display:flex; align-items:center; gap:8px; flex-shrink:0; height:30px; padding:0 8px 0 14px; border-bottom:1px solid var(--line); background:var(--s1); font-size:12px; color:var(--tx2); }
+.dw-bar b { color:var(--tx); font-weight:500; }
+.dw-bar .btn { height:22px; }
+.dw-status.warn { color:var(--warn); }
+.dw-pdf { position:relative; flex:1; min-height:0; }
+.dwview.dw-pointer .pdf-page { cursor:pointer; }
+.dw-head { display:flex; flex-direction:column; gap:4px; padding:0 0 6px; font-size:12px; color:var(--tx2); }
+.dw-hrow { display:flex; align-items:center; gap:8px; min-width:0; }
+.dw-name { color:var(--tx); font-weight:500; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dw-hrow .m { white-space:nowrap; color:var(--tx3); }
+.dw-hrow .tag { font-size:11px; padding:1px 7px; border-radius:9px; white-space:nowrap; }
+.dw-hrow .tag.w { background:rgba(232,197,71,.12); color:var(--warn); }
+.dw-hrow .btn-tag:hover { background:rgba(232,197,71,.22); }
+.dw-hrow .ibtn { color:var(--tx3); }
+.dw-warns { display:flex; flex-direction:column; gap:2px; padding:6px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--s1); }
+.dw-warn { display:flex; align-items:flex-start; gap:8px; padding:4px 6px; border-radius:5px; text-align:left; color:var(--tx2); font-size:12px; line-height:1.4; }
+.dw-warn:hover { background:var(--s3); color:var(--tx); }
+.dw-warn svg { color:var(--warn); flex-shrink:0; margin-top:2px; }
+.dw-warn .c3 { margin-left:auto; white-space:nowrap; font-family:var(--mono); font-size:11px; }
+/* Ebene über dem Blatt: Klicks gehen an die Textebene darunter, die Treffer rechnet drawings.ts aus dem Index */
+.dw-ov { position:absolute; inset:0; pointer-events:none; }
+.dw-hit { position:absolute; box-sizing:border-box; border-radius:3px; }
+.dw-hit.hov { border:1.5px dashed var(--acc); background:rgba(242,154,56,.06); }
+.dw-hit.sel { border:2px solid var(--acc); background:rgba(242,154,56,.10); }
+.dw-hit.flash { border:2px solid var(--warn); background:rgba(232,197,71,.15); }
+.dw-tag { position:absolute; left:-2px; bottom:100%; margin-bottom:3px; padding:1px 7px; border-radius:5px; background:rgba(24,27,31,.94); color:var(--tx); font:500 11px var(--sans); white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+.dw-hit.sel .dw-tag { background:var(--acc); color:#1a1206; }
+.dw-hit.below .dw-tag { bottom:auto; top:100%; margin:3px 0 0; }
+.dw-wmark { position:absolute; box-sizing:border-box; border:1.5px dotted var(--warn); border-radius:3px; }
+.dw-card { position:absolute; left:12px; right:12px; bottom:12px; z-index:6; max-width:440px; margin:0 auto; display:flex; flex-direction:column; gap:8px; padding:10px 10px 10px 14px; border:1px solid var(--line2); border-radius:10px; background:var(--s1); box-shadow:var(--shadow); font-size:12px; }
+.dw-chead { display:flex; align-items:flex-start; gap:8px; }
+.dw-chead > div { flex:1; min-width:0; }
+.dw-chead .t { font-size:14px; font-weight:500; color:var(--tx); }
+.dw-chead .m { color:var(--tx3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dw-cline { display:flex; gap:8px; align-items:flex-start; color:var(--tx2); line-height:1.4; }
+.dw-cline svg { flex-shrink:0; margin-top:1px; color:var(--tx3); }
+.dw-cline.warn svg { color:var(--warn); }
+.dw-cacts { display:flex; align-items:center; gap:8px; }
+.dw-empty { max-width:360px; margin:60px auto; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; color:var(--tx2); font-size:13px; line-height:1.5; }
+.dw-empty .ic { color:var(--tx3); }
+.dw-empty b { color:var(--tx); font-weight:500; font-size:14px; }
+.dw-empty p { margin:0; }
+.dw-note { display:flex; align-items:center; gap:10px; flex-shrink:0; padding:8px 10px 8px 14px; border-bottom:1px solid var(--line); background:rgba(232,197,71,.08); color:var(--tx); font-size:12px; line-height:1.4; }
+.dw-note > svg { color:var(--warn); flex-shrink:0; }
+.dw-note span { flex:1; }
+.dw-note .btn { flex-shrink:0; }

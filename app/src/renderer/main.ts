@@ -1,10 +1,12 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
-import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ImportResult, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
+import type { AgentInfo, AnimEntry, BuildStatus, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
 import { CodePanel, codeRows, isDxf, isPdf, type Mark } from './code';
+import { DRAWINGS_KEY, DrawingsView } from './drawings';
+import { DrawingLink } from './drawlink';
 import { AnimTool } from './animtool';
 import { Busy } from './busy';
 import { DRAG_FILE, FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
@@ -145,6 +147,7 @@ function showCode(on: boolean): void {
     else if (project) void code.open('model.py');
   }
   renderLayout();
+  renderDrawingsRail();
 }
 
 /** Spalten-Schalter oben rechts: zeigen, welche Spalten offen sind. */
@@ -159,7 +162,8 @@ const code = new CodePanel(
   {
     read: (rel) => api.fs.readText(rel), readBinary: (rel) => api.fs.readBinary(rel), projectId: () => project?.id ?? null, toast, ask: (o) => api.dialog.choose(o),
     changed: () => { if (saveState) renderSaveState(saveState); },
-    active: (f) => fileTree?.setActive(f),
+    // Später: Der erste Aufruf kommt schon aus dem Konstruktor, bevor `code` steht
+    active: (f) => { fileTree?.setActive(f); queueMicrotask(renderDrawingsRail); },
     saveAndBuild: () => void saveCode(),
     build: () => void api.build.run(),
     link: (href) => openLink(href),
@@ -586,6 +590,62 @@ const sectionTool = new SectionTool({
   hint: $('section-hint'), flip: $<HTMLButtonElement>('btn-section-flip'), look: $<HTMLButtonElement>('btn-section-look'),
 }, { viewer });
 
+// ---- Zeichnungen (E76): Dokument „Drawings“ in der Code-Spalte, Ansichten und Maße in 3D --------------------------
+
+const drawingLink = new DrawingLink({
+  viewer, section: sectionTool,
+  beforeShow: () => endOthers('drawing'),
+  partIds: (names) => {
+    const want = new Set(names);
+    return viewer.partList().filter((p) => want.has(p.name) || want.has(p.id)).map((p) => p.id);
+  },
+  allIds: () => viewer.partList().map((p) => p.id),
+  ready: () => viewer.partList().length > 0,
+});
+const drawingKey = (e: DrawingEntry) => `d:${e.id}:${e.built}`;
+const drawingsView = () => code.pane(DRAWINGS_KEY) as DrawingsView | undefined;
+const drawingsShown = () => codeOpen && code.activeFile === DRAWINGS_KEY;
+
+/** Klick auf „Drawings“ an der Leiste: das Dokument zeigen, ist es schon vorne, die Code-Spalte schließen. */
+function toggleDrawings(): void {
+  if (drawingsShown()) { showCode(false); return; }
+  // Blätter brauchen die Breite: Eine offene Seitenleiste geht zu, wie beim Wechsel zwischen ihren Reitern
+  if (panel) showPanel(null);
+  if (!codeOpen) { codeOpen = true; $('editor').hidden = false; $('split-code').hidden = false; renderLayout(); }
+  code.openPane(DRAWINGS_KEY, 'Drawings', () => new DrawingsView({
+    list: () => api.drawings.list(), build: (f) => api.drawings.build(f), readBinary: (rel) => api.fs.readBinary(rel),
+    pdf: {
+      quote: (file, pages, text) => {
+        const cut = text.length > MAX_QUOTE;
+        insertToAgent(`[Quote: ${file} p. ${pages}: "${cut ? `${text.slice(0, MAX_QUOTE)} …` : text}"] `, cut ? `Quote shortened to ${MAX_QUOTE} characters.` : undefined);
+      },
+      markPage: (file, page, canvas) => void markSource(`${file} p. ${page}`, canvas, canvas.width, canvas.height),
+    },
+    openCode: (file, line, label) => void openCode(file, line ? { from: line, to: line, label } : undefined),
+    openFile: (rel) => void openCode(rel),
+    insert: (t) => insertToAgent(t), toast, link: drawingLink,
+    menu: $('menu-ctx'),
+    exportFiles: async (what, sheet) => {
+      const r = await api.drawings.export(what, sheet);
+      if (r.cancelled) return;
+      const name = (f: string) => f.split(/[\\/]/).pop() ?? f;
+      const warn = r.warnings?.length ? `\n${r.warnings.join('\n')}` : '';
+      if (!r.ok) toast(`Export failed: ${r.error}${warn}`, 'error');
+      else if (r.files.length === 1) toast(`Exported:\n${r.target ?? r.files[0]}${warn}`, warn ? 'info' : 'ok');
+      else toast(`${r.files.length} files exported to ${r.target ?? ''}:\n${r.files.map(name).join(', ')}${warn}`, warn ? 'info' : 'ok');
+    },
+    isNew: (e) => !seen.has(drawingKey(e)), seen: (e) => { seen.add(drawingKey(e)); },
+    listed: (list) => { viewLists.drawings = list.drawings; renderResults(); },
+  }));
+  renderResults();
+}
+
+/** Knopf an der Leiste: gedrückt, solange das Dokument vorne in der offenen Code-Spalte steht. */
+function renderDrawingsRail(): void {
+  $('btn-rail-drawings').setAttribute('aria-pressed', String(drawingsShown()));
+}
+$('btn-rail-drawings').addEventListener('click', () => toggleDrawings());
+
 // ---- Explosionsansicht (E56) ----------------------------------------------------------------------------------------
 
 /** Ladeanzeige über dem Viewer, solange die Explosion rechnet. */
@@ -704,7 +764,8 @@ async function sendMarkup(): Promise<void> {
 const resultLayer = new ResultLayer(viewer);
 /** Zeigt der Viewer gerade eine Analyse oder Animation, sagen es Reiter, Baum und die Leiste unten im Bild (E82). */
 /** Messen, Explosion, Animation und Analyse schließen sich aus: Jedes braucht das Modell in seiner eigenen Lage. */
-const endOthers = (keep: 'measure' | 'explode' | 'anim' | 'result') => {
+const endOthers = (keep: 'measure' | 'explode' | 'anim' | 'result' | 'drawing') => {
+  if (keep !== 'drawing') drawingLink.release();
   if (keep !== 'measure' && measureTool.isActive) measureTool.setActive(false);
   if (keep !== 'explode' && explodeTool.isActive) explodeTool.setActive(false, false);
   if (keep !== 'anim') animTool.setActive(false);
@@ -1333,7 +1394,7 @@ async function doExport(fmt: string, label: string): Promise<ExportResult> {
 // Analysen, Animationen und Videos sind Ergebnisse des Agenten, keine Werkzeuge. Ein Klick auf den Reiter zeigt die Liste (oder
 // den Bericht, wenn schon ein Ergebnis im Bild ist), erst ein Klick in der Liste bringt eins in den Viewer. Das × in der Leiste unten im Bild führt zurück zum Modell.
 
-let viewLists: { results: ResultEntry[]; anims: AnimEntry[]; videos: string[] } = { results: [], anims: [], videos: [] };
+let viewLists: { results: ResultEntry[]; anims: AnimEntry[]; videos: string[]; drawings: DrawingEntry[] } = { results: [], anims: [], videos: [], drawings: [] };
 /** Angesehene Ergebnisse (Schlüssel). Was danach dazukommt, steht in der Liste als „new“, bis man es öffnet. */
 const seen = new Set<string>();
 /** Ergebnisse, die schon in einem geöffneten Reiter standen. Was nicht darin ist, gibt dem Reiter einen Punkt. */
@@ -1345,6 +1406,7 @@ let viewTimer: ReturnType<typeof setTimeout> | undefined;
 const resultKey = (r: ResultEntry) => `r:${r.id}:${String(r.created ?? '')}`;
 const analysisKeys = () => viewLists.results.map(resultKey);
 const animKeys = () => [...viewLists.anims.map(animKey), ...viewLists.videos.map(videoKey)];
+const drawingKeys = () => viewLists.drawings.map(drawingKey);
 
 function videosIn(nodes: FileNode[], out: string[] = []): string[] {
   for (const n of nodes) {
@@ -1356,7 +1418,7 @@ function videosIn(nodes: FileNode[], out: string[] = []): string[] {
 
 function resetViewLists(): void {
   viewSeq++;
-  viewLists = { results: [], anims: [], videos: [] };
+  viewLists = { results: [], anims: [], videos: [], drawings: [] };
   seen.clear();
   tabSeen.clear();
   seenReady = false;
@@ -1367,15 +1429,16 @@ function resetViewLists(): void {
 async function refreshViewLists(): Promise<void> {
   if (!project) return;
   const seq = ++viewSeq;
-  const [results, anims, nodes] = await Promise.all([
+  const [results, anims, nodes, drawings] = await Promise.all([
     api.results.list().catch(() => null), api.anim.list().catch(() => null), api.fs.list().catch(() => [] as FileNode[]),
+    api.drawings.list().catch(() => null as DrawingList | null),
   ]);
   if (seq !== viewSeq) return;
-  viewLists = { results: results ?? viewLists.results, anims: anims?.animations ?? viewLists.anims, videos: videosIn(nodes) };
+  viewLists = { results: results ?? viewLists.results, anims: anims?.animations ?? viewLists.anims, videos: videosIn(nodes), drawings: drawings?.drawings ?? viewLists.drawings };
   if (results) resultTool.setList(results);
   if (anims) animTool.setList(anims);
   // Was beim Öffnen des Modells schon da ist, gilt als gesehen
-  if (!seenReady) { for (const k of [...analysisKeys(), ...animKeys()]) { seen.add(k); tabSeen.add(k); } seenReady = true; }
+  if (!seenReady) { for (const k of [...analysisKeys(), ...animKeys(), ...drawingKeys()]) { seen.add(k); tabSeen.add(k); } seenReady = true; }
   renderResults();
 }
 const scheduleViewLists = () => { clearTimeout(viewTimer); viewTimer = setTimeout(() => void refreshViewLists(), 400); };
@@ -1387,6 +1450,9 @@ function renderResults(): void {
   if (panel === 'anim') for (const k of animKeys()) tabSeen.add(k);
   $('nd-analysis').hidden = !analysisKeys().some((k) => !tabSeen.has(k));
   $('nd-anim').hidden = !animKeys().some((k) => !tabSeen.has(k));
+  if (drawingsShown()) for (const k of drawingKeys()) tabSeen.add(k);
+  $('nd-drawings').hidden = !drawingKeys().some((k) => !tabSeen.has(k));
+  renderDrawingsRail();
   if (panel === 'analysis') analysisPanel.render();
   if (panel === 'anim') animPanel.render();
   // In der Analyse stehen im Baum nur die gerechneten Körper, gegliedert wie im Modell
@@ -1559,6 +1625,7 @@ api.fs.onEditorRequest(async (action) => {
 api.dialog.onShow((o) => ask(o));
 api.versions.onChanged(() => void versions.refresh());
 api.anim.onChanged(() => { void animTool.refresh(); scheduleViewLists(); });
+api.drawings.onChanged(() => { drawingsView()?.refresh(); scheduleViewLists(); });
 api.render.onProgress((f) => animTool.progress(f));
 // Bilder und Videos, die der Agent erzeugt hat: kurz Bescheid geben, ein Klick im Dateibaum öffnet sie
 api.render.onNotice((n) => {
@@ -1702,7 +1769,12 @@ if (api.testMode) {
     analysisToggle: (key: string) => analysisPanel.testToggle(key),
     animShow: (id: string) => animTool.show(id),
     animPanel: () => animPanel.state(),
-    rail: () => ({ analysis: !$('nd-analysis').hidden, anim: !$('nd-anim').hidden, pressed: [...document.querySelectorAll<HTMLElement>('#rail [aria-pressed=true]')].map((b) => b.dataset.panel) }),
+    drawings: () => drawingsView()?.state() ?? null,
+    drawingsOpen: () => toggleDrawings(),
+    drawingsScreen: (name: string, x: number, y: number) => drawingsView()?.screenOf(name, x, y) ?? null,
+    drawingsGoTo: (name: string) => drawingsView()?.goTo(name),
+    drawingsSelectNone: () => drawingsView()?.select(null),
+    rail: () => ({ analysis: !$('nd-analysis').hidden, anim: !$('nd-anim').hidden, drawings: !$('nd-drawings').hidden, pressed: [...document.querySelectorAll<HTMLElement>('#rail [aria-pressed=true]')].map((b) => b.dataset.panel) }),
     dockCompact: () => $('dock').classList.contains('compact'),
     video: () => videoView.state(),
     videoOpen: (rel: string) => videoView.open(rel),

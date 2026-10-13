@@ -117,6 +117,12 @@ const api: SomaApi = {
     build: (file) => ipcRenderer.invoke('anim:build', file ?? null),
     onChanged: (cb) => { ipcRenderer.on('anim:changed', () => cb()); },
   },
+  drawings: {
+    list: () => ipcRenderer.invoke('drawings:list'),
+    build: (file) => ipcRenderer.invoke('drawings:build', file ?? null),
+    export: (what, sheet) => ipcRenderer.invoke('drawings:export', what, sheet ?? null),
+    onChanged: (cb) => { ipcRenderer.on('drawings:changed', () => cb()); },
+  },
   results: {
     list: () => ipcRenderer.invoke('results:list'),
     rerun: (id) => ipcRenderer.invoke('results:rerun', id),

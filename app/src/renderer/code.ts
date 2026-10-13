@@ -78,10 +78,24 @@ interface Doc {
   pdf?: PdfView;
   /** DXF-Reiter (E80): wie PDF, statt des Editors die DXF-Ansicht. */
   dxf?: DxfView;
+  /** Reiter ohne Datei (etwa „Drawings“): eine eigene Ansicht mit Namen. Der Schlüssel beginnt mit `soma:`. */
+  pane?: Pane;
+  label?: string;
 }
 
-/** Eigene Ansicht statt des Editors (PDF, DXF). */
-const paneOf = (d: Doc): PdfView | DxfView | undefined => d.pdf ?? d.dxf;
+/** Ansicht eines Reiters ohne Datei. `refresh` kommt bei Dateiänderungen wie bei PDF und DXF. */
+export interface Pane {
+  root: HTMLElement;
+  dispose(): void;
+  hidden(): void;
+  shown(): void;
+  refresh?(): void;
+}
+
+/** Eigene Ansicht statt des Editors (PDF, DXF, Reiter ohne Datei). */
+const paneOf = (d: Doc): Pane | undefined => d.pdf ?? d.dxf ?? d.pane;
+/** Schlüssel der Reiter ohne Datei, kann nie ein Pfad im Projekt sein. */
+export const isPaneKey = (key: string) => key.startsWith('soma:');
 
 const isMarkdown = (file: string) => /\.md$/i.test(file);
 export const isPdf = (file: string) => /\.pdf$/i.test(file);
@@ -233,6 +247,27 @@ export class CodePanel {
 
   get activeFile(): string | null { return this.active; }
 
+  /** Reiter ohne Datei öffnen (oder nach vorne holen). `make` baut die Ansicht beim ersten Mal. */
+  openPane(key: string, label: string, make: () => Pane): void {
+    let d = this.docs.get(key);
+    if (!d) {
+      const pane = make();
+      pane.root.hidden = true;
+      this.ui.view.append(pane.root);
+      d = { file: key, label, pane, base: '', eol: '\n', locked: label, dirty: false, writing: false, queue: Promise.resolve(), conflict: null, mark: null, scrollTop: 0,
+        preview: false, previewScroll: 0, state: EditorState.create({ doc: '', extensions: [EditorState.readOnly.of(true)] }) };
+      this.docs.set(key, d);
+    }
+    this.activate(d);
+    this.renderChrome();
+  }
+
+  /** Ansicht eines offenen Reiters ohne Datei. */
+  pane(key: string): Pane | undefined { return this.docs.get(key)?.pane; }
+
+  /** Reiter schließen (ohne Rückfrage nur bei Reitern ohne Eingaben, wie Ansichten). */
+  closeTab(key: string): Promise<void> { return this.close(key); }
+
   async open(file: string, mark?: Mark, scroll = true): Promise<void> {
     const d = this.docs.get(file) ?? (await this.load(file));
     if (!d) return;
@@ -255,6 +290,7 @@ export class CodePanel {
   async refresh(): Promise<void> {
     for (const d of [...this.docs.values()]) {
       if (d.pdf) { await this.refreshPdf(d); continue; }
+      if (d.pane) { d.pane.refresh?.(); continue; }
       // Nicht abwarten: Neu zeichnen dauert bei großen DXF Sekunden, die übrigen Reiter sollen nicht darauf warten
       if (d.dxf) { void this.refreshDxf(d); continue; }
       if (d.writing) continue;
@@ -591,12 +627,13 @@ export class CodePanel {
     const { tabs, info, banner } = this.ui;
     this.deps.active?.(this.active);
     tabs.replaceChildren(...[...this.docs.values()].map((d) => {
-      const x = el('button', { className: 'x', title: `Close ${d.file}` }, icon('x', 11, 2.2));
-      x.setAttribute('aria-label', `Close ${d.file}`);
+      const x = el('button', { className: 'x', title: `Close ${d.label ?? d.file}` }, icon('x', 11, 2.2));
+      x.setAttribute('aria-label', `Close ${d.label ?? d.file}`);
       x.addEventListener('click', (e) => { e.stopPropagation(); void this.close(d.file); });
       const state = d.conflict ? el('span', { className: 'dirty warn', textContent: '●', title: 'Conflict with a change from outside' })
         : d.dirty ? el('span', { className: 'dirty', textContent: '●', title: 'Not saved' }) : null;
-      const tab = el('div', { className: 'ctab' + (d.file === this.active ? ' on' : ''), title: d.file }, el('span', { textContent: d.file.split('/').pop()! }), state, x);
+      const tab = el('div', { className: 'ctab' + (d.file === this.active ? ' on' : '') + (d.pane ? ' pane' : ''), title: d.label ?? d.file },
+        d.pane ? icon('drawing', 12, 1.9) : null, el('span', { textContent: d.label ?? d.file.split('/').pop()! }), state, x);
       tab.addEventListener('click', () => { this.activate(d); this.renderChrome(); });
       return tab;
     }));
@@ -616,7 +653,7 @@ export class CodePanel {
 
     const m = paneOf(d) ? null : d.mark;
     const left: (Node | string)[] = [];
-    if (paneOf(d)) { /* PDF und DXF: eigene Leiste in der Ansicht */ }
+    if (paneOf(d)) { /* PDF, DXF und Ansichten: eigene Leiste in der Ansicht */ }
     else if (d.locked) left.push(icon('lock', 13, 2), `Read only. ${d.locked}`);
     else if (m) {
       const sw = m.kind === 'er' ? el('span', { className: 'ci-err' }, icon('alert', 13, 2)) : el('span', { className: 'sw' });
@@ -690,7 +727,7 @@ export class CodePanel {
         const d = this.active ? this.docs.get(this.active) : undefined;
         return {
           file: this.active, files: [...this.docs.keys()], dirty: !!d?.dirty, conflict: d?.conflict ? (d.conflict.disk === null ? 'gone' : 'changed') : null,
-          locked: d?.locked ?? null, readOnly: this.view.state.readOnly, preview: !this.md.hidden, pdf: d?.pdf?.state() ?? null, dxf: d?.dxf?.state() ?? null, line: this.view.state.doc.lineAt(this.view.state.selection.main.head).number,
+          locked: d?.locked ?? null, readOnly: this.view.state.readOnly, preview: !this.md.hidden, pdf: d?.pdf?.state() ?? null, dxf: d?.dxf?.state() ?? null, pane: d?.pane ? d.file : null, line: this.view.state.doc.lineAt(this.view.state.selection.main.head).number,
           rendered: this.md.hidden ? null : [...this.md.querySelectorAll<HTMLElement>('.md > *, .md li')].map((x) => `${x.tagName.toLowerCase()}:${(x.textContent ?? '').trim().slice(0, 60)}`), text: this.text(), focused: this.view.hasFocus, unsaved: this.unsaved(),
           marked: [...this.ui.view.querySelectorAll('.cm-line.cm-mark-hl, .cm-line.cm-mark-er')].map((x) => (x.classList.contains('cm-mark-er') ? 'er:' : 'hl:') + x.textContent),
         };

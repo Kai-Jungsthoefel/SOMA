@@ -259,6 +259,9 @@ function registerIpc(ctl: ProjectController): void {
 
   ipcMain.handle('anim:list', () => ctl.animList());
   ipcMain.handle('anim:build', (_e, file: unknown) => ctl.animBuild(file));
+  ipcMain.handle('drawings:list', () => ctl.drawingList());
+  ipcMain.handle('drawings:build', (_e, file: unknown) => ctl.drawingBuild(file));
+  ipcMain.handle('drawings:export', (_e, what: unknown, sheet: unknown) => ctl.drawingExport(what, sheet));
   ipcMain.handle('results:list', () => ctl.results());
   ipcMain.handle('results:rerun', (_e, id: unknown) => ctl.rerunResult(id));
   ipcMain.handle('render:video', (_e, id: unknown) => ctl.renderVideo(id));

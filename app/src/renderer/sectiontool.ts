@@ -46,7 +46,7 @@ export class SectionTool {
   private value = 0;
   private flipped = false;
   /** Fläche, an der der Schnitt ausgerichtet ist. `normal` zeigt aus dem Material heraus, `base` ist ihre Lage entlang der Normalen. */
-  private face: { normal: number[]; point: number[]; name: string; base: number } | null = null;
+  private face: { normal: number[]; point: number[]; name: string; base: number; drawing?: boolean } | null = null;
   private range: [number, number] = [0, 1];
   private picking = false;
   private note = '';
@@ -102,6 +102,33 @@ export class SectionTool {
     this.render();
   }
 
+  /**
+   * Schnitt wie in einer Zeichnung (E76): Ebene durch `point`, weggenommen wird die Seite, in die `removed` zeigt. `name`
+   * nennt die Herkunft („section A-A of Bracket“). Danach ist es ein gewöhnlicher Schnitt an einer Fläche: Tiefe und Seite
+   * lassen sich verstellen.
+   */
+  showPlane(point: number[], removed: number[], name: string): void {
+    const len = Math.hypot(removed[0], removed[1], removed[2]);
+    if (!(len > 1e-9)) return;
+    this.stopPick();
+    const n = removed.map((x) => x / len);
+    this.axis = 'face';
+    this.flipped = false;
+    this.note = '';
+    this.face = { normal: n, point: [...point], name, base: dot(n, point), drawing: true };
+    if (!this.active) {
+      this.active = true;
+      this.ui.button.setAttribute('aria-pressed', 'true');
+      this.ui.card.hidden = false;
+    }
+    this.updateRange();
+    this.value = this.face.base;
+    this.apply();
+  }
+
+  /** Stammt der Schnitt aus einer Zeichnung? */
+  get fromDrawing(): boolean { return this.active && this.axis === 'face' && !!this.face?.drawing; }
+
   /** Neues Modell (Build oder anderer Stand): Bereich neu bestimmen, die Ebene bleibt, wo sie war. */
   refresh(): void {
     if (!this.active) return;
@@ -119,6 +146,7 @@ export class SectionTool {
     }
     const r = this.removedDir();
     const p = this.planePoint();
+    if (this.face!.drawing) return `section view as ${this.face!.name}, plane through (${p.map(f3).join(', ')}) mm, the side towards ${vec(r)} is cut away`;
     return `section view, plane through (${p.map(f3).join(', ')}) mm parallel to a face of "${this.face!.name}", `
       + `the side towards ${vec(r)} is cut away`;
   }
@@ -254,6 +282,7 @@ export class SectionTool {
     ui.range.disabled = ui.value.disabled = this.picking;
     let hint: string;
     if (this.picking) hint = this.note || 'Click a planar face in the model. Escape cancels.';
+    else if (faceMode && this.face!.drawing) hint = `As ${this.face!.name}, depth from its cutting plane.`;
     else if (faceMode) hint = `Parallel to a face of “${this.face!.name}”, depth from the face.`;
     else hint = `Cut away: ${this.axis.toUpperCase()} ${this.removedSign() > 0 ? '>' : '<'} ${num(this.value)} mm`;
     ui.hint.textContent = hint;

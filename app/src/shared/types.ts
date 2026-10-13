@@ -290,6 +290,44 @@ export interface AnimFileError { file: string; line: number | null; message: str
 export interface AnimList { animations: AnimEntry[]; errors: AnimFileError[]; building: boolean }
 export interface AnimBuildResult extends AnimList { ok: boolean; error?: string }
 
+/**
+ * Technische Zeichnungen (E76) aus .soma/drawings/index.json. Blattmaße in mm ab der linken unteren Papierecke, Punkte und
+ * Richtungen im Modell (mm, Z oben) wie im Viewer. Die Felder ab Index-Version 2 fehlen bei älteren Builds.
+ */
+export interface DrawingView {
+  name: string; kind: string; scale: string; line: number | null; file: string | null;
+  /** Vom Teil zum Betrachter. */
+  direction: number[];
+  /** Lage auf dem Blatt [x0, y0, x1, y1]. */
+  bbox: number[];
+  parts?: string[]; right?: number[]; up?: number[]; center?: number[]; size?: number;
+  /** Schnitt: Ebene durch `point`, `normal` zeigt zur weggenommenen Seite (zum Betrachter). Stufenschnitte ohne Ebene. */
+  section?: { kind: string; point?: number[]; normal?: number[] };
+  detail?: { center: number[]; radius: number; parent: string };
+}
+export interface DrawingDim {
+  kind: string; value: number; label: string; view: string; line: number | null; file: string | null;
+  points?: number[][]; radius?: number | null;
+  /** Maß mit Linien und Text auf dem Blatt, und nur der Text. */
+  box?: number[]; textBox?: number[];
+}
+export interface DrawingWarning { message: string; file: string | null; line: number | null; box?: number[] }
+export interface DrawingEntry {
+  id: string; name: string; file: string | null; line: number | null;
+  size: string; width: number; height: number; scale: string;
+  pdf: string; dxf: string | null;
+  /** Was die PDF-Seite vom Blatt zeigt, falls nicht genau das Papier. */
+  pageBox: number[];
+  views: DrawingView[]; dims: DrawingDim[]; warnings: DrawingWarning[];
+  /** Zeitpunkt der PDF (ms), Modell oder Zeichnungsdatei neuer: veraltet. */
+  built: number; stale: boolean;
+  /** Mit Teilen, Achsen und Maßpunkten gebaut (Index ab Version 2)? Sonst kennt die App nur die Lage der Ansichten. */
+  linked: boolean;
+}
+export interface DrawingFileError { file: string; line: number | null; message: string }
+export interface DrawingList { drawings: DrawingEntry[]; errors: DrawingFileError[]; building: boolean }
+export interface DrawingBuildResult extends DrawingList { ok: boolean; error?: string }
+
 /** Ergebnis einer Auswertung (`soma analyze`, E58), Metadaten aus extras.soma_result der GLB. */
 export interface ResultPart {
   name: string; group: string | null; area: number; critical: number; min?: number; max?: number;
@@ -517,6 +555,16 @@ export interface SomaApi {
     list(): Promise<AnimList>;
     /** `file` (animations/x.py) baut nur diese Datei, ohne alle. */
     build(file?: string): Promise<AnimBuildResult>;
+    onChanged(cb: () => void): void;
+  };
+  /** Technische Zeichnungen (E76): Liste aus .soma/drawings/index.json, bauen über `soma drawing build`. */
+  drawings: {
+    list(): Promise<DrawingList>;
+    /** `file` (drawings/x.py) baut nur diese Datei, ohne alle. */
+    build(file?: string): Promise<DrawingBuildResult>;
+    /** Exportieren mit Dateidialog: alle Blätter als eine PDF, je Blatt PDF/DXF/beides in einen Ordner, mit `sheet` (id) nur dieses Blatt. */
+    export(what: 'set' | 'pdf' | 'dxf' | 'both', sheet?: string): Promise<ExportResult>;
+    /** Index neu geschrieben, Zeichnungsdatei geändert oder Bauen begonnen. */
     onChanged(cb: () => void): void;
   };
   /** Ergebnisse von `soma analyze` (E58). */

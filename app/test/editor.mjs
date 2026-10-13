@@ -226,8 +226,9 @@ try {
   await ev(() => { const tm = window.__t.terminals; const orig = tm.insert.bind(tm); tm.insert = (x) => { window.__inserted = x; return orig(x); }; });
   const selected = await ev(() => window.__t.editor.pdfSelect(1, 'Haltemoment 0,45 Nm'));
   await sleep(100);
-  check('Text markiert: schwebender Knopf „Zitat an Agent" erscheint', selected && (await ed()).pdf.float);
-  await ev(() => document.querySelector('.pdf-float').click());
+  const qb = await ev(() => { const b = [...document.querySelectorAll('.pdfview:not([hidden]) .pdf-bar button')].find((x) => /Quote to agent/.test(x.textContent)); return b ? { on: !b.disabled, acc: b.classList.contains('acc') } : null; });
+  check('Text markiert: Knopf „Quote to agent“ oben aktiv und orange, kein schwebender Knopf am Text', selected && (await ed()).pdf.quote && qb?.on && qb.acc && !(await ev(() => document.querySelector('.pdf-float'))), JSON.stringify(qb));
+  await ev(() => [...document.querySelectorAll('.pdfview:not([hidden]) .pdf-bar button')].find((x) => /Quote to agent/.test(x.textContent)).click());
   await sleep(200);
   check('Zitat geht mit Datei und Seite an den Agenten', await ev(() => window.__inserted) === '[Quote: docs/datenblatt.pdf p. 1: "Haltemoment 0,45 Nm"] ',
     `${await ev(() => window.__inserted)} | ${(await ev(() => window.__t.toast())).text} | ${await ev(() => window.__t.terminals.count)}`);
@@ -242,6 +243,57 @@ try {
   check('PDF auf der Platte geändert (etwa vom Agenten): Ansicht lädt neu', (await ed()).pdf?.pages === 3);
   await ev(() => window.__t.editor.pdfSelect(1, 'Datenblatt'));
   await shot('9c-pdf');
+
+  // 9c2) PDF: Vorschauleiste, Einzelseite mit Blättern, ganze Seite einpassen (gemerkt je Art der Ansicht)
+  const pv = (sel) => ev((q) => { const r = [...document.querySelectorAll('.pdfview')].find((v) => !v.hidden); const e = q ? r?.querySelector(q) : r; e?.click(); return !!e; }, sel);
+  const pkey = (key) => ev((k) => { const sc = [...document.querySelectorAll('.pdfview')].find((v) => !v.hidden).querySelector('.pdf-scroll'); sc.focus(); sc.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })); }, key);
+  await waitFor('Vorschaubilder', () => (window.__t.editor.state().pdf?.thumbs.rendered ?? 0) >= 3, 15000).catch(() => {});
+  s = await ed();
+  check('Vorschauleiste: bei mehreren Seiten sichtbar, 3 Bilder gezeichnet, Seite 1 orange', s.pdf.thumbs.visible && s.pdf.thumbs.count === 3 && s.pdf.thumbs.rendered === 3 && s.pdf.thumbs.current === 1,
+    JSON.stringify(s.pdf.thumbs));
+  await pv('.pdf-thumb[data-page="3"]');
+  await sleep(150);
+  s = await ed();
+  check('Klick auf das dritte Vorschaubild springt zu Seite 3', s.pdf.current === 3 && s.pdf.thumbs.current === 3
+    && await ev(() => [...document.querySelectorAll('.pdfview')].find((v) => !v.hidden).querySelector('.pdf-page-no').textContent === 'Page 3 of 3'), JSON.stringify([s.pdf.current, s.pdf.thumbs]));
+  await pv('[data-pdf="mode"] [data-v="single"]');
+  await sleep(150);
+  s = await ed();
+  check('Einzelseite: nur Seite 3 zu sehen, Knöpfe zum Blättern da', s.pdf.mode === 'single' && JSON.stringify(s.pdf.visible) === '[3]'
+    && await ev(() => { const r = [...document.querySelectorAll('.pdfview')].find((v) => !v.hidden); return !r.querySelector('[data-pdf="prev"]').hidden && r.querySelector('[data-pdf="next"]').disabled; }), JSON.stringify(s.pdf.visible));
+  const nav = [];
+  await pkey('ArrowLeft'); nav.push((await ed()).pdf.visible.join());
+  await pkey('PageUp'); nav.push((await ed()).pdf.visible.join());
+  await pkey('End'); nav.push((await ed()).pdf.visible.join());
+  await pv('[data-pdf="prev"]'); nav.push((await ed()).pdf.visible.join());
+  await pkey('Home'); nav.push((await ed()).pdf.visible.join());
+  await pkey('ArrowRight'); nav.push((await ed()).pdf.visible.join());
+  check('Blättern mit Pfeil, Bild auf, Ende, Knopf, Pos1, Pfeil: 2, 1, 3, 2, 1, 2', nav.join(' ') === '2 1 3 2 1 2', nav.join(' '));
+  await waitFor('Seite 2 gezeichnet', () => window.__t.editor.state().pdf?.rendered.includes(2), 10000).catch(() => {});
+  check('Einzelseite: die gezeigte Seite ist gezeichnet, Text darauf', (await ed()).pdf.text[1]?.includes('Seite zwei'));
+  await pv('[data-pdf="fit"] [data-v="page"]');
+  await waitFor('neu gezeichnet', () => window.__t.editor.state().pdf?.rendered.includes(2), 10000).catch(() => {});
+  const fits = () => ev(() => {
+    const r = [...document.querySelectorAll('.pdfview')].find((v) => !v.hidden);
+    const sc = r.querySelector('.pdf-scroll'), cur = window.__t.editor.state().pdf.current;
+    const a = sc.getBoundingClientRect(), b = r.querySelector(`.pdf-page[data-page="${cur}"]`).getBoundingClientRect();
+    return { inside: b.top >= a.top - 1 && b.bottom <= a.top + sc.clientHeight + 1 && b.left >= a.left - 1 && b.right <= a.left + sc.clientWidth + 1, h: Math.round(b.height), view: sc.clientHeight, w: Math.round(b.width), vw: sc.clientWidth, scroll: sc.scrollHeight - sc.clientHeight };
+  });
+  let f = await fits();
+  s = await ed();
+  check('„Fit whole page": Seite ganz zu sehen, füllt Höhe oder Breite, nichts zu scrollen', s.pdf.fit === 'page' && f.inside && (f.h > f.view - 60 || f.w > f.vw - 60) && f.scroll <= 1, JSON.stringify(f));
+  await shot('9e-pdf-einzelseite');
+  await pv('[data-pdf="mode"] [data-v="all"]');
+  await sleep(200);
+  f = await fits();
+  s = await ed();
+  check('Zurück zu allen Seiten: Seite 2 bleibt die aktuelle und ist ganz zu sehen', s.pdf.mode === 'all' && JSON.stringify(s.pdf.visible) === '[1,2,3]' && s.pdf.current === 2 && f.inside, JSON.stringify([s.pdf.current, f]));
+  await pv('[data-pdf="thumbs"]');
+  s = await ed();
+  const saved = await ev(() => localStorage.getItem('soma.pdf.pdf'));
+  check('Leiste ausgeschaltet, Wahl gemerkt (Ansicht, Einpassen, Leiste)', !s.pdf.thumbs.visible && saved === '{"mode":"all","fit":"page","thumbs":false}', saved);
+  await pv('[data-pdf="thumbs"]');
+  await pv('[data-pdf="fit"] [data-v="width"]');
   fs.writeFileSync(path.join(proj.dir, 'docs', 'kaputt.pdf'), '%PDF-1.4 kein echtes PDF');
   await open('docs/kaputt.pdf');
   await waitFor('Fehlermeldung', () => !!window.__t.editor.state().pdf?.error, 10000).catch(() => {});

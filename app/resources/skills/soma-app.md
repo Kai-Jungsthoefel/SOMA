@@ -123,11 +123,21 @@ Mark up is the quickest way to show the agent what you mean: draw an arrow, writ
 2. **Files**: all files of the model. Click one to open it next to it.
 3. **Analysis**: results the agent calculated, such as strength (FEM), wall thickness, overhang or clearance. Click one to see it in color on the model, with its report.
 4. **Animation**: motion the agent made, for example an assembly sequence. Click one to play it in the viewer, "Make video" writes an MP4.
-5. **Skills**: rule sets for the agent, such as 3D printing, CNC or tolerances. Off, On demand (the agent reads them when the topic comes up) or Always.
-6. **Help**: this guide (F1).
-7. **Settings**: see below.
+5. **Drawings**: all technical drawings of the model in one view, next to the viewer (no sidebar). See "Drawings" below.
+6. **Skills**: rule sets for the agent, such as 3D printing, CNC or tolerances. Off, On demand (the agent reads them when the topic comes up) or Always.
+7. **Help**: this guide (F1).
+8. **Settings**: see below.
 
-A dot on Analysis or Animation means the agent made something new you have not looked at yet.
+A dot on Analysis, Animation or Drawings means the agent made something new you have not looked at yet.
+
+## Drawings
+
+Ask the agent for a technical drawing ("Make a drawing of the bracket with all dimensions"). It writes `drawings/*.py` and builds the sheets with `soma drawing build`. "Drawings" on the left shows all sheets one after another in the code column; click it again to close the column.
+
+- Above each sheet: size, scale, number of views and dimensions, "older than the code" when the model changed since, and the warnings of the check (click to list them, click a warning to open its line). The buttons open the drawing's code or the DXF, build the sheet again or send it to the agent.
+- Point at a view or a dimension on the sheet to highlight it. Click it to see it on the model: a view turns the camera to its direction, a section sets the section tool to the same plane, a detail zooms in, a dimension shows its points and value. The card below has "Code" and "Send to agent". Escape clears it.
+- The bar of the viewer switches between all pages and single pages, shows page previews on the left and fits the page width or the whole page. Select text and click "Quote to agent" to send it with its page.
+- "Export" at the top saves all sheets as one PDF, or each sheet as PDF, DXF or both into a folder. The export button above a sheet saves just that sheet.
 
 ## Files and code
 

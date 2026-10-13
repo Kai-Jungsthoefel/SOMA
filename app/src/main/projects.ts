@@ -3,11 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type {
-  AnimBuildResult, AnimList, ExportResult, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
+  AnimBuildResult, AnimList, DrawingBuildResult, DrawingList, ExportResult, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
   ParamResult, ParamState, ParamValue, ProjectInfo, RemoveResult, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
 import { AnimBuilder, listResults, readAnimList, rerunResult, samePath } from './animations';
+import { DrawingBuilder, isDrawingFile, readDrawingList } from './drawings';
+import { resolveInside } from './files';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, chooseExportTarget, choosePath, documentsDir, trashItem } from './dialogs';
@@ -40,6 +42,8 @@ interface Session {
   measure: MeasureService;
   /** Animationen bauen (E58), ausgelöst vom Watcher, der Oberfläche oder vor einem Video. */
   anims: AnimBuilder;
+  /** Zeichnungen bauen (E76), nur auf Wunsch aus dem Dokument „Drawings“. */
+  drawings: DrawingBuilder;
   animTimer?: NodeJS.Timeout;
   stopWatch: () => void;
   poll: NodeJS.Timeout;
@@ -89,6 +93,7 @@ export class ProjectController {
     clearTimeout(s.animTimer);
     s.stopWatch();
     s.anims.dispose();
+    s.drawings.dispose();
     s.builds.dispose();
     s.terminals.killAll();
     s.measure.stop();
@@ -121,12 +126,13 @@ export class ProjectController {
     void git.ensureIgnored(); // ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten
     syncHelpImages(dir, helpDir()); // Bilder der Anleitung (E83) fehlen nach dem Öffnen einer .soma-Datei oder sind von einer älteren App
     const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
+    const drawings = new DrawingBuilder(dir, () => this.send('drawings:changed'));
     const stopWatch = watchProject(dir, (rel) => builds.sourceChanged(rel ? path.join(dir, rel) : null), () => this.send('fs:changed'),
-      (rel) => this.animFileChanged(rel), () => builds.externalResult());
+      (rel) => this.animFileChanged(rel), () => builds.externalResult(), () => this.send('drawings:changed'));
     // Projektumgebung (E67): Meist steht sie schon, sonst legt `soma env` sie in rund 0,5 s an. Die Terminals kennen ihre
     // Pfade vorab, gewartet wird nur vor dem Installieren von Paketen
     const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
-    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, stopWatch, signature: '', env, poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
     builds.on('status', (st) => {
@@ -581,6 +587,97 @@ export class ProjectController {
       if (s.builds.autoBuild && fs.existsSync(path.join(s.dir, rel))) void s.anims.request(rel);
       else this.send('anim:changed');
     }, 700);
+  }
+
+  drawingList(): DrawingList {
+    const s = this.need();
+    return readDrawingList(s.dir, s.drawings.busy);
+  }
+
+  /**
+   * Zeichnungen exportieren (E97): `set` alle Blätter als eine PDF (output/drawings.pdf von soma), `pdf`/`dxf`/`both` je
+   * Blatt eine Datei in einen gewählten Ordner, mit `sheet` nur dieses Blatt in eine gewählte Datei. Kopiert werden die
+   * Dateien, die soma gebaut hat. Vorhandene Dateien ersetzt die App nur nach Rückfrage (beim Einzelexport fragt der Dialog).
+   */
+  async drawingExport(what: unknown, sheet: unknown): Promise<ExportResult> {
+    const s = this.need();
+    const kind = String(what);
+    if (!['set', 'pdf', 'dxf', 'both'].includes(kind)) return { ok: false, files: [], error: `Unknown export: ${kind}` };
+    const list = readDrawingList(s.dir, s.drawings.busy);
+    if (list.building) return { ok: false, files: [], error: 'The drawings are being built. Export when the build is done.' };
+    const one = sheet == null ? null : list.drawings.find((d) => d.id === String(sheet)) ?? null;
+    if (sheet != null && !one) return { ok: false, files: [], error: 'This sheet does not exist any more. Rebuild the drawings.' };
+    const sheets = one ? [one] : list.drawings;
+    if (!sheets.length) return { ok: false, files: [], error: 'There are no drawings to export.' };
+    const abs = (rel: string) => resolveInside(s.dir, rel);
+    const warnings: string[] = [];
+    const stale = sheets.filter((d) => d.stale).map((d) => d.name);
+    if (stale.length) warnings.push(`Older than the code: ${stale.join(', ')}. Rebuild to export the current state.`);
+    const last = getAppState(s.id).exportDir;
+    const startDir = last && fs.existsSync(last) ? last : documentsDir();
+    // Eine Datei: ein Blatt als PDF oder DXF, oder alle Blätter in einer PDF
+    if (kind === 'set' || (one && kind !== 'both')) {
+      let src: string, name: string;
+      const ext = kind === 'dxf' ? 'dxf' : 'pdf';
+      if (kind === 'set') {
+        src = abs('output/drawings.pdf');
+        // Die Sammel-PDF schreibt soma nur ohne Fehler, und nur ein Lauf über alle Blätter macht sie so neu wie jedes Blatt
+        if (list.errors.length) return { ok: false, files: [], error: 'A drawing has errors, so output/drawings.pdf is not up to date. Fix them or export each sheet as PDF.' };
+        const setTime = fs.existsSync(src) ? fs.statSync(src).mtimeMs : 0;
+        if (!setTime || list.drawings.some((d) => d.built > setTime + 2000)) return { ok: false, files: [], error: 'output/drawings.pdf is older than some sheets. Use “Rebuild all” first.' };
+        name = `${safeFileName(readProjectJson(s.id)?.name ?? 'Model')} drawings.pdf`;
+      } else {
+        const rel = ext === 'pdf' ? one!.pdf : one!.dxf;
+        if (!rel) return { ok: false, files: [], error: `“${one!.name}” has no ${ext.toUpperCase()}.` };
+        src = abs(rel);
+        name = `${safeFileName(one!.name)}.${ext}`;
+      }
+      if (!fs.existsSync(src)) return { ok: false, files: [], error: `${path.basename(src)} is missing. Rebuild the drawings.` };
+      const target = await chooseExportTarget(this.getWin(), { kind: 'file', title: kind === 'set' ? 'Export all sheets as one PDF' : `Export “${one!.name}”`,
+        defaultPath: path.join(startDir, name), ext, label: ext.toUpperCase() });
+      if (!target) return { ok: false, files: [], cancelled: true };
+      const dest = path.extname(target) ? target : `${target}.${ext}`;
+      try { fs.copyFileSync(src, dest); } catch (e) { return { ok: false, files: [], error: `Export failed: ${e instanceof Error ? e.message : String(e)}` }; }
+      patchAppState(s.id, { exportDir: path.dirname(dest) });
+      return { ok: true, files: [dest], target: dest, warnings };
+    }
+    // Ordner: je Blatt PDF, DXF oder beides
+    const target = await chooseExportTarget(this.getWin(), { kind: 'dir', title: 'Choose a folder for the drawings', defaultPath: startDir });
+    if (!target) return { ok: false, files: [], cancelled: true };
+    const plan: [string, string][] = [];
+    const missing: string[] = [];
+    for (const d of sheets) {
+      for (const [ext, rel] of [['pdf', d.pdf], ['dxf', d.dxf]] as const) {
+        if (kind !== 'both' && kind !== ext) continue;
+        const src = rel ? abs(rel) : null;
+        if (!src || !fs.existsSync(src)) { missing.push(`${d.name} (${ext.toUpperCase()})`); continue; }
+        plan.push([src, path.join(target, `${safeFileName(d.name)}.${ext}`)]);
+      }
+    }
+    if (missing.length) warnings.push(`Missing: ${missing.join(', ')}.`);
+    if (!plan.length) return { ok: false, files: [], error: 'There is no file to export. Rebuild the drawings.', warnings };
+    const exists = plan.filter(([, d]) => fs.existsSync(d)).map(([, d]) => path.basename(d));
+    if (exists.length) {
+      const c = await choose(this.getWin(), {
+        title: 'Export', message: exists.length === 1 ? 'This file already exists in the folder:' : `These ${exists.length} files already exist in the folder:`,
+        detail: `${exists.slice(0, 10).join('\n')}${exists.length > 10 ? `\n… and ${exists.length - 10} more` : ''}`, buttons: ['Replace', 'Cancel'],
+      });
+      if (c !== 0) return { ok: false, files: [], cancelled: true };
+    }
+    try {
+      fs.mkdirSync(target, { recursive: true });
+      for (const [src, dest] of plan) fs.copyFileSync(src, dest);
+    } catch (e) { return { ok: false, files: [], error: `Export failed: ${e instanceof Error ? e.message : String(e)}` }; }
+    patchAppState(s.id, { exportDir: target });
+    return { ok: true, files: plan.map(([, d]) => d), target, warnings };
+  }
+
+  /** Zeichnungen bauen: eine Datei (drawings/x.py) oder alle. */
+  drawingBuild(file: unknown): Promise<DrawingBuildResult> {
+    const s = this.need();
+    const f = file == null ? null : String(file).replace(/\\/g, '/');
+    if (f !== null && !isDrawingFile(f)) return Promise.resolve({ ...readDrawingList(s.dir), ok: false, error: 'Not a drawing file (drawings/*.py).' });
+    return s.drawings.request(f);
   }
 
   results(): ResultEntry[] { return listResults(this.need().dir); }

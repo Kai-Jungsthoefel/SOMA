@@ -93,6 +93,7 @@ export const SHOTS = [
       { label: 'Files', sel: '#rail [data-panel=files]', at: 'r' },
       { label: 'Analysis', sel: '#rail [data-panel=analysis]', at: 'r' },
       { label: 'Animation', sel: '#rail [data-panel=anim]', at: 'r' },
+      { label: 'Drawings', sel: '#btn-rail-drawings', at: 'r' },
       { label: 'Skills', sel: '#rail [data-panel=skills]', at: 'r' },
       { label: 'Help', sel: '#btn-help', at: 'r' },
       { label: 'Settings', sel: '#btn-settings', at: 'r' },

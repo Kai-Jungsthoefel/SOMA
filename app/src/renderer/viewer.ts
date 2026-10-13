@@ -559,6 +559,18 @@ export class Viewer {
     this.requestRender();
   }
 
+  /** Blick aus `dir0` auf eine Kugel um `center` mit `radius` (mm), etwa die Einzelheit einer Zeichnung. */
+  frame(dir0: THREE.Vector3, center: THREE.Vector3, radius: number): void {
+    if (dir0.lengthSq() < 1e-18 || !(radius > 0)) return;
+    const dir = dir0.clone().normalize();
+    if (Math.abs(dir.z) > 0.99999) dir.set(0, -0.0001, Math.sign(dir.z)).normalize();
+    this.anim?.stop();
+    this.placeAt(center, dir, radius / Math.sin(THREE.MathUtils.degToRad(this.persp.fov / 2)) * 1.05);
+    this.controls.update();
+    this.fitClip();
+    this.requestRender();
+  }
+
   // ---- Kamera, Projektion und Maus (E81) -------------------------------------------------------------------------
 
   /** tan des halben Bildwinkels: Höhe in der Ebene des Drehpunkts je Abstand. */

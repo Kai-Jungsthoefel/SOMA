@@ -76,6 +76,8 @@ const PATHS: Record<string, string> = {
   // Animation, Analyse und Video (E58)
   pause: '<path d="M8 5v14M16 5v14"/>',
   anim: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>',
+  // Zeichnungen (E76): Blatt quer mit Schriftfeld unten rechts und einer Ansicht
+  drawing: '<rect x="2.5" y="4.5" width="19" height="15" rx="1"/><path d="M13 19.5v-4.5h8.5"/><rect x="5.5" y="8" width="5" height="4.5"/><path d="M13.5 10.2h4.5"/>',
   gauge: '<path d="M4.2 17a8.5 8.5 0 1 1 15.6 0"/><path d="m12 14 4.5-5"/><circle cx="12" cy="14" r="1.2"/>',
   stepback: '<path d="M18 6v12l-8-6zM6 6v12"/>', stepfwd: '<path d="M6 6v12l8-6zM18 6v12"/>',
   loop: '<path d="M17 3l3 3-3 3"/><path d="M4 11V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3"/><path d="M20 13v2a3 3 0 0 1-3 3H4"/>',
@@ -88,6 +90,12 @@ const PATHS: Record<string, string> = {
   grid: '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M3.5 9.2h17M3.5 14.8h17M9.2 3.5v17M14.8 3.5v17"/>',
   square: '<rect x="4" y="4" width="16" height="16" rx="1.5"/>', circle: '<circle cx="12" cy="12" r="8"/>',
   text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>', undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+  // PDF-Ansicht: alle Seiten untereinander, eine Seite, Vorschauleiste, Seitenbreite und ganze Seite einpassen
+  pages: '<rect x="6" y="2.5" width="12" height="8" rx="1"/><rect x="6" y="13.5" width="12" height="8" rx="1"/>',
+  page1: '<rect x="5.5" y="3" width="13" height="18" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+  thumbs: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M5.3 8h1.4M5.3 12h1.4M5.3 16h1.4"/>',
+  fitw: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M7 12h10M9.5 9.5 7 12l2.5 2.5M14.5 9.5 17 12l-2.5 2.5"/>',
+  fitp: '<rect x="3" y="3" width="18" height="18" rx="1.5"/><rect x="7.5" y="6" width="9" height="12" rx="1"/>',
 };
 
 export function icon(name: string, size = 16, stroke = 1.8): SVGSVGElement {
