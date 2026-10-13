@@ -418,6 +418,8 @@ export interface SomaApi {
     onChanged(cb: () => void): void;
     /** Kopiert gezogene Dateien nach inputs/. Vorhandenes wird nie überschrieben. */
     importFiles(files: File[]): Promise<ImportResult>;
+    /** Wie importFiles, die Dateien wählt der Nutzer im Dialog. null: abgebrochen. */
+    importPick(): Promise<ImportResult | null>;
     /** Neue, leere Datei oder neuer Ordner in `parent` ('' = Projektordner). Vorhandenes wird nie überschrieben. */
     create(parent: string, name: string, dir: boolean): Promise<FileOpResult>;
     /** Benennt eine Datei oder einen Ordner im selben Ordner um. Vorhandenes wird nie überschrieben. */

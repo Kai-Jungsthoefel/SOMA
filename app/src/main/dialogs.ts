@@ -60,6 +60,17 @@ export async function chooseSkillFiles(win: BrowserWindow | null): Promise<strin
   return r.canceled ? [] : r.filePaths;
 }
 
+/**
+ * Dateien für inputs/ wählen (Knopf „Import“, gleicher Weg wie Reinziehen). Ordner nur per Ziehen: Der Dialog von
+ * Windows kann nicht Dateien und Ordner zugleich wählen. Leere Liste: abgebrochen.
+ */
+export async function chooseInputFiles(win: BrowserWindow | null): Promise<string[]> {
+  if (testMode()) return nextAnswer<string[] | null>('Import files') ?? [];
+  const opts = { title: 'Import files into the model', defaultPath: documentsDir(), buttonLabel: 'Import', properties: ['openFile' as const, 'multiSelections' as const] };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return r.canceled ? [] : r.filePaths;
+}
+
 export type ChooseOptions = { title: string; message: string; detail?: string; buttons: string[] };
 /** Zeigt Rückfragen im Fenster der App. `null`: geht gerade nicht (Fenster lädt, abgestürzt), dann der Dialog des Systems. */
 type DialogHost = (o: ChooseOptions) => Promise<number | null>;

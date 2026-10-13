@@ -5,7 +5,7 @@ import { aboutInfo, aboutText } from './about';
 import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
-import { choose, chooseSkillFiles, setDialogHost, setTestAnswers, trashItem, type ChooseOptions } from './dialogs';
+import { choose, chooseInputFiles, chooseSkillFiles, setDialogHost, setTestAnswers, trashItem, type ChooseOptions } from './dialogs';
 import { viewDxf } from './dxf';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
@@ -78,6 +78,11 @@ function registerIpc(ctl: ProjectController): void {
 
   ipcMain.handle('fs:list', () => listFiles(dir()));
   ipcMain.handle('fs:import', (_e, paths: string[]) => importInputs(dir(), Array.isArray(paths) ? paths.map(String) : []));
+  ipcMain.handle('fs:importPick', async () => {
+    const root = dir();
+    const files = await chooseInputFiles(win);
+    return files.length ? importInputs(root, files) : null;
+  });
   ipcMain.handle('fs:create', (_e, parent: string, name: string, isDir: boolean) => createEntry(dir(), String(parent ?? ''), String(name ?? ''), !!isDir));
   ipcMain.handle('fs:rename', (_e, rel: string, name: string) => renameEntry(dir(), String(rel ?? ''), String(name ?? '')));
   ipcMain.handle('fs:trash', async (_e, rel: string): Promise<FileOpResult> => {

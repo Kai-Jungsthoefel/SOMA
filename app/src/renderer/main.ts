@@ -1,6 +1,6 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
-import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
+import type { AgentInfo, AnimEntry, BuildStatus, ExportResult, FileNode, ImportResult, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
@@ -392,7 +392,17 @@ document.addEventListener('drop', (e) => {
 });
 
 async function importFiles(list: File[]): Promise<void> {
-  const r = await api.fs.importFiles(list);
+  reportImport(await api.fs.importFiles(list));
+}
+
+// Knopf „Import“: derselbe Weg wie Ziehen, nur mit Dateidialog. Zeigt Nutzern, wie Daten ins Modell kommen
+$('btn-import').addEventListener('click', async () => {
+  if (!project) return;
+  const r = await api.fs.importPick();
+  if (r) reportImport(r);
+});
+
+function reportImport(r: ImportResult): void {
   showPanel('files');
   const lines: string[] = [];
   if (r.files.length) lines.push(`Added to inputs/: ${r.files.map((f) => f.replace(/^inputs\//, '')).join(', ')}`, 'The agent can now use them in the script.');

@@ -248,6 +248,23 @@ try {
   s = await ed();
   check('Kaputte PDF: Meldung in der Ansicht, App läuft weiter', !!s.pdf?.error && await ev(() => [...document.querySelectorAll('.pdf-msg')].some((m) => m.offsetParent && m.textContent.includes('cannot be read'))), s.pdf?.error ?? '');
 
+  // 9e) Knopf „Import": wie Ziehen, nur mit Dateidialog. Gleicher Name wird nicht überschrieben, Abbrechen tut nichts
+  const extern = path.join(ud, 'skizze.png');
+  fs.writeFileSync(extern, 'kein echtes Bild');
+  await app.answers([[extern]]);
+  await domClick('btn-import');
+  const inp = (n) => path.join(proj.dir, 'inputs', n);
+  for (let i = 0; i < 20 && !fs.existsSync(inp('skizze.png')); i++) await sleep(150);
+  check('„Import": gewählte Datei landet in inputs/', fs.existsSync(inp('skizze.png')));
+  await app.answers([[extern]]);
+  await domClick('btn-import');
+  for (let i = 0; i < 20 && !fs.existsSync(inp('skizze (2).png')); i++) await sleep(150);
+  check('„Import" gleicher Name: neue Kopie, nichts überschrieben', fs.existsSync(inp('skizze (2).png')));
+  await app.answers([null]);
+  await domClick('btn-import');
+  await sleep(400);
+  check('„Import" abgebrochen: keine weitere Datei', fs.readdirSync(path.join(proj.dir, 'inputs')).filter((n) => n.startsWith('skizze')).length === 2);
+
   // 10) Build-Fehler: „Code öffnen" markiert die Zeile rot
   await open('model.py');
   await replace('LENGTH = param(79.0', 'LENGTH = param(79.0 +');

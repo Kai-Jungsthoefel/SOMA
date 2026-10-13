@@ -29,14 +29,15 @@ things, and ask for changes.
 1. **Model menu**: new model, open, recent models, save as. Next to it: whether the model is saved.
 2. **Build status**: "Built" when the model is up to date, "Build failed" if the code has an error. Click for details. With "Auto on" the model is rebuilt whenever the code changes.
 3. **Columns**: show or hide the sidebar, the code and the agent (Ctrl 1, Ctrl 2, Ctrl 3).
-4. **Export**: write parts as STL, STEP and other formats.
-5. **Save**: saves the model as a .soma file and adds a version to the history (Ctrl S).
-6. **Sidebar**: parameters, files, analysis, animation, skills, help and settings.
-7. **Structure tree**: the parts of the model. Click the arrow to expand it.
-8. **Tools**: measure, section, explode and mark up.
-9. **View cube**: click a side, edge or corner to look from there.
-10. **History**: every saved version. Click a dot to look at it.
-11. **Agent**: the terminal where you talk to the agent.
+4. **Import**: add files such as STEP models, images or sketches to `inputs/`, where the agent can use them. Dragging files or folders into the window does the same.
+5. **Export**: write parts as STL, STEP and other formats.
+6. **Save**: saves the model as a .soma file and adds a version to the history (Ctrl S).
+7. **Sidebar**: parameters, files, analysis, animation, skills, help and settings.
+8. **Structure tree**: the parts of the model. Click the arrow to expand it.
+9. **Tools**: measure, section, explode and mark up.
+10. **View cube**: click a side, edge or corner to look from there.
+11. **History**: every saved version. Click a dot to look at it.
+12. **Agent**: the terminal where you talk to the agent.
 
 The logo at the top left opens the start page.
 

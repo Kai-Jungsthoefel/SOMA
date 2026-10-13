@@ -14,6 +14,7 @@ export const SHOTS = [
       { label: 'Model menu', sel: '#btn-doc', at: 'tr', box: true },
       { label: 'Build status', sel: '#build-pill', at: 'b', box: true },
       { label: 'Columns', sel: '#layout', at: 'b', box: true },
+      { label: 'Import', sel: '#btn-import', at: 'b' },
       { label: 'Export', sel: '#btn-export', at: 'b' },
       { label: 'Save', sel: '#btn-save', at: 'b' },
       { label: 'Sidebar', sel: '#rail', at: 'r', box: true },
