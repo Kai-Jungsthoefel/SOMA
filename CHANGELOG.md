@@ -6,6 +6,10 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Added
+
+- "Import" button next to Export: choose files in a file dialog to add them to `inputs/`, the same as dragging them into the window.
+
 ## [0.7.2] - 2026-10-13
 
 ### Fixed
