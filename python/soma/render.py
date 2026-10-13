@@ -2,7 +2,8 @@
 
 Die App zeichnet mit demselben Viewer wie auf dem Bildschirm, in einem unsichtbaren Fenster. Dieser Befehl bereitet den
 Auftrag vor (Animation bauen, Ergebnis suchen) und schickt ihn ueber eine lokale Verbindung an die App. Die Adresse und
-ein Schluessel stehen in den Umgebungsvariablen der Terminals der App (SOMA_APP, SOMA_APP_TOKEN).
+ein Schluessel stehen in den Umgebungsvariablen der Terminals der App (SOMA_APP, SOMA_APP_TOKEN). Fehlen sie (Agenten
+wie Codex fuehren Befehle teils mit fremder Umgebung aus), gilt `bridge.json` in den App-Daten, neben `workspaces/`.
 """
 import http.client
 import json
@@ -136,12 +137,35 @@ def prepare(root, args):
     return job
 
 
+def bridge_file(root):
+    """`bridge.json` der App, wenn `root` ein Arbeitsordner der App ist (<App-Daten>/workspaces/<id>), sonst None."""
+    root = Path(root).resolve()
+    if root.parent.name.lower() != "workspaces":
+        return None
+    f = root.parent.parent / "bridge.json"
+    return f if f.is_file() else None
+
+
+def _connection(project):
+    """Adresse und Schluessel: aus der Umgebung, sonst aus `bridge.json` der App."""
+    addr, token = os.environ.get("SOMA_APP"), os.environ.get("SOMA_APP_TOKEN")
+    if addr and token:
+        return addr, token
+    f = bridge_file(project)
+    if f:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            if data.get("app") and data.get("token"):
+                return str(data["app"]), str(data["token"])
+        except (OSError, ValueError):
+            pass
+    raise RenderError("soma render needs the running app: open this model in SOMA and run the command in its folder "
+                      "(the app's terminals have the connection in SOMA_APP and SOMA_APP_TOKEN).")
+
+
 def send(job, timeout=900):
     """Schickt den Auftrag an die App und wartet auf das Ergebnis."""
-    addr, token = os.environ.get("SOMA_APP"), os.environ.get("SOMA_APP_TOKEN")
-    if not addr or not token:
-        raise RenderError("soma render needs the running app: run the command in a terminal of the app "
-                          "(SOMA_APP and SOMA_APP_TOKEN are set there).")
+    addr, token = _connection(job["project"])
     host, _, port = addr.rpartition(":")
     try:
         conn = http.client.HTTPConnection(host or "127.0.0.1", int(port), timeout=timeout)

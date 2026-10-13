@@ -41,10 +41,38 @@ def _print_build(res, as_json, seconds):
             print("Warning:", w, file=sys.stderr)
 
 
+def _foreign_shell_note(project):
+    """Hinweis, wenn `soma` in einem Arbeitsordner der App laeuft, aber nicht mit der Umgebung ihrer Terminals.
+
+    Manche Agenten (Codex) fuehren Befehle ueber einen Hintergrunddienst mit der Umgebung eines anderen Programms aus:
+    `soma` und `pip` fehlen dort im PATH oder sind fremde, `pip install` landete nicht in der Projektumgebung.
+    """
+    from .render import bridge_file
+    root = Path(project).resolve()
+    if bridge_file(root) is None:
+        return None  # kein Arbeitsordner der laufenden App
+    mine = os.environ.get("SOMA_PROJECT")
+    try:
+        if mine and Path(mine).resolve() == root:
+            return None
+    except OSError:
+        pass
+    py = Path(".soma", "env", "Scripts", "python.exe") if os.name == "nt" else Path(".soma", "env", "bin", "python")
+    if not (root / py).is_file():
+        py = Path(sys.executable)
+    note = (f"Note: this shell does not have the environment of the app's terminals. Run soma as `{py} -m soma ...` "
+            f"and install packages only with `{py} -m pip install ...`.")
+    skill = root / ".soma" / "skills" / "shell-environment.md"
+    return note + (" Details: .soma/skills/shell-environment.md" if skill.is_file() else "")
+
+
 def cmd_build(args):
     from . import build
     res = build.run_build(args.project)
     _print_build(res, args.json, time.perf_counter() - _STARTED)
+    note = None if args.json else _foreign_shell_note(args.project)
+    if note:
+        print(note)
     # Das Aufraeumen von OCP und vtk beim normalen Beenden kostet fast eine Sekunde und bringt nichts:
     # alle Dateien sind geschrieben und geschlossen, also Puffer leeren und sofort beenden
     sys.stdout.flush()
