@@ -6,6 +6,15 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Fixed
+
+- Agents that run their commands outside the app's terminal (seen with Codex on Windows, which uses a background service with the environment of another program) can use `soma render` again: it now finds the running app without the terminal's environment variables.
+
+### Added
+
+- `soma build` notes when the shell lacks the environment of the app's terminals and says how to call `soma` and `pip` instead.
+- New skill "Shell environment" (on demand for new models): what the agent does when `soma` or `pip` is not found, or umlauts in files look garbled in Windows PowerShell.
+
 ## [0.7.1] - 2026-10-12
 
 ### Fixed
