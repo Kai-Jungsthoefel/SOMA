@@ -207,8 +207,22 @@ try {
   await domClick('btn-measure');
 
   // 6) soma render: Fehler der Verbindung
-  r = soma(['render'], { env: { ...process.env, PYTHONUTF8: '1', SOMA_APP: '', SOMA_APP_TOKEN: '' } });
-  check('Ohne die Umgebung der App: verständliche Meldung', r.status === 1 && r.stderr.includes('needs the running app'), r.stderr);
+  // Ohne die Umgebung der Terminals (Codex führt Befehle über einen Dienst mit fremder Umgebung aus): bridge.json in den App-Daten
+  const noEnv = { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', SOMA_APP: '', SOMA_APP_TOKEN: '', SOMA_PROJECT: '' };
+  let bj = null;
+  try { bj = JSON.parse(fs.readFileSync(path.join(dir, '..', '..', 'bridge.json'), 'utf8')); } catch { /* fehlt */ }
+  check('bridge.json neben workspaces/: dieselbe Adresse und derselbe Schlüssel wie in den Terminals', bj?.app === bridge.SOMA_APP && bj?.token === bridge.SOMA_APP_TOKEN, JSON.stringify(bj));
+  r = soma(['render', '--size', '320x200', '--out', 'renders/ohne-umgebung.png'], { env: noEnv });
+  check('Ohne die Umgebung der App: soma render findet die App über bridge.json', r.status === 0 && fs.existsSync(path.join(dir, 'renders', 'ohne-umgebung.png')), r.stdout + r.stderr);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-ausserhalb-'));
+  r = soma(['render', '--project', outside], { env: noEnv });
+  check('Ohne Umgebung und außerhalb der Arbeitsordner: verständliche Meldung', r.status === 1 && r.stderr.includes('needs the running app'), r.stderr);
+  cleanup(outside);
+  r = soma(['build'], { env: noEnv });
+  check('soma build mit fremder Umgebung: Hinweis auf python -m soma, pip und den Skill', r.status === 0 && r.stdout.includes("does not have the environment of the app's terminals")
+    && r.stdout.includes('-m pip install') && r.stdout.includes('shell-environment.md'), r.stdout + r.stderr);
+  r = soma(['build'], { env: { ...env, SOMA_PROJECT: dir } });
+  check('soma build in der Umgebung der Terminals: kein Hinweis', r.status === 0 && !r.stdout.includes('Note:'), r.stdout + r.stderr);
   r = soma(['render'], { env: { ...env, SOMA_APP_TOKEN: 'x'.repeat(48) } });
   check('Falscher Schlüssel: abgelehnt', r.status === 1 && r.stderr.includes('Wrong key'), r.stderr);
   const other = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-anderes-'));

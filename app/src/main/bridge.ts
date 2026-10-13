@@ -1,10 +1,19 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
+import { userDataDir } from './paths';
 
 /**
  * Verbindung von `soma` im Terminal zur App (E58), etwa für `soma render`: ein HTTP-Dienst nur auf 127.0.0.1, mit einem
  * zufälligen Port und einem Schlüssel je App-Start. Beides bekommen nur die Terminals der App als Umgebungsvariablen
  * (SOMA_APP, SOMA_APP_TOKEN). Andere Programme kennen den Schlüssel nicht, Anfragen ohne ihn werden abgelehnt.
+ *
+ * Manche Agenten führen ihre Befehle nicht in der Shell aus, in der sie gestartet wurden: Codex etwa über einen
+ * Hintergrunddienst, der die Umgebung des Programms behält, aus dem er zuerst gestartet wurde (z. B. VS Code), und
+ * Variablen mit TOKEN im Namen filtert Codex ohnehin heraus. Deshalb stehen beide zusätzlich in `bridge.json` in den
+ * App-Daten, neben `workspaces/`: `soma` findet die Datei vom Arbeitsordner aus. Nie im Projekt, so kann der Schlüssel
+ * weder in Git noch in die Modelldatei geraten.
  */
 export type BridgeHandler = (route: string, body: unknown) => Promise<{ status: number; body: unknown }>;
 
@@ -25,12 +34,31 @@ export function startBridge(handler: BridgeHandler): Promise<void> {
       const a = srv.address();
       port = typeof a === 'object' && a ? a.port : 0;
       server = srv;
+      writeBridgeFile();
       resolve();
     });
   });
 }
 
-export function stopBridge(): void { server?.close(); server = null; port = 0; }
+export function stopBridge(): void { server?.close(); server = null; port = 0; removeBridgeFile(); }
+
+const bridgeFile = () => path.join(userDataDir(), 'bridge.json');
+
+/** Nur eine Erleichterung: Scheitert das Schreiben, bleiben die Umgebungsvariablen. */
+function writeBridgeFile(): void {
+  try {
+    fs.mkdirSync(userDataDir(), { recursive: true });
+    fs.writeFileSync(bridgeFile(), JSON.stringify({ app: `127.0.0.1:${port}`, token, pid: process.pid }), { mode: 0o600 });
+  } catch (e) { console.error('[soma] Could not write bridge.json:', e); }
+}
+
+/** Nur die eigene: Eine zweite laufende App kann die Datei inzwischen überschrieben haben. */
+function removeBridgeFile(): void {
+  try {
+    const cur = JSON.parse(fs.readFileSync(bridgeFile(), 'utf8')) as { token?: string };
+    if (cur.token === token) fs.rmSync(bridgeFile(), { force: true });
+  } catch { /* keine Datei oder unlesbar: nichts zu tun */ }
+}
 
 /** Umgebungsvariablen für Terminals: Adresse und Schlüssel, leer ohne laufenden Dienst. */
 export function bridgeEnv(): Record<string, string> {
