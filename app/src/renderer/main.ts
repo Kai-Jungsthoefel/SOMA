@@ -1651,76 +1651,131 @@ async function showStart(on: boolean): Promise<void> {
   $('start').hidden = !on;
   if (!on) return;
   menus.close();
-  $('btn-start-close').hidden = !project;
-  $('start-note').hidden = store.get('soma.noteSeen') === '1';
+  $('btn-start-close').hidden = $('start-close-sep').hidden = !project;
+  $('start-close-name').textContent = project?.name ?? '';
+  renderStartNote();
   renderTourCard();
   void renderUpdate();
   let list: ProjectListEntry[] = [];
   try { list = await api.project.list(); } catch { /* ohne Liste */ }
   list.sort((a, b) => b.modified - a.modified);
-  $('start-recent').replaceChildren(...list.slice(0, 12).map((p) => {
+  // Ohne Modelle zeigen zwei große Karten den Weg, mit Modellen ist Zuletzt geöffnet der Hauptinhalt
+  $('start-recent-wrap').hidden = !list.length;
+  $('start-empty').hidden = $('start-tip').hidden = !!list.length;
+  $('start-recent-count').textContent = String(list.length);
+  ($('start-filter') as HTMLInputElement).value = '';
+  $('start-recent').replaceChildren(...list.map((p) => {
     const th = el('div', { className: 'th' }, icon('cube', 36, 1.2));
     void api.project.thumb(p.id).then((url) => { if (url) th.replaceChildren(el('img', { src: url, alt: '' })); });
     const cur = p.id === project?.id;
-    // Viele heißen „Neues Modell“: Ob es je gespeichert wurde, hilft beim Wiederfinden und beim Aufräumen
-    const when = cur ? 'open' : `changed ${fmtWhen(p.modified, true)}`;
+    // Viele heißen „New model“: Ob es je gespeichert wurde, hilft beim Wiederfinden und beim Aufräumen
+    const when = p.saved ? `changed ${fmtWhen(p.modified, true)}` : fmtWhen(p.modified, true);
     const card = el('button', { className: 'recent' + (cur ? ' cur' : ''), title: cur ? 'Currently open' : `Open ${p.name}` },
-      th, el('div', { className: 'meta' }, el('b', { textContent: p.name }), el('span', { textContent: when }), !p.saved && el('span', { textContent: 'never saved' })));
+      th, cur && el('span', { className: 'tag', textContent: 'Open' }),
+      el('div', { className: 'meta' }, el('b', { textContent: p.name }),
+        el('span', { className: 'sub' }, el('span', { textContent: when }), !p.saved && el('span', { className: 'unsaved', textContent: 'never saved' }))));
     card.addEventListener('click', () => { if (!cur) void openProject(p.id); showStart(false); });
-    if (cur) return el('div', { className: 'recent-item' }, card);
+    const item = el('div', { className: 'recent-item' }, card);
+    item.dataset.name = p.name.toLowerCase();
+    if (cur) return item;
     // Entfernen (E69): Arbeitsordner in den Papierkorb, die Rückfrage im Hauptprozess sagt, was dabei verloren geht
-    const rm = el('button', { className: 'recent-rm', title: `Remove “${p.name}” from this computer`, ariaLabel: `Remove ${p.name}` }, icon('trash', 15));
+    const rm = el('button', { className: 'recent-rm', title: `Remove “${p.name}” from this computer`, ariaLabel: `Remove ${p.name}` }, icon('trash', 14));
     rm.addEventListener('click', () => void (async () => {
       const r = await api.project.remove(p.id).catch((e: unknown) => ({ removed: false, error: e instanceof Error ? e.message : String(e) }));
       if (r.error) toast(r.error, 'error');
       if (r.removed) { toast(`“${p.name}” removed. The working folder is in the Recycle Bin.`, 'ok'); void showStart(true); }
     })());
-    return el('div', { className: 'recent-item' }, card, rm);
-  }));
-  if (!list.length) $('start-recent').append(el('div', { className: 'c3', textContent: 'No models on this computer yet.' }));
+    item.append(rm);
+    return item;
+  }), el('div', { id: 'start-nomatch', className: 'c3', textContent: 'No model matches the filter.', hidden: true }));
   if (!agents.length) await refreshAgents();
-  $('start-agents').replaceChildren(...agents.map((a) => el('div', { className: 'agrow' },
-    el('span', { className: a.found ? 'ok' : 'no' }, icon(a.found ? 'check' : 'x', 16, 2.2)),
-    el('div', {}, el('b', { textContent: a.label }), el('span', { textContent: a.found ? `found (${a.command})` : 'not installed' })))));
+  renderStartAgents();
 }
+
+/** Agenten kompakt: gefundene zuerst, je eine Zeile mit Punkt wie im Agent-Menü. Jeder andere CLI-Agent geht auch (Zeile darunter). */
+function renderStartAgents(): void {
+  const list = [...agents.filter((a) => a.found), ...agents.filter((a) => !a.found)];
+  $('start-agents-count').textContent = agents.length ? `${agents.filter((a) => a.found).length} of ${agents.length} found` : '';
+  $('start-agents').replaceChildren(...list.map((a) => el('div', {
+    className: 'agrow' + (a.found ? '' : ' off'),
+    title: a.found ? `Found in the PATH as ${a.command}` : `${a.command} was not found in the PATH. Install the agent yourself, then it appears here.`,
+  }, el('span', { className: 'dot' }), el('span', { className: 'nm', textContent: a.label }),
+  a.found ? el('code', { textContent: a.command }) : el('span', { className: 'st', textContent: 'not installed' }))));
+}
+
+/** Sicherheitshinweis bei den Agenten: bis „Got it“ ausführlich, danach eine Zeile. */
+function renderStartNote(): void {
+  const seen = store.get('soma.noteSeen') === '1';
+  $('start-note').hidden = seen;
+  $('start-note-line').hidden = !seen;
+}
+
+/** Filter über die Namen der Karten. Escape im Feld leert es zuerst, erst das nächste Escape verlässt die Startseite. */
+function filterStart(): void {
+  const q = ($('start-filter') as HTMLInputElement).value.trim().toLowerCase();
+  let shown = 0;
+  for (const item of $('start-recent').querySelectorAll<HTMLElement>('.recent-item')) {
+    item.hidden = !!q && !(item.dataset.name ?? '').includes(q);
+    if (!item.hidden) shown++;
+  }
+  $('start-nomatch').hidden = shown > 0;
+}
+$('start-filter').addEventListener('input', filterStart);
+$('start-filter').addEventListener('keydown', (e) => {
+  const f = e.currentTarget as HTMLInputElement;
+  if (e.key === 'Escape' && f.value) { e.preventDefault(); e.stopPropagation(); f.value = ''; filterStart(); }
+});
+// Escape führt zurück zum offenen Modell. Menüs, Rückfragen, Hilfe und Einstellungen nehmen Escape vorher für sich
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.defaultPrevented || $('start').hidden || !project || help.isOpen || settings.isOpen) return;
+  e.preventDefault();
+  void showStart(false);
+});
 $('btn-start-close').addEventListener('click', () => showStart(false));
-$('start-new').addEventListener('click', () => { void doNew(); showStart(false); });
-$('start-open').addEventListener('click', () => { void doOpen().then((ok) => { if (ok) showStart(false); }); });
+const startNew = () => { void doNew(); showStart(false); };
+const startOpen = () => { void doOpen().then((ok) => { if (ok) showStart(false); }); };
+$('start-new').addEventListener('click', startNew);
+$('start-new-tpl').addEventListener('click', startNew);
+$('start-empty-new').addEventListener('click', startNew);
+$('start-open').addEventListener('click', startOpen);
+$('start-empty-open').addEventListener('click', startOpen);
+$('start-new-more').addEventListener('click', () => menus.toggle($('menu-start-new'), $('start-new-more'), 'right'));
 $('start-new-cq').addEventListener('click', () => void doNewFromCadQuery());
+$('start-empty-cq').addEventListener('click', () => void doNewFromCadQuery());
+$('btn-start-tip-help').addEventListener('click', () => void help.open());
 /**
- * Karte „Updates“: neueste Version unter GitHub Releases (updates.ts, einmal je Sitzung). Der Knopf öffnet die Seite im
- * Browser, laden und installieren tut der Nutzer selbst. Ausgeschaltet (Settings › About) oder im Test ohne Adresse: keine Karte.
+ * Pille „neue Version“ neben der Versionsnummer: neueste Version unter GitHub Releases (updates.ts, einmal je Sitzung). Ein
+ * Klick öffnet die Seite im Browser, laden und installieren tut der Nutzer selbst. Bei aktuellem Stand keine Pille, klappt die
+ * Prüfung nicht, eine leise. Ausgeschaltet (Settings › About) oder im Test ohne Adresse: keine.
  */
 let updateInfo: UpdateInfo | null = null;
 async function renderUpdate(): Promise<void> {
-  const card = $('start-update');
-  if (!appSettings.settings.start.updateCheck) { card.hidden = true; return; }
-  if (!updateInfo) {
-    card.hidden = false;
-    card.className = 'panel-card update checking';
-    card.replaceChildren(el('span', { className: 'up-ico' }, icon('refresh', 18)),
-      el('div', { className: 'up-text' }, el('b', { textContent: 'Updates' }), el('span', { className: 'c2', textContent: 'Checking GitHub for a new version …' })));
-  }
+  const pill = $('start-update');
+  if (!appSettings.settings.start.updateCheck) { pill.hidden = true; return; }
+  if (!updateInfo) { pill.hidden = true; pill.className = 'uppill checking'; }
   try { updateInfo = await api.updates.check(); } catch (e) {
     updateInfo = { state: 'error', current: SOMA_VERSION, url: RELEASES_URL, error: e instanceof Error ? e.message : String(e) };
   }
   const u = updateInfo;
-  if (u.state === 'skipped') { card.hidden = true; return; }
+  if (!appSettings.settings.start.updateCheck || u.state === 'skipped') { pill.hidden = true; return; }
   const when = u.published ? ` on ${new Date(u.published).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : '';
-  const [ico, title, text, label] = u.state === 'newer'
-    ? ['refresh', `SOMA ${u.latest} is available`, `You have ${u.current}. The new version was released${when}. Download it from the release page and install it, your models stay.`, 'Open release page']
+  const [ico, label, title] = u.state === 'newer'
+    ? ['arrowup', `${u.latest} available`, `SOMA ${u.latest} was released${when}. You have ${u.current}. Opens the release page: download and install it there, your models stay.`]
     : u.state === 'current'
-      ? ['okcirc', 'SOMA is up to date', `${u.current} is the latest release on GitHub.`, 'All releases']
-      : ['alert', 'Updates', `Could not check for a new version. ${u.error ?? ''}`.trim(), 'Open releases'];
-  const btn = el('button', { id: 'btn-start-update', className: `btn sm${u.state === 'newer' ? ' acc' : ''}`, title: u.url }, el('span', { textContent: label }), icon('openext', 13, 1.9));
-  btn.addEventListener('click', () => void api.openUrl(u.url).then((r) => { if (!r.ok) toast(r.error ?? `${u.url} could not be opened.`, 'error'); }));
-  card.hidden = false;
-  card.className = `panel-card update ${u.state}`;
-  card.replaceChildren(el('span', { className: 'up-ico' }, icon(ico, 18)),
-    el('div', { className: 'up-text' }, el('b', { textContent: title }), el('span', { className: 'c2', textContent: text }), btn));
+      ? ['okcirc', 'Up to date', `SOMA is up to date. ${u.current} is the latest release on GitHub.`]
+      : ['alert', 'Update check failed', `Could not check for a new version. ${u.error ?? ''}`.trim()];
+  pill.className = `uppill ${u.state}`;
+  pill.title = title;
+  pill.dataset.url = u.url;
+  pill.replaceChildren(icon(ico, 12, 2.2), el('span', { textContent: label }));
+  pill.hidden = u.state === 'current';
 }
+$('start-update').addEventListener('click', () => {
+  const url = $('start-update').dataset.url ?? RELEASES_URL;
+  void api.openUrl(url).then((r) => { if (!r.ok) toast(r.error ?? `${url} could not be opened.`, 'error'); });
+});
 const RELEASES_URL = 'https://github.com/Kai-Jungsthoefel/SOMA/releases';
-$('btn-note-ok').addEventListener('click', () => { store.set('soma.noteSeen', '1'); $('start-note').hidden = true; });
+$('btn-note-ok').addEventListener('click', () => { store.set('soma.noteSeen', '1'); renderStartNote(); });
 
 // ---- Ereignisse vom Hauptprozess --------------------------------------------------------------------------------
 

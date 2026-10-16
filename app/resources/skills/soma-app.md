@@ -45,18 +45,20 @@ The logo at the top left opens the start page.
 
 ![The start page](../help/start.png)
 
-1. **Tutorial**: a short guided tour of the app with an example model. No agent needed. "Got it" hides the card.
-2. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). Below it, **New from CadQuery script** starts from an existing CadQuery script instead (see "CadQuery scripts").
-3. **Open**: opens a .soma or ZIP file (Ctrl O).
-4. **Recent**: models you worked on. The bin on a card removes the model from this computer, a saved .soma file stays.
-5. **Agents on this computer**: the agents SOMA found. You install them yourself, SOMA does not bring one.
+1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts").
+2. **Open**: opens a .soma or ZIP file (Ctrl O).
+3. **Tutorial**: a short guided tour of the app with an example model. No agent needed. The cross hides the card.
+4. **Recent**: models you worked on, the newest first. The field above filters them by name. "Open" marks the model that is open right now, "never saved" one that was never saved as a .soma file. The bin on a card removes the model from this computer, a saved .soma file stays.
+5. **Agents**: the agents SOMA found. Any other agent that runs in a terminal works too. You install them yourself, SOMA does not bring one.
 6. **Help**: this guide (F1).
 7. **Settings**: viewer, shortcuts, skills, storage and version.
-8. **Back to the model**: returns to the open model.
+8. **Back to the model**: returns to the open model, it shows the model's name (Esc).
 
-Below the agents, a card shows whether a newer version of SOMA is available on GitHub. **Open release page** opens the
-download page in your browser; SOMA downloads and installs nothing by itself. Settings > About > **Check for new
-versions** turns the check off.
+As long as there is no model on this computer, two large cards for a new and an opened model take the place of Recent.
+
+When a newer version of SOMA is available on GitHub, a small orange label appears next to the version number at the top
+left. Clicking it opens the download page in your browser; SOMA downloads and installs nothing by itself. If the check
+fails, a grey label says so. Settings > About > **Check for new versions** turns the check off.
 
 **Start tutorial** opens a new example model called "Tutorial" and walks you through the window in ten steps: starting
 the agent, the code, clicking a part, measuring, marking up, parameters, history, saving and export, and help. An orange
@@ -214,4 +216,4 @@ The block and the standard parts are under the Apache License 2.0, so the export
 - **Build failed**: a red card in the viewer shows the error and the line. "Send to agent" asks the agent to fix it, "Open code" shows the line. The viewer keeps showing the last model that worked.
 - **Warning sign next to the model name**: SOMA found a problem in the model folder (for example a missing file). It only reports, it does not repair anything by itself. Ask the agent or fix it yourself.
 - **Building takes long**: turn off "Auto on" in the build status and build with Ctrl B when you are ready.
-- **The agent does not start**: check under "Agents on this computer" on the start page whether it is installed.
+- **The agent does not start**: check under "Agents" on the start page whether it is installed.

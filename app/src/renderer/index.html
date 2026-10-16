@@ -516,48 +516,76 @@
   </div>
 
   <div id="start" class="start" hidden>
-    <header class="top"><span class="logo"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></span><b class="brand">SOMA</b><span id="start-version" class="c3 small"></span><span class="grow"></span>
-      <button id="btn-start-help" class="btn" title="Help: how the app works (F1)"><i data-icon="help" data-size="15" data-stroke="1.7"></i>Help</button>
-      <button id="btn-start-settings" class="btn" title="Settings: viewer, skills, storage and version"><i data-icon="cog" data-size="15" data-stroke="1.7"></i>Settings</button>
-      <button id="btn-start-close" class="btn">Back to the model</button></header>
+    <!-- Startseite (Entwurf vom Oktober 2026): Zuletzt geöffnet ist der Hauptinhalt, Neu und Öffnen sitzen in der Titelzeile,
+         die großen Karten gibt es nur, solange es kein Modell gibt. Updates als Pille neben der Version -->
+    <header class="top"><span class="logo"><i data-icon="logo" data-size="22" data-stroke="1.6"></i></span><b class="brand">SOMA</b><span id="start-version" class="c3 small"></span>
+      <!-- Neue Version unter GitHub Releases (updates.ts). Inhalt baut main.ts, bei aktuellem Stand und ausgeschaltet (Settings › About) unsichtbar -->
+      <button id="start-update" class="uppill" hidden></button>
+      <span class="grow"></span>
+      <button id="btn-start-help" class="btn ghost" title="Help: how the app works (F1)"><i data-icon="help" data-size="15" data-stroke="1.7"></i>Help</button>
+      <button id="btn-start-settings" class="btn ghost" title="Settings: viewer, skills, storage and version"><i data-icon="cog" data-size="15" data-stroke="1.7"></i>Settings</button>
+      <span id="start-close-sep" class="vsep"></span>
+      <button id="btn-start-close" class="btn" title="Back to the open model (Escape)"><span>Back to</span><b id="start-close-name"></b><span class="kbd">Esc</span></button></header>
     <div class="start-body">
       <div class="start-grid">
         <div>
-          <h1>Models</h1>
-          <p class="c2 lead">A model is a .soma file with code, result and history. You can move it and share it freely.</p>
-          <!-- Tutorial (E94): bis „Got it“ (gespeichert in settings.json). Die Tour führt durch ein Beispielmodell, ohne Agent -->
-          <section id="start-tour" class="tour-intro" aria-label="Tutorial" hidden>
-            <span class="ico"><i data-icon="route" data-size="22" data-stroke="1.8"></i></span>
-            <div class="ti-text"><b>New to SOMA?</b><span class="c2">Learn the basics in a few minutes with an example model. No agent needed.</span></div>
-            <div class="ti-acts">
-              <button id="btn-tour-start" class="btn primary">Start tutorial</button>
-              <button id="btn-tour-dismiss" class="btn" title="Hide this card. Help can start the tutorial at any time.">Got it</button>
+          <div class="start-head">
+            <h1>Models</h1>
+            <span class="grow"></span>
+            <button id="start-open" class="btn" title=".soma or ZIP file from this or another computer"><i data-icon="folder" data-size="15"></i>Open …<span class="kbd">Ctrl O</span></button>
+            <div class="split">
+              <button id="start-new" class="btn primary" title="Template with an example part, plus a terminal in the model folder"><i data-icon="plus" data-size="15" data-stroke="2.4"></i>New model<span class="kbd">Ctrl N</span></button>
+              <button id="start-new-more" class="btn primary more" title="More ways to start a model" aria-label="More ways to start a model" aria-expanded="false"><i data-icon="down" data-size="13" data-stroke="2.4"></i></button>
             </div>
-          </section>
-          <div class="bigcards">
-            <button id="start-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="22" data-stroke="2.2"></i></span><b>New model</b><span class="c2">Template with an example part, plus a terminal in the model folder</span><span class="c3 small">Ctrl N</span></button>
-            <button id="start-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="22"></i></span><b>Open …</b><span class="c2">.soma or ZIP file from this or another computer</span><span class="c3 small">Ctrl O</span></button>
           </div>
-          <div class="start-alt"><button id="start-new-cq" class="btn sm ghost" title="A model from an existing CadQuery script (.py). The script stays as it is, the original is kept in inputs/."><i data-icon="f-py" data-size="14"></i>New from CadQuery script …</button></div>
-          <div class="cap">RECENT</div>
-          <div id="start-recent" class="recent-grid"></div>
+          <!-- Tutorial (E94): bis zum Kreuz (gespeichert in settings.json). Die Tour führt durch ein Beispielmodell, ohne Agent -->
+          <section id="start-tour" class="tour-intro" aria-label="Tutorial" hidden>
+            <span class="ico"><i data-icon="route" data-size="18" data-stroke="1.8"></i></span>
+            <div class="ti-text"><b>New to SOMA?</b> <span class="c2">A few minutes with an example model, no agent needed.</span></div>
+            <button id="btn-tour-start" class="btn sm primary">Start tutorial</button>
+            <button id="btn-tour-dismiss" class="ibtn" title="Hide this card. Help can start the tutorial at any time." aria-label="Hide the tutorial card"><i data-icon="x" data-size="14" data-stroke="2.2"></i></button>
+          </section>
+          <div id="start-recent-wrap">
+            <div class="start-bar">
+              <span class="cap">RECENT</span><span id="start-recent-count" class="count"></span>
+              <span class="grow"></span>
+              <label class="start-filter"><i data-icon="search" data-size="13" data-stroke="2"></i><input id="start-filter" placeholder="Filter by name" spellcheck="false" aria-label="Filter models by name"></label>
+            </div>
+            <div id="start-recent" class="recent-grid"></div>
+          </div>
+          <!-- Ohne Modelle: zwei große Karten zeigen den Weg -->
+          <div id="start-empty" class="start-empty" hidden>
+            <button id="start-empty-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="20" data-stroke="2.2"></i></span><b>Create your first model</b><span class="c2">Starts from a template with an example part and opens a terminal in the model folder.</span><span class="kbd">Ctrl N</span></button>
+            <button id="start-empty-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="20"></i></span><b>Open a model</b><span class="c2">A .soma or ZIP file from this or another computer. Code, result and history travel with it.</span><span class="kbd">Ctrl O</span></button>
+            <div class="ehint">Already have a CadQuery script? <button id="start-empty-cq" class="lnk">Start a model from it …</button></div>
+          </div>
         </div>
         <div class="start-side">
-          <section class="panel-card">
-            <div class="ph"><b>Agents on this computer</b><span class="c3 small">You bring your own agent and install it yourself.</span></div>
+          <section id="start-agents-card" class="panel-card">
+            <div class="ph"><b>Agents</b><span id="start-agents-count" class="c3 small"></span></div>
             <div id="start-agents"></div>
+            <div class="ag-more" title="Any agent that runs in a terminal works. Start it in the terminal panel of a model.">… and any other CLI agent</div>
+            <!-- Sicherheitshinweis bis „Got it“ (localStorage), danach eine Zeile -->
+            <div id="start-note" class="ag-note">
+              <span class="note-ico"><i data-icon="shield" data-size="16"></i></span>
+              <div class="note-text"><span>The agent works with your user rights and can change files on this computer. Set permissions in the agent itself.</span>
+                <button id="btn-note-ok" class="btn sm">Got it</button></div>
+            </div>
+            <div id="start-note-line" class="ag-noteline" title="The agent works with your user rights and can read and change files on this computer. You set permissions and protection in the agent itself."><i data-icon="shield" data-size="13"></i>Agents work with your user rights</div>
           </section>
-          <!-- Neue Version unter GitHub Releases (updates.ts). Inhalt baut main.ts, ausgeschaltet in Settings › About bleibt die Karte weg -->
-          <section id="start-update" class="panel-card update" aria-label="Updates" hidden></section>
-          <section id="start-note" class="panel-card note">
-            <span class="note-ico"><i data-icon="info" data-size="18"></i></span>
-            <div class="note-text"><b>Good to know</b>
-              <span class="c2">The agent works with your user rights. It can read and change files on this computer. You set permissions and protection in the agent itself.</span>
-              <button id="btn-note-ok" class="btn sm">Got it</button></div>
+          <section id="start-tip" class="panel-card start-tip" hidden>
+            <b>You bring the agent</b>
+            <span class="c2">SOMA has no agent of its own. Install any CLI agent, then start it from the terminal panel of a model.</span>
+            <button id="btn-start-tip-help" class="lnk">How it works <i data-icon="send" data-size="12" data-stroke="2"></i></button>
           </section>
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="menu-start-new" class="menu" role="menu" hidden>
+    <button id="start-new-tpl" class="mi two" role="menuitem"><i data-icon="plus" data-size="15"></i><span class="t"><span>From template</span><span class="sub">Example part, terminal in the model folder</span></span><span class="k">Ctrl N</span></button>
+    <button id="start-new-cq" class="mi two" role="menuitem" title="A model from an existing CadQuery script (.py). The script stays as it is, the original is kept in inputs/."><i data-icon="f-py" data-size="15"></i><span class="t"><span>From CadQuery script …</span><span class="sub">The script stays as it is, the original is kept in inputs/</span></span></button>
   </div>
 
   <!-- Einstellungen (E78): Fenster über der App, zuerst die Bibliothek der Skills. Inhalt rechts baut settings.ts -->
