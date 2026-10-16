@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell, type WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { aboutInfo, aboutText } from './about';
+import { aboutInfo, aboutText, osName } from './about';
 import { detectAgents } from './agents';
 import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
@@ -11,7 +11,9 @@ import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntr
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
 import { readHelp, readHelpImage } from './help';
-import { adoptLoginShellPath, appIcon, editBackupsDir, helpDir, libraryBackupsDir, skillDirs, skillsDir, thumbnailsDir, userSkillsDir } from './paths';
+import { initLog, log } from './log';
+import { adoptLoginShellPath, appIcon, editBackupsDir, helpDir, libraryBackupsDir, logsDir, pythonExe, skillDirs, skillsDir, thumbnailsDir, userDataDir, userSkillsDir } from './paths';
+import { SOMA_VERSION } from '../shared/version';
 import { readSettings, writeSettings } from './settings';
 import { checkUpdate } from './updates';
 import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
@@ -25,6 +27,12 @@ import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProje
 // umgeleitet oder synchronisiert sein, das ist für Arbeitsordner und GPU-Cache ungeeignet. Tests leiten alles um.
 if (process.env.SOMA_USER_DATA) app.setPath('userData', process.env.SOMA_USER_DATA);
 else if (process.platform === 'win32' && process.env.LOCALAPPDATA) app.setPath('userData', path.join(process.env.LOCALAPPDATA, 'soma'));
+
+// Protokoll (log.ts) so früh wie möglich: Auch Fehler beim Start sollen drinstehen
+initLog(logsDir(), {
+  version: SOMA_VERSION, system: `${osName()} ${process.arch}`, electron: process.versions.electron,
+  packaged: app.isPackaged ? 'yes' : 'no (development)', python: pythonExe(), appData: userDataDir(),
+});
 
 /**
  * Linux ohne nutzbaren Grafiktreiber (VM, Remote-Desktop, xvfb): Chromium sperrt WebGL auf dem Software-Renderer llvmpipe,
@@ -41,6 +49,22 @@ let win: BrowserWindow | null = null;
 let controller: ProjectController | null = null;
 /** Im Testmodus landet Kopiertes hier statt in der echten Zwischenablage des Nutzers. */
 let testClipboard = '';
+
+/**
+ * Anfragen des Renderers mit der Antwort `{ ok: false, error }` ins Protokoll (log.ts), abgebrochene Rückfragen nicht.
+ * Sonst sähe nur der Nutzer die Meldung, im Protokoll fehlte sie. Ein Wrapper um ipcMain.handle statt an jedem der vielen
+ * Handler. Ausnahmen protokolliert Electron selbst über console.error („Error occurred in handler for …“, mit Stack), die
+ * landen so schon im Protokoll.
+ */
+function logIpcFailures(): void {
+  const handle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = (channel, fn) => handle(channel, async (e, ...args) => {
+    const r: unknown = await fn(e, ...args);
+    const o = r as { ok?: unknown; error?: unknown; canceled?: unknown } | null;
+    if (o && typeof o === 'object' && o.ok === false && o.error && !o.canceled) log('WARN', `[${channel}] ${String(o.error)}`);
+    return r;
+  });
+}
 
 function registerIpc(ctl: ProjectController): void {
   const dir = () => ctl.need().dir;
@@ -422,6 +446,7 @@ function hostDialogs(wc: WebContents): void {
 
 // Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
 app.whenReady().then(async () => {
+  logIpcFailures();
   // Dunkel wie die Oberfläche: unter Windows sonst eine weiße Titelleiste, ebenso die Dialoge zum Öffnen und Speichern
   nativeTheme.themeSource = 'dark';
   adoptLoginShellPath(); // macOS und Linux: PATH wie im Terminal, sonst fehlen die Agenten
@@ -436,4 +461,4 @@ app.whenReady().then(async () => {
   });
   createWindow();
 });
-app.on('window-all-closed', () => { stopBridge(); stopWarm(); app.quit(); });
+app.on('window-all-closed', () => { console.log('[soma] quit'); stopBridge(); stopWarm(); app.quit(); });

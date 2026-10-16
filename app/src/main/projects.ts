@@ -153,6 +153,7 @@ export class ProjectController {
       if (st.state === 'ok' && !st.stale) void this.cachePreview(session);
     });
     setLastProject(id);
+    console.log(`[project] opened ${id}`);
     // Gilt der letzte Build noch (seit seinem Start nichts geändert), zeigt der Viewer ihn gleich, statt neu zu bauen. Sonst
     // erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
     const last = currentBuild(dir);

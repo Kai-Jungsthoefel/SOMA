@@ -240,7 +240,7 @@ export interface LibraryResult {
   library: LibraryState;
 }
 /** Bereich der App-Daten in den Einstellungen (E81). Der Renderer nennt nur die Kennung, den Ordner kennt der Hauptprozess. */
-export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills';
+export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills' | 'logs';
 /** Größe eines Bereichs. `other`: alles Übrige in den App-Daten. `models`: Zahl der Arbeitsordner. */
 export interface StorageEntry { id: StorageArea | 'other'; path: string | null; bytes: number; files: number; models?: number }
 export interface StorageStats { dir: string; total: number; areas: StorageEntry[] }

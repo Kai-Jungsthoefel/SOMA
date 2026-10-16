@@ -6,7 +6,8 @@ import { app } from 'electron';
 import { exec } from 'dugite';
 import type { AboutInfo, AgentInfo, ComponentInfo } from '../shared/types';
 import { SOMA_VERSION } from '../shared/version';
-import { pythonExe, userDataDir, userSkillsDir, warmDir } from './paths';
+import { logTail } from './log';
+import { logsDir, pythonExe, userDataDir, userSkillsDir, warmDir } from './paths';
 
 /**
  * Angaben für „About“ in den Einstellungen (E81): Versionen, Komponenten mit Lizenz, gefundene Agenten, Pfade. Alles wird
@@ -102,7 +103,7 @@ async function gitVersion(): Promise<string | null> {
   } catch { return null; }
 }
 
-function osName(): string {
+export function osName(): string {
   const rel = os.release();
   if (process.platform === 'win32') {
     // Windows 11 meldet sich weiter als 10.0, erst die Build-Nummer ab 22000 unterscheidet
@@ -122,6 +123,7 @@ export async function aboutInfo(agents: () => Promise<AgentInfo[]>): Promise<Abo
     paths: [
       { label: 'App data', path: userDataDir() },
       { label: 'Your skills', path: userSkillsDir() },
+      { label: 'Logs', path: logsDir() },
       { label: 'Python', path: python.exe },
       { label: 'Program', path: app.getAppPath() },
     ],
@@ -141,5 +143,8 @@ export function aboutText(a: AboutInfo): string {
     ...a.paths.map((p) => `${p.label}: ${p.path}`),
   ];
   if (a.python.error) lines.push(`Python problem: ${a.python.error}`);
+  // Das Ende des Protokolls (log.ts): Mit dem Bericht kommt gleich, was zuletzt schiefging
+  const tail = logTail(40);
+  if (tail) lines.push('', 'Recent log (logs/soma.log):', tail);
   return lines.join('\n');
 }

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { affectsBuild } from '../shared/editable';
 import type { BuildResult, BuildStatus, ParamInfo } from '../shared/types';
+import { log } from './log';
 import { pythonExe, warmDir } from './paths';
 import { IGNORED_TOP } from './watcher';
 
@@ -116,6 +117,7 @@ export class BuildManager extends EventEmitter {
       clearTimeout(timeout);
       this.proc = null;
       if (this.disposed) return;
+      logBuild(result, (Date.now() - startedAt) / 1000, reason);
       this.takeParams(result);
       if (result.status === 'ok') this.shown = mapBuildId(this.dir);
       this.setStatus({ state: result.status === 'ok' ? 'ok' : 'error', result, seconds: (Date.now() - startedAt) / 1000, builtAt: Date.now() });
@@ -184,6 +186,7 @@ export class BuildManager extends EventEmitter {
     let error: string | null;
     try { error = await install(); } catch (e) { error = e instanceof Error ? e.message : String(e); }
     this.installing = null;
+    if (error) log('ERROR', `[packages] Could not install ${names.join(', ')}: ${error}`);
     if (this.disposed) return;
     this.packageError = error;
     const { queued: _q, ...rest } = this.status;
@@ -314,6 +317,21 @@ function emitLine(w: WarmProcess, line: string): void {
   const l = line.trim();
   if (w.onLine) w.onLine(l);
   else w.lines.push(l);
+}
+
+/** Fehler im Ablauf statt im Code des Modells: Python startet nicht, Zeitlimit, kein Ergebnis. */
+const PIPELINE_ERRORS = new Set(['PythonStart', 'Timeout', 'NoResult']);
+
+/**
+ * Build ins Protokoll (log.ts). Fehler im Code des Modells sind Alltag beim Modellieren und stehen nur mit Art und erster
+ * Zeile drin, Fehler im Ablauf mit der ganzen Meldung (darin das Ende von stderr).
+ */
+function logBuild(r: BuildResult, seconds: number, reason: string): void {
+  const s = `${seconds.toFixed(1)} s, ${reason}`;
+  if (r.status === 'ok') { log('INFO', `[build] ok, ${r.parts?.length ?? 0} parts, ${s}`); return; }
+  const e = r.error;
+  if (e && PIPELINE_ERRORS.has(e.kind)) log('ERROR', `[build] ${e.kind} (${s}): ${e.message}`);
+  else log('INFO', `[build] error in the model, ${e?.kind ?? 'unknown'} (${s}): ${(e?.message ?? '').split('\n')[0].slice(0, 300)}`);
 }
 
 function errorResult(kind: string, message: string): BuildResult {

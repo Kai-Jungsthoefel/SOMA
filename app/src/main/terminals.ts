@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { WebContents } from 'electron';
 import * as pty from 'node-pty';
+import { logAgentStart } from './agents';
 import { bridgeEnv } from './bridge';
 import { envPaths } from './packages';
 import { gitCmdDir, pythonBinDirs } from './paths';
@@ -34,6 +35,8 @@ let nextId = 1;
 /** Verwaltet die Terminals eines Projekts. Jedes ist eine normale Shell im Projektordner (E19). */
 export class TerminalManager {
   private terms = new Map<number, pty.IPty>();
+  /** Getippte Zeile je Terminal, nur um einen von Hand gestarteten Agenten zu protokollieren (track). null: unzuverlässig. */
+  private typed = new Map<number, string | null>();
 
   constructor(private readonly wc: WebContents, private readonly dir: string) {}
 
@@ -51,9 +54,11 @@ export class TerminalManager {
     }
     const id = nextId++;
     this.terms.set(id, p);
+    if (opts.command) logAgentStart(opts.command, 'button', terminalEnv(this.dir));
     p.onData((d) => { if (!this.wc.isDestroyed()) this.wc.send('term:data', id, d); });
     p.onExit(({ exitCode }) => {
       this.terms.delete(id);
+      this.typed.delete(id);
       if (!this.wc.isDestroyed()) this.wc.send('term:exit', id, exitCode);
     });
     // Ein Startbefehl (z. B. der Agent) wird sichtbar in die Shell getippt. Endet er, bleibt die Shell offen.
@@ -61,11 +66,39 @@ export class TerminalManager {
     return id;
   }
 
-  write(id: number, data: string): void { this.terms.get(id)?.write(data); }
+  write(id: number, data: string): void {
+    const p = this.terms.get(id);
+    if (!p) return;
+    p.write(data);
+    this.track(id, data);
+  }
+
+  /**
+   * Erkennt, wenn der Nutzer einen bekannten Agenten selbst in die Shell tippt, für das Protokoll. Nur grob: Pfeiltasten,
+   * Verlauf, Tab-Ergänzung oder Einfügen machen die Zeile unzuverlässig, sie zählt dann nicht. Als Agentenstart gilt nur
+   * der Befehl allein oder mit Optionen (`claude`, `codex --resume`), damit Text an einen laufenden Agenten, der zufällig
+   * mit seinem Namen beginnt, nicht mitzählt. Getippter Text selbst kommt nie ins Protokoll.
+   */
+  private track(id: number, data: string): void {
+    let line = this.typed.get(id) ?? '';
+    let ok = this.typed.get(id) !== null;
+    for (const ch of data) {
+      if (ch === '\r' || ch === '\n') {
+        const t = line.trim();
+        if (ok && t && /^\S+(\s+-.*)?$/.test(t)) logAgentStart(t, 'typed', terminalEnv(this.dir));
+        line = ''; ok = true;
+      } else if (ch === '\x7f' || ch === '\b') line = line.slice(0, -1);
+      else if (ch === '\x03') { line = ''; ok = true; }
+      else if (ch === '\x1b' || ch === '\t') ok = false;
+      else if (ch >= ' ' && line.length < 200) line += ch;
+    }
+    this.typed.set(id, ok ? line : null);
+  }
+
   resize(id: number, cols: number, rows: number): void {
     if (cols > 0 && rows > 0) { try { this.terms.get(id)?.resize(cols, rows); } catch { /* Terminal schon beendet */ } }
   }
-  kill(id: number): void { try { this.terms.get(id)?.kill(); } catch { /* schon beendet */ } this.terms.delete(id); }
+  kill(id: number): void { try { this.terms.get(id)?.kill(); } catch { /* schon beendet */ } this.terms.delete(id); this.typed.delete(id); }
   killAll(): void { for (const id of [...this.terms.keys()]) this.kill(id); }
 
   /**
