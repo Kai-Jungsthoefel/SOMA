@@ -6,6 +6,10 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Added
+
+- The start page shows whether a newer version is available on GitHub, with a button to the release page. Turn it off under Settings > About.
+
 ## [0.8.0] - 2026-10-13
 
 ### Added

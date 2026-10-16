@@ -19,7 +19,7 @@ A desktop app (Electron, TypeScript) in which a user designs 3D models in CadQue
 Details in `app/README.md`.
 
 **`app/`** Electron app
-- `src/main/` main process. Projects: `projects.ts` (save, open, history, export), `git.ts`, `zip.ts`, `workspace.ts`, `files.ts`, `watcher.ts`. Building and display: `build.ts` (prewarmed Python process), `previews.ts`, `measure.ts`, `dxf.ts` (E80), `drawings.ts` (document "Drawings", E97), `render.ts` + `bridge.ts` (`soma render`), `animations.ts`. Agent and skills: `terminals.ts`, `agents.ts`, `skills.ts`, `skilllibrary.ts` (own skills, E78). Environment: `packages.ts` (project environment, E67), `params.ts` (parameter panel, E74). App: `settings.ts`, `storage.ts`, `about.ts` (E81), `help.ts` (E83), `dialogs.ts`.
+- `src/main/` main process. Projects: `projects.ts` (save, open, history, export), `git.ts`, `zip.ts`, `workspace.ts`, `files.ts`, `watcher.ts`. Building and display: `build.ts` (prewarmed Python process), `previews.ts`, `measure.ts`, `dxf.ts` (E80), `drawings.ts` (document "Drawings", E97), `render.ts` + `bridge.ts` (`soma render`), `animations.ts`. Agent and skills: `terminals.ts`, `agents.ts`, `skills.ts`, `skilllibrary.ts` (own skills, E78). Environment: `packages.ts` (project environment, E67), `params.ts` (parameter panel, E74). App: `settings.ts`, `storage.ts`, `about.ts` (E81), `updates.ts` (new version on GitHub, E98), `help.ts` (E83), `dialogs.ts`.
 - `src/preload/` the only bridge to the renderer.
 - `src/renderer/` interface, wired up in `main.ts`. Viewer: `viewer.ts`, `viewcube.ts`, `tree.ts` (structure tree, E82), tools `sectiontool.ts`, `explodetool.ts`, `measuretool.ts`, `markup.ts`. Panels: `code.ts`, `pdfview.ts`, `dxfview.ts`, `drawings.ts` + `drawlink.ts` (document "Drawings" and its link to 3D, E97), `markdown.ts`, `filetree.ts`, `versions.ts`, `terminals.ts`, `params.ts`, `skills.ts`, `help.ts`, `settings.ts` + `settingspages.ts`, `tutorial.ts` (guided tour, E94). Animation and analysis: `animtool.ts`, `animpanel.ts`, `animdata.ts`, `overlay.ts`, `resulttool.ts`, `resultview.ts`, `analysispanel.ts`, `videoview.ts`. Render window: `render.ts`/`render.html`. General: `ui.ts`, `icons.ts`, `busy.ts`, `shortcuts.ts`, `style.css`.
 - `src/shared/` `types.ts` (IPC contract), `settings.ts` (defaults, validation, mouse bindings, E81), `editable.ts`, `help.ts`, `skillname.ts`, `version.ts`.
@@ -51,7 +51,8 @@ powershell -File python/scripts/setup_env.ps1
 npm install
 npm start                            # builds and starts
 npm run typecheck
-npm test                             # builds, then all suites in parallel via test/run-all.mjs
+npm test                             # builds, then all suites except animation and fem in parallel via test/run-all.mjs
+npm run test:all                     # all suites including the slow animation and fem
 node test/run-all.mjs smoke editor   # single suites in parallel, after npm run build
 npm run test:unit                    # without build, checks the version number among other things
 npm run help:shots                   # regenerate the images of the user guide
@@ -87,7 +88,7 @@ npm run dist                         # installation package for this system, run
 
 ## Tests
 
-- After changes run `npm run typecheck` and `npm test`. The npm scripts build first, `node test/*.mjs` without a build tests stale `dist/` files.
+- After changes run `npm run typecheck` and `npm test`. Also run `node test/run-all.mjs animation fem` (after `npm run build`) when animations, analysis, FEM, the render window or their Python side change, and `npm run test:all` before a version bump. The npm scripts build first, `node test/*.mjs` without a build tests stale `dist/` files.
 - The suites start the real app. Windows stay invisible (`SOMA_HIDDEN=1`), otherwise they flash up for the user. Invisible windows do not repaint: for screenshots use `SMOKE_VISIBLE=offscreen`, for UI changes also `SMOKE_SHOTS=1`, and look at the images in `app/test/shots/`.
 - **User guide (E83):** when the interface changes, run `npm run help:shots`, look at the images in `app/resources/help/` and update `app/resources/skills/soma-app.md`. Crops and numbers are in `app/test/helpshots-spec.mjs`, the labels there and under the images must match.
 - Answer native dialogs via `app.answers([...])` (`src/main/dialogs.ts`).
