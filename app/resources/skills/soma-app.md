@@ -90,7 +90,7 @@ The agent works with your user rights. Permissions and safety settings are part 
 3. **Selection card**: the selected part with its face and the line in the code. "Code" jumps there, "Export" saves only this part.
 4. **Send to agent**: tells the agent which part and face you mean.
 5. **View cube**: click to look from a side, drag to rotate.
-6. **Fit, default view, display**: fit the model into the view, back to the default view, and the display menu (edges, wireframe, transparent, front, top and other views).
+6. **Fit, default view, axes, display**: fit the model into the view, back to the default view, origin and axes on and off (red X, green Y, blue Z, like on the view cube), and the display menu (edges, wireframe, transparent, origin and axes, front, top and other views).
 
 Mouse (default): left drag rotates, right drag pans, the wheel zooms to the mouse position. A double-click sets the
 pivot. You can switch to the mouse buttons of SolidWorks, Fusion 360, Onshape and others in Settings, Viewer.
@@ -209,7 +209,7 @@ The block and the standard parts are under the Apache License 2.0, so the export
 2. **Shortcuts**: all keys and mouse actions.
 3. **Skills**: edit the built-in skills or write your own. They are available in every model.
 4. **Storage**: how much space SOMA's data takes, and clearing the preview cache.
-5. **About**: versions, components and the agents found, and whether the start page checks GitHub for new versions.
+5. **About**: versions, components and the agents found, the folders of SOMA including its logs, and whether the start page checks GitHub for new versions.
 
 ## When something goes wrong
 
@@ -217,3 +217,4 @@ The block and the standard parts are under the Apache License 2.0, so the export
 - **Warning sign next to the model name**: SOMA found a problem in the model folder (for example a missing file). It only reports, it does not repair anything by itself. Ask the agent or fix it yourself.
 - **Building takes long**: turn off "Auto on" in the build status and build with Ctrl B when you are ready.
 - **The agent does not start**: check under "Agents" on the start page whether it is installed.
+- **Reporting a problem**: "Copy system info" under Settings > About copies the versions and the end of SOMA's log, paste it into the bug report. The full log is in the folder "Logs" there. It stays on your computer, SOMA sends nothing by itself.
