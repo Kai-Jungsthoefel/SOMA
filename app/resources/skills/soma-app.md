@@ -54,6 +54,10 @@ The logo at the top left opens the start page.
 7. **Settings**: viewer, shortcuts, skills, storage and version.
 8. **Back to the model**: returns to the open model.
 
+Below the agents, a card shows whether a newer version of SOMA is available on GitHub. **Open release page** opens the
+download page in your browser; SOMA downloads and installs nothing by itself. Settings > About > **Check for new
+versions** turns the check off.
+
 **Start tutorial** opens a new example model called "Tutorial" and walks you through the window in ten steps: starting
 the agent, the code, clicking a part, measuring, marking up, parameters, history, saving and export, and help. An orange
 frame shows where to look, and you can try everything right away. Back, Skip and Next move through the steps, Esc ends
@@ -180,7 +184,7 @@ Reference parts (for example an imported circuit board) are not included in "All
 2. **Shortcuts**: all keys and mouse actions.
 3. **Skills**: edit the built-in skills or write your own. They are available in every model.
 4. **Storage**: how much space SOMA's data takes, and clearing the preview cache.
-5. **About**: versions, components and the agents found.
+5. **About**: versions, components and the agents found, and whether the start page checks GitHub for new versions.
 
 ## When something goes wrong
 

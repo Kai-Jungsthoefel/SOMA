@@ -231,7 +231,11 @@ export class StoragePage implements SettingsPage {
 
 // ---- Info -----------------------------------------------------------------------------------------------------------
 
-interface AboutDeps { api: SomaApi['about']; openUrl(url: string): void; openFolder(area: StorageArea): void; toast: Toast }
+interface AboutDeps {
+  api: SomaApi['about']; openUrl(url: string): void; openFolder(area: StorageArea): void; toast: Toast;
+  /** Einstellung „Check for new versions“ (Karte auf der Startseite). */
+  updateCheck(): boolean; setUpdateCheck(on: boolean): Promise<SettingsResult>;
+}
 
 const REPO = 'https://github.com/Kai-Jungsthoefel/SOMA';
 
@@ -255,6 +259,12 @@ export class AboutPage implements SettingsPage {
   private async copy(): Promise<void> {
     const r = await this.deps.api.copy().catch((e) => ({ ok: false, error: errText(e) }));
     this.deps.toast(r.ok ? 'System info copied. Paste it into a bug report or a message.' : `Could not copy: ${r.error ?? 'unknown error'}`, r.ok ? 'ok' : 'error');
+  }
+
+  private async setUpdateCheck(on: boolean): Promise<void> {
+    const r = await this.deps.setUpdateCheck(on).catch((e) => ({ ok: false, error: errText(e) }));
+    if (!r.ok) this.deps.toast(r.error ?? 'The setting could not be saved.', 'error');
+    this.render();
   }
 
   private link(label: string, url: string, title: string): HTMLElement {
@@ -288,6 +298,8 @@ export class AboutPage implements SettingsPage {
         'SOMA is free software under the GNU GPL, version 3 or later. The SOMA Model Exception makes sure that what you design belongs to you: your models, their files and everything SOMA creates from them.'),
       el('div', { className: 'st-actions' }, this.link('License', `${REPO}/blob/main/LICENSE`, 'GNU General Public License, version 3'), this.link('Model Exception', `${REPO}/blob/main/MODEL-EXCEPTION.md`, 'Additional permission for your models')),
     ];
+    kids.push(group('Updates', field('Check for new versions', 'The start page asks GitHub once per session whether a newer release exists. SOMA downloads and installs nothing by itself.',
+      toggle('st-update', this.deps.updateCheck(), 'Check for new versions', (on) => void this.setUpdateCheck(on)))));
     if (this.error) kids.push(el('div', { className: 'st-problem' }, icon('alert', 14, 2), el('span', { textContent: `The information could not be collected: ${this.error}` })));
     if (!a) {
       kids.push(el('div', { className: 'st-wait', textContent: this.loading ? 'Collecting versions …' : '' }));

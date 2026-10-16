@@ -1,6 +1,6 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
-import type { AgentInfo, AnimEntry, BuildStatus, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState } from '../shared/types';
+import type { AgentInfo, AnimEntry, BuildStatus, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
@@ -250,6 +250,8 @@ const aboutPage = new AboutPage($('st-about'), {
   api: api.about, toast,
   openUrl: (url) => void api.openUrl(url).then((r) => { if (!r.ok) toast(r.error ?? `${url} could not be opened.`, 'error'); }),
   openFolder: (area) => void api.storage.open(area).then((r) => { if (!r.ok) toast(`The folder could not be opened: ${r.error ?? 'unknown error'}`, 'error'); }),
+  updateCheck: () => appSettings.settings.start.updateCheck,
+  setUpdateCheck: async (on) => { const r = await changeSettings({ start: { updateCheck: on } }); if (!$('start').hidden) void renderUpdate(); return r; },
 });
 
 // Einstellungen (E78, E81): Reiter Viewer, Skills, Speicher und Info, auch von der Startseite aus. Änderungen an den
@@ -1568,6 +1570,7 @@ async function showStart(on: boolean): Promise<void> {
   $('btn-start-close').hidden = !project;
   $('start-note').hidden = store.get('soma.noteSeen') === '1';
   renderTourCard();
+  void renderUpdate();
   let list: ProjectListEntry[] = [];
   try { list = await api.project.list(); } catch { /* ohne Liste */ }
   list.sort((a, b) => b.modified - a.modified);
@@ -1599,6 +1602,39 @@ async function showStart(on: boolean): Promise<void> {
 $('btn-start-close').addEventListener('click', () => showStart(false));
 $('start-new').addEventListener('click', () => { void doNew(); showStart(false); });
 $('start-open').addEventListener('click', () => { void doOpen().then((ok) => { if (ok) showStart(false); }); });
+/**
+ * Karte „Updates“: neueste Version unter GitHub Releases (updates.ts, einmal je Sitzung). Der Knopf öffnet die Seite im
+ * Browser, laden und installieren tut der Nutzer selbst. Ausgeschaltet (Settings › About) oder im Test ohne Adresse: keine Karte.
+ */
+let updateInfo: UpdateInfo | null = null;
+async function renderUpdate(): Promise<void> {
+  const card = $('start-update');
+  if (!appSettings.settings.start.updateCheck) { card.hidden = true; return; }
+  if (!updateInfo) {
+    card.hidden = false;
+    card.className = 'panel-card update checking';
+    card.replaceChildren(el('span', { className: 'up-ico' }, icon('refresh', 18)),
+      el('div', { className: 'up-text' }, el('b', { textContent: 'Updates' }), el('span', { className: 'c2', textContent: 'Checking GitHub for a new version …' })));
+  }
+  try { updateInfo = await api.updates.check(); } catch (e) {
+    updateInfo = { state: 'error', current: SOMA_VERSION, url: RELEASES_URL, error: e instanceof Error ? e.message : String(e) };
+  }
+  const u = updateInfo;
+  if (u.state === 'skipped') { card.hidden = true; return; }
+  const when = u.published ? ` on ${new Date(u.published).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : '';
+  const [ico, title, text, label] = u.state === 'newer'
+    ? ['refresh', `SOMA ${u.latest} is available`, `You have ${u.current}. The new version was released${when}. Download it from the release page and install it, your models stay.`, 'Open release page']
+    : u.state === 'current'
+      ? ['okcirc', 'SOMA is up to date', `${u.current} is the latest release on GitHub.`, 'All releases']
+      : ['alert', 'Updates', `Could not check for a new version. ${u.error ?? ''}`.trim(), 'Open releases'];
+  const btn = el('button', { id: 'btn-start-update', className: `btn sm${u.state === 'newer' ? ' acc' : ''}`, title: u.url }, el('span', { textContent: label }), icon('openext', 13, 1.9));
+  btn.addEventListener('click', () => void api.openUrl(u.url).then((r) => { if (!r.ok) toast(r.error ?? `${u.url} could not be opened.`, 'error'); }));
+  card.hidden = false;
+  card.className = `panel-card update ${u.state}`;
+  card.replaceChildren(el('span', { className: 'up-ico' }, icon(ico, 18)),
+    el('div', { className: 'up-text' }, el('b', { textContent: title }), el('span', { className: 'c2', textContent: text }), btn));
+}
+const RELEASES_URL = 'https://github.com/Kai-Jungsthoefel/SOMA/releases';
 $('btn-note-ok').addEventListener('click', () => { store.set('soma.noteSeen', '1'); $('start-note').hidden = true; });
 
 // ---- Ereignisse vom Hauptprozess --------------------------------------------------------------------------------

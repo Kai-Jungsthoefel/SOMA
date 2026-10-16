@@ -22,8 +22,8 @@ export interface ViewerPrefs {
   /** Nachkommastellen der Messwerte in der Oberfläche. Der Text für den Agenten hat immer drei. */
   decimals: number;
 }
-/** Startseite (E94): Karte „New to SOMA?“ mit dem Tutorial. „Got it“ blendet sie aus. */
-export interface StartPrefs { tutorialCard: boolean }
+/** Startseite (E94): Karte „New to SOMA?“ mit dem Tutorial. „Got it“ blendet sie aus. `updateCheck`: auf GitHub nach einer neuen Version fragen. */
+export interface StartPrefs { tutorialCard: boolean; updateCheck: boolean }
 export interface AppSettings { viewer: ViewerPrefs; start: StartPrefs }
 /** Änderung aus dem Renderer: nur die Werte, die sich ändern sollen. */
 export interface SettingsPatch { viewer?: Partial<ViewerPrefs>; start?: Partial<StartPrefs> }
@@ -34,7 +34,7 @@ export interface SettingsResult extends SettingsState { ok: boolean; error?: str
 export const DECIMALS = { min: 0, max: 4 };
 export const DEFAULT_SETTINGS: AppSettings = {
   viewer: { navigation: 'soma', invertZoom: false, projection: 'perspective', edges: true, wireframe: false, transparent: false, decimals: 2 },
-  start: { tutorialCard: true },
+  start: { tutorialCard: true, updateCheck: true },
 };
 
 const NAV = (spec: string): NavBinding[] => spec.split(',').map((s) => {
@@ -91,7 +91,7 @@ const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 const VIEWER_CHECKS: { [K in keyof ViewerPrefs]: (v: unknown) => boolean } = {
   navigation: isNav, invertZoom: isBool, projection: isProjection, edges: isBool, wireframe: isBool, transparent: isBool, decimals: isDecimals,
 };
-const START_CHECKS: { [K in keyof StartPrefs]: (v: unknown) => boolean } = { tutorialCard: isBool };
+const START_CHECKS: { [K in keyof StartPrefs]: (v: unknown) => boolean } = { tutorialCard: isBool, updateCheck: isBool };
 /** Bereiche der Einstellungen mit der Prüfung je Wert. */
 const SECTIONS: Record<keyof AppSettings, Record<string, (v: unknown) => boolean>> = { viewer: VIEWER_CHECKS, start: START_CHECKS };
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);

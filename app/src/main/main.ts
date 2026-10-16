@@ -13,6 +13,7 @@ import { terminalEnv } from './terminals';
 import { readHelp, readHelpImage } from './help';
 import { adoptLoginShellPath, appIcon, editBackupsDir, helpDir, libraryBackupsDir, skillDirs, skillsDir, thumbnailsDir, userSkillsDir } from './paths';
 import { readSettings, writeSettings } from './settings';
+import { checkUpdate } from './updates';
 import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, renameOldSkillFiles, saveLibrarySkill } from './skilllibrary';
 import { isSkillId, isSkillMode, librarySkill } from './skills';
@@ -251,6 +252,8 @@ function registerIpc(ctl: ProjectController): void {
     return true;
   });
   ipcMain.handle('about:info', () => aboutInfo(agents));
+  // Nur wenn die Einstellung es erlaubt: Ausgeschaltet geht keine Anfrage ins Netz
+  ipcMain.handle('updates:check', () => checkUpdate(readSettings().settings.start.updateCheck));
   ipcMain.handle('about:copy', async (): Promise<FileOpResult> => {
     const text = aboutText(await aboutInfo(agents));
     if (process.env.SOMA_TEST === '1') testClipboard = text; else clipboard.writeText(text);

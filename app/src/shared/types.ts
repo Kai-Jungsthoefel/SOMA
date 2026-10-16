@@ -245,6 +245,15 @@ export interface StorageStats { dir: string; total: number; areas: StorageEntry[
 /** Vorschau-Cache leeren. `kept`: Die Vorschauen des offenen Modells blieben. `canceled`: Rückfrage abgelehnt. */
 export interface StorageClear { ok: boolean; canceled?: boolean; freed?: number; kept?: boolean; error?: string; stats?: StorageStats }
 
+/**
+ * Neue Version unter GitHub Releases (Startseite). `skipped`: nicht gefragt (Test ohne Adresse). `url`: Seite der neuesten
+ * Veröffentlichung, sonst die Liste aller.
+ */
+export interface UpdateInfo {
+  state: 'newer' | 'current' | 'error' | 'skipped';
+  current: string; latest?: string; url: string; published?: string; error?: string;
+}
+
 /** Eine mitgelieferte Komponente: npm-Paket der App oder Python-Paket, das soma voraussetzt. Lizenz wie in ihren Metadaten. */
 export interface ComponentInfo { name: string; version: string; license: string }
 /** Angaben für „About“ in den Einstellungen (E81). */
@@ -550,6 +559,8 @@ export interface SomaApi {
   /** Der Viewer bekam keinen WebGL-Kontext. true: Die App startet mit Software-Rendering neu (nur Linux, einmal). */
   gpu: { webglFailed(): Promise<boolean> };
   about: { info(): Promise<AboutInfo>; copy(): Promise<FileOpResult> };
+  /** Neueste Version auf GitHub, einmal je Sitzung gefragt. */
+  updates: { check(): Promise<UpdateInfo> };
   /** Animationen (E58): Liste aus .soma/anim/index.json, bauen über `soma anim build`. */
   anim: {
     list(): Promise<AnimList>;

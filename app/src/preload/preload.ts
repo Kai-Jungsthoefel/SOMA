@@ -112,6 +112,9 @@ const api: SomaApi = {
     info: () => ipcRenderer.invoke('about:info'),
     copy: () => ipcRenderer.invoke('about:copy'),
   },
+  updates: {
+    check: () => ipcRenderer.invoke('updates:check'),
+  },
   anim: {
     list: () => ipcRenderer.invoke('anim:list'),
     build: (file) => ipcRenderer.invoke('anim:build', file ?? null),
