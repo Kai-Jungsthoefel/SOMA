@@ -8,11 +8,15 @@ the version is bumped.
 
 ### Added
 
-- The start page shows whether a newer version is available on GitHub, with a button to the release page. Turn it off under Settings > About.
+- The start page shows a small label next to the version number when a newer version is available on GitHub, it opens the release page. Turn it off under Settings > About.
 - Click a STEP file in Files to view it in the 3D viewer, with measuring, section, explode and the structure tree. "Back to model" returns to your model, builds wait until then.
 - "New from CadQuery script" in the model menu: make a model from an existing CadQuery script, with a loading screen while it builds for the first time. Scripts with `show_object()` (CQ-editor), `ocp_vscode` or `result` build as they are.
 - "As CadQuery script" in the Export menu: the model as plain CadQuery that runs in CQ-editor, VS Code and other tools without SOMA, with parameters and standard parts. Importing it again gives back the original code.
 - `soma cadquery export` and `soma cadquery import` on the command line, and the on-demand skill "CadQuery scripts" for converting scripts to `add_part()` and `param()`.
+
+### Changed
+
+- A tidier start page: Recent models come first, with a filter by name. New model and Open sit next to the title, "From CadQuery script" in the arrow menu of New model. The agents take less space, and any other CLI agent works too. "Back to …" names the open model, Esc goes back as well.
 
 ### Fixed
 

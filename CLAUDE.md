@@ -33,7 +33,8 @@ Details in `app/README.md`.
 - CLI: `soma build`, `export`, `glb`, `serve` (measuring service, `measure.py`), `anim` (`anim.py`, `animrun.py`), `analyze` (`analysis.py`, FEM in `fem.py`, CalculiX via `ccx.py`, E84), `drawing` (`drawing.py`, `drawrun.py`, E76), `dxfview` (E80), `render` (only via the app), `env` (`env.py`, `.soma/env` and `requirements.txt`, E67).
 - `python/scripts/`: `setup_env.ps1` (development environment from `python/requirements-base.txt`), `fetch_ccx.py` (CalculiX), `build_runtime.py` (standalone base environment for the installation packages).
 
-**`design/`** approved UI drafts, open in a browser, arrow keys to page
+**`design/`** UI drafts, local only (in `.gitignore`, in the Git history up to `v0.8.0`), open in a browser, arrow keys to page
+- `startseite-entwurf.html` (implemented): start page with Recent first, New model and Open next to the title, compact agents, update label next to the version.
 - `ui-entwurf-2.html` "Aufgeräumt" (E62): reference for layout, colors and texts. Image 6 is the parameter panel (E74).
 - `strukturbaum-entwurf.html` (E82, implemented): structure tree, Analysis and Animation tabs, analysis report. Replaces the Parts tab and the switch at the top left in draft 2.
 - `ui-entwurf.html` (E38): first draft, colors and building blocks still apply, the layout no longer does.
