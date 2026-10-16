@@ -221,7 +221,7 @@ add_part("Model", cq.Workplane().box(3, 3, 3))
   const e3 = p3.id !== p2.id ? buildOf(p3.dir).error : null;
   check('Syntaxfehler: Modell entsteht, der Build meldet Datei und Zeile', !bk?.error && e3?.file === 'model.py' && e3?.line === 2, JSON.stringify(e3 ?? bk));
 
-  // Kleiner Knopf auf der Startseite unter „New model“
+  // Eintrag im Pfeil-Menü von „New model“ auf der Startseite
   await ev(() => window.__t.showStart(true));
   await app.answers([path.join(work, 'res', 'model.py')]);
   await app.domClick('start-new-cq');
