@@ -6,6 +6,8 @@ the version is bumped.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-16
+
 ### Added
 
 - The start page shows a small label next to the version number when a newer version is available on GitHub, it opens the release page. Turn it off under Settings > About.
@@ -13,8 +15,9 @@ the version is bumped.
 - "New from CadQuery script" in the model menu: make a model from an existing CadQuery script, with a loading screen while it builds for the first time. Scripts with `show_object()` (CQ-editor), `ocp_vscode` or `result` build as they are.
 - "As CadQuery script" in the Export menu: the model as plain CadQuery that runs in CQ-editor, VS Code and other tools without SOMA, with parameters and standard parts. Importing it again gives back the original code.
 - `soma cadquery export` and `soma cadquery import` on the command line, and the on-demand skill "CadQuery scripts" for converting scripts to `add_part()` and `param()`.
-
 - A portable ZIP for Windows on the releases page, to run SOMA without installing it.
+- Origin and main axes in the 3D viewer (red X, green Y, blue Z): the new button next to the view cube or the display menu turns them on. Settings > Viewer shows them for every model.
+- A log file for bug reports (`logs/soma.log` in the app data): errors, builds, which agent was started and its version. "Copy system info" under Settings > About now adds the end of the log, the folder is listed there and under Storage. Nothing is sent anywhere.
 
 ### Changed
 
@@ -242,7 +245,8 @@ First numbered version. It sums up the state of the prototype.
 - Extra packages: `pip install` in the terminal goes into a small environment per model, `requirements.txt` travels with the model, on another computer the app reinstalls the packages.
 - Version number on the start page, on the logo and in `project.json`.
 
-[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.0...v0.7.1
