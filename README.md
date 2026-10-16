@@ -18,11 +18,11 @@ SOMA is not an agent of its own. Any CLI agent that can read files and run comma
 
 ## Install
 
-Download the package for your system from the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases): an installer for Windows, an AppImage or tar.gz for Linux, a dmg for macOS (Apple Silicon). Python, CadQuery, Git and CalculiX are included.
+Download the package for your system from the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases): an installer or a portable ZIP for Windows, an AppImage or tar.gz for Linux, a dmg for macOS (Apple Silicon). Python, CadQuery, Git and CalculiX are included.
 
 - You need a CLI agent installed and logged in, for example Claude Code, OpenCode, Codex CLI or Gemini CLI. SOMA does not bring one
 - The installed app takes over 1 GB of disk space, most of it for Python, CadQuery and OpenCascade
-- The packages are not signed yet. On Windows, SmartScreen warns on the first start ("More info" > "Run anyway"). On macOS, open the app the first time with right-click > Open
+- The packages are not signed yet. On Windows, SmartScreen warns on the first start ("More info" > "Run anyway"). For the portable ZIP, tick "Unblock" in its Properties before extracting to avoid the warning, and extract it to a local folder. On macOS, open the app the first time with right-click > Open
 - Linux needs glibc 2.31 or newer
 - There is no automatic update. Download a new version from the releases page
 

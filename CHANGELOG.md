@@ -14,6 +14,8 @@ the version is bumped.
 - "As CadQuery script" in the Export menu: the model as plain CadQuery that runs in CQ-editor, VS Code and other tools without SOMA, with parameters and standard parts. Importing it again gives back the original code.
 - `soma cadquery export` and `soma cadquery import` on the command line, and the on-demand skill "CadQuery scripts" for converting scripts to `add_part()` and `param()`.
 
+- A portable ZIP for Windows on the releases page, to run SOMA without installing it.
+
 ### Changed
 
 - A tidier start page: Recent models come first, with a filter by name. New model and Open sit next to the title, "From CadQuery script" in the arrow menu of New model. The agents take less space, and any other CLI agent works too. "Back to …" names the open model, Esc goes back as well.
