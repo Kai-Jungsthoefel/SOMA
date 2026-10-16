@@ -158,6 +158,10 @@ wheels bundle where relevant.
 | pdf.js decoders: OpenJPEG, JBIG2 (PDFium), qcms, QuickJS (WebAssembly) | as in pdfjs-dist 6.4.299 | BSD-2-Clause, BSD-3-Clause, MIT | https://github.com/mozilla/pdf.js | yes |
 | Fastener dimension tables (from bd_warehouse) | 0.3.0, commit eed2da1 | Apache-2.0 | https://github.com/gumyr/bd_warehouse | yes |
 
+"As CadQuery script" copies the fastener tables into exported scripts that use standard parts, with a note on their
+origin and license. The compatibility code around them (`python/soma/cqruntime.py`, `python/soma/fasteners.py`) is
+SOMA's own work and also available under the Apache License 2.0.
+
 The SOMA icon and the interface symbols are SOMA's own work.
 
 ## Notes

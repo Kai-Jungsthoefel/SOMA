@@ -9,6 +9,14 @@ the version is bumped.
 ### Added
 
 - The start page shows whether a newer version is available on GitHub, with a button to the release page. Turn it off under Settings > About.
+- Click a STEP file in Files to view it in the 3D viewer, with measuring, section, explode and the structure tree. "Back to model" returns to your model, builds wait until then.
+- "New from CadQuery script" in the model menu: make a model from an existing CadQuery script, with a loading screen while it builds for the first time. Scripts with `show_object()` (CQ-editor), `ocp_vscode` or `result` build as they are.
+- "As CadQuery script" in the Export menu: the model as plain CadQuery that runs in CQ-editor, VS Code and other tools without SOMA, with parameters and standard parts. Importing it again gives back the original code.
+- `soma cadquery export` and `soma cadquery import` on the command line, and the on-demand skill "CadQuery scripts" for converting scripts to `add_part()` and `param()`.
+
+### Fixed
+
+- The cards of Measure, Section and Explode no longer hide behind the banner of a version preview.
 
 ## [0.8.0] - 2026-10-13
 

@@ -45,6 +45,7 @@ Press F1 in the app for a short guide with numbered screenshots. The agent knows
 - **Skills:** rule sets for the agent, such as 3D printing, CNC, laser cutting, sheet metal and tolerances, switched on per model. Edit them or add your own
 - **Analysis and animation:** overhangs, wall thickness, strength with FEM, animations as video
 - **Export:** STEP, STL, 3MF, DXF and more, technical drawings as PDF
+- **Plain CadQuery in and out:** start from an existing CadQuery script, export the model as a script for CQ-editor or VS Code
 
 ## Screenshots
 
@@ -91,6 +92,6 @@ More in [app/README.md](app/README.md).
 
 SOMA is free software under the [GNU General Public License v3.0](LICENSE) or any later version. You can use, change and share it. If you distribute a changed version, its source code has to be open under the same license.
 
-What you design with SOMA is yours. The [SOMA Model Exception](MODEL-EXCEPTION.md) lets you license your model files under any terms you like, even though they import `soma`. Exported files like STEP or STL are not affected by the GPL at all.
+What you design with SOMA is yours. The [SOMA Model Exception](MODEL-EXCEPTION.md) lets you license your model files under any terms you like, even though they import `soma`. Exported files like STEP or STL are not affected by the GPL at all. The compatibility code that "As CadQuery script" puts into an exported script is also available under the Apache License 2.0.
 
 Third-party components keep their own licenses, see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
