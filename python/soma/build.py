@@ -15,7 +15,7 @@ from pathlib import Path
 
 import cadquery as cq
 
-from . import measure, mesher, params, registry
+from . import cqcompat, measure, mesher, params, registry
 
 DEFAULT_ENTRY = "model.py"
 # Fassung von model.glb, model.map.json und geometry/. Die App zeigt beim Oeffnen den letzten Build ohne neu zu bauen, aber
@@ -169,6 +169,8 @@ def _is_inside(path, root):
 # Einstiegspunkt und Namensraum des letzten erfolgreichen run_model(). Animationen importieren daraus (`from model import
 # ...`), statt das ganze Modell ein zweites Mal auszufuehren (animrun._run_file).
 LAST_RUN = None
+# Hinweis des letzten run_model(), wenn die Teile aus show_object()/result kamen (Kompatibilitaetsmodus, E100), sonst None
+COMPAT_WARNING = None
 
 
 def run_model(root, entry=None):
@@ -180,15 +182,19 @@ def run_model(root, entry=None):
         raise BuildError(
             f"Entry point {entry!r} not found. Create {DEFAULT_ENTRY} or set \"entry\" in .soma/project.json.",
             kind="EntryMissing")
-    global LAST_RUN
+    global LAST_RUN, COMPAT_WARNING
     registry.REGISTRY.clear()
+    COMPAT_WARNING = None
     params.begin(root)  # Werte des Nutzers aus parameters.json (Parameter-Panel)
     LAST_RUN = None
     old_cwd = os.getcwd()
     os.chdir(root)
     sys.path.insert(0, str(root))
     try:
-        LAST_RUN = (script, runpy.run_path(str(script), run_name="__main__"))
+        with cqcompat.hooks():
+            LAST_RUN = (script, runpy.run_path(str(script), init_globals=cqcompat.script_globals(), run_name="__main__"))
+            if not registry.REGISTRY:  # ein CadQuery-Skript ohne add_part()
+                COMPAT_WARNING = cqcompat.register_shown(LAST_RUN[1], script)
     except BuildError:
         raise
     except SystemExit as e:
@@ -203,7 +209,8 @@ def run_model(root, entry=None):
     if not registry.REGISTRY:
         raise BuildError(
             "No part registered. Call add_part(name, obj) for every part "
-            "(from soma import add_part).", file=entry, kind="NoParts")
+            "(from soma import add_part). Plain CadQuery scripts work too with show_object(obj, name=...) "
+            "or a variable result.", file=entry, kind="NoParts")
     return list(registry.REGISTRY)
 
 
@@ -310,6 +317,8 @@ def _run_build(root):
         timings.update(out["timings"])
         result.update(parts=[dict(name=p["name"], role=p["role"], file=p["file"], line=p["line"]) for p in out["map_parts"]],
                       glb_bytes=out["glb_bytes"], tolerance=out["tolerance"])
+        if COMPAT_WARNING:
+            result["warnings"].append(COMPAT_WARNING)
         result["warnings"].extend(params.unused_warnings())
         # Zusatzpakete, die das Modell geladen hat, in requirements.txt (E67). Ein Fehler dabei kostet den Build nicht
         try:

@@ -161,6 +161,35 @@ def cmd_glb(args):
     return 0
 
 
+def cmd_cadquery(args):
+    """Export als CadQuery-Skript bzw. Import eines CadQuery-Skripts (E100)."""
+    from . import cqexport
+    try:
+        if args.action == "export":
+            if not args.out:
+                print("export needs --out (a .py file, or a folder for models with parts/)", file=sys.stderr)
+                return 2
+            r = cqexport.export(args.project, args.out)
+        else:
+            if not args.script:
+                print("import needs the script, e.g. soma cadquery import box.py --project .", file=sys.stderr)
+                return 2
+            r = cqexport.import_script(args.script, args.project, backup=args.backup)
+    except cqexport.ExportError as e:
+        print(json.dumps(dict(status="error", error=str(e)), ensure_ascii=False) if args.json else str(e),
+              file=sys.stdout if args.json else sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(dict(status="ok", **r), ensure_ascii=False))
+    else:
+        verb = "exported" if args.action == "export" else "imported"
+        for f in r["files"]:
+            print(f"{verb}: {f}")
+        for w in r["warnings"]:
+            print(f"Note: {w}")
+    return 0
+
+
 def cmd_warm(args):
     """Vorgewaermter Prozess der App: Python und cadquery sind geladen (rund 3 s), bevor es etwas zu tun gibt. Den Auftrag
     schickt die App als eine JSON-Zeile, z. B. {"cwd": "<Ordner>", "argv": ["build", "--project", "<Ordner>", "--json"]}.
@@ -422,6 +451,15 @@ def main(argv=None):
     e.add_argument("--out", help="target folder, relative to the project or absolute (default: exports)")
     e.add_argument("--project", default=".")
     e.set_defaults(func=cmd_export)
+
+    q = sub.add_parser("cadquery", help="export the model as a plain CadQuery script, or import one (round trip)")
+    q.add_argument("action", choices=["export", "import"])
+    q.add_argument("script", nargs="?", help="import: the CadQuery script (.py)")
+    q.add_argument("--out", help="export: target .py file (a folder for models with parts/)")
+    q.add_argument("--backup", help="import: folder for files of the model that the import replaces")
+    q.add_argument("--project", default=".")
+    q.add_argument("--json", action="store_true")
+    q.set_defaults(func=cmd_cadquery)
 
     g = sub.add_parser("glb", help="convert a STEP file to GLB for the viewer (basic mode)")
     g.add_argument("step", help="STEP file")

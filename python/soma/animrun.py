@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import anim, build, gltf, registry
+from . import anim, build, cqcompat, gltf, registry
 
 ANIM_DIR = "animations"
 OUT_DIR = Path(".soma") / "anim"
@@ -92,7 +92,8 @@ def _run_file(root, path):
         mod.__name__, mod.__file__ = mod_name, str(script)
         sys.modules[mod_name] = mod
     try:
-        runpy.run_path(str(path), run_name="__main__")
+        with cqcompat.hooks():  # importiert die Datei ein CadQuery-Skript mit show_object(), bleibt das wirkungslos
+            runpy.run_path(str(path), run_name="__main__")
     except SystemExit as e:
         if e.code not in (None, 0):
             raise build.BuildError(f"{_rel(path, root)} exited with code {e.code}", file=_rel(path, root), kind="SystemExit")

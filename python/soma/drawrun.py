@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import build, drawing
+from . import build, cqcompat, drawing
 
 DRAW_DIR = "drawings"
 OUT_DIR = Path("output") / "drawings"
@@ -70,7 +70,8 @@ def _run_file(root, path):
         mod.__name__, mod.__file__ = mod_name, str(script)
         sys.modules[mod_name] = mod
     try:
-        runpy.run_path(str(path), run_name="__main__")
+        with cqcompat.hooks():  # importiert die Datei ein CadQuery-Skript mit show_object(), bleibt das wirkungslos
+            runpy.run_path(str(path), run_name="__main__")
     except SystemExit as e:
         if e.code not in (None, 0):
             raise build.BuildError(f"{_rel(path, root)} exited with code {e.code}", file=_rel(path, root), kind="SystemExit")

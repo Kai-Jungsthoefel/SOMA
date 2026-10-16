@@ -81,6 +81,14 @@ def add_part(name, obj, role=None, color=None, group=None):
     """
     if IGNORE_ADD:
         return
+    frame = inspect.currentframe().f_back
+    pos = inspect.getframeinfo(frame, context=0).positions  # Startzeile und Endzeile des Aufrufs
+    _add(name, obj, role, color, group, dict(file=frame.f_code.co_filename, line=pos.lineno, end_line=pos.end_lineno))
+
+
+def _add(name, obj, role, color, group, where, alpha=None):
+    """add_part ohne Blick auf den Aufrufer: Der Kompatibilitaetsmodus (cqcompat.py) nennt die Stelle von show_object().
+    `alpha` < 1: halbtransparent wie in CQ-editor (options={"alpha": ...})."""
     standard_part = hasattr(obj, "__soma_shape__")
     if role is None:
         role = getattr(obj, "role", "part") if standard_part else "part"
@@ -91,16 +99,13 @@ def add_part(name, obj, role=None, color=None, group=None):
     if not isinstance(name, str) or not name.strip():
         raise ValueError("The part name must be a non-empty text")
     groups = _group_path(group)
-    frame = inspect.currentframe().f_back
-    pos = inspect.getframeinfo(frame, context=0).positions  # Startzeile und Endzeile des Aufrufs
-    where = dict(file=frame.f_code.co_filename, line=pos.lineno, end_line=pos.end_lineno)
     if isinstance(obj, cq.Assembly):
         leaves = list(_leaves(obj, cq.Location(), (), None))
         if not leaves:
             raise ValueError(f"The assembly for {name!r} contains no geometry")
         if len(leaves) == 1:  # nur ein Koerper: ein Bauteil unter dem angegebenen Namen, ohne eigene Gruppe
             _, _, o, c, loc = leaves[0]
-            _register(name, to_shape(o).moved(loc), role, color or (c.toTuple()[:3] if c else None), groups, where)
+            _register(name, to_shape(o).moved(loc), role, color or (c.toTuple()[:3] if c else None), groups, where, alpha=alpha)
             return
         taken = {p["name"] for p in REGISTRY}
         for sub_groups, leaf_name, o, c, loc in leaves:
@@ -108,11 +113,12 @@ def add_part(name, obj, role=None, color=None, group=None):
             path = groups + (name,) + sub_groups[1:]
             nm = _unique(leaf_name or "Part", taken)
             taken.add(nm)
-            _register(nm, to_shape(o).moved(loc), role, color or (c.toTuple()[:3] if c else None), path, where, unique_step=True)
+            _register(nm, to_shape(o).moved(loc), role, color or (c.toTuple()[:3] if c else None), path, where, unique_step=True,
+                      alpha=alpha)
         return
     if any(p["name"] == name for p in REGISTRY):
         raise ValueError(f"Part name {name!r} is already taken (names must be unique)")
-    _register(name, to_shape(obj), role, color, groups, where, axis=_axis(obj), fastener=obj if standard_part else None)
+    _register(name, to_shape(obj), role, color, groups, where, axis=_axis(obj), fastener=obj if standard_part else None, alpha=alpha)
 
 
 def _axis(obj):
@@ -130,7 +136,7 @@ def _axis(obj):
     return tuple(round(-x / n, 6) + 0.0 for x in d)  # + 0.0: kein "-0.0" in den Metadaten
 
 
-def _register(name, shape, role, color, groups, where, unique_step=False, axis=None, fastener=None):
+def _register(name, shape, role, color, groups, where, unique_step=False, axis=None, fastener=None, alpha=None):
     step_name = ascii_name(name)
     if any(p["step_name"] == step_name for p in REGISTRY):
         if not unique_step:
@@ -142,7 +148,7 @@ def _register(name, shape, role, color, groups, where, unique_step=False, axis=N
     rgb = tuple(color[:3]) if color else DEFAULT_COLORS[role]
     REGISTRY.append(dict(
         name=name, step_name=step_name, role=role, shape=shape, group=tuple(groups),
-        color=(*rgb, REFERENCE_ALPHA if role == "reference" else 1.0), axis=axis, **where,
+        color=(*rgb, REFERENCE_ALPHA if role == "reference" else alpha if alpha is not None and 0 < alpha < 1 else 1.0), axis=axis, **where,
         # Das Normteil selbst (Screw, Nut ...), nur im Speicher: soma.fem liest daraus Groesse, Kopf und Lage (bolt())
         fastener=fastener,
     ))

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later OR Apache-2.0
+# Zusaetzlich Apache 2.0 (E101): "Export as CadQuery" kopiert dieses Modul in das Skript des Nutzers.
 """Standard parts: screws, nuts, washers and heat-set inserts, simplified without threads, with matching holes.
 
     from soma import add_part
@@ -21,6 +23,7 @@ maximum values. Threads are not modelled: the shank and the bore of the nut have
 import copy
 import csv
 import functools
+import io
 import math
 import numbers
 import re
@@ -33,6 +36,9 @@ from OCP.gp import gp_Ax1, gp_Dir, gp_Lin, gp_Pnt, gp_Trsf
 __all__ = ["Screw", "Nut", "Washer", "HeatSetInsert", "lengths", "pick_length", "standards"]
 
 _DATA = Path(__file__).parent / "data" / "fasteners"
+# Tabellen als Text (Dateiname -> CSV). Fuellt nur der Block von "Export as CadQuery" (cqexport.py), dann laeuft dieses
+# Modul ohne soma und ohne data/
+_EMBEDDED = {}
 INCH = 25.4
 # Bohrwerkzeuge ragen so weit ueber die Oberflaeche hinaus: Deckungsgleiche Flaechen machen cut() unzuverlaessig
 MARGIN = 1.0
@@ -92,10 +98,17 @@ HINTS = {
 
 # --- Tabellen ----------------------------------------------------------------------------------------------------------
 
+def _open(name):
+    """Tabelle zum Lesen: eingebettet (Export als CadQuery) oder aus data/fasteners."""
+    if name in _EMBEDDED:
+        return io.StringIO(_EMBEDDED[name].lstrip("﻿"), newline="")
+    return open(_DATA / name, encoding="utf-8-sig", newline="")
+
+
 @functools.cache
 def _table(name):
     """CSV als Liste von (Schluessel, {Spalte: Wert}). Kopfzeilen haben teils Leerzeichen am Rand, die fallen weg."""
-    with open(_DATA / name, encoding="utf-8-sig", newline="") as f:
+    with _open(name) as f:
         rows = list(csv.reader(f))
     head = [h.strip() for h in rows[0]]
     return [(r[0].strip(), {h: v.strip() for h, v in zip(head[1:], r[1:])}) for r in rows[1:] if r and r[0].strip()]
@@ -192,7 +205,7 @@ def _split_designation(standard, size):
 @functools.cache
 def _nominal_lengths():
     out = {}
-    with open(_DATA / "nominal_screw_lengths.csv", encoding="utf-8-sig", newline="") as f:
+    with _open("nominal_screw_lengths.csv") as f:
         for row in csv.DictReader(f):
             if row["Unit"].strip() == "mm":
                 out[row["Screw_Type"].strip()] = [_num(x) for x in row["Nominal_Sizes"].split(",") if x.strip()]
@@ -252,7 +265,7 @@ def _tap_drill(d):
 
 @functools.cache
 def _drills():
-    with open(_DATA / "drill_sizes.csv", encoding="utf-8-sig", newline="") as f:
+    with _open("drill_sizes.csv") as f:
         return {r[0].strip(): _num(r[1].strip()) * INCH for r in list(csv.reader(f))[1:] if len(r) > 1}
 
 
