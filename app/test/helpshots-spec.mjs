@@ -128,6 +128,7 @@ export const SHOTS = [
       { label: 'Scope', sel: '#menu-export .seg', at: 'l' },
       { label: 'Formats', sel: '#menu-export .chips', at: 'l', box: true },
       { label: 'Everything as ZIP', sel: '#exp-zip', at: 'l' },
+      { label: 'As CadQuery script', sel: '#exp-cq', at: 'l' },
     ],
   },
   {

@@ -318,6 +318,18 @@
           <button id="btn-restore" class="btn vio" title="Restore this version as a new version">Restore</button>
         </div>
 
+        <!-- STEP-Datei aus dem Projekt im Viewer (fileview.ts), schreibgeschützt wie die Vorschau -->
+        <div id="file-banner" class="float banner" hidden>
+          <span class="bn-ico"><i data-icon="file" data-size="18"></i></span>
+          <div class="bn-text">
+            <div class="bn-line"><b id="fb-title"></b><span class="tag">view only</span></div>
+            <span id="fb-sub" class="c2"></span>
+            <span class="c3">Measure, section and explode work as usual. Builds of your model wait until you go back.</span>
+          </div>
+          <span class="grow"></span>
+          <button id="btn-file-back" class="btn">Back to model</button>
+        </div>
+
         <!-- Video (E58, videoview.ts): MP4 aus dem Projekt abspielen, Standbild markieren -->
         <div id="videoview" class="videoview" hidden>
           <video id="video-el" preload="auto" playsinline></video>
@@ -386,9 +398,21 @@
     </aside>
   </div>
 
+  <!-- Ladeanzeige über dem ganzen Fenster, solange ein CadQuery-Skript als neues Modell hereinkommt (E100) -->
+  <div id="app-busy" class="vbusy appbusy" hidden>
+    <div class="float vb-card" role="status" aria-live="polite">
+      <div class="vb-hd"><span class="spin"><i data-icon="spin" data-size="16" data-stroke="2.4"></i></span><b>Loading CadQuery script</b><span class="grow"></span><span id="app-busy-time" class="c3 small"></span></div>
+      <div id="app-busy-step" class="vb-sub"></div>
+      <div id="app-busy-file" class="vb-sub c3"></div>
+      <div class="vb-bar indet"><div></div></div>
+      <div class="vb-sub c3 small appbusy-note">The first build runs the script once. Large models can take a while.</div>
+    </div>
+  </div>
+
   <!-- Menüs: fest im Dokument, damit Kurzbefehle und Tests die Einträge auch geschlossen finden -->
   <div id="menu-doc" class="menu" role="menu" hidden>
     <button id="btn-new" class="mi" role="menuitem"><i data-icon="plus" data-size="15"></i><span>New model</span><span class="k">Ctrl N</span></button>
+    <button id="btn-new-cq" class="mi" role="menuitem" title="A model from an existing CadQuery script (.py). The script stays as it is, the original is kept in inputs/."><i data-icon="f-py" data-size="15"></i><span>New from CadQuery script …</span></button>
     <button id="btn-open" class="mi" role="menuitem"><i data-icon="folder" data-size="15"></i><span>Open …</span><span class="k">Ctrl O</span></button>
     <div id="recent-wrap"><div class="msep"></div><div class="mh">RECENT</div><div id="recent-list"></div></div>
     <div class="msep"></div>
@@ -439,6 +463,7 @@
     <div class="msep"></div>
     <div class="mh">WHOLE MODEL</div>
     <button id="exp-zip" class="mi two" role="menuitem"><i data-icon="f-zip" data-size="15"></i><span class="t"><span>Everything as ZIP …</span><span class="sub">Code, results and history in one ZIP file, for example for someone without SOMA. The .soma file stays as it is.</span></span></button>
+    <button id="exp-cq" class="mi two" role="menuitem"><i data-icon="f-py" data-size="15"></i><span class="t"><span>As CadQuery script …</span><span class="sub">Plain CadQuery for CQ-editor, VS Code and others, with parameters and standard parts. “New from CadQuery script” brings it back.</span></span></button>
   </div>
 
   <div id="menu-agents" class="menu" role="menu" hidden>
@@ -513,6 +538,7 @@
             <button id="start-new" class="bigcard"><span class="ico acc"><i data-icon="plus" data-size="22" data-stroke="2.2"></i></span><b>New model</b><span class="c2">Template with an example part, plus a terminal in the model folder</span><span class="c3 small">Ctrl N</span></button>
             <button id="start-open" class="bigcard"><span class="ico"><i data-icon="folder" data-size="22"></i></span><b>Open …</b><span class="c2">.soma or ZIP file from this or another computer</span><span class="c3 small">Ctrl O</span></button>
           </div>
+          <div class="start-alt"><button id="start-new-cq" class="btn sm ghost" title="A model from an existing CadQuery script (.py). The script stays as it is, the original is kept in inputs/."><i data-icon="f-py" data-size="14"></i>New from CadQuery script …</button></div>
           <div class="cap">RECENT</div>
           <div id="start-recent" class="recent-grid"></div>
         </div>

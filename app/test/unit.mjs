@@ -200,10 +200,10 @@ try {
   const SKD = { bundled: path.join(APP, 'resources', 'skills'), user: path.join(tmp, 'keine-eigenen-skills') };
   const dm = defaultModes(SKD, {});
   check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise (mit Parametrik) und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'design-workflow,cadquery,parametric,standard-parts'
-    && dm.demand.join(',') === 'shell-environment,soma-app,3d-printing,resin-powder,cnc,laser,sheet-metal,tolerances,joints,strength,assemblies,analysis,animation,fem,drawings', JSON.stringify(dm));
+    && dm.demand.join(',') === 'cadquery-scripts,shell-environment,soma-app,3d-printing,resin-powder,cnc,laser,sheet-metal,tolerances,joints,strength,assemblies,analysis,animation,fem,drawings', JSON.stringify(dm));
   const dm2 = defaultModes(SKD, { 'design-workflow': 'demand', tolerances: 'always', '3d-printing': 'always', laser: 'off' });
   check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,parametric,3d-printing,tolerances,standard-parts'
-    && dm2.demand.join(',') === 'design-workflow,shell-environment,soma-app,resin-powder,cnc,sheet-metal,joints,strength,assemblies,analysis,animation,fem,drawings', JSON.stringify(dm2));
+    && dm2.demand.join(',') === 'design-workflow,cadquery-scripts,shell-environment,soma-app,resin-powder,cnc,sheet-metal,joints,strength,assemblies,analysis,animation,fem,drawings', JSON.stringify(dm2));
   // Bei Bedarf (E55): Hinweis unter der ersten Überschrift, Werte als Standard der App, vom Nutzer gesetzte mit Namen
   const rd = renderSkill(SRC, {}, 'demand');
   check('Bei Bedarf: Hinweis direkt unter der Überschrift, mit Leerzeilen, Werte als Standard der App, NOTES.md', rd.includes('# Skill\n\n> **On demand:**')

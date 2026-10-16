@@ -69,6 +69,8 @@ export interface BuildStatus {
  * Ordner. `cancelled`: Dialog oder Rückfrage abgebrochen, nichts geschrieben.
  */
 export interface ExportResult { ok: boolean; files: string[]; target?: string; cancelled?: boolean; error?: string; warnings?: string[] }
+/** Neues Modell aus einem CadQuery-Skript (E100). `info`: das geöffnete Modell, `warnings`: Hinweise des Imports. */
+export interface CadQueryImportResult { info?: ProjectInfo; warnings: string[]; cancelled?: boolean; error?: string }
 /** Dateien, die per Ziehen nach inputs/ kopiert wurden (E33). */
 export interface ImportResult { files: string[]; errors: string[] }
 /**
@@ -267,8 +269,11 @@ export interface AboutInfo {
   components: ComponentInfo[];
 }
 
-/** Was vermessen wird: der aktuelle Stand oder die Vorschau eines alten Stands. */
-export type MeasureSource = 'live' | { preview: string };
+/**
+ * Was vermessen wird: der aktuelle Stand, die Vorschau eines alten Stands oder eine STEP-Datei aus dem Projekt (`key`: die
+ * Kennung ihres Inhalts aus `project.viewFile`, damit eine inzwischen geänderte Datei nicht still anders vermessen wird).
+ */
+export type MeasureSource = 'live' | { preview: string } | { file: string; key: string };
 
 /** Stand der Speicherung: was ist gesichert, was nicht (E21). */
 export interface SaveState {
@@ -290,6 +295,8 @@ export interface OpenResult { cancelled: boolean; opened?: boolean; error?: stri
 export interface CommitInfo { hash: string; short: string; author: string; date: string; subject: string; byApp: boolean }
 export interface GitLog { commits: CommitInfo[]; problems: string[]; head: string | null; dirtyFiles: number }
 export interface PreviewResult { commit: CommitInfo | null; glb: ArrayBuffer; map: ModelMap; error?: string }
+/** STEP-Datei aus dem Projekt im Viewer (`project.viewFile`). `key`: SHA-1 des Inhalts, unter dem die Umwandlung im Cache liegt. */
+export interface FileViewResult { rel: string; key: string; glb: ArrayBuffer; map: ModelMap; error?: string }
 export interface RestoreResult { cancelled: boolean; commit?: string | null; safety?: string | null; error?: string }
 
 /** Animation aus animations/*.py (E58), gebaut nach `glb`. `stale`: Code oder Animationsdatei sind neuer. */
@@ -428,6 +435,12 @@ export interface SomaApi {
     openZip(): Promise<OpenResult>;
     /** Das ganze Modell als ZIP exportieren (E79), ohne Snapshot. Die Modelldatei bleibt, wie sie ist. */
     exportZip(): Promise<ExportResult>;
+    /** Neues Modell aus einem CadQuery-Skript (E100): Dateidialog, Import, erster Build. */
+    createFromCadQuery(): Promise<CadQueryImportResult>;
+    /** Schritte von createFromCadQuery nach dem Dateidialog, für die Ladeanzeige: `step` ist der laufende Schritt. */
+    onCadQueryStep(cb: (s: { step: string; file: string }) => void): void;
+    /** Das Modell als reines CadQuery-Skript (E100): eine .py, mit parts/ ein Ordner. */
+    exportCadQuery(): Promise<ExportResult>;
     onSaveState(cb: (s: SaveState) => void): void;
     /** Zeigt die Modelldatei im Dateimanager (noch nicht gespeichert: den Arbeitsordner). */
     reveal(): Promise<void>;
@@ -436,6 +449,11 @@ export interface SomaApi {
     thumb(id: string): Promise<string | null>;
     /** Arbeitsordner eines Modells in den Papierkorb, nach Rückfrage. Nicht das gerade geöffnete. */
     remove(id: string): Promise<RemoveResult>;
+    /**
+     * Eine STEP-Datei des Projekts (.step, .stp) für den Viewer umwandeln, im Basismodus wie die Vorschau alter Stände.
+     * Unveränderte Dateien kommen aus dem Cache. Fehler stehen in `error`.
+     */
+    viewFile(rel: string): Promise<FileViewResult>;
   };
   versions: {
     log(): Promise<GitLog>;

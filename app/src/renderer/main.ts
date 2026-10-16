@@ -1,6 +1,6 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
-import type { AgentInfo, AnimEntry, BuildStatus, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
+import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
@@ -10,6 +10,7 @@ import { DrawingLink } from './drawlink';
 import { AnimTool } from './animtool';
 import { Busy } from './busy';
 import { DRAG_FILE, FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
+import { FileView } from './fileview';
 import { hydrateIcons, icon } from './icons';
 import { Markup } from './markup';
 import { MAX_QUOTE } from './pdfview';
@@ -303,7 +304,8 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
     // Bilder (etwa Markierungen und Skizzen) öffnen auf der Zeichenfläche (E52), das Bildprogramm gibt es per Rechtsklick
     else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
     else if (VIDEO_EXT.test(n.name)) void videoView.open(n.path);
-    else if (/\.(step|stp)$/i.test(n.name)) toast('Viewing other STEP files in the viewer is coming in a later version. The agent can already use them in the script.', 'info');
+    // STEP-Dateien des Projekts im Viewer, schreibgeschützt wie die Vorschau eines alten Stands
+    else if (/\.(step|stp)$/i.test(n.name)) void fileView.open(n.path);
     else toast('The app has no view for this file type. Right-click: “Open with default app”.', 'info');
   },
   create: async (parent, name, dir) => {
@@ -452,6 +454,13 @@ function fitDock(): void {
   dock.classList.toggle('compact', dock.scrollWidth > room);
 }
 new ResizeObserver(() => fitDock()).observe($('viewer'));
+// Höhe des sichtbaren Banners (Vorschau, Dateiansicht): Die Karten unten links rücken darüber, sonst verdeckt es sie
+const bannerObserver = new ResizeObserver(() => {
+  const h = Math.max($('preview-banner').offsetHeight, $('file-banner').offsetHeight);
+  if (h) $('viewer').style.setProperty('--bn-h', `${h}px`);
+});
+bannerObserver.observe($('preview-banner'));
+bannerObserver.observe($('file-banner'));
 const partEntry = (id: string): PartMap | undefined => map?.parts.find((x) => x.id === id);
 const partInfo = (id: string) => viewer.partList().find((x) => x.id === id);
 const lineRange = (e: PartMap) => ({ from: e.line!, to: e.end_line && e.end_line >= e.line! ? e.end_line : e.line! });
@@ -537,13 +546,15 @@ async function renderSelection(): Promise<void> {
 /** Text für die Eingabe des Agenten. Zahlen mit Punkt, damit sie eindeutig bleiben. */
 function selectionText(): string | null {
   if (!selection) return null;
+  // In der Dateiansicht gehören die Teile zur STEP-Datei, nicht zum Modell: Das muss der Agent wissen
+  const inFile = fileView.rel ? ` in the STEP file ${fileView.rel}` : '';
   if (picked.length > 1) {
     const names = picked.map((id) => `"${partName(id)}"`);
-    return `[Selection: ${picked.length} parts: ${names.slice(0, 40).join(', ')}${names.length > 40 ? ` and ${names.length - 40} more` : ''}] `;
+    return `[Selection: ${picked.length} parts${inFile}: ${names.slice(0, 40).join(', ')}${names.length > 40 ? ` and ${names.length - 40} more` : ''}] `;
   }
   const e = partEntry(selection.partId);
   const group = partInfo(selection.partId)?.group;
-  const bits = [`part "${e?.name ?? partInfo(selection.partId)?.name ?? selection.partId}"${group ? ` in group "${group}"` : ''}`];
+  const bits = [`part "${e?.name ?? partInfo(selection.partId)?.name ?? selection.partId}"${group ? ` in group "${group}"` : ''}${inFile}`];
   if (e?.file && e.line) { const { from, to } = lineRange(e); bits.push(`${e.file} ${to !== from ? 'lines' : 'line'} ${from}${to !== from ? '-' + to : ''}`); }
   const pk = selection.pick;
   if (pk?.faceId != null) {
@@ -577,9 +588,9 @@ const measureTool = new MeasureTool({
   again: $<HTMLButtonElement>('btn-measure-again'), agent: $<HTMLButtonElement>('btn-measure-agent'), viewerEl: $('viewer'),
 }, {
   viewer,
-  source: () => (versions.previewed ? { preview: versions.previewed.hash } : 'live'),
+  source: () => fileView.source ?? (versions.previewed ? { preview: versions.previewed.hash } : 'live'),
   build: () => map?.build ?? null,
-  reload: () => void loadModel(),
+  reload: () => void (fileView.active ? fileView.filesChanged() : loadModel()),
   part: (id) => partEntry(id),
   insert: (t) => insertToAgent(t),
 });
@@ -746,7 +757,7 @@ async function sendMarkup(): Promise<void> {
     const r = await api.fs.saveFeedback(await markup.image());
     // Ging das Speichern schief, bleibt die Zeichnung offen: Nichts geht verloren, der Nutzer kann es noch einmal versuchen
     if (!r.ok || !r.path) { toast(`The markup could not be saved: ${r.error ?? 'unknown error'}`, 'error'); return; }
-    const old = versions.previewed, source = markup.source;
+    const old = versions.previewed, source = markup.source, shownFile = fileView.rel;
     markup.close();
     void refreshFiles(); // die neue Markierung steht gleich im Dateibaum
     // Zeigt das Bild einen alten Stand, einen Schnitt oder eine Explosion, soll der Agent das wissen (sonst vergleicht er es mit dem
@@ -754,7 +765,8 @@ async function sendMarkup(): Promise<void> {
     // Auf einem Bild aus dem Projekt gezeichnet: Der Agent soll das Original kennen, Stand und Schnitt spielen dann keine Rolle
     const cut = [sectionTool.agentText(), explodeTool.agentText(), animTool.agentText(), resultTool.agentText()].filter(Boolean).join(', ');
     const note = source ? `, drawn on ${source}`
-      : (old ? `, shows the older version ${old.short} "${old.subject.slice(0, 80)}"` : '') + (cut ? `, ${cut}` : '');
+      : (old ? `, shows the older version ${old.short} "${old.subject.slice(0, 80)}"` : '')
+        + (shownFile ? `, shows the STEP file ${shownFile}, not the model` : '') + (cut ? `, ${cut}` : '');
     insertToAgent(`[Markup: ${r.path}${note}] `, `Markup saved: ${r.path}`);
   } catch (e) {
     toast(`The markup could not be saved: ${e instanceof Error ? e.message : String(e)}`, 'error');
@@ -990,7 +1002,7 @@ function renderBuild(s: BuildStatus): void {
 
 async function renderErrorCard(): Promise<void> {
   const s = buildStatus;
-  const e = s.state === 'error' && !versions.previewing ? s.result?.error : undefined;
+  const e = s.state === 'error' && !showsOther() ? s.result?.error : undefined;
   const hasModel = viewer.partList().length > 0;
   $('viewer').classList.toggle('dim', !!e && hasModel);
   $('lastgood').hidden = !(e && hasModel && lastOkAt);
@@ -1015,8 +1027,11 @@ async function renderErrorCard(): Promise<void> {
   }
 }
 
+/** Der Viewer zeigt gerade nicht das Modell, sondern einen alten Stand oder eine STEP-Datei: Builds warten. */
+const showsOther = () => versions.previewing || fileView.active;
+
 async function loadModel(): Promise<void> {
-  if (versions.previewing) return; // während einer Vorschau bleibt der alte Stand stehen
+  if (showsOther()) return; // während einer Vorschau oder Dateiansicht bleibt deren Bild stehen
   const seq = ++loadSeq;
   const msg = $('viewer-msg');
   try {
@@ -1049,7 +1064,7 @@ let thumbTimer: ReturnType<typeof setTimeout> | undefined;
 function scheduleThumb(): void {
   clearTimeout(thumbTimer);
   thumbTimer = setTimeout(() => {
-    if (versions.previewing) return;
+    if (showsOther()) return;
     const url = viewer.thumbnail();
     if (url) void api.project.setThumb(url).catch(() => { /* Vorschaubild ist verzichtbar */ });
   }, 1500);
@@ -1065,23 +1080,47 @@ const versions = new VersionsBar({
     // der Stand erst Pakete (E67), kommt der Build nach der Installation.
     if (!res && restored && (buildStatus.state === 'building' || buildStatus.installing)) return;
     if (!res) { await loadModel(); return; }
-    animTool.setActive(false);
-    resultTool.setActive(false);
-    try {
-      map = res.map;
-      textCache.clear();
-      await viewer.load(res.glb);
-      measureTool.reset();
-      explodeTool.refresh();
-      sectionTool.refresh();
-      refreshTree();
-      selectPart(null, null);
-      void renderErrorCard();
-    } catch (e) { toast(`The preview cannot be shown: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
-    renderResults();
+    // Eine offene STEP-Datei macht der Vorschau Platz, ohne dazwischen das Modell zu laden
+    if (fileView.active) { fileView.drop(); tree.setTitle(project?.name ?? ''); }
+    await showForeign(res.glb, res.map, 'The preview');
   },
   toast,
   beforeRestore: () => leaveEditor('Restore version'), // Wiederherstellen ersetzt Dateien
+});
+
+/**
+ * Zeigt einen fremden Stand (Vorschau eines alten Stands oder STEP-Datei) im Viewer. Animation und Analyse gehören zum
+ * Modell und gehen aus, Messen, Explosion und Schnitt fangen auf dem neuen Bild von vorn an.
+ */
+async function showForeign(glb: ArrayBuffer, m: ModelMap, what: string): Promise<void> {
+  loadSeq++; // ein noch laufendes Laden des Modells soll das Bild nicht überschreiben
+  animTool.setActive(false);
+  resultTool.setActive(false);
+  try {
+    map = m;
+    textCache.clear();
+    await viewer.load(glb);
+    measureTool.reset();
+    explodeTool.refresh();
+    sectionTool.refresh();
+    refreshTree();
+    selectPart(null, null);
+    void renderErrorCard();
+  } catch (e) { toast(`${what} cannot be shown: ${e instanceof Error ? e.message : String(e)}`, 'error'); }
+  renderResults();
+}
+
+const fileView = new FileView({
+  banner: $('file-banner'), title: $('fb-title'), sub: $('fb-sub'), back: $<HTMLButtonElement>('btn-file-back'), viewer: $('viewer'),
+}, {
+  async show(res) {
+    if (!res) { tree.setTitle(project?.name ?? ''); await loadModel(); return; }
+    tree.setTitle(fileView.title ?? '');
+    await showForeign(res.glb, res.map, 'The file');
+  },
+  beforeShow: () => versions.endPreview(),
+  busy: (title, cancel) => busy.show(title, cancel),
+  toast,
 });
 
 // ---- Projekt ----------------------------------------------------------------------------------------------------
@@ -1103,6 +1142,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   videoView.close();
   viewer.clear();
   versions.reset();
+  fileView.drop();
   tree.setTitle(p.name);
   terminals.closeAll();
   code.reset();
@@ -1219,7 +1259,7 @@ async function doSave(saveAs = false): Promise<void> {
     toast(lines.join('\n'), r.warnings?.length ? 'error' : 'ok');
     project = await api.project.current(); // der Modellname folgt dem Dateinamen
     $('doc-name').textContent = project.name;
-    tree.setTitle(project.name);
+    tree.setTitle(fileView.title ?? project.name);
     void refreshSaveState();
   } finally {
     saving = false;
@@ -1237,6 +1277,36 @@ async function doOpen(): Promise<boolean> {
 }
 
 const doNew = async () => { if (await leaveEditor('New model')) await api.project.create(); };
+// Ladeanzeige für den Import: erscheint mit dem ersten Schritt nach dem Dateidialog, zählt die Sekunden mit
+let cqBusyTick: ReturnType<typeof setInterval> | undefined;
+api.project.onCadQueryStep(({ step, file }) => {
+  const root = $('app-busy');
+  if (root.hidden) {
+    const t0 = performance.now();
+    $('app-busy-time').textContent = '';
+    clearInterval(cqBusyTick);
+    cqBusyTick = setInterval(() => { $('app-busy-time').textContent = `${Math.round((performance.now() - t0) / 1000)} s`; }, 1000);
+    root.hidden = false;
+  }
+  $('app-busy-step').textContent = `${step} …`;
+  $('app-busy-file').textContent = file;
+});
+function closeCadQueryBusy(): void {
+  clearInterval(cqBusyTick);
+  $('app-busy').hidden = true;
+}
+
+/** Neues Modell aus einem CadQuery-Skript (E100). Die Hinweise des Imports (Kompatibilitätsmodus, Werte) zeigt ein Toast. */
+async function doNewFromCadQuery(): Promise<CadQueryImportResult | null> {
+  if (!(await leaveEditor('New model'))) return null;
+  let r: CadQueryImportResult;
+  try { r = await api.project.createFromCadQuery(); } finally { closeCadQueryBusy(); }
+  if (r.cancelled) return r;
+  if (r.error) { toast(r.error, 'error'); return r; }
+  showStart(false);
+  toast(['Model created from the CadQuery script. The original is kept in inputs/.', ...r.warnings].join('\n'), 'info');
+  return r;
+}
 /** „Jetzt bauen“: baut immer. Vorher werden die Eingaben im Editor gespeichert, sonst sähe der Build sie nicht. */
 async function doBuild(): Promise<void> {
   const r = await code.saveAll();
@@ -1283,6 +1353,7 @@ async function renderRecent(): Promise<void> {
 
 $('btn-doc').addEventListener('click', () => { void renderRecent().then(() => menus.toggle($('menu-doc'), $('btn-doc'))); });
 $('btn-new').addEventListener('click', () => void doNew());
+$('btn-new-cq').addEventListener('click', () => { menus.close(); void doNewFromCadQuery(); });
 $('btn-open').addEventListener('click', () => void doOpen());
 $('btn-save').addEventListener('click', () => void doSave(false));
 $('btn-save-menu').addEventListener('click', () => void doSave(false));
@@ -1362,6 +1433,19 @@ $('exp-all').addEventListener('click', () => { exportScope = 'all'; renderExport
 $('exp-sel').addEventListener('click', () => { exportScope = 'sel'; renderExportScope(); });
 document.querySelectorAll<HTMLButtonElement>('#menu-export [data-fmt]').forEach((b) => b.addEventListener('click', () => void doExport(b.dataset.fmt!, b.textContent!)));
 $('exp-zip').addEventListener('click', () => { menus.close(); void doExportZip(); });
+$('exp-cq').addEventListener('click', () => { menus.close(); void doExportCadQuery(); });
+
+/** Das Modell als reines CadQuery (E100). Wie beim ZIP fehlen Eingaben, die im Editor noch nicht gespeichert sind. */
+async function doExportCadQuery(): Promise<ExportResult> {
+  const r = await api.project.exportCadQuery();
+  if (r.cancelled) return r;
+  const open = code.unsaved();
+  if (r.ok) {
+    const notes = [...(r.warnings ?? []), ...(open.length ? [`Not included (not saved in the editor): ${open.join(', ')}`] : [])];
+    toast([`Model exported as CadQuery:\n${r.target ?? ''}`, ...notes].join('\n'), open.length ? 'error' : 'ok');
+  } else toast(r.error ?? 'Export failed', 'error');
+  return r;
+}
 
 /**
  * Das ganze Modell als ZIP (E79). Eingaben im Editor, die noch nicht gespeichert sind, fehlen darin wie in jedem Export:
@@ -1602,6 +1686,7 @@ async function showStart(on: boolean): Promise<void> {
 $('btn-start-close').addEventListener('click', () => showStart(false));
 $('start-new').addEventListener('click', () => { void doNew(); showStart(false); });
 $('start-open').addEventListener('click', () => { void doOpen().then((ok) => { if (ok) showStart(false); }); });
+$('start-new-cq').addEventListener('click', () => void doNewFromCadQuery());
 /**
  * Karte „Updates“: neueste Version unter GitHub Releases (updates.ts, einmal je Sitzung). Der Knopf öffnet die Seite im
  * Browser, laden und installieren tut der Nutzer selbst. Ausgeschaltet (Settings › About) oder im Test ohne Adresse: keine Karte.
@@ -1650,7 +1735,7 @@ api.build.onStatus((s) => {
   if (panel === 'params' && s.state !== 'building') void paramsPanel.refresh();
 });
 // Auch bei geschlossenem Code abgleichen: Offene Dateien können ungesicherte Eingaben enthalten
-api.fs.onChanged(() => { textCache.clear(); void refreshFiles(); void code.refresh(); scheduleViewLists(); if (panel === 'params') void paramsPanel.refresh(); });
+api.fs.onChanged(() => { textCache.clear(); void fileView.filesChanged(); void refreshFiles(); void code.refresh(); scheduleViewLists(); if (panel === 'params') void paramsPanel.refresh(); });
 // Beim Beenden fragt der Hauptprozess, was im Editor ungespeichert ist, und lässt speichern oder verwerfen
 api.fs.onEditorRequest(async (action) => {
   if (action === 'status') return { dirty: code.unsaved() };
@@ -1783,6 +1868,8 @@ if (api.testMode) {
     saveState: () => saveState,
     toast: () => ({ text: $('toast').textContent, hidden: $('toast').hidden, error: $('toast').classList.contains('error') }),
     banner: () => ({ hidden: $('preview-banner').hidden, text: $('preview-banner').textContent }),
+    fileView: () => ({ ...fileView.state(), banner: $('file-banner').hidden ? null : $('file-banner').textContent, frame: $('viewer').classList.contains('fileview') }),
+    openFile: (rel: string) => fileView.open(rel),
     partSize: (name: string) => { const p = viewer.partList().find((x) => x.name === name); return p ? viewer.partSize(p.id) : null; },
     versionsUi: () => ({ restoreHidden: $('btn-restore').hidden, problem: $('vproblem').hidden ? '' : $('vproblem').textContent }),
     selectionText, errorText,
@@ -1847,6 +1934,10 @@ if (api.testMode) {
     exportAs: (fmt: string, scope: 'all' | 'sel') => { exportScope = scope; return doExport(fmt, fmt.toUpperCase()); },
     /** „Everything as ZIP“ im Export-Menü (E79). */
     exportZip: () => doExportZip(),
+    /** „As CadQuery script“ im Export-Menü und „New from CadQuery script“ (E100). */
+    exportCadQuery: () => doExportCadQuery(),
+    newFromCadQuery: () => doNewFromCadQuery(),
+    cqBusy: () => ({ hidden: $('app-busy').hidden, text: $('app-busy').textContent }),
     showStart: (on: boolean) => showStart(on),
     tour: () => tour.state(),
     tourGo: (n: number) => tour.goTo(n),

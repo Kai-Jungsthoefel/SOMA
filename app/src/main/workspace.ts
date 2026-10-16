@@ -53,11 +53,22 @@ const stateFile = (id: string) => path.join(projectStateDir(), `${id}.json`);
 export const readProjectJson = (id: string) => readJson<ProjectJson>(path.join(projectDir(id), '.soma', 'project.json'));
 
 /** Neues Projekt: UUID-Ordner in den App-Daten (E21), Vorlage kopieren, Zustand doppelt ablegen (E27), Git-Verlauf anlegen (E7). */
-export async function createProject(name = 'New model'): Promise<{ id: string; dir: string }> {
+/**
+ * Legt ein neues Modell aus der Vorlage an. `prepare` läuft vor dem ersten Build und dem Startcommit (etwa der Import eines
+ * CadQuery-Skripts, E100), so beginnt schon der erste Stand mit dem fremden Skript. Wirft `prepare`, wird der halb
+ * angelegte Ordner wieder entfernt und der Fehler weitergereicht.
+ */
+export async function createProject(name = 'New model', prepare?: (dir: string, id: string) => Promise<void>): Promise<{ id: string; dir: string }> {
   const id = randomUUID();
   const dir = projectDir(id);
   fs.mkdirSync(dir, { recursive: true });
   fs.cpSync(templateDir(), dir, { recursive: true });
+  if (prepare) {
+    try { await prepare(dir, id); } catch (e) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      throw e;
+    }
+  }
   // Skills für neue Modelle (E46) vor dem ersten Build und dem Startcommit: Der erste Stand enthält sie schon
   const skills = applyDefaultSkills(dir, skillDirs(), skillBackupsDir(id), getSkillDefaults());
   const pj: ProjectJson = { id, name, api_version: API_VERSION, app_version: SOMA_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString(),

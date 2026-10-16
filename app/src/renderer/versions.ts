@@ -78,6 +78,14 @@ export class VersionsBar {
     else this.render();
   }
 
+  /** Vorschau beenden, ohne den Arbeitsstand zu laden: Etwas anderes (eine STEP-Datei) übernimmt den Viewer. */
+  endPreview(): void {
+    this.seq++;
+    if (!this.previewHash) return;
+    this.previewHash = null;
+    this.render();
+  }
+
   /** Zurück zum Arbeitsstand, falls gerade eine Vorschau läuft. */
   async leavePreview(): Promise<void> { if (this.previewHash) await this.select(this.log.commits.length); }
 

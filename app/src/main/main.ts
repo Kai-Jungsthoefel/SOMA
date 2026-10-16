@@ -54,6 +54,8 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('project:save', (_e, saveAs?: boolean) => ctl.save(!!saveAs));
   ipcMain.handle('project:openZip', () => ctl.openZip());
   ipcMain.handle('project:exportZip', () => ctl.exportZip());
+  ipcMain.handle('project:createFromCadQuery', () => ctl.createFromCadQuery());
+  ipcMain.handle('project:exportCadQuery', () => ctl.exportCadQuery());
   ipcMain.handle('project:reveal', () => ctl.reveal());
   ipcMain.handle('project:setThumb', (_e, dataUrl: string) => {
     const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));
@@ -62,6 +64,7 @@ function registerIpc(ctl: ProjectController): void {
     fs.writeFileSync(path.join(thumbnailsDir(), `${ctl.session.id}.jpg`), Buffer.from(m[1], 'base64'));
   });
   ipcMain.handle('project:remove', (_e, id: string) => ctl.remove(String(id)));
+  ipcMain.handle('project:viewFile', (_e, rel: unknown) => ctl.viewFile(rel));
   ipcMain.handle('project:thumb', (_e, id: string) => {
     if (!isProjectId(String(id))) return null;
     try { return `data:image/jpeg;base64,${fs.readFileSync(path.join(thumbnailsDir(), `${id}.jpg`)).toString('base64')}`; } catch { return null; }

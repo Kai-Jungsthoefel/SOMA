@@ -26,7 +26,7 @@ things, and ask for changes.
 
 ![The main window](../help/window.png)
 
-1. **Model menu**: new model, open, recent models, save as. Next to it: whether the model is saved.
+1. **Model menu**: new model, new from CadQuery script, open, recent models, save as. Next to it: whether the model is saved.
 2. **Build status**: "Built" when the model is up to date, "Build failed" if the code has an error. Click for details. With "Auto on" the model is rebuilt whenever the code changes.
 3. **Columns**: show or hide the sidebar, the code and the agent (Ctrl 1, Ctrl 2, Ctrl 3).
 4. **Import**: add files such as STEP models, images or sketches to `inputs/`, where the agent can use them. Dragging files or folders into the window does the same.
@@ -46,7 +46,7 @@ The logo at the top left opens the start page.
 ![The start page](../help/start.png)
 
 1. **Tutorial**: a short guided tour of the app with an example model. No agent needed. "Got it" hides the card.
-2. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N).
+2. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). Below it, **New from CadQuery script** starts from an existing CadQuery script instead (see "CadQuery scripts").
 3. **Open**: opens a .soma or ZIP file (Ctrl O).
 4. **Recent**: models you worked on. The bin on a card removes the model from this computer, a saved .soma file stays.
 5. **Agents on this computer**: the agents SOMA found. You install them yourself, SOMA does not bring one.
@@ -155,6 +155,11 @@ Ask the agent for a technical drawing ("Make a drawing of the bracket with all d
 
 Markdown files (such as `NOTES.md`) open as a document, PDF and DXF files open as a drawing.
 
+Click a STEP file (`.step`, `.stp`) to look at it in the viewer. A banner names the file. Measure, Section, Explode and the
+structure tree work as usual, but the parts have no link to code, and Animation and Analysis stay off. Builds of your model
+wait until you click **Back to model**. When the file changes on disk, the viewer loads it again. Large files can take a
+while the first time, after that they open from the preview cache.
+
 ## Saving and history
 
 ![Looking at an earlier version](../help/history.png)
@@ -173,8 +178,26 @@ after that Ctrl S saves to the same file. Copy or send the file like any other d
 1. **Scope**: all parts, or only the selected one.
 2. **Formats**: for 3D printing (STL, 3MF), CAD (STEP, IGES), graphics and 2D (DXF, SVG). All parts become one file per part in a folder you choose.
 3. **Everything as ZIP**: the whole model with code, results and history, for someone without SOMA.
+4. **As CadQuery script**: the model as plain CadQuery for CQ-editor, VS Code with ocp_vscode and other tools, without SOMA.
 
 Reference parts (for example an imported circuit board) are not included in "All parts".
+
+## CadQuery scripts
+
+SOMA works with plain CadQuery scripts in both directions.
+
+- **In:** **New from CadQuery script** in the model menu makes a new model from a `.py` file. The script stays as it is, the
+  original is kept in `inputs/`. Scripts for CQ-editor (`show_object`), for VS Code (`ocp_vscode`) or with a variable
+  `result` build in compatibility mode: the build shows a warning, the parts take their names and colors from there. Ask
+  the agent to convert the script to `add_part()` and `param()`, then you get groups and the Parameters panel.
+- **Out:** **As CadQuery script** in the Export menu writes one `.py` file. Your code stays the same, only the `from soma
+  import` lines are replaced by a marked block that provides `add_part()`, `param()` and the standard parts. The values
+  from the Parameters panel are in it. A model with modules in `parts/` becomes a folder with `soma_compat.py`. Animations,
+  drawings and analyses stay in SOMA.
+- **Back again:** import an exported script with **New from CadQuery script**. The block is removed, your original imports
+  and the values of the Parameters panel come back. Leave the block unchanged, otherwise SOMA keeps it as it is.
+
+The block and the standard parts are under the Apache License 2.0, so the exported script is yours like any model.
 
 ## Settings
 

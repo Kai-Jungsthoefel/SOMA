@@ -52,6 +52,14 @@ export async function chooseExportTarget(win: BrowserWindow | null, o: { kind: '
 
 export const documentsDir = () => app.getPath('documents');
 
+/** CadQuery-Skript für ein neues Modell (E100). null: abgebrochen. */
+export async function chooseCadQueryScript(win: BrowserWindow | null): Promise<string | null> {
+  if (testMode()) return nextAnswer<string | null>('New model from CadQuery script');
+  const opts = { title: 'New model from CadQuery script', defaultPath: documentsDir(), filters: [{ name: 'CadQuery script', extensions: ['py'] }], properties: ['openFile' as const] };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+}
+
 /** Markdown-Dateien, die als eigene Skills übernommen werden (E78). Leere Liste: abgebrochen. */
 export async function chooseSkillFiles(win: BrowserWindow | null): Promise<string[]> {
   if (testMode()) return nextAnswer<string[] | null>('Import skills') ?? [];

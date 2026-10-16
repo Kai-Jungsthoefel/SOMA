@@ -440,7 +440,7 @@ code { font-family:var(--mono); font-size:.95em; }
   background:radial-gradient(ellipse at 52% 44%, #272c34 0%, #1b1e23 60%, #16181c 100%); }
 #viewer > canvas { position:absolute; inset:0; width:100%; height:100%; display:block; transition:opacity .2s; }
 #viewer.dim > canvas { opacity:.35; filter:grayscale(.5); }
-#viewer.preview::after { content:''; position:absolute; inset:0; border:2px solid var(--vio); pointer-events:none; z-index:6; }
+#viewer.preview::after, #viewer.fileview::after { content:''; position:absolute; inset:0; border:2px solid var(--vio); pointer-events:none; z-index:6; }
 #viewer-msg { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--tx2); pointer-events:none; white-space:pre-wrap; text-align:center; z-index:1; max-width:70%; }
 #viewer-msg.error { color:var(--err); }
 /* Ladeanzeige (busy.ts): deckt den Viewer ab, bis die Explosion bereit ist. Unter Banner und Markierung */
@@ -451,6 +451,9 @@ code { font-family:var(--mono); font-size:.95em; }
 .vb-sub { padding:0 14px; min-height:18px; font-size:12px; color:var(--tx2); overflow-wrap:anywhere; }
 .vb-bar { position:relative; height:4px; margin:10px 14px 0; border-radius:2px; background:var(--s3); overflow:hidden; }
 .vb-bar > div { height:100%; width:0; background:var(--acc); transition:width .15s; }
+/* Über Startseite und Menüs (40), unter den Meldungen (60): ein CadQuery-Skript kommt herein */
+.appbusy { position:fixed; z-index:50; background:rgba(8,9,11,.6); }
+.appbusy .appbusy-note { padding-top:10px; padding-bottom:12px; }
 .vb-bar.indet > div { width:35%; position:absolute; animation:vb-run 1.2s ease-in-out infinite; transition:none; }
 @keyframes vb-run { from { left:-35%; } to { left:100%; } }
 .float { position:absolute; z-index:2; background:rgba(24,27,31,.95); border:1px solid var(--line2); border-radius:10px; box-shadow:var(--shadow); }
@@ -639,7 +642,8 @@ code { font-family:var(--mono); font-size:.95em; }
 .bn-text b { font-size:14px; }
 .bn-line { display:flex; align-items:center; gap:8px; }
 .bn-text .tag { font-size:11px; padding:1px 7px; border-radius:9px; background:var(--vio-tint); color:#cdd2ff; }
-#bn-sub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#bn-sub, #fb-sub, #fb-title { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bn-line { min-width:0; }
 
 /* ---- Animation, Analyse und Video (E58) ----------------------------------------------------------------------- */
 .v-paint { pointer-events:none; }
@@ -707,6 +711,8 @@ code { font-family:var(--mono); font-size:.95em; }
 @container viewer (max-width: 760px) { .tbar .tgl { padding:0 8px; font-size:0; gap:0; } .tbar .tgl svg.ic { margin:0; } }
 /* Unten liegen die Leisten der Analyse und Animation: Karten (Messen, Schnitt, Auswahl) rücken darüber */
 #viewer.analyzing .cards, #viewer.animating .cards { bottom:66px; }
+/* Vorschau und Dateiansicht: Die Karten (Messen, Schnitt, Explosion) stehen über dem Banner, --bn-h setzt main.ts */
+#viewer.preview .cards, #viewer.fileview .cards { bottom:calc(var(--bn-h, 108px) + 24px); }
 
 /* ---- Reiter Analysis und Animation (E82): Liste und ruhiger Bericht ------------------------------------------ */
 .cx { font-variant-numeric:tabular-nums; }
@@ -961,6 +967,10 @@ code { font-family:var(--mono); font-size:.95em; }
 .bigcard b { font-size:16px; }
 .bigcard .ico { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:8px; background:var(--s3); }
 .bigcard .ico.acc { background:var(--acc); color:#1b1206; }
+/* Weitere Wege zu einem neuen Modell, klein unter den Karten (E100) */
+.start-alt { display:flex; gap:6px; margin-top:8px; }
+.start-alt .btn { color:var(--tx3); padding:0 6px; }
+.start-alt .btn:hover { color:var(--tx); }
 .cap { font-size:11px; letter-spacing:.06em; color:var(--tx3); margin:34px 0 12px; }
 .recent-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:14px; }
 .recent-item { position:relative; display:flex; min-width:0; }

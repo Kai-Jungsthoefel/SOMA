@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type {
-  AnimBuildResult, AnimList, DrawingBuildResult, DrawingList, ExportResult, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
+  AnimBuildResult, AnimList, CadQueryImportResult, DrawingBuildResult, DrawingList, ExportResult, FileViewResult, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
   ParamResult, ParamState, ParamValue, ProjectInfo, RemoveResult, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
@@ -12,15 +12,15 @@ import { DrawingBuilder, isDrawingFile, readDrawingList } from './drawings';
 import { resolveInside } from './files';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
-import { choose, chooseExportTarget, choosePath, documentsDir, trashItem } from './dialogs';
+import { choose, chooseCadQueryScript, chooseExportTarget, choosePath, documentsDir, trashItem } from './dialogs';
 import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
 import { checkParamValue, isParamValue, readUserParams, writeUserParams } from './params';
-import { helpDir, previewsDir, skillBackupsDir, skillDirs } from './paths';
+import { backupsDir, helpDir, previewsDir, skillBackupsDir, skillDirs } from './paths';
 import { syncHelpImages } from './help';
 import { HELP_SKILL } from '../shared/help';
-import { storeBuildAsPreview } from './previews';
+import { stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
 import {
   agentsEntries, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
 } from './skills';
@@ -52,9 +52,22 @@ interface Session {
   caching?: boolean;
   /** Projektumgebung bereit (E67): Fehlertext oder null. */
   env: Promise<string | null>;
+  /** STEP-Dateien im Viewer: schon gehashte Dateien und laufende Umwandlungen (ein Doppelklick wandelt nicht zweimal um). */
+  stepStamps: Map<string, StepStamp>;
+  stepJobs: Map<string, Promise<FileViewResult>>;
 }
 
+/** Nur diese Dateien zeigt der Viewer aus dem Projekt. */
+const STEP_FILE = /\.(step|stp)$/i;
+
 const POLL_MS = 2000;
+/** Letzte JSON-Zeile einer Ausgabe von `soma … --json` (davor können Meldungen von Bibliotheken stehen). */
+function lastJson<T>(out: string): T | null {
+  for (const line of out.trim().split(/\r?\n/).reverse()) {
+    try { const v = JSON.parse(line) as unknown; if (v && typeof v === 'object') return v as T; } catch { /* keine JSON-Zeile */ }
+  }
+  return null;
+}
 const safeFileName = (n: string) => n.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'Model';
 /** Modelle werden als .soma gespeichert (E79), innen eine ZIP. Geöffnet wird auch eine .zip. */
 const MODEL_EXT = '.soma';
@@ -132,7 +145,7 @@ export class ProjectController {
     // Projektumgebung (E67): Meist steht sie schon, sonst legt `soma env` sie in rund 0,5 s an. Die Terminals kennen ihre
     // Pfade vorab, gewartet wird nur vor dem Installieren von Paketen
     const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
-    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
     builds.on('status', (st) => {
@@ -155,6 +168,33 @@ export class ProjectController {
   async create(name?: string): Promise<ProjectInfo> {
     const { id } = await createProject(name);
     return this.open(id);
+  }
+
+  /**
+   * Neues Modell aus einem CadQuery-Skript (E100). `soma cadquery import` läuft vor dem ersten Build und dem Startcommit:
+   * Ein Export aus SOMA wird zurückgedreht, ein fremdes Skript baut im Kompatibilitätsmodus. Das Original liegt danach in
+   * inputs/, die ersetzte Vorlage in workspace-backups/. Scheitert der Import, entsteht kein Modell.
+   */
+  async createFromCadQuery(): Promise<CadQueryImportResult> {
+    const file = await chooseCadQueryScript(this.getWin());
+    if (!file) return { cancelled: true, warnings: [] };
+    // Import, erster Build und Startcommit dauern einige Sekunden: Das Fenster zeigt die Schritte in einer Ladeanzeige
+    const step = (s: string) => this.send('cadquery:step', { step: s, file: path.basename(file) });
+    step('Reading the script');
+    let warnings: string[] = [];
+    try {
+      const { id } = await createProject(path.parse(file).name.trim() || undefined, async (dir, pid) => {
+        const r = await runSoma(['cadquery', 'import', file, '--project', dir, '--backup', path.join(backupsDir(), `${pid}-import`), '--json'], dir);
+        const res = lastJson<{ status?: string; error?: string; warnings?: string[] }>(r.out);
+        if (!r.ok || res?.status !== 'ok') throw new Error(res?.error || (r.err || r.out).trim().split(/\r?\n/).pop() || 'unknown error');
+        warnings = Array.isArray(res.warnings) ? res.warnings.map(String) : [];
+        step('Building the model for the first time');
+      });
+      step('Opening the model');
+      return { info: await this.open(id), warnings };
+    } catch (e) {
+      return { warnings: [], error: `The script could not be imported: ${e instanceof Error ? e.message : String(e)}` };
+    }
   }
 
   /**
@@ -283,6 +323,59 @@ export class ProjectController {
       return { ok: false, files: [], error: `Export failed: ${e instanceof Error ? e.message : String(e)}` };
     } finally {
       if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Das Modell als reines CadQuery-Skript (E100). soma schreibt erst in einen leeren Ordner unter Temp, danach weiß die App,
+   * ob es eine Datei wird oder (mit parts/) ein Ordner, und fragt nach dem Ziel. Vorhandenes ersetzt sie nur nach Rückfrage.
+   */
+  async exportCadQuery(): Promise<ExportResult> {
+    const s = this.need();
+    const name = safeFileName(readProjectJson(s.id)?.name ?? 'Model');
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-cq-'));
+    try {
+      const r = await runSoma(['cadquery', 'export', '--project', s.dir, '--out', path.join(tmp, `${name}.py`), '--json'], s.dir);
+      const res = lastJson<{ status?: string; mode?: string; error?: string; warnings?: string[] }>(r.out);
+      if (!r.ok || res?.status !== 'ok') return { ok: false, files: [], error: res?.error || (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n') || 'Export failed' };
+      const folder = res.mode === 'folder';
+      const last = getAppState(s.id).exportDir;
+      const startDir = last && fs.existsSync(last) ? last : documentsDir();
+      const target = await chooseExportTarget(this.getWin(), folder
+        ? { kind: 'dir', title: `Choose a folder for the CadQuery model (a folder “${name}” is created in it)`, defaultPath: startDir }
+        : { kind: 'file', title: 'Export as CadQuery script', defaultPath: path.join(startDir, `${name}.py`), ext: 'py', label: 'CadQuery script' });
+      if (!target) return { ok: false, files: [], cancelled: true };
+      const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+      const plan: [string, string][] = [];
+      let dest: string;
+      if (folder) {
+        dest = path.join(target, name);
+        for (const f of walk(path.join(tmp, name))) plan.push([f, path.join(dest, path.relative(path.join(tmp, name), f))]);
+      } else {
+        dest = /\.py$/i.test(target) ? target : `${target}.py`;
+        plan.push([path.join(tmp, `${name}.py`), dest]);
+        // Mitgebrachte Dateien (inputs/), die das Skript lädt, kommen daneben
+        if (fs.existsSync(path.join(tmp, 'inputs'))) for (const f of walk(path.join(tmp, 'inputs'))) plan.push([f, path.join(path.dirname(dest), path.relative(tmp, f))]);
+      }
+      // Für die Hauptdatei hat der Speichern-Dialog schon gefragt, alles andere fragt die App
+      const exists = plan.filter(([, d], i) => !(!folder && i === 0) && fs.existsSync(d)).map(([, d]) => path.relative(path.dirname(dest), d));
+      if (exists.length) {
+        const c = await choose(this.getWin(), {
+          title: 'Export as CadQuery', message: exists.length === 1 ? 'This file already exists:' : `These ${exists.length} files already exist:`,
+          detail: `${exists.slice(0, 10).join('\n')}${exists.length > 10 ? `\n… and ${exists.length - 10} more` : ''}`, buttons: ['Replace', 'Cancel'],
+        });
+        if (c !== 0) return { ok: false, files: [], cancelled: true };
+      }
+      for (const [src, d] of plan) {
+        fs.mkdirSync(path.dirname(d), { recursive: true });
+        fs.copyFileSync(src, d);
+      }
+      patchAppState(s.id, { exportDir: folder ? target : path.dirname(dest) });
+      return { ok: true, files: plan.map(([, d]) => d), target: dest, warnings: Array.isArray(res.warnings) ? res.warnings.map(String) : [] };
+    } catch (e) {
+      return { ok: false, files: [], error: `Export failed: ${e instanceof Error ? e.message : String(e)}` };
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   }
 
@@ -519,10 +612,44 @@ export class ProjectController {
 
   /** Ordner des gemessenen Stands, den bestimmt der Hauptprozess. Unbekannte Quelle: null. */
   private measureFolder(s: Session, source: unknown): string | null {
-    const hash = (source as { preview?: unknown } | null)?.preview;
+    const src = source as { preview?: unknown; file?: unknown; key?: unknown } | null;
     if (source === 'live') return path.join(s.dir, '.soma');
-    if (typeof hash === 'string' && /^[0-9a-f]{7,40}$/.test(hash)) return path.join(previewsDir(), s.id, hash);
+    if (typeof src?.preview === 'string' && /^[0-9a-f]{7,40}$/.test(src.preview)) return path.join(previewsDir(), s.id, src.preview);
+    // STEP-Datei aus dem Projekt: nur innerhalb, und nur ein Stand, der schon im Cache liegt (der Renderer nennt ihn mit key)
+    if (typeof src?.file === 'string' && STEP_FILE.test(src.file) && typeof src.key === 'string' && /^[0-9a-f]{40}$/.test(src.key)) {
+      try { resolveInside(s.dir, src.file); } catch { return null; }
+      const dir = path.join(this.stepCache(s), src.key);
+      return fs.existsSync(dir) ? dir : null;
+    }
     return null;
+  }
+
+  private stepCache(s: Session): string { return path.join(previewsDir(), s.id, 'files'); }
+
+  /**
+   * STEP-Datei aus dem Projekt für den Viewer (Klick im Dateibaum). Umgewandelt wird im Basismodus wie bei der Vorschau alter
+   * Stände, über den vorgewärmten Python-Prozess (runSoma). Gleichzeitige Aufrufe für dieselbe Datei teilen sich die Arbeit.
+   */
+  viewFile(rel: unknown): Promise<FileViewResult> {
+    const s = this.need();
+    const fail = (error: string): FileViewResult => ({ rel: typeof rel === 'string' ? rel : '', key: '', glb: new ArrayBuffer(0), map: { version: 0, parts: [] }, error });
+    if (typeof rel !== 'string' || !rel || rel.length > 1000) return Promise.resolve(fail('Invalid file.'));
+    if (!STEP_FILE.test(rel)) return Promise.resolve(fail('Only STEP files (.step, .stp) can be shown in the viewer.'));
+    let abs: string;
+    try { abs = resolveInside(s.dir, rel); } catch { return Promise.resolve(fail('The file is outside the project.')); }
+    const running = s.stepJobs.get(abs);
+    if (running) return running;
+    const job = (async (): Promise<FileViewResult> => {
+      const r = await stepPreview(abs, this.stepCache(s), s.dir, s.stepStamps);
+      if ('error' in r) return fail(r.error);
+      try {
+        const glb = await fs.promises.readFile(path.join(r.dir, 'model.glb'));
+        const map = JSON.parse(await fs.promises.readFile(path.join(r.dir, 'model.map.json'), 'utf8')) as ModelMap;
+        return { rel, key: r.key, glb: glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength) as ArrayBuffer, map };
+      } catch (e) { return fail(`The file could not be shown: ${e instanceof Error ? e.message : String(e)}`); }
+    })().finally(() => s.stepJobs.delete(abs));
+    s.stepJobs.set(abs, job);
+    return job;
   }
 
   /** Messdienst vorab starten, sobald der Nutzer den Messmodus einschaltet. */
