@@ -210,19 +210,36 @@ try {
   await domClick('btn-measure');
 
   // ---- 6) Darstellung beim Öffnen -----------------------------------------------------------------------------------------
+  // Ursprung und Achsen: Vorgabe aus. Der Knopf neben dem ViewCube und der Eintrag im Menü „Display“ schalten sie gemeinsam
+  const axBtn = () => ev(() => document.getElementById('btn-axes').getAttribute('aria-pressed'));
+  const ax0 = await ev(() => window.__t.axes());
+  check('Ursprung und Achsen: Vorgabe aus, nichts im Bild, Knopf nicht gedrückt', !ax0.on && ax0.objects === 0 && (await axBtn()) === 'false'
+    && (await ev(() => window.__t.display())).axes === false, JSON.stringify(ax0));
+  await domClick('btn-axes');
+  const ax1 = await ev(() => window.__t.axes());
+  check('Knopf Origin and axes: drei Linien und Punkt, Beschriftung X Y Z, Länge passend zum Modell, Knopf und Menüeintrag an',
+    ax1.on && ax1.objects === 4 && ax1.labels.join('') === 'XYZ' && ax1.len >= 5 && ax1.len <= 50 && (await axBtn()) === 'true'
+    && (await ev(() => window.__t.display())).axes === true, JSON.stringify(ax1));
+  await shot('settings-axes');
+  await ev(() => document.querySelector('[data-display="axes"]').click());
+  const ax2 = await ev(() => window.__t.axes());
+  check('Menü „Display“: Origin and axes aus, nichts mehr im Bild, Knopf nicht mehr gedrückt', !ax2.on && ax2.objects === 0 && !ax2.labels.length && (await axBtn()) === 'false', JSON.stringify(ax2));
   await ev(() => window.__t.openSettings());
   const flip = (id) => ev((i) => { const c = document.getElementById(i); c.checked = !c.checked; c.dispatchEvent(new Event('change')); }, id);
   await flip('st-edges');
   await waitPref('edges', false);
   await flip('st-ghost');
   await waitPref('transparent', true);
+  await flip('st-axes');
+  await waitPref('axes', true);
   const nowDisplay = await ev(() => window.__t.display());
-  check('Darstellung beim Öffnen geändert: das offene Modell bleibt, wie es ist', nowDisplay.edges === true && nowDisplay.ghost === false, JSON.stringify(nowDisplay));
+  check('Darstellung beim Öffnen geändert: das offene Modell bleibt, wie es ist', nowDisplay.edges === true && nowDisplay.ghost === false && nowDisplay.axes === false, JSON.stringify(nowDisplay));
   await ev(() => window.__t.closeSettings());
   await ev(() => window.soma.project.create());
   await waitFor('Neues Modell offen und gebaut', (id) => window.__t.project()?.id !== id && window.__t.status().state === 'ok' && window.__t.partCount() > 0, 90000, proj.id);
   const newDisplay = await ev(() => window.__t.display());
-  check('Neues Modell: ohne Kanten, transparent (Menü „Display" zeigt es so)', newDisplay.edges === false && newDisplay.ghost === true && newDisplay.wire === false, JSON.stringify(newDisplay));
+  check('Neues Modell: ohne Kanten, transparent, mit Achsen (Menü „Display" und Knopf zeigen es so)', newDisplay.edges === false && newDisplay.ghost === true && newDisplay.wire === false
+    && newDisplay.axes === true && (await ev(() => window.__t.axes())).objects === 4 && (await axBtn()) === 'true', JSON.stringify(newDisplay));
   const proj2 = await ev(() => window.__t.project());
 
   // ---- 7) Speicherplatz ---------------------------------------------------------------------------------------------------
@@ -290,6 +307,31 @@ try {
   const clip = await ev(() => window.soma.test.clipboard());
   check('„Copy system info": Text mit Version, Python-Paketen, System und Ordnern (im Test nicht in der echten Zwischenablage)',
     clip.startsWith(`SOMA ${VERSION}\n`) && clip.includes('CadQuery') && clip.includes('OS: ') && clip.includes('App data: '), clip.split('\n')[1]);
+
+  // Protokoll (log.ts): Kopf beim Start, geöffnetes Modell, Build, gescheiterte Anfrage, Agentenstart per Knopf und getippt
+  const logFile = path.join(ud, 'logs', 'soma.log');
+  const term = await ev(async () => {
+    // Startbefehl wie vom Knopf, nur mit einem Pfad, den es nicht gibt: Es startet nichts, die Shell meldet einen Fehler
+    const a = await window.soma.term.create({ command: 'soma-no-such-dir/claude --soma-test-nonexistent' });
+    const b = await window.soma.term.create({});
+    // Getippt mit Korrektur: „codexx“ + Rücktaste. Der Pfad existiert nicht, die Shell meldet nur einen Fehler
+    window.soma.term.write(b, 'soma-no-such-dir/codexx\x7f --x\r');
+    window.soma.term.write(b, 'echo gemini\r'); // kein Agentenstart: erstes Wort echo
+    return [a, b];
+  });
+  await sleep(1500);
+  await ev((ids) => ids.forEach((id) => window.soma.term.kill(id)), term);
+  const logText = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
+  check('Protokoll logs/soma.log: Kopf mit Version und System, Modell geöffnet, Build, gescheiterte Anfrage (unbekannter Ordner)',
+    logText.includes('SOMA started') && logText.includes(`version: ${VERSION}`) && logText.includes('system: ') && /\[project\] opened [0-9a-f-]{36}/.test(logText)
+    && /\[build\] ok, \d+ parts/.test(logText) && /WARN  \[storage:open\] Unknown folder/.test(logText), logText.slice(0, 200));
+  check('Protokoll ohne ERROR (etwa Dateiliste ohne offenes Modell, „No project open“)', !/ ERROR /.test(logText),
+    logText.split('\n').filter((l) => / ERROR /.test(l)).join(' | ').slice(0, 300));
+  check('Protokoll: Agent per Knopf und getippt erkannt (nur Name, keine Befehlszeile), echo gemini zählt nicht',
+    logText.includes('[agent] Claude Code started (start button)') && logText.includes('[agent] Codex started (typed in a terminal)') && !logText.includes('Gemini CLI started')
+    && !logText.includes('soma-test-nonexistent') && !logText.includes('soma-no-such-dir'));
+  check('„Copy system info" mit Ordner Logs und dem Ende des Protokolls', clip.includes('Logs: ') && clip.includes('Recent log (logs/soma.log):') && clip.includes('SOMA started'));
+  check('Storage: Bereich Logs mit dem Protokoll', (sp.stats.areas.find((a) => a.id === 'logs')?.bytes ?? 0) > 0);
   const link = await ev(() => { const b = [...document.querySelectorAll('#st-about button')].find((x) => x.textContent.includes('Changelog')); b.click(); return !!b; });
   await sleep(200);
   check('Link „Changelog" geht an den Browser (im Test ohne Fehlermeldung)', link && !(await ev(() => window.__t.toast())).error);

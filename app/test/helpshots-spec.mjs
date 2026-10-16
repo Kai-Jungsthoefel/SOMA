@@ -58,7 +58,7 @@ export const SHOTS = [
       { label: 'Selection card', sel: '#selcard', at: 'tr', box: true },
       { label: 'Send to agent', sel: '#btn-sel-agent', at: 'r' },
       { label: 'View cube', sel: '#cube-view', at: 'l' },
-      { label: 'Fit, default view, display', sel: '#cube .vbtns', at: 'l', box: true },
+      { label: 'Fit, default view, axes, display', sel: '#cube .vbtns', at: 'l', box: true },
     ],
   },
   {
