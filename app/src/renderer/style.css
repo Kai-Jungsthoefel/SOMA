@@ -545,6 +545,7 @@ code { font-family:var(--mono); font-size:.95em; }
 .vbtns { display:flex; flex-direction:column; gap:2px; padding:3px; background:rgba(24,27,31,.95); border:1px solid var(--line2); border-radius:9px; }
 .vbtns button { width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:#c9ced4; }
 .vbtns button:hover { background:var(--s3); }
+.vbtns button[aria-pressed="true"] { background:var(--acc-tint); color:var(--acc-tx); }
 
 /* Karten unten links (Entwurf 2): Auswahl, Messen, Schnitt, Explosion, Animation und Analyse stapeln sich nach oben */
 .cards { position:absolute; left:12px; bottom:12px; z-index:2; width:360px; display:flex; flex-direction:column-reverse; gap:8px; pointer-events:none; }
@@ -579,6 +580,8 @@ code { font-family:var(--mono); font-size:.95em; }
 .mc-ent b { color:var(--acc-tx); }
 .mc-ent span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .v-overlay { position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
+/* Beschriftung der Hauptachsen (Farbe je Achse wie am ViewCube, im Code gesetzt) */
+.v-axis { position:absolute; left:0; top:0; margin:-8px 0 0 -4px; font:700 12px/1 var(--mono, monospace); text-shadow:0 0 3px #000, 0 0 2px #000; }
 /* Rahmenauswahl (Alt + links ziehen): durchgezogen von links nach rechts (ganz darin), gestrichelt von rechts nach links (angeschnitten) */
 .v-box { position:absolute; z-index:2; pointer-events:none; border:1px solid var(--acc); background:rgba(242,154,56,.08); }
 .v-box.cross { border-style:dashed; background:rgba(242,154,56,.05); }

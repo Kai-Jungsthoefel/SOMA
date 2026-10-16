@@ -19,6 +19,8 @@ export interface ViewerPrefs {
   edges: boolean;
   wireframe: boolean;
   transparent: boolean;
+  /** Ursprung und Hauptachsen X, Y, Z. */
+  axes: boolean;
   /** Nachkommastellen der Messwerte in der Oberfläche. Der Text für den Agenten hat immer drei. */
   decimals: number;
 }
@@ -33,7 +35,7 @@ export interface SettingsResult extends SettingsState { ok: boolean; error?: str
 
 export const DECIMALS = { min: 0, max: 4 };
 export const DEFAULT_SETTINGS: AppSettings = {
-  viewer: { navigation: 'soma', invertZoom: false, projection: 'perspective', edges: true, wireframe: false, transparent: false, decimals: 2 },
+  viewer: { navigation: 'soma', invertZoom: false, projection: 'perspective', edges: true, wireframe: false, transparent: false, axes: false, decimals: 2 },
   start: { tutorialCard: true, updateCheck: true },
 };
 
@@ -89,7 +91,7 @@ const isProjection = (v: unknown): v is Projection => v === 'perspective' || v =
 const isDecimals = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= DECIMALS.min && v <= DECIMALS.max;
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 const VIEWER_CHECKS: { [K in keyof ViewerPrefs]: (v: unknown) => boolean } = {
-  navigation: isNav, invertZoom: isBool, projection: isProjection, edges: isBool, wireframe: isBool, transparent: isBool, decimals: isDecimals,
+  navigation: isNav, invertZoom: isBool, projection: isProjection, edges: isBool, wireframe: isBool, transparent: isBool, axes: isBool, decimals: isDecimals,
 };
 const START_CHECKS: { [K in keyof StartPrefs]: (v: unknown) => boolean } = { tutorialCard: isBool, updateCheck: isBool };
 /** Bereiche der Einstellungen mit der Prüfung je Wert. */

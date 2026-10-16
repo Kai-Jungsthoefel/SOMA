@@ -230,11 +230,19 @@ function applySettings(): void {
 /** Darstellung beim Öffnen eines Modells (Menü „Display“). Danach gilt bis zum nächsten Modell, was der Nutzer dort umstellt. */
 function applyDisplayDefaults(): void {
   const v = appSettings.settings.viewer;
-  const want: Record<string, boolean> = { edges: v.edges, wire: v.wireframe, ghost: v.transparent };
+  const want: Record<string, boolean> = { edges: v.edges, wire: v.wireframe, ghost: v.transparent, axes: v.axes };
   document.querySelectorAll<HTMLButtonElement>('[data-display]').forEach((b) => b.setAttribute('aria-checked', String(want[b.dataset.display!])));
   viewer.setEdges(v.edges);
   viewer.setWireframe(v.wireframe);
   viewer.setGhost(v.transparent);
+  setAxes(v.axes);
+}
+
+/** Ursprung und Achsen: eigener Knopf neben dem ViewCube und Eintrag im Menü „Display“, beide zeigen denselben Stand. */
+function setAxes(on: boolean): void {
+  $('btn-axes').setAttribute('aria-pressed', String(on));
+  document.querySelector('[data-display="axes"]')?.setAttribute('aria-checked', String(on));
+  viewer.setAxes(on);
 }
 
 async function changeSettings(patch: SettingsPatch): Promise<SettingsResult> {
@@ -358,7 +366,8 @@ function fileOpAllowed(rel: string, what: 'rename' | 'delete'): boolean {
 }
 
 async function refreshFiles(): Promise<void> {
-  if (panel !== 'files') { filesDirty = true; return; }
+  // Ohne Modell (Startseite) gibt es keine Dateien: Die Anfrage scheiterte nur und stand als Fehler im Protokoll
+  if (panel !== 'files' || !project) { filesDirty = true; return; }
   filesDirty = false;
   try { files.render(await api.fs.list()); } catch { /* Projekt wechselt gerade */ }
 }
@@ -1392,11 +1401,13 @@ $('btn-buildinfo').addEventListener('click', () => {
 
 // Darstellung
 $('btn-display').addEventListener('click', () => menus.toggle($('menu-display'), $('btn-display'), 'beside'));
+$('btn-axes').addEventListener('click', () => setAxes($('btn-axes').getAttribute('aria-pressed') !== 'true'));
 document.querySelectorAll<HTMLButtonElement>('[data-display]').forEach((b) => b.addEventListener('click', () => {
   const on = b.getAttribute('aria-checked') !== 'true';
   b.setAttribute('aria-checked', String(on));
   if (b.dataset.display === 'edges') viewer.setEdges(on);
   else if (b.dataset.display === 'wire') viewer.setWireframe(on);
+  else if (b.dataset.display === 'axes') setAxes(on);
   else viewer.setGhost(on);
 }));
 
@@ -1984,6 +1995,7 @@ if (api.testMode) {
     settingsPages: () => ({ viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state() }),
     appSettings: () => appSettings,
     storageRefresh: () => storagePage.refresh(),
+    axes: () => viewer.axesState(),
     display: () => Object.fromEntries([...document.querySelectorAll<HTMLElement>('[data-display]')].map((b) => [b.dataset.display, b.getAttribute('aria-checked') === 'true'])),
     /** Export wie über das Menü (`sel`: das ausgewählte Bauteil), liefert das Ergebnis. */
     exportAs: (fmt: string, scope: 'all' | 'sel') => { exportScope = scope; return doExport(fmt, fmt.toUpperCase()); },

@@ -110,8 +110,9 @@ export class ViewerPage implements SettingsPage {
       group('When a model opens',
         field('Edges', null, toggle('st-edges', v.edges, 'Edges', (on) => void this.change({ edges: on }))),
         field('Wireframe', null, toggle('st-wire', v.wireframe, 'Wireframe', (on) => void this.change({ wireframe: on }))),
-        field('Transparent', 'The display menu in the viewer changes these for the open model, until the next one opens.',
-          toggle('st-ghost', v.transparent, 'Transparent', (on) => void this.change({ transparent: on })))),
+        field('Transparent', null, toggle('st-ghost', v.transparent, 'Transparent', (on) => void this.change({ transparent: on }))),
+        field('Origin and axes', 'The display menu in the viewer changes these for the open model, until the next one opens.',
+          toggle('st-axes', v.axes, 'Origin and axes', (on) => void this.change({ axes: on })))),
       group('Measurements',
         field('Decimal places', `In the measurement card and at the measuring line, for example ${sample} mm. Text sent to the agent always has three decimals.`, digits)),
     ));
@@ -130,6 +131,7 @@ const AREA: Record<Exclude<StorageEntry['id'], 'appdata'>, { title: string; icon
   previews: { title: 'Preview cache', icon: 'layers', desc: () => 'Older versions from the history, prepared for viewing. Created again when needed.' },
   thumbnails: { title: 'Start page pictures', icon: 'image', desc: () => 'Pictures of your models on the start page.' },
   skills: { title: 'Your skills', icon: 'book', desc: () => 'Skills you created or edited under “Skills”.' },
+  logs: { title: 'Logs', icon: 'file', desc: () => 'What the app did and what went wrong, for bug reports. A few MB at most, older entries are dropped.' },
   other: { title: 'Other', icon: 'file', desc: () => 'Caches of the display, the settings and the state of the app.' },
 };
 
@@ -316,7 +318,7 @@ export class AboutPage implements SettingsPage {
       el('span', { className: 'c3', textContent: x.found ? `found (${x.command})` : `not installed (${x.command})` })))
       : [el('span', { className: 'c3', textContent: 'No agents were checked.' })]))));
     kids.push(group('Folders', el('div', { className: 'st-kv paths' }, ...a.paths.flatMap((p) => {
-      const area: StorageArea | null = p.label === 'App data' ? 'appdata' : p.label === 'Your skills' ? 'skills' : null;
+      const area: StorageArea | null = p.label === 'App data' ? 'appdata' : p.label === 'Your skills' ? 'skills' : p.label === 'Logs' ? 'logs' : null;
       const open = area ? el('button', { className: 'ibtn s', title: 'Open the folder' }, icon('folder', 14, 1.8)) : null;
       open?.setAttribute('aria-label', `Open the folder: ${p.label}`);
       open?.addEventListener('click', () => this.deps.openFolder(area!));

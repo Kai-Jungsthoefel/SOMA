@@ -178,7 +178,8 @@
           <div class="vbtns">
             <button data-view="fit" aria-label="Fit all" title="Fit all"><i data-icon="fit"></i></button>
             <button data-view="iso" aria-label="Default view" title="Default view (isometric)"><i data-icon="home"></i></button>
-            <button id="btn-display" aria-haspopup="menu" aria-expanded="false" aria-label="Display" title="Display: edges, wireframe, transparent and views"><i data-icon="layers"></i></button>
+            <button id="btn-axes" aria-pressed="false" aria-label="Origin and axes" title="Origin and axes: X red, Y green, Z blue"><i data-icon="axes"></i></button>
+            <button id="btn-display" aria-haspopup="menu" aria-expanded="false" aria-label="Display" title="Display: edges, wireframe, transparent, origin and axes, and views"><i data-icon="layers"></i></button>
           </div>
         </div>
 
@@ -438,6 +439,7 @@
     <button class="mi keep" role="menuitemcheckbox" data-display="edges" aria-checked="true"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Edges</span></button>
     <button class="mi keep" role="menuitemcheckbox" data-display="wire" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Wireframe</span></button>
     <button class="mi keep" role="menuitemcheckbox" data-display="ghost" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Transparent</span></button>
+    <button class="mi keep" role="menuitemcheckbox" data-display="axes" aria-checked="false"><span class="chk"><i data-icon="check" data-size="15" data-stroke="2.2"></i></span><span>Origin and axes</span></button>
     <div class="msep"></div>
     <div class="mh">VIEW</div>
     <div class="chips views">

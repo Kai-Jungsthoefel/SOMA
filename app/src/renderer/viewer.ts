@@ -125,6 +125,10 @@ const NAV_BUTTON: Record<number, NavButton> = { 0: 'left', 1: 'middle', 2: 'righ
 const NAV_KEY: Record<NavButton, 'LEFT' | 'MIDDLE' | 'RIGHT'> = { left: 'LEFT', middle: 'MIDDLE', right: 'RIGHT' };
 /** Keine Bewegung für eine Taste (OrbitControls kennt dafür keinen eigenen Wert, alles außer den drei Aktionen gilt als nichts). */
 const NAV_NONE = -1 as THREE.MOUSE;
+/** Hauptachsen, Farben wie am ViewCube (viewcube.ts). */
+const AXES = [
+  { dir: [1, 0, 0], color: 0xe5534b, label: 'X' }, { dir: [0, 1, 0], color: 0x57ab5a, label: 'Y' }, { dir: [0, 0, 1], color: 0x539bf5, label: 'Z' },
+];
 
 export class Viewer {
   private renderer: THREE.WebGLRenderer;
@@ -152,6 +156,10 @@ export class Viewer {
   private edges = true;
   private wire = false;
   private ghost = false;
+  /** Ursprung und Hauptachsen (Menü „Display“), Farben wie am ViewCube. Länge nach der Größe des Modells beim Laden. */
+  private axes = new THREE.Group();
+  private showAxes = false;
+  private axisItems: { el: HTMLElement; at: THREE.Vector3 }[] = [];
   private selectedId: string | null = null;
   /** Mehrfachauswahl (Strg/Shift-Klick, Rahmen, Baum): alle leuchten orange, `selectedId` ist das zuletzt gewählte. */
   private selectedIds = new Set<string>();
@@ -235,7 +243,7 @@ export class Viewer {
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(80, -120, 200);
-    this.scene.add(sun, this.highlight, this.hover, this.marks, this.caps, this.trails);
+    this.scene.add(sun, this.highlight, this.hover, this.marks, this.caps, this.trails, this.axes);
     this.overlay = document.createElement('div');
     this.overlay.className = 'v-overlay';
     container.appendChild(this.overlay);
@@ -310,6 +318,7 @@ export class Viewer {
     for (const id of [...this.selectedIds]) if (!this.parts.has(id)) this.selectedIds.delete(id);
     this.applySelection();
     this.updateExtent();
+    this.buildAxes();
     if (!this.hasFitted && this.parts.size) { this.setView('iso'); this.hasFitted = true; }
     this.fitClip();
     this.syncSection();
@@ -423,6 +432,39 @@ export class Viewer {
   setEdges(on: boolean): void { this.edges = on; this.applyDisplay(); this.requestRender(); }
   setWireframe(on: boolean): void { this.wire = on; this.applyDisplay(); this.requestRender(); }
   setGhost(on: boolean): void { this.ghost = on; this.applyDisplay(); this.requestRender(); }
+  setAxes(on: boolean): void { this.showAxes = on; this.buildAxes(); this.fitClip(); this.requestRender(); }
+
+  /**
+   * Ursprung und Achsen X, Y, Z. Immer obenauf (ohne Tiefentest): Der Ursprung liegt oft im Modell, verdeckt wäre er nutzlos.
+   * Nicht auswählbar (Auswählen trifft nur Bauteile), vom Schnitt nicht betroffen. Länge rund 30 % des Modellradius,
+   * auf 1, 2 oder 5 × 10ⁿ mm gerundet: Sie zeigen Lage und Richtung, ohne das Modell zu überdecken.
+   */
+  private buildAxes(): void {
+    this.clearGroup(this.axes);
+    for (const it of this.axisItems) it.el.remove();
+    this.axisItems = [];
+    if (!this.showAxes) return;
+    const raw = Math.max(this.radius * 0.3, 1);
+    const pow = 10 ** Math.floor(Math.log10(raw));
+    const len = [1, 2, 5, 10].map((f) => f * pow).find((v) => v >= raw * 0.75) ?? raw;
+    for (const a of AXES) {
+      const tip = a.dir.map((d) => d * len);
+      const l = this.fatLines([0, 0, 0, ...tip], a.color, 2, false);
+      l.renderOrder = 11;
+      this.axes.add(l);
+      const el = document.createElement('div');
+      el.className = 'v-axis';
+      el.textContent = a.label;
+      el.style.color = `#${a.color.toString(16).padStart(6, '0')}`;
+      this.overlay.appendChild(el);
+      this.axisItems.push({ el, at: new THREE.Vector3(...(a.dir.map((d) => d * len * 1.08) as [number, number, number])) });
+    }
+    const og = new THREE.BufferGeometry();
+    og.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
+    const origin = new THREE.Points(og, new THREE.PointsMaterial({ color: 0xe6e8eb, size: 7, sizeAttenuation: false, map: Viewer.dot(), transparent: true, alphaTest: 0.2, depthTest: false }));
+    origin.renderOrder = 11;
+    this.axes.add(origin);
+  }
 
   private applyDisplay(): void {
     for (const [id, p] of this.parts) {
@@ -741,7 +783,9 @@ export class Viewer {
     if (this.camera === this.ortho) { this.fitOrtho(); return; }
     const dist = Math.max(this.camera.position.distanceTo(this.controls.target), 1e-3);
     const near = Math.max(dist / 200, 1e-3);
-    const far = Math.max(this.camera.position.distanceTo(this.center) + this.radius * 2, near * 100);
+    // Die Achsen liegen am Ursprung, der kann weit neben dem Modell liegen
+    const axes = this.showAxes ? this.camera.position.length() + this.radius : 0;
+    const far = Math.max(this.camera.position.distanceTo(this.center) + this.radius * 2, axes, near * 100);
     if (Math.abs(near - this.camera.near) > near * 0.02 || Math.abs(far - this.camera.far) > far * 0.02) {
       this.camera.near = near;
       this.camera.far = far;
@@ -755,7 +799,7 @@ export class Viewer {
    */
   private fitOrtho(): void {
     const target = this.controls.target;
-    const need = target.distanceTo(this.center) + this.radius * 2 + 1;
+    const need = Math.max(target.distanceTo(this.center), this.showAxes ? target.length() : 0) + this.radius * 2 + 1;
     const off = this.ortho.position.clone().sub(target);
     if (off.lengthSq() < 1e-18) off.set(0.8, -1.2, 0.9);
     if (off.length() < need) this.ortho.position.copy(target).addScaledVector(off.normalize(), need);
@@ -1191,10 +1235,10 @@ export class Viewer {
   }
 
   private placeOverlay(): void {
-    if (!this.overlayItems.length && !this.tagItems.length) return;
+    if (!this.overlayItems.length && !this.tagItems.length && !this.axisItems.length) return;
     const w = this.container.clientWidth, h = this.container.clientHeight;
     const v = new THREE.Vector3();
-    for (const it of [...this.overlayItems, ...this.tagItems]) {
+    for (const it of [...this.overlayItems, ...this.tagItems, ...this.axisItems]) {
       v.copy(it.at).project(this.camera);
       const off = v.z > 1 || v.x < -1.2 || v.x > 1.2 || v.y < -1.2 || v.y > 1.2;
       it.el.hidden = off;
@@ -2134,6 +2178,11 @@ export class Viewer {
     return { target: this.controls.target.toArray(), dir: d.clone().normalize().toArray(), dist: this.viewDist(), near: this.camera.near, far: this.camera.far,
       zoomToCursor: this.controls.zoomToCursor, animating: !!this.anim, projection: this.projection, navigation: this.nav, zoomSpeed: this.controls.zoomSpeed,
       buttons: [b.LEFT, b.MIDDLE, b.RIGHT] };
+  }
+
+  /** Ursprung und Achsen, für Tests: an, Anzahl der Objekte (3 Linien und der Punkt), Beschriftungen im Bild, Länge der X-Achse. */
+  axesState() {
+    return { on: this.showAxes, objects: this.axes.children.length, labels: this.axisItems.filter((it) => !it.el.hidden).map((it) => it.el.textContent), len: this.axisItems[0] ? this.axisItems[0].at.x / 1.08 : 0 };
   }
 
   /** Stand des Schnitts, für Tests: Ebene, Bauteile mit Deckel, Segmente und Ausdehnung der Kontur, geschnittene Materialien. */
