@@ -58,7 +58,9 @@ module.exports = {
   ],
 
   win: {
-    target: [{ target: 'nsis', arch: ['x64'] }],
+    // Dazu der entpackte Ordner als ZIP (portabel, ohne Installation). Nicht das Ziel „portable“: Das ist eine EXE, die
+    // bei jedem Start 1,4 GB nach %TEMP% entpackt.
+    target: [{ target: 'nsis', arch: ['x64'] }, { target: 'zip', arch: ['x64'] }],
     icon: 'resources/icon.ico',
   },
   nsis: {

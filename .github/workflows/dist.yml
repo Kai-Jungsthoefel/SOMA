@@ -21,7 +21,9 @@ jobs:
         include:
           - os: windows-latest
             exe: release/win-unpacked/SOMA.exe
-            files: app/release/*.exe
+            files: |
+              app/release/*.exe
+              app/release/*.zip
           # 22.04 statt neuer: Das Paket läuft nur auf Systemen mit mindestens dieser glibc
           - os: ubuntu-22.04
             exe: release/linux-unpacked/soma-app
@@ -139,13 +141,13 @@ jobs:
 
           | System | File |
           |---|---|
-          | Windows 10/11, x64 | \`SOMA-*-win-x64.exe\` (installer) |
+          | Windows 10/11, x64 | \`SOMA-*-win-x64.exe\` (installer) or \`SOMA-*-win-x64.zip\` (portable) |
           | macOS 11 or later, Apple Silicon | \`SOMA-*-mac-arm64.dmg\` |
           | Linux x64, glibc 2.31 or later | \`SOMA-*-linux-*.AppImage\` or \`SOMA-*-linux-*.tar.gz\` |
 
           The packages are not signed yet:
 
-          - **Windows:** SmartScreen warns on the first start. Choose "More info", then "Run anyway". The installer needs no admin rights.
+          - **Windows:** SmartScreen warns on the first start. Choose "More info", then "Run anyway". The installer needs no admin rights. For the portable ZIP, right-click it before extracting, choose Properties and tick "Unblock", then SOMA.exe starts without a warning. Extract it to a local folder, not to a network drive or a synced folder like OneDrive (over 1 GB in many files). Settings stay in your user profile as with the installer.
           - **macOS:** Move SOMA to Applications, then right-click it and choose "Open", or run \`xattr -cr /Applications/SOMA.app\` once.
           - **Linux:** Make the AppImage executable (\`chmod +x\`). Without a working graphics driver SOMA falls back to software rendering, which is slow for large models.
           EOF
