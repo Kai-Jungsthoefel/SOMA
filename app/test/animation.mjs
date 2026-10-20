@@ -65,6 +65,30 @@ a = Animation("Deckel falsch")
 lid = a.hinge("Lid", (0, 0, 26), (1, 0, 26))
 a.play(lid.to(60), run_time=1)
 `;
+// Konsole schwenkt mit to() um 90° um die senkrechte Achse durch (-50, 0): Schraubbahn statt geradem Weg des Ursprungs.
+// Dazu je ein Fall für die Bewegungsprüfung: Sprung (run_time=0), zu schnelle Drehung, am Ende versteckt
+const BEWEGUNG = `import cadquery as cq
+from soma.anim import Animation
+
+a = Animation("Bewegung")
+konsole = a.part("Konsole")
+stift = a.hinge("Stift", (50, 0, 0), (50, 0, 1))
+lasche = a.part("Lasche")
+a.play(konsole.to(cq.Location(cq.Vector(-50, 50, 0), cq.Vector(0, 0, 1), 90)), run_time=1, ease="linear")
+a.play(stift.by(1800), run_time=1)
+a.play(lasche.translate((0, -30, 0)), run_time=0)
+a.wait(0.5)
+a.hide("Störer")
+a.wait(0.5)
+`;
+// Abstand eines Punkts der Konsole (10 mm neben der Achse) von der Achse nach der halben Drehung
+const POSE = `from soma import animrun
+import numpy as np
+_p, res = animrun.load(".")
+a = next(x for _f, r in res if isinstance(r, list) for x in r if x.name == "Bewegung")
+p = a.poses(0.5)["Konsole"] @ np.array([-60.0, 0, 5, 1])
+print(round(float(np.hypot(p[0] + 50, p[1])), 4))
+`;
 const KAPUTT = `from soma.anim import Animation
 a = Animation("Kaputt")
 a.hinge("Gibtsnicht", (0, 0, 0), (1, 0, 0))
@@ -139,6 +163,26 @@ try {
   fs.rmSync(path.join(dir, 'animations', 'kaputt.py'));
   await waitFor('Fehler weg', () => window.soma.anim.list().then((x) => x.errors.length === 0), 20000).catch(() => {});
   check('Gelöschte Datei: Ihr Fehler verschwindet aus der Liste', (await list()).errors.length === 0);
+
+  // 3b) Schraubbahn bei to() und Bewegungsprüfung (Sprung, Eiern, am Ende versteckt)
+  r = soma(['anim', 'info', 'Deckel öffnen']);
+  check('Ruhige Animation: keine Warnungen zur Bewegung', r.stdout.includes('Motion: no jumps, wobble or parts hidden at the end'), r.stdout.slice(-400));
+  fs.writeFileSync(path.join(dir, 'animations', 'bewegung.py'), BEWEGUNG);
+  // Erst den Watcher bauen lassen, sonst bauen App und soma gleichzeitig
+  await waitFor('Animation Bewegung gebaut', () => window.soma.anim.list().then((x) => x.animations.length === 3 && !x.building), 90000);
+  r = soma(['anim', 'build', 'animations/bewegung.py']);
+  check('soma anim build meldet Eiern (Stift), Sprung (Lasche) und am Ende versteckt (Störer)', r.status === 0
+    && /Stift: turns up to [\d.]+ deg per frame[^\n]*\(wobble\)/.test(r.stdout) && /Lasche: jumps 30 mm within one frame/.test(r.stdout)
+    && r.stdout.includes('still hidden at the end: Störer') && !r.stdout.includes('Konsole:'), r.stdout + r.stderr);
+  r = spawnSync(PY, ['-c', POSE], { cwd: dir, env, encoding: 'utf8', timeout: 5 * 60 * 1000 });
+  check('to() mit Drehung um eine Achse fern vom Ursprung: Schraubbahn, der Punkt bleibt 10 mm neben der Achse', near(Number(r.stdout.trim()), 10, 1e-3),
+    r.stdout + r.stderr);
+  r = soma(['anim', 'info', 'Bewegung']);
+  check('soma anim info zeigt die Warnungen', r.stdout.includes('Motion warnings:') && r.stdout.includes('Lasche: jumps'), r.stdout.slice(-600));
+  fs.rmSync(path.join(dir, 'animations', 'bewegung.py'));
+  // Der Index verliert gelöschte Dateien erst beim nächsten Bauen
+  soma(['anim', 'build']);
+  await waitFor('Animation Bewegung wieder weg', () => window.soma.anim.list().then((x) => x.animations.length === 2 && !x.building), 90000);
 
   // 4) Abspielen im Viewer. Animationen und Analysen stehen in eigenen Reitern (E82): Der Reiter zeigt die Liste, erst ein Klick
   // darin spielt eine ab. `showAnim` wählt wie ein Klick in der Liste

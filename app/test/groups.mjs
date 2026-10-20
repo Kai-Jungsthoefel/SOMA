@@ -240,6 +240,17 @@ walk(a)`);
   check('output/model.step: Gehaeuse › Schrauben › Schraube und Reference › Platine › Stecker › USB_C', lines.includes('  Gehaeuse') && lines.includes('    Schrauben') && lines.includes('      Schraube')
     && lines.includes('  Reference') && lines.includes('    Platine') && lines.includes('      Stecker') && lines.includes('        USB_C'), lines.join(' | ').slice(0, 120));
 
+  // 8) Referenz mit alpha=1 (Boden, Logo für eine Animation): deckend mit Tiefe, trotzdem nicht in export --all
+  fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL + 'add_part("Tisch", cq.Workplane().box(100, 80, 2).translate((0, 0, -12)), role="reference", alpha=1, color=(0.3, 0.3, 0.3))\n');
+  await waitFor('Modell mit deckender Referenz gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 7, 90000).catch(() => {});
+  const ids7 = await ev(() => Object.fromEntries(window.__t.parts().map((p) => [p.name, p.id])));
+  const tisch = await ev((id) => window.__t.viewer.partLook(id), ids7.Tisch);
+  const platine = await ev((id) => window.__t.viewer.partLook(id), ids7.Leiterplatte);
+  check('Referenz mit alpha=1 deckend und mit Tiefe, die übrigen Referenzen bleiben durchsichtig', tisch?.opacity === 1 && tisch.depthWrite
+    && platine?.opacity < 1 && !platine.depthWrite, JSON.stringify({ tisch, platine }));
+  const exp = spawnSync(PY, ['-m', 'soma', 'export', '--all', '--format', 'step', '--out', path.join(proj.dir, 'renders'), '--project', proj.dir], { encoding: 'utf8', env: { ...process.env, PYTHONUTF8: '1' } });
+  check('soma export --all lässt auch die deckende Referenz aus', exp.status === 0 && !exp.stdout.includes('Tisch') && /not exported: \d+ reference/.test(exp.stdout), exp.stdout + exp.stderr);
+
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));
 } catch (e) {

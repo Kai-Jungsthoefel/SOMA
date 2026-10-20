@@ -297,7 +297,9 @@ export class Viewer {
         mat.polygonOffset = true; mat.polygonOffsetFactor = 1; mat.polygonOffsetUnits = 1;
         mat.userData.baseOpacity = mat.opacity;
         mat.userData.baseTransparent = mat.transparent;
-        if (meta.role === 'reference') { mat.depthWrite = false; m.renderOrder = 1; }
+        // Durchsichtige Referenzen ohne Tiefe, damit man dahinter sieht. Eine deckende (alpha=1, etwa ein Boden) wie ein Bauteil
+        mat.userData.seeThrough = meta.role === 'reference' && mat.opacity < 1;
+        if (mat.userData.seeThrough) { mat.depthWrite = false; m.renderOrder = 1; }
       }
       fresh.set(meta.partId, { group: o, meta, meshes, lines, base: o.position.clone(), offset: new THREE.Vector3() });
     });
@@ -482,8 +484,9 @@ export class Viewer {
         // Einzeln transparent: deutlich durchsichtiger und ohne Tiefe, damit man sieht, was dahinter liegt
         mat.opacity = own ? Math.min(base, 0.18) : this.ghost ? Math.min(base, 0.35) : base;
         mat.transparent = own || this.ghost || (mat.userData.baseTransparent as boolean);
-        mat.depthWrite = !own && p.meta.role !== 'reference';
-        m.renderOrder = own ? 2 : p.meta.role === 'reference' ? 1 : 0;
+        const seeThrough = mat.userData.seeThrough as boolean;
+        mat.depthWrite = !own && !seeThrough;
+        m.renderOrder = own ? 2 : seeThrough ? 1 : 0;
         mat.needsUpdate = true;
       }
     }
