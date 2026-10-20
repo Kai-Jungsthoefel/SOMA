@@ -6,6 +6,19 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Added
+
+- `soma anim build`, `info` and `check` warn about motion that plays back differently than written: jumps within one frame, turns so fast that they wobble between frames, and parts that are still hidden at the end.
+- `add_part(..., alpha=)` sets the opacity of a part. A reference with `alpha=1` is opaque, for scenery in animations such as a floor or a logo, and still stays out of `soma export --all`.
+
+### Changed
+
+- Free parts moved with `to()` in an animation follow a rigid-body screw path: a turn runs on the arc about its axis instead of wobbling around the model origin. Animations that combine a large turn with a large shift in one `to()` take a different path than before.
+
+### Fixed
+
+- Long animations with many steps build much faster (a two-minute animation in seconds instead of many minutes), so the app shows them again.
+
 ## [0.9.0] - 2026-10-16
 
 ### Added

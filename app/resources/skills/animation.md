@@ -33,7 +33,9 @@ a.wait(1)
 ## Joints and timeline
 
 - `hinge(parts, p1, p2)`: angle in degrees, right-hand rule around `p2 - p1`. `slider(parts, direction)`: way in mm.
-  `part(parts)`: free motion with `to(cq.Location(...))`, `translate((x, y, z))`, `rotate(p1, p2, angle)`.
+  `part(parts)`: free motion with `to(cq.Location(...))`, `translate((x, y, z))`, `rotate(p1, p2, angle)`. `to()`
+  moves like a rigid body on a screw path: a pure turn runs on the arc about its axis (at most 180°), a pure shift
+  straight. Do not build your own interpolation from many tiny steps for that.
 - `parts` is a name from `add_part`, a group (`"Housing"`, `"Housing/Screws"`), a part with its group (`"Housing/Lid"`) or a list. One joint per part. A joint
   on a moving part gets `parent=lid`, its axis is given in the model position.
 - `joint.to(value)` (0 = as modelled), `joint.by(delta)`.
@@ -55,8 +57,11 @@ Captions: one short sentence in the language the user speaks, about what moves a
 
 ## Build, check, look
 
-1. `soma anim build` (the app also builds when the file changes). Errors name file and line.
-2. `soma anim info "Open the lid"`: the timeline as text. Read it.
+1. `soma anim build` (the app also builds when the file changes). Errors name file and line. It also warns about
+   motion that plays back differently than written: jumps within one frame (`run_time=0`, a camera `set()` in the
+   middle), turns faster than about 15° per frame that wobble between the 30 samples per second, and parts still
+   hidden at the end (also through `hide()` of a group). Fix them or make sure they are intended.
+2. `soma anim info "Open the lid"`: the timeline and the warnings as text. Read it.
 3. `soma anim check "Open the lid" --gap 0.5`: parts that collide or come closer than the gap during the motion. Fix
    collisions in the model or in the motion. Contacts and gaps as built in the model count as intended, only what
    gets worse during the motion is reported. A motion built from many short `play()` steps (a coupled mechanism)
