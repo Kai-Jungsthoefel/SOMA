@@ -15,6 +15,7 @@ to .soma/anim/. The viewer, videos and pictures are made from it, the animation 
 
 Lengths in mm, angles in degrees, times in seconds. Parts are named as in add_part(), groups as in group=.
 """
+import bisect
 import inspect
 import math
 
@@ -118,30 +119,27 @@ def _quat(m):
     return q / np.linalg.norm(q)
 
 
-def _quat_matrix(q):
-    x, y, z, w = q
-    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
-
-
-def _slerp(q0, q1, s):
-    d = float(np.dot(q0, q1))
-    if d < 0:
-        q1, d = -q1, -d
-    if d > 0.9995:
-        q = q0 + (q1 - q0) * s
-        return q / np.linalg.norm(q)
-    th = math.acos(d)
-    return (math.sin((1 - s) * th) * q0 + math.sin(s * th) * q1) / math.sin(th)
-
-
-def _blend(m0, m1, s):
-    """Zwischenlage zweier Lagen: Ursprung geradlinig, Drehung auf kuerzestem Weg."""
-    out = np.eye(4)
-    out[:3, :3] = _quat_matrix(_slerp(_quat(m0), _quat(m1), s))
-    out[:3, 3] = m0[:3, 3] + (m1[:3, 3] - m0[:3, 3]) * s
-    return out
+def _screw(m0, m1, s):
+    """Zwischenlage zweier Lagen als Schraubbewegung: Drehung um eine feste Achse im Raum plus Verschiebung entlang dieser
+    Achse, auf dem kuerzeren Weg (hoechstens 180 Grad). Frueher lief der Ursprung des Modells geradlinig und die Drehung
+    getrennt um ihn. Dann eiert jedes Teil, das weit weg vom Nullpunkt liegt, und die Bahn haengt davon ab, wo der Nullpunkt
+    zufaellig liegt. Hier nicht: eine reine Drehung laeuft auf dem Kreisbogen um ihre Achse, eine reine Verschiebung gerade."""
+    d = m1 @ np.linalg.inv(m0)  # die Bewegung im Raum: m1 = d @ m0
+    q = _quat(d)
+    if q[3] < 0:
+        q = -q
+    sin_half = float(np.linalg.norm(q[:3]))
+    th = 2 * math.atan2(sin_half, q[3])
+    t = d[:3, 3]
+    if th < 1e-9:  # keine Drehung (auch Rechenrauschen): gerade Verschiebung
+        return _translation(t * s) @ m0
+    u = q[:3] / sin_half
+    along = float(np.dot(u, t))
+    # Punkt der Achse, der dem Nullpunkt am naechsten liegt (Satz von Chasles). Bei kleinen Winkeln liegt die Achse weit
+    # weg und der Bogen ist fast gerade, der Fehler bleibt dabei klein (Pfeilhoehe etwa |t| * th / 8).
+    perp = t - along * u
+    p = 0.5 * (perp + np.cross(u, perp) / math.tan(th / 2))
+    return _translation(u * (along * s)) @ _axis_rotation(p, u, math.degrees(th) * s) @ m0
 
 
 def _placement(loc):
@@ -242,27 +240,34 @@ class Joint:
         self.anim, self.kind, self.parts, self.parent = anim, kind, parts, parent
         self.value = value            # Stand am Ende der bisher beschriebenen Zeitleiste
         self.start = value
-        self.segments = []            # (t0, t1, f(s) -> Wert, ease)
+        self.segments = []            # (t0, t1, f(s) -> Wert, ease, Endwert), zeitlich geordnet
+        self.ends = []                # t1 je Schritt, fuer die binaere Suche in value_at()
         self.label = ", ".join(parts[:3]) + (" ..." if len(parts) > 3 else "")
 
     def _own(self, value):
         raise NotImplementedError
 
     def value_at(self, t):
-        v = self.start
-        for t0, t1, f, ease in self.segments:
-            if t >= t1:
-                v = f(1.0)
-            elif t >= t0:
-                return f(ease((t - t0) / (t1 - t0)) if t1 > t0 else 1.0)
-            else:
-                break
-        return v
+        # Binaere Suche statt alle Schritte von vorn: Gekoppelte Bewegungen haben Tausende kurze Schritte je Gelenk,
+        # und abgetastet wird 30-mal je Sekunde. Abgeschlossene Schritte liefern ihren gespeicherten Endwert.
+        i = bisect.bisect_right(self.ends, t)  # Schritte vor i sind zur Zeit t abgeschlossen
+        if i < len(self.segments):
+            t0, t1, f, ease, _end = self.segments[i]
+            if t >= t0:  # laeuft gerade, t1 > t >= t0 und damit t1 > t0
+                return f(ease((t - t0) / (t1 - t0)))
+        return self.segments[i - 1][4] if i else self.start
 
-    def matrix(self, t):
-        """Position of all parts of this joint at time t (including the joints above it), as a 4x4 matrix."""
+    def matrix(self, t, cache=None):
+        """Position of all parts of this joint at time t (including the joints above it), as a 4x4 matrix.
+        cache: dict for one time t, so that every joint (and every parent) is computed only once."""
+        if cache is not None and self in cache:
+            return cache[self]
         m = self._own(self.value_at(t))
-        return self.parent.matrix(t) @ m if self.parent else m
+        if self.parent:
+            m = self.parent.matrix(t, cache) @ m
+        if cache is not None:
+            cache[self] = m
+        return m
 
 
 class _Hinge(Joint):
@@ -315,10 +320,12 @@ class _Free(Joint):
         return value
 
     def to(self, location):
-        """Move to this location (cq.Location or (x, y, z), relative to the position in the model). Without a rotation
-        axis the origin moves in a straight line: for rotations about an axis use hinge() or rotate()."""
+        """Move to this location (cq.Location or (x, y, z), relative to the position in the model). The parts move like
+        a rigid body on a screw path: a pure rotation runs on the arc about its axis (the shorter way, at most 180
+        degrees), a pure shift in a straight line, both together on a helix. For a large turn and a large shift at the
+        same time that can be a wide arc: then chain translate() and rotate(), or use parent=."""
         m1 = _placement(location)
-        return _Action(self, lambda m0: (lambda s: _blend(m0, m1, s), m1), lambda m0: f"{self.label}: to new location")
+        return _Action(self, lambda m0: (lambda s: _screw(m0, m1, s), m1), lambda m0: f"{self.label}: to new location")
 
     def translate(self, vector):
         """Move by this vector (mm)."""
@@ -490,7 +497,8 @@ class Animation:
             if j.anim is not self:
                 raise ValueError("This movement belongs to another animation")
             func, end = act.make(j.value)
-            j.segments.append((t0, t1, func, f))
+            j.segments.append((t0, t1, func, f, end))
+            j.ends.append(t1)
             move = dict(key=f"joint{self.joints.index(j)}", label=j.label)
             if j.unit:
                 move.update(unit=j.unit, v0=round(float(j.value), 4), v1=round(float(end), 4))
@@ -584,5 +592,6 @@ class Animation:
         return [p for j in self.joints for p in j.parts]
 
     def poses(self, t):
-        """Lage jedes bewegten Bauteils zur Zeit t (4x4-Matrix)."""
-        return {p: j.matrix(t) for j in self.joints for p in j.parts}
+        """Lage jedes bewegten Bauteils zur Zeit t (4x4-Matrix). Die Teile eines Gelenks teilen sich eine Matrix (nur lesen)."""
+        cache = {}
+        return {p: j.matrix(t, cache) for j in self.joints for p in j.parts}

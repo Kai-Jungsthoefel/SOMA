@@ -72,7 +72,7 @@ def _soma_shape(obj):
     raise TypeError(f"add_part expects a cq.Workplane, a cq.Shape, a cq.Assembly or a standard part, not {type(obj).__name__}")
 
 
-def add_part(name, obj, role=None, color=None, group=None):
+def add_part(name, obj, role=None, color=None, group=None, alpha=None):
     """Registers a part (SOMA). Here: collects it for the assembly `result` and for show_object() of the viewer."""
     standard = hasattr(obj, "__soma_shape__")
     role = role or (getattr(obj, "role", "part") if standard else "part")
@@ -83,7 +83,7 @@ def add_part(name, obj, role=None, color=None, group=None):
         groups = ("Reference",) + groups
     rgb = tuple(color[:3]) if color else _SOMA_COLORS.get(role, _SOMA_COLORS["part"])
     _SOMA_PARTS.append(dict(name=str(name), shape=_soma_shape(obj), role=role, groups=groups,
-                            color=(*rgb, 0.45 if role == "reference" else 1.0)))
+                            color=(*rgb, float(alpha) if alpha is not None else 0.45 if role == "reference" else 1.0)))
 
 
 def _soma_assembly(name="Model"):

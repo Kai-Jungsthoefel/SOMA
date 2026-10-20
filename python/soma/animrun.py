@@ -283,6 +283,121 @@ def _spans(a, duration):
     return out
 
 
+# Grenzen der Bewegungspruefung (motion_warnings), bezogen auf die Diagonale der Teile eines Gelenks
+JUMP_SIZE = 0.1          # Sprung: in einem Bild weiter als 10 % der Diagonale ...
+JUMP_FACTOR = 4.0        # ... und mindestens viermal so weit wie im Bild davor und danach
+WOBBLE_SIZE = 0.02       # Eiern: Viewer und Video liegen zwischen zwei Abtastungen mehr als 2 % daneben
+WOBBLE_MIN_MM = 0.05
+MAX_WARNINGS = 30
+
+
+def _ranges(idx):
+    """Aufeinanderfolgende Indizes zu (erster, letzter)."""
+    out = []
+    for i in idx:
+        if out and i == out[-1][1] + 1:
+            out[-1][1] = i
+        else:
+            out.append([i, i])
+    return out
+
+
+def motion_warnings(a, times, poses, cams):
+    """Was beim Abspielen anders aussieht als beschrieben (soma anim build, info und check melden es):
+    - jump: ein Gelenk oder die Kamera springt. Viewer und Video blenden das ueber ein Bild, es ruckelt.
+    - wobble: Viewer und Video interpolieren zwischen den Abtastungen (30 je Sekunde) Ursprung geradlinig und Drehung auf
+      dem kuerzesten Weg. Schnelle Drehungen, vor allem um eine Achse fern vom Teil, eiern dann, ab 180 Grad je Bild
+      laufen sie rueckwaerts. Gemessen als Abstand der Ecken zwischen interpolierter und wahrer Lage in der Mitte.
+    - hidden: Teile, die am Ende noch versteckt sind (hide() ohne show(), auch ueber eine Gruppe)."""
+    from scipy.spatial.transform import Rotation
+    out = []
+    info = {p["name"]: p for p in anim._PARTS}
+    mids = (times[1:] + times[:-1]) / 2
+    mid_m = {j: [] for j in a.joints}
+    for t in mids:
+        cache = {}
+        for j in a.joints:
+            mid_m[j].append(j.matrix(float(t), cache))
+    for j in a.joints:
+        if len(times) < 3:
+            break
+        lo = np.min([info[p]["bbox"][0] for p in j.parts], axis=0)
+        hi = np.max([info[p]["bbox"][1] for p in j.parts], axis=0)
+        diag = max(float(np.linalg.norm(hi - lo)), 1e-6)
+        c = _corners((lo, hi))
+        ms = np.array([pz[j.parts[0]] for pz in poses])
+        pts = np.einsum("nij,kj->nki", ms, c)[:, :, :3]
+        step = np.linalg.norm(pts[1:] - pts[:-1], axis=2).max(axis=1)  # weitester Weg einer Ecke je Bild
+        prev = np.r_[0.0, step[:-1]]
+        nxt = np.r_[step[1:], 0.0]
+        jumps = np.nonzero((step > JUMP_SIZE * diag) & (step > JUMP_FACTOR * np.maximum(prev, nxt)))[0]
+        for i in jumps:
+            out.append(dict(kind="jump", label=j.label, start=round(float(times[i]), 4), end=round(float(times[i + 1]), 4),
+                            value=round(float(step[i]), 2)))
+        # Zwischenlage wie im Viewer: Ursprung linear, Drehung slerp (bei s = 0.5 die normierte Summe der Quaternionen)
+        q = Rotation.from_matrix(ms[:, :3, :3]).as_quat()
+        q0, q1 = q[:-1], q[1:] * np.where(np.sum(q[:-1] * q[1:], axis=1) < 0, -1.0, 1.0)[:, None]
+        qm = q0 + q1
+        qm /= np.linalg.norm(qm, axis=1)[:, None]
+        lin = np.repeat(np.eye(4)[None], len(qm), axis=0)
+        lin[:, :3, :3] = Rotation.from_quat(qm).as_matrix()
+        lin[:, :3, 3] = (ms[:-1, :3, 3] + ms[1:, :3, 3]) / 2
+        true = np.einsum("nij,kj->nki", np.array(mid_m[j]), c)[:, :, :3]
+        err = np.linalg.norm(np.einsum("nij,kj->nki", lin, c)[:, :, :3] - true, axis=2).max(axis=1)
+        deg = np.degrees((Rotation.from_matrix(ms[:-1, :3, :3]).inv() * Rotation.from_matrix(ms[1:, :3, :3])).magnitude())
+        bad = (err > max(WOBBLE_SIZE * diag, WOBBLE_MIN_MM)) & ~np.isin(np.arange(len(err)), jumps)
+        for i0, i1 in _ranges(np.nonzero(bad)[0]):
+            out.append(dict(kind="wobble", label=j.label, start=round(float(times[i0]), 4), end=round(float(times[i1 + 1]), 4),
+                            value=round(float(err[i0:i1 + 1].max()), 2), deg=round(float(deg[i0:i1 + 1].max()), 1)))
+    # Kamera: Sprung der Blickrichtung (Grad) oder des Standorts (bezogen auf den Abstand zum Ziel)
+    if len(cams) >= 3:
+        pos = np.array([c[0] + c[1] * c[2] for c in cams])
+        dirs = np.array([c[1] for c in cams])
+        dist = np.array([c[2] for c in cams])
+        ang = np.degrees(np.arccos(np.clip(np.sum(dirs[1:] * dirs[:-1], axis=1), -1, 1)))
+        move = np.linalg.norm(pos[1:] - pos[:-1], axis=1) / np.minimum(dist[1:], dist[:-1])
+        cut = np.zeros(len(ang), dtype=bool)
+        for v, size in ((ang, 5.0), (move, JUMP_SIZE)):
+            cut |= (v > size) & (v > JUMP_FACTOR * np.maximum(np.r_[0.0, v[:-1]], np.r_[v[1:], 0.0]))
+        for i in np.nonzero(cut)[0]:
+            out.append(dict(kind="jump", label="camera", start=round(float(times[i]), 4), end=round(float(times[i + 1]), 4)))
+    hidden = {}
+    for e in sorted(a.events, key=lambda e: e["t"]):
+        for p in e["parts"]:
+            if e["kind"] in ("hide", "show"):
+                hidden[p] = e["kind"] == "hide"
+    names = [p for p, h in hidden.items() if h]
+    if names:
+        out.append(dict(kind="hidden", label=", ".join(names[:6]) + (f" and {len(names) - 6} more" if len(names) > 6 else ""),
+                        start=round(float(times[-1]), 4), end=round(float(times[-1]), 4)))
+    out.sort(key=lambda w: (w["start"], w["label"]))
+    return out[:MAX_WARNINGS] + ([dict(kind="more", label="", start=0, end=0, value=len(out) - MAX_WARNINGS)]
+                                 if len(out) > MAX_WARNINGS else [])
+
+
+def warning_text(w):
+    span = f"{_t(w['start'])}-{_t(w['end'])} s" if w["end"] > w["start"] else f"{_t(w['start'])} s"
+    if w["kind"] == "jump":
+        what = (f"{w['label']}: jumps" + (f" {w['value']:g} mm" if w.get("value") is not None else "")
+                + " within one frame, the viewer and the video blend it over a single frame. Make it a motion in play() "
+                  "(run_time of a few tenths of a second) or keep it as a deliberate cut")
+    elif w["kind"] == "wobble":
+        what = (f"{w['label']}: turns up to {w['deg']:g} deg per frame, between frames the parts are off by up to "
+                f"{w['value']:g} mm (wobble). Slow the motion down or split it: about 15 deg per frame is the limit"
+                + (", above 180 deg per frame it turns backwards" if w["deg"] > 180 else ""))
+    elif w["kind"] == "hidden":
+        what = f"still hidden at the end: {w['label']}. Intended? Otherwise show() them again (hide() of a group hides all its parts)"
+    else:
+        return f"  ... {w['value']} more"
+    return f"  {span:<16} {what}"
+
+
+def warnings_text(ws):
+    if not ws:
+        return "Motion: no jumps, wobble or parts hidden at the end"
+    return "\n".join(["Motion warnings:"] + [warning_text(w) for w in ws])
+
+
 def finalize(a):
     """Abgetastete Daten einer Animation (fuer die Datei, die Textausgabe und die Pruefung)."""
     duration = a.duration
@@ -309,7 +424,7 @@ def finalize(a):
                            text=lb["text"], part=lb["part"], at=[round(v, 4) for v in at]))
     return dict(times=times, poses=poses, cams=cams, auto=auto, duration=duration, captions=captions, labels=labels,
                 titles=[dict(t, start=round(t["start"], 4), end=round(t["end"], 4)) for t in a.titles],
-                spans=_spans(a, duration))
+                spans=_spans(a, duration), warnings=motion_warnings(a, times, poses, cams))
 
 
 def write_glb(root, a, data):
@@ -348,7 +463,7 @@ def write_glb(root, a, data):
     meta = dict(version=1, id=a.id, name=a.name, file=_rel(a.file, root), line=a.line, duration=round(data["duration"], 4),
                 fps=anim.SAMPLE_FPS, fov=anim.FOV, cameraAuto=data["auto"], parts=a.moving_parts(),
                 captions=data["captions"], titles=data["titles"], labels=data["labels"], states=data["spans"],
-                steps=a.steps, built=time.time())
+                steps=a.steps, warnings=data["warnings"], built=time.time())
     out = Path(root) / OUT_DIR
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{a.id}.glb"
@@ -386,7 +501,8 @@ def build_all(root, only=None):
                 data = finalize(a)
                 path = write_glb(root, a, data)
                 built.append(dict(id=a.id, name=a.name, file=rel, line=a.line, duration=round(data["duration"], 4),
-                                  built=time.time(), glb=path.relative_to(root).as_posix(), parts=len(a.moving_parts())))
+                                  built=time.time(), glb=path.relative_to(root).as_posix(), parts=len(a.moving_parts()),
+                                  warnings=data["warnings"]))
             except build.BuildError as e:
                 errors.append(dict(file=e.file or rel, line=e.line, message=e.message, traceback=e.tb))
             except Exception as e:  # Fehler beim Abtasten, etwa unbrauchbare Werte
@@ -526,6 +642,8 @@ def info_text(root, entry):
         lines += ["", "Labels:"] + [
             f"  {_t(lb['start'])}-{_t(lb['end'])} s  \"{lb['text']}\"" + (f" on {lb['part']}" if lb["part"] else "")
             + " at ({:.1f}, {:.1f}, {:.1f})".format(*lb["at"]) for lb in m["labels"]]
+    if "warnings" in m:  # aelter gebaute Animationen haben keine
+        lines += ["", warnings_text(m["warnings"])]
     chk = read_check(root, entry)
     if chk:
         lines += ["", check_text(chk)]

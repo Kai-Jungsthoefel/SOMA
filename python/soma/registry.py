@@ -66,7 +66,7 @@ def _unique(name, taken):
     return f"{name} ({i})"
 
 
-def add_part(name, obj, role=None, color=None, group=None):
+def add_part(name, obj, role=None, color=None, group=None, alpha=None):
     """Registers a part. Required for every part, otherwise the viewer and the export do not know it.
 
     name   unique name (any characters, in the STEP file it is written as ASCII)
@@ -78,17 +78,26 @@ def add_part(name, obj, role=None, color=None, group=None):
            export --all). Standard parts from soma.fasteners are "hardware" if not given
     color  optional (r, g, b) with values 0..1 (for an assembly for all parts). Standard parts have their own
     group  optional, group in the part tree and in the STEP file, nested with "/", e.g. "Housing/Screws"
+    alpha  optional opacity above 0 up to 1 (opaque). References are 0.45 if not given: alpha=1 makes an
+           opaque reference, e.g. a floor or a logo for an animation that should not be exported
     """
     if IGNORE_ADD:
         return
+    if alpha is not None:
+        try:
+            alpha = float(alpha)
+        except (TypeError, ValueError):
+            raise ValueError(f"alpha must be a number above 0 up to 1, not {alpha!r}") from None
+        if not 0 < alpha <= 1:  # faengt auch nan ab. Unsichtbar: in Animationen hide()
+            raise ValueError(f"alpha must be a number above 0 up to 1, not {alpha!r}")
     frame = inspect.currentframe().f_back
     pos = inspect.getframeinfo(frame, context=0).positions  # Startzeile und Endzeile des Aufrufs
-    _add(name, obj, role, color, group, dict(file=frame.f_code.co_filename, line=pos.lineno, end_line=pos.end_lineno))
+    _add(name, obj, role, color, group, dict(file=frame.f_code.co_filename, line=pos.lineno, end_line=pos.end_lineno), alpha=alpha)
 
 
 def _add(name, obj, role, color, group, where, alpha=None):
     """add_part ohne Blick auf den Aufrufer: Der Kompatibilitaetsmodus (cqcompat.py) nennt die Stelle von show_object().
-    `alpha` < 1: halbtransparent wie in CQ-editor (options={"alpha": ...})."""
+    `alpha` < 1: halbtransparent wie in CQ-editor (options={"alpha": ...}). Unbrauchbare Werte gelten als nicht angegeben."""
     standard_part = hasattr(obj, "__soma_shape__")
     if role is None:
         role = getattr(obj, "role", "part") if standard_part else "part"
@@ -146,9 +155,11 @@ def _register(name, shape, role, color, groups, where, unique_step=False, axis=N
             i += 1
         step_name = f"{step_name}_{i}"
     rgb = tuple(color[:3]) if color else DEFAULT_COLORS[role]
+    if alpha is None or not 0 < alpha <= 1:
+        alpha = REFERENCE_ALPHA if role == "reference" else 1.0
     REGISTRY.append(dict(
         name=name, step_name=step_name, role=role, shape=shape, group=tuple(groups),
-        color=(*rgb, REFERENCE_ALPHA if role == "reference" else alpha if alpha is not None and 0 < alpha < 1 else 1.0), axis=axis, **where,
+        color=(*rgb, alpha), axis=axis, **where,
         # Das Normteil selbst (Screw, Nut ...), nur im Speicher: soma.fem liest daraus Groesse, Kopf und Lage (bolt())
         fastener=fastener,
     ))

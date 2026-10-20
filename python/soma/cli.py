@@ -262,6 +262,8 @@ def cmd_anim(args):
             else:
                 for b in res["built"]:
                     print(f"Animation ok: \"{b['name']}\" ({b['duration']:.2f} s, {b['parts']} moving part(s)) from {b['file']}")
+                    for w in b["warnings"]:
+                        print(animrun.warning_text(w))
                 for e in res["errors"]:
                     where = f"{e['file']}{':' + str(e['line']) if e.get('line') else ''}"
                     print(f"Animation ERROR ({where}): {e['message']}", file=sys.stderr)
@@ -295,7 +297,12 @@ def cmd_anim(args):
                 print(animrun.info_text(root, entry))
             return 0
         res = animrun.check(root, args.name, step=args.step, gap=args.gap)
-        print(json.dumps(res, ensure_ascii=False) if args.json else animrun.check_text(res))
+        if args.json:
+            print(json.dumps(dict(res, warnings=animrun.read_meta(root, entry).get("warnings")), ensure_ascii=False))
+        else:
+            print(animrun.check_text(res))
+            if "warnings" in (meta := animrun.read_meta(root, entry)):
+                print(animrun.warnings_text(meta["warnings"]))
         return 1 if any(r["kind"] == animrun.COLLISION and not p["atRest"] for p in res["pairs"] for r in p["ranges"]) else 0
     except animrun.AnimError as e:
         return _fail(str(e))
