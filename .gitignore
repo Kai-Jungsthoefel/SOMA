@@ -38,3 +38,6 @@ marketing/
 
 # UI-Entwürfe, nur lokal (bis v0.8.0 im Verlauf)
 design/
+
+# Webseite, eigenes Git-Repo, nur lokal
+website/
