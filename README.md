@@ -2,15 +2,16 @@
 
 **Solid Object Modeling with Agents.** A desktop app for designing parametric 3D models together with a coding agent.
 
-<!-- Trailer: upload the MP4 in the GitHub web editor and put the user-attachments link here, the hero image moves to Screenshots -->
-
+**[somacad.app](https://somacad.app)** · [Download](https://somacad.app/download/) · [Changelog](CHANGELOG.md)
 
 https://github.com/user-attachments/assets/3294d1e4-1f06-477d-9770-c91f3470330d
 
 
 You tell the agent what you need. It writes the model as Python code with [CadQuery](https://github.com/CadQuery/cadquery), SOMA builds it and shows the result. You look at it, measure it, point at what is wrong, and the agent changes the code.
 
-## What it is
+## What is SOMA?
+
+A CAD program where the AI does the CAD and you are the designer. SOMA brings together the three parts this needs: a code workspace with a terminal for your agent, an editor and Git for every version; a 3D viewer that rebuilds the model on every change; and instructions for the agent, with rules, skills and a command line tool.
 
 It's vibe coding, but for CAD. Made for makers and tinkerers who need a case, a bracket or a mount for their project and don't want to spend hours in a CAD program to get it. Describe or sketch the part, check the result, export it, print it. You don't have to know CadQuery. The code is there if you want to change a dimension yourself.
 
@@ -18,13 +19,13 @@ SOMA is not an agent of its own. Any CLI agent that can read files and run comma
 
 ## Install
 
-Download the package for your system from the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases): an installer or a portable ZIP for Windows, an AppImage or tar.gz for Linux, a dmg for macOS (Apple Silicon). Python, CadQuery, Git and CalculiX are included.
+Download SOMA from [somacad.app/download](https://somacad.app/download/), which offers the right package for your system, or from the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases): an installer or a portable ZIP for Windows, an AppImage or tar.gz for Linux, a dmg for macOS (Apple Silicon). Python, CadQuery, Git and CalculiX are included.
 
 - You need a CLI agent installed and logged in, for example Claude Code, OpenCode, Codex CLI or Gemini CLI. SOMA does not bring one
 - The installed app takes over 1 GB of disk space, most of it for Python, CadQuery and OpenCascade
 - The packages are not signed yet. On Windows, SmartScreen warns on the first start ("More info" > "Run anyway"). For the portable ZIP, tick "Unblock" in its Properties before extracting to avoid the warning, and extract it to a local folder. On macOS, open the app the first time with right-click > Open
 - Linux needs glibc 2.31 or newer
-- There is no automatic update. Download a new version from the releases page
+- SOMA shows on its start page when a new version is out. Download it from the website or the releases page
 
 ## Quick start
 
@@ -40,10 +41,13 @@ Press F1 in the app for a short guide with numbered screenshots. The agent knows
 - **Models as code:** Python with CadQuery, rebuilt on every change
 - **One file per model:** a `.soma` file holds code, result and history, like a CAD file
 - **Point, measure, draw:** click a part, measure exactly or sketch on the view, and send it to the agent
+- **Section and explode:** cut the model open, take an assembly apart
 - **Parameters:** change the values the agent made adjustable, without touching the code
 - **History:** every step of the agent on a timeline, preview and restore old states
+- **Standard parts and STEP import:** screws, nuts, washers and heat-set inserts from dimension tables, purchased parts as STEP
 - **Skills:** rule sets for the agent, such as 3D printing, CNC, laser cutting, sheet metal and tolerances, switched on per model. Edit them or add your own
-- **Analysis and animation:** overhangs, wall thickness, strength with FEM, animations as video
+- **Analysis:** overhangs, wall thickness, and strength with FEM (CalculiX)
+- **Animation:** motion described in Python, played in the viewer or rendered to video
 - **Export:** STEP, STL, 3MF, DXF and more, technical drawings as PDF
 - **Plain CadQuery in and out:** start from an existing CadQuery script, export the model as a script for CQ-editor or VS Code
 
@@ -61,9 +65,11 @@ Press F1 in the app for a short guide with numbered screenshots. The agent knows
 
 ![Technical drawing of a wardrobe next to the 3D model](docs/images/drawing.png)
 
+Look at more examples in 3D on [somacad.app](https://somacad.app/#models): a CNC router, a parametric organizer, a walking robot dog and a shelf with FEM.
+
 ## Status
 
-Early prototype, version 0.8.0. See [CHANGELOG.md](CHANGELOG.md).
+Early prototype. The current version is on the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases) page, changes are in [CHANGELOG.md](CHANGELOG.md).
 
 - Developed and mainly tested on Windows. The packages also run on Linux (Kubuntu) and macOS (Apple Silicon), but have seen much less use there
 - Mostly tested with Claude Code and Claude Opus 5.5 as the agent's model, with very good results. Other agents and models work too
