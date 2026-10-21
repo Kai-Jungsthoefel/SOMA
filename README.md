@@ -101,3 +101,6 @@ SOMA is free software under the [GNU General Public License v3.0](LICENSE) or an
 What you design with SOMA is yours. The [SOMA Model Exception](MODEL-EXCEPTION.md) lets you license your model files under any terms you like, even though they import `soma`. Exported files like STEP or STL are not affected by the GPL at all. The compatibility code that "As CadQuery script" puts into an exported script is also available under the Apache License 2.0.
 
 Third-party components keep their own licenses, see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+
+[![As seen on Open Source Alternatives](https://www.opensourcealternatives.to/badge-osa.svg)](https://www.opensourcealternatives.to)
