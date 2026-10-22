@@ -13,7 +13,8 @@ topics: Why it happens; Running soma; Installing packages; Reading files in Wind
 ## Why it happens
 
 The app's terminals put `soma`, `pip` and the model's own Python environment on the PATH. Some agents run their
-commands somewhere else, for example in a background service that kept the environment of another program. Then
+commands somewhere else, for example in a background service that kept the environment of another program,
+or in an agent app such as Claude Desktop or the Codex app that has this folder open. Then
 `soma` is missing or another `pip` answers. The working folder is still the model's folder, so call everything
 through the model's environment directly.
 

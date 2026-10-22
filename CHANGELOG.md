@@ -8,6 +8,8 @@ the version is bumped.
 
 ### Added
 
+- "Open folder" uses SOMA in a folder of yours, for example a Git repository: viewer, skills, agent instructions and `soma`, without a .soma file. Before anything changes, SOMA lists the files it creates and changes, with Cancel. It adds a section to `AGENTS.md` and a line to `CLAUDE.md` (backed up first), leaves your Git history and `requirements.txt` alone, and never moves or deletes the folder.
+- "Copy path for agent app" in the menu for new tabs copies the model folder, so an agent app such as Claude Desktop or the Codex app can work on the model. SOMA shows its changes, and `soma render` works from there too.
 - `soma anim build`, `info` and `check` warn about motion that plays back differently than written: jumps within one frame, turns so fast that they wobble between frames, and parts that are still hidden at the end.
 - `add_part(..., alpha=)` sets the opacity of a part. A reference with `alpha=1` is opaque, for scenery in animations such as a floor or a logo, and still stays out of `soma export --all`.
 

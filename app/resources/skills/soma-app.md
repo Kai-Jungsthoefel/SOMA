@@ -45,7 +45,7 @@ The logo at the top left opens the start page.
 
 ![The start page](../help/start.png)
 
-1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts").
+1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts"), and **Open folder**, which uses SOMA in a folder of yours (see "Your own folder").
 2. **Open**: opens a .soma or ZIP file (Ctrl O).
 3. **Tutorial**: a short guided tour of the app with an example model. No agent needed. The cross hides the card.
 4. **Recent**: models you worked on, the newest first. The field above filters them by name. "Open" marks the model that is open right now, "never saved" one that was never saved as a .soma file. The bin on a card removes the model from this computer, a saved .soma file stays.
@@ -74,6 +74,8 @@ disappears like any new model you did not change.
 2. **New tab**: opens the menu below.
 3. **Start agent**: starts one of the agents found on this computer.
 4. **Empty terminal**: a plain command line, for example for `soma build`.
+5. **Copy path for agent app**: copies the model folder. Open it in an agent app such as Claude Desktop or the Codex
+   app, and SOMA shows its changes like those of an agent in a tab.
 
 Type your wishes into the agent and press Enter. Everything with **Send to agent** (a part, a measurement, an error,
 a drawing) puts a short note into the agent's input. Add your own words, then press Enter. You can also drag a file
@@ -200,6 +202,25 @@ SOMA works with plain CadQuery scripts in both directions.
   and the values of the Parameters panel come back. Leave the block unchanged, otherwise SOMA keeps it as it is.
 
 The block and the standard parts are under the Apache License 2.0, so the exported script is yours like any model.
+
+## Your own folder
+
+**Open folder** (model menu, or the arrow next to New model) uses SOMA in a folder of yours, for example a Git repository.
+The folder itself is the model: there is no .soma file to save, and your files stay where they are.
+
+- **Entry point:** `model.py` if there is one. Otherwise SOMA asks which script builds the model (plain CadQuery with
+  `show_object` or `result` works too), or creates `model.py` from the template.
+- **Before anything changes**, SOMA lists what it creates and what it changes, with Cancel. It creates `.soma/` (app
+  data, cache and skills, with its own `.gitignore` for the intermediate results) and `output/`. It adds a marked section
+  for SOMA to `AGENTS.md` and a line pointing to it to `CLAUDE.md`, or creates the two files. Changed files are backed up
+  first. Packages the model needs go into `.soma/requirements.txt`, a `requirements.txt` of yours stays as it is.
+- **Git:** SOMA creates no repository and commits nothing here. If the folder is a repository, the history shows its
+  commits. A version shows in the viewer if its commit contains `output/model.step`. **Restore** is not available:
+  commit yourself or ask the agent.
+- **Saving:** Ctrl S writes the editor's changes into the folder. **Export › Everything as ZIP** makes a copy as a file,
+  without the Git history.
+- **Start page:** the card says "Folder". The bin only removes it from the list, the folder stays. If you move or rename
+  the folder, the card says "folder missing": open it again with **Open folder** at its new place.
 
 ## Settings
 
