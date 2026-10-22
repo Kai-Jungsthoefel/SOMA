@@ -30,6 +30,19 @@ REQ_HEADER = ("# Extra Python packages this model imports, on top of the app's b
               "# Written by `soma build`. Install packages with pip, the app installs this list when the model is opened elsewhere.\n")
 
 
+def requirements_path(root):
+    """Paketliste des Modells. Ein geoeffneter Ordner (Ordner-Modus) hat sie in .soma/, weil eine requirements.txt dort dem
+    Nutzer gehoert: project.json nennt dann "requirements". Nur ein Pfad innerhalb des Projekts gilt."""
+    root = Path(root).resolve()
+    try:
+        rel = json.loads((root / ".soma" / "project.json").read_text(encoding="utf-8")).get("requirements")
+    except (OSError, ValueError, AttributeError):
+        rel = None
+    if isinstance(rel, str) and rel and _inside(root / rel, root):
+        return root / rel
+    return root / REQUIREMENTS
+
+
 def env_dir(project):
     return Path(project).resolve() / ENV_DIR
 
@@ -179,11 +192,12 @@ def record_requirements(project):
         rel = Path(f[len(prefix):])
         top = rel.parts[0] if len(rel.parts) > 1 else rel.parts[0].split(".")[0]
         used |= by_top.get(top, set())
-    req = root / REQUIREMENTS
+    req = requirements_path(root)
+    name = req.relative_to(root).as_posix()
     try:
         old = req.read_text(encoding="utf-8") if req.is_file() else None
     except (OSError, UnicodeDecodeError) as e:
-        return f"{REQUIREMENTS} is not readable ({e}) and was not updated."
+        return f"{name} is not readable ({e}) and was not updated."
     lines = {n: installed[n] for n in used}
     for name, line in _parse_requirements(old or ""):
         if name is None or name not in installed:
@@ -193,7 +207,8 @@ def record_requirements(project):
     text = REQ_HEADER + "".join(f"{v}\n" for _, v in sorted(lines.items(), key=lambda kv: kv[0]))
     if text != old:
         try:
+            req.parent.mkdir(parents=True, exist_ok=True)
             req.write_text(text, encoding="utf-8", newline="\n")
         except OSError as e:
-            return f"{REQUIREMENTS} could not be written: {e}"
+            return f"{name} could not be written: {e}"
     return None
