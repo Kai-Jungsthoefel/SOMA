@@ -99,7 +99,7 @@ wheels bundle where relevant.
 | pdfplumber | 0.11.10 | MIT | https://github.com/jsvine/pdfplumber | yes |
 | pdfminer.six | 20260107 | MIT | https://github.com/pdfminer/pdfminer.six | yes |
 | pypdfium2 (incl. PDFium and its dependencies) | 5.14.0 | Apache-2.0 OR BSD-3-Clause; PDFium BSD-3-Clause, bundled libraries as listed in the package | https://github.com/pypdfium2-team/pypdfium2 | yes |
-| pillow | 12.3.0 | MIT-CMU | https://github.com/python-pillow/Pillow | yes |
+| pillow | 13.0.0 | MIT-CMU | https://github.com/python-pillow/Pillow | yes |
 | fonttools | 4.66.0 | MIT | https://github.com/fonttools/fonttools | yes |
 | contourpy | 1.4.0 | BSD-3-Clause | https://github.com/contourpy/contourpy | yes |
 | cycler | 0.12.1 | BSD-3-Clause | https://github.com/matplotlib/cycler | yes |
@@ -121,7 +121,7 @@ wheels bundle where relevant.
 | idna | 3.20 | BSD-3-Clause | https://github.com/kjd/idna | yes |
 | attrs | 26.1.0 | MIT | https://github.com/python-attrs/attrs | yes |
 | msgpack | 1.2.3 | Apache-2.0 | https://github.com/msgpack/msgpack-python | yes |
-| aiohttp (incl. llhttp) | 3.14.3 | Apache-2.0 AND MIT | https://github.com/aio-libs/aiohttp | yes |
+| aiohttp (incl. llhttp) | 3.14.4 | Apache-2.0 AND MIT | https://github.com/aio-libs/aiohttp | yes |
 | aiohappyeyeballs | 2.7.1 | PSF-2.0 | https://github.com/aio-libs/aiohappyeyeballs | yes |
 | aiosignal, frozenlist, multidict, propcache, yarl | 1.4.0, 1.8.0, 6.9.1, 0.5.4, 1.25.1 | Apache-2.0 | https://github.com/aio-libs | yes |
 | trame, trame-common, trame-components, trame-server | 4.0.0, 1.2.7, 2.5.0, 4.0.0 | Apache-2.0 | https://github.com/Kitware/trame | yes |

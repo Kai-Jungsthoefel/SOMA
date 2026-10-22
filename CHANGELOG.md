@@ -6,6 +6,10 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Security
+
+- The bundled Python environment uses Pillow 13.0.0 and aiohttp 3.14.4, which fix several reported vulnerabilities (crafted image files, HTTP server limits).
+
 ## [0.10.0] - 2026-10-22
 
 ### Added
