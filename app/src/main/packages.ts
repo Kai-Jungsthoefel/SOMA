@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { samePath } from './animations';
+import { resolveInside } from './files';
 import { pythonExe, warmDir } from './paths';
 
 /**
@@ -122,10 +123,22 @@ function basePackages(env: string): Set<string> {
   } catch { return new Set(); }
 }
 
+/**
+ * Paketliste des Modells, wie `requirements_path` in python/soma/env.py: Ein geöffneter Ordner (Ordner-Modus) hat sie in
+ * .soma/, eine requirements.txt dort gehört dem Nutzer. project.json nennt sie dann unter "requirements".
+ */
+export function requirementsFile(dir: string): string {
+  try {
+    const rel = (JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'project.json'), 'utf8')) as { requirements?: unknown }).requirements;
+    if (typeof rel === 'string' && rel) return resolveInside(dir, rel);
+  } catch { /* Vorgabe */ }
+  return path.join(dir, 'requirements.txt');
+}
+
 /** Zeilen aus requirements.txt, die in der Projektumgebung fehlen oder dort eine andere Version haben. */
 function missingLines(dir: string): Requirement[] {
   let text: string;
-  try { text = fs.readFileSync(path.join(dir, 'requirements.txt'), 'utf8'); } catch { return []; }
+  try { text = fs.readFileSync(requirementsFile(dir), 'utf8'); } catch { return []; }
   const { env } = envPaths(dir);
   const have = installedInEnv(env);
   const base = basePackages(env);
@@ -150,7 +163,7 @@ export async function installMissing(dir: string): Promise<string | null> {
   if (!missing.length) return null;
   const { env, python } = envPaths(dir);
   let options: string[] = [];
-  try { options = parseRequirements(fs.readFileSync(path.join(dir, 'requirements.txt'), 'utf8')).filter((r) => !r.name).map((r) => r.line); } catch { /* nur die Pakete */ }
+  try { options = parseRequirements(fs.readFileSync(requirementsFile(dir), 'utf8')).filter((r) => !r.name).map((r) => r.line); } catch { /* nur die Pakete */ }
   const list = path.join(env, 'restore-requirements.txt');
   try { fs.writeFileSync(list, [...options, ...missing.map((r) => r.line)].join('\n') + '\n'); } catch (e) {
     return `Could not write the package list: ${e instanceof Error ? e.message : String(e)}`;

@@ -12,12 +12,13 @@ import { DrawingBuilder, isDrawingFile, readDrawingList } from './drawings';
 import { resolveInside } from './files';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
-import { choose, chooseCadQueryScript, chooseExportTarget, choosePath, documentsDir, trashItem } from './dialogs';
+import { choose, chooseCadQueryScript, chooseEntryScript, chooseExportTarget, chooseFolder, choosePath, documentsDir, trashItem } from './dialogs';
+import { applyFolder, planFolder, refreshFolderSection, topLevelScripts } from './folders';
 import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
 import { checkParamValue, isParamValue, readUserParams, writeUserParams } from './params';
-import { backupsDir, helpDir, previewsDir, skillBackupsDir, skillDirs } from './paths';
+import { backupsDir, helpDir, previewsDir, skillBackupsDir, skillDirs, userDataDir } from './paths';
 import { syncHelpImages } from './help';
 import { HELP_SKILL } from '../shared/help';
 import { stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
@@ -27,7 +28,7 @@ import {
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
-  backupWorkspace, createProject, discardWorkspace, extractProject, forgetProject, getAppState, inspectProject, isProjectId, isUntouched, patchAppState, projectDir,
+  backupWorkspace, createProject, discardWorkspace, extractProject, folderId, forgetProject, getAppState, inspectProject, isFolderProject, isProjectId, isUntouched, patchAppState, projectDir, registerFolder,
   getSkillDefaults, readProjectJson, readSkillModes, renameProject, setLastProject, setSkillDefault, stampAppVersion, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
@@ -36,6 +37,8 @@ import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip
 interface Session {
   id: string;
   dir: string;
+  /** Geöffneter Ordner des Nutzers (Ordner-Modus, folders.ts): kein git init, Snapshot, Restore oder Speichern als .soma. */
+  folder: boolean;
   builds: BuildManager;
   terminals: TerminalManager;
   git: GitRepo;
@@ -96,7 +99,7 @@ export class ProjectController {
   info(): ProjectInfo {
     const s = this.need();
     const { name, problems } = inspectProject(s.id);
-    return { id: s.id, name, dir: s.dir, problems, autoBuild: s.builds.autoBuild };
+    return { id: s.id, name, dir: s.dir, problems, autoBuild: s.builds.autoBuild, folder: s.folder, entry: readProjectJson(s.id)?.entry || 'model.py' };
   }
 
   close(): void {
@@ -133,10 +136,18 @@ export class ProjectController {
     // Dasselbe Modell neu öffnen (etwa „Arbeitsstand behalten“ beim Öffnen seiner Datei) verwirft es nie
     if (this.session?.id === id) this.close(); else await this.leave();
     const dir = projectDir(id);
+    const folder = isFolderProject(id);
+    if (folder && !fs.existsSync(dir)) throw new Error(`The folder no longer exists: ${dir}. Open it again with “Open folder” at its new place.`);
     const builds = new BuildManager(dir);
     const terminals = new TerminalManager(this.wc, dir);
     const git = new GitRepo(dir);
-    void git.ensureIgnored(); // ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten
+    // Ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten. Im Ordner-Modus gehört das Repository
+    // dem Nutzer, dort hält .soma/.gitignore die Zwischenergebnisse heraus
+    if (!folder) void git.ensureIgnored();
+    else {
+      try { refreshFolderSection(dir, readProjectJson(id)?.entry || 'model.py', backupsDir(), id); }
+      catch (e) { console.error('[soma] Could not update the SOMA section in AGENTS.md:', e); }
+    }
     syncHelpImages(dir, helpDir()); // Bilder der Anleitung (E83) fehlen nach dem Öffnen einer .soma-Datei oder sind von einer älteren App
     const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
     const drawings = new DrawingBuilder(dir, () => this.send('drawings:changed'));
@@ -145,7 +156,7 @@ export class ProjectController {
     // Projektumgebung (E67): Meist steht sie schon, sonst legt `soma env` sie in rund 0,5 s an. Die Terminals kennen ihre
     // Pfade vorab, gewartet wird nur vor dem Installieren von Paketen
     const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
-    const session: Session = { id, dir, builds, terminals, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    const session: Session = { id, dir, folder, builds, terminals, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
     builds.on('status', (st) => {
@@ -164,6 +175,75 @@ export class ProjectController {
     // Erst nach project:changed: Das Fenster räumt beim Projektwechsel den Viewer leer und lädt danach das Modell
     if (last) builds.adopt(last);
     return info;
+  }
+
+  /**
+   * „Open folder“ (Ordner-Modus): SOMA in einem Ordner des Nutzers. Erst die Einstiegsdatei klären, dann sagt ein Hinweis,
+   * was angelegt und was geändert wird (Wunsch des Nutzers), mit Abbrechen. Ein schon eingerichteter Ordner öffnet ohne Frage.
+   */
+  async openFolder(): Promise<OpenResult> {
+    const picked = await chooseFolder(this.getWin());
+    if (!picked) return { cancelled: true };
+    const dir = path.resolve(picked);
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return { cancelled: false, error: `Not a folder: ${dir}` };
+    const inside = (a: string, b: string) => { const r = path.relative(b, a); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
+    if (inside(dir, userDataDir()) || inside(userDataDir(), dir)) return { cancelled: false, error: 'This folder holds the app data of SOMA. Choose another folder.' };
+
+    // Schon eingetragen (gleicher Ordner): nur die Einstiegsdatei aus project.json prüfen
+    const pj = (() => { try { return JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'project.json'), 'utf8')) as { entry?: unknown }; } catch { return null; } })();
+    let entry = typeof pj?.entry === 'string' && pj.entry && fs.existsSync(path.join(dir, pj.entry)) ? pj.entry : null;
+    let createModel = false;
+    if (!entry && fs.existsSync(path.join(dir, 'model.py'))) entry = 'model.py';
+    if (!entry) {
+      const scripts = topLevelScripts(dir);
+      if (!scripts.length) { createModel = true; entry = 'model.py'; }
+      else {
+        const c = await choose(this.getWin(), {
+          title: 'Open folder',
+          message: 'Which script builds the model?',
+          detail: `The folder has no model.py, but other Python scripts (${scripts.slice(0, 5).join(', ')}${scripts.length > 5 ? ' …' : ''}). ` +
+            'Choose the one that builds the model (plain CadQuery with show_object or result works too), or start a new model.py from the template.',
+          buttons: ['Choose script …', 'Create model.py', 'Cancel'],
+        });
+        if (c === 1) { createModel = true; entry = 'model.py'; }
+        else if (c !== 0) return { cancelled: true };
+        else {
+          const file = await chooseEntryScript(this.getWin(), dir);
+          if (!file) return { cancelled: true };
+          const rel = path.relative(dir, file);
+          if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return { cancelled: false, error: 'The script must be inside the folder.' };
+          entry = rel.split(path.sep).join('/');
+        }
+      }
+    }
+
+    const plan = planFolder(dir, entry, createModel);
+    if (plan.create.length || plan.change.length) {
+      const lines: string[] = [];
+      if (plan.create.length) lines.push('Creates:', ...plan.create.map((l) => `  ${l}`));
+      if (plan.change.length) lines.push(...(lines.length ? [''] : []), 'Changes:', ...plan.change.map((l) => `  ${l}`), '', 'Changed files are backed up first.');
+      lines.push('', 'Your other files stay as they are. SOMA does not create a Git repository or commit here.');
+      const c = await choose(this.getWin(), {
+        title: 'Open folder',
+        message: plan.change.length ? `SOMA creates and changes files in ${path.basename(dir)}.` : `SOMA creates files in ${path.basename(dir)}.`,
+        detail: `${dir}\n\n${lines.join('\n')}`,
+        buttons: ['Open', 'Cancel'],
+      });
+      if (c !== 0) return { cancelled: true };
+    }
+    let id: string;
+    try {
+      const r = applyFolder(plan, backupsDir());
+      id = r.id;
+      const known = folderId(dir);
+      if (known && known !== id) forgetProject(known); // derselbe Ordner unter alter Kennung (project.json ersetzt)
+      registerFolder(id, dir);
+      patchAppState(id, {}); // zweite Kopie des Projektzustands (E27)
+    } catch (e) {
+      return { cancelled: false, error: `The folder could not be set up: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    await this.open(id);
+    return { cancelled: false, opened: true };
   }
 
   async create(name?: string): Promise<ProjectInfo> {
@@ -255,7 +335,8 @@ export class ProjectController {
     // Abfrage der Verlaufsleiste könnte nach der frischen Meldung noch „nicht gespeichert“ schicken
     const app = getAppState(s.id);
     let unsaved: boolean;
-    if (!app.zipPath) unsaved = true;
+    if (s.folder) unsaved = false; // der Ordner ist das Modell, es gibt keine Modelldatei
+    else if (!app.zipPath) unsaved = true;
     else if (hasRepo) unsaved = st.dirty || st.head !== (app.savedHead ?? null);
     else unsaved = newestSourceMtime(s.dir) > (app.savedAt ?? 0); // ohne Git bleibt nur der Zeitvergleich
     return { zipPath: app.zipPath ?? null, savedHead: app.savedHead ?? null, head: st.head, dirtyFiles: st.changed, unsaved, hasRepo, savedAt: app.zipPath ? app.savedAt ?? null : null };
@@ -410,12 +491,13 @@ export class ProjectController {
       await s.builds.whenIdle();
       if (s.builds.status.state === 'error') warnings.push('The last build failed. The ZIP contains the last successful version of output/model.step.');
       let dirty = false;
-      if (await s.git.isRepo()) {
+      // Im Ordner-Modus geht das Repository des Nutzers nicht mit und wird nicht umgepackt
+      if (!s.folder && await s.git.isRepo()) {
         try { await s.git.pack(); } catch { /* nur größer */ }
         dirty = (await s.git.status()).dirty;
       }
-      const info: ZipInfo = { savedAt: new Date().toISOString(), head: await s.git.head(), id: s.id, name: pj?.name ?? s.id, ...(dirty ? { dirty } : {}) };
-      await saveProjectZip(s.dir, dest, info);
+      const info: ZipInfo = { savedAt: new Date().toISOString(), head: s.folder ? null : await s.git.head(), id: s.id, name: pj?.name ?? s.id, ...(dirty ? { dirty } : {}) };
+      await saveProjectZip(s.dir, dest, info, !s.folder);
       patchAppState(s.id, { exportDir: path.dirname(dest) });
       return { ok: true, files: [dest], target: dest, ...(warnings.length ? { warnings } : {}) };
     } catch (e) {
@@ -430,6 +512,7 @@ export class ProjectController {
    */
   async save(saveAs = false): Promise<SaveResult> {
     const s = this.need();
+    if (s.folder) return { cancelled: false, error: 'This model is a folder: its files are saved in place. Export › Everything as ZIP makes a copy as a file.' };
     const app = getAppState(s.id);
     let zipPath = saveAs ? undefined : app.zipPath;
     if (zipPath && !fs.existsSync(path.dirname(zipPath))) zipPath = undefined; // Zielordner weg (z. B. USB-Stick ab): neu fragen
@@ -511,6 +594,18 @@ export class ProjectController {
     const dir = projectDir(id);
     const remember = () => patchAppState(id, { zipPath, savedHead: info?.head ?? null, savedAt: Date.now() });
 
+    // Die Datei ist ein Export eines geöffneten Ordners: den Ordner nie ersetzen, nur ihn öffnen
+    if (isFolderProject(id)) {
+      const c = await choose(this.getWin(), {
+        title: 'Open model', message: 'This file is a copy of a model you opened as a folder.',
+        detail: `The folder: ${dir}\nSOMA does not replace a folder of yours with a file. To work on the file separately, open it on another computer or move the folder first.`,
+        buttons: ['Open the folder', 'Cancel'],
+      });
+      if (c !== 0) return { cancelled: true };
+      await this.open(id);
+      return { cancelled: false, opened: true };
+    }
+
     if (!fs.existsSync(dir)) {
       try { await extractProject(zipPath, id); } catch (e) { return { cancelled: false, error: `Unpacking failed: ${e instanceof Error ? e.message : String(e)}` }; }
       remember();
@@ -557,7 +652,8 @@ export class ProjectController {
 
   async gitLog(): Promise<GitLog> {
     const s = this.need();
-    const problems = await s.git.problems();
+    // Im Ordner-Modus ist das Repository Sache des Nutzers: anderer Branch oder gar keins ist kein Problem
+    const problems = s.folder ? [] : await s.git.problems();
     const hasRepo = await s.git.isRepo();
     const commits = hasRepo ? await s.git.log() : [];
     const st = hasRepo ? await s.git.status() : { changed: 0, head: null };
@@ -668,6 +764,7 @@ export class ProjectController {
 
   async restore(hash: string): Promise<RestoreResult> {
     const s = this.need();
+    if (s.folder) return { cancelled: false, error: 'SOMA does not restore versions in a folder you opened. Use Git or your agent for that.' };
     const commit = (await s.git.log()).find((c) => c.hash === hash);
     if (!commit) return { cancelled: false, error: 'This version no longer exists in the history.' };
     const c = await choose(this.getWin(), {
@@ -1022,9 +1119,20 @@ export class ProjectController {
    * Modell geht ohne Rückfrage. Das gerade geöffnete Modell nicht (erst ein anderes öffnen).
    */
   async remove(id: string): Promise<RemoveResult> {
-    if (!isProjectId(id) || !fs.existsSync(projectDir(id))) return { removed: false, error: 'This model no longer exists on this computer.' };
+    // Ein fehlender Ordner (Ordner-Modus) lässt sich trotzdem aus der Liste nehmen
+    if (!isProjectId(id) || (!fs.existsSync(projectDir(id)) && !isFolderProject(id))) return { removed: false, error: 'This model no longer exists on this computer.' };
     if (this.session?.id === id) return { removed: false, error: 'The open model cannot be removed. Open another one first.' };
     const dir = projectDir(id);
+    // Ein geöffneter Ordner gehört dem Nutzer: nur aus der Liste nehmen, der Ordner bleibt
+    if (isFolderProject(id)) {
+      const c = await choose(this.getWin(), {
+        title: 'Remove model', message: `Remove “${readProjectJson(id)?.name ?? path.basename(dir)}” from the list?`,
+        detail: `The folder stays as it is: ${dir}\n“Open folder” brings it back.`, buttons: ['Remove', 'Cancel'],
+      });
+      if (c !== 0) return { removed: false, cancelled: true };
+      forgetProject(id);
+      return { removed: true };
+    }
     if (!(await isUntouched(id))) {
       const name = readProjectJson(id)?.name ?? id.slice(0, 8);
       const app = getAppState(id);

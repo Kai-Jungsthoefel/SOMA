@@ -77,10 +77,18 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('project:saveState', () => ctl.saveState());
   ipcMain.handle('project:save', (_e, saveAs?: boolean) => ctl.save(!!saveAs));
   ipcMain.handle('project:openZip', () => ctl.openZip());
+  ipcMain.handle('project:openFolder', () => ctl.openFolder());
   ipcMain.handle('project:exportZip', () => ctl.exportZip());
   ipcMain.handle('project:createFromCadQuery', () => ctl.createFromCadQuery());
   ipcMain.handle('project:exportCadQuery', () => ctl.exportCadQuery());
   ipcMain.handle('project:reveal', () => ctl.reveal());
+  // Agenten-Apps (Claude Desktop, Codex-App) öffnen den Arbeitsordner selbst. `soma` finden sie über .soma/env (AGENTS.md)
+  ipcMain.handle('project:copyPath', (): FileOpResult => {
+    const dir = ctl.session?.dir;
+    if (!dir) return { ok: false, error: 'No model is open.' };
+    if (process.env.SOMA_TEST === '1') testClipboard = dir; else clipboard.writeText(dir);
+    return { ok: true, path: dir };
+  });
   ipcMain.handle('project:setThumb', (_e, dataUrl: string) => {
     const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));
     if (!m || m[1].length > 2_000_000 || !ctl.session) return;

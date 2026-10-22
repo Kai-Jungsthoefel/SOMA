@@ -47,6 +47,7 @@ export const SHOTS = [
       { label: 'New tab', sel: '#btn-term-add', at: 'r' },
       { label: 'Start agent', sel: '#agent-list', at: 'r', box: true },
       { label: 'Empty terminal', sel: '#btn-term-plain', at: 'r' },
+      { label: 'Copy path for agent app', sel: '#btn-copy-path', at: 'r' },
     ],
   },
   {

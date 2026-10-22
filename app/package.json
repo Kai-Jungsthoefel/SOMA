@@ -17,6 +17,7 @@
     "test:measure": "npm run build && node test/measure.mjs",
     "test:stepview": "npm run build && node test/stepview.mjs",
     "test:cadquery": "npm run build && node test/cadquery.mjs",
+    "test:folder": "npm run build && node test/folder.mjs",
     "test:groups": "npm run build && node test/groups.mjs",
     "test:section": "npm run build && node test/section.mjs",
     "test:explode": "npm run build && node test/explode.mjs",

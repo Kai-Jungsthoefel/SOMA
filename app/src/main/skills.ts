@@ -48,8 +48,8 @@ function inLibrary<T>(lib: Map<string, T>, id: string): T | undefined {
   return lib.get(id) ?? lib.get(currentSkillId(id));
 }
 export const SKILLS_DIR = '.soma/skills';
-const BEGIN = '<!-- soma:skills -->';
-const END = '<!-- /soma:skills -->';
+export const BEGIN = '<!-- soma:skills -->';
+export const END = '<!-- /soma:skills -->';
 /** Überschrift der Liste „Bei Bedarf“ in AGENTS.md, trennt sie von „Immer“. */
 const DEMAND_HEAD = '### Read when relevant';
 export const MAX_BYTES = 256 * 1024;

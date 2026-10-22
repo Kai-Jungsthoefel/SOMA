@@ -5,7 +5,7 @@ import type { ProjectListEntry, SkillMode } from '../shared/types';
 import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
-import { appStateFile, backupsDir, editBackupsDir, previewsDir, projectStateDir, skillBackupsDir, skillDirs, templateDir, thumbnailsDir, workspacesDir } from './paths';
+import { appStateFile, backupsDir, editBackupsDir, foldersFile, previewsDir, projectStateDir, skillBackupsDir, skillDirs, templateDir, thumbnailsDir, workspacesDir } from './paths';
 import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
@@ -27,6 +27,8 @@ export interface ProjectJson {
   skills_on_demand?: string[];
   /** Einstellungen der Skills je Kennung, nur vom Standard abweichende Werte (auch für ausgeschaltete Skills). */
   skill_settings?: Record<string, Record<string, number | string>>;
+  /** Paketliste (E67), wenn nicht requirements.txt: im Ordner-Modus .soma/requirements.txt (packages.ts, env.py). */
+  requirements?: string;
 }
 
 /** Zweite Kopie des Projektzustands in den App-Daten (E27) plus Angaben, die nur die App braucht. */
@@ -46,7 +48,39 @@ export const isProjectId = (id: string) => UUID.test(id);
 
 export function projectDir(id: string): string {
   if (!isProjectId(id)) throw new Error(`Invalid project ID: ${id}`);
-  return path.join(workspacesDir(), id);
+  return folderOf(id) ?? path.join(workspacesDir(), id);
+}
+
+/**
+ * Ordner-Modus: Modelle in einem Ordner des Nutzers, den er mit „Open folder“ geöffnet hat. Der Ordner gehört ihm: Die App
+ * legt dort kein Git an, verschiebt und löscht ihn nie (E69 und „Remove“ gelten nicht), sie schreibt nur ihren Teil
+ * (.soma/, den Abschnitt in AGENTS.md, folders.ts).
+ */
+function readFolders(): Record<string, string> {
+  const all = readJson<Record<string, unknown>>(foldersFile()) ?? {};
+  const out: Record<string, string> = {};
+  for (const [id, dir] of Object.entries(all)) if (isProjectId(id) && typeof dir === 'string' && path.isAbsolute(dir)) out[id] = dir;
+  return out;
+}
+
+export const folderOf = (id: string): string | null => readFolders()[id] ?? null;
+export const isFolderProject = (id: string): boolean => folderOf(id) !== null;
+/** Kennung, unter der ein Ordner schon eingetragen ist (gleicher Ordner, auch über Kurznamen oder andere Schreibweise). */
+export function folderId(dir: string): string | null {
+  const real = (p: string) => { try { return fs.realpathSync.native(p).toLowerCase(); } catch { return path.resolve(p).toLowerCase(); } };
+  const want = real(dir);
+  return Object.entries(readFolders()).find(([, d]) => real(d) === want)?.[0] ?? null;
+}
+
+export function registerFolder(id: string, dir: string): void {
+  writeJson(foldersFile(), { ...readFolders(), [id]: path.resolve(dir) });
+}
+
+function unregisterFolder(id: string): void {
+  const all = readFolders();
+  if (!(id in all)) return;
+  delete all[id];
+  writeJson(foldersFile(), all);
 }
 
 const stateFile = (id: string) => path.join(projectStateDir(), `${id}.json`);
@@ -175,7 +209,8 @@ export function inspectProject(id: string): { name: string; problems: string[] }
   for (const s of [pj?.skills, pj?.skills_on_demand].flatMap((x) => (Array.isArray(x) ? x : [])).filter(isSkillId)) {
     if (!fs.existsSync(path.join(dir, SKILLS_DIR, `${s}.md`))) problems.push(`The skill “${s}” is switched on, but ${SKILLS_DIR}/${s}.md is missing.`);
   }
-  for (const bad of ['.venv', 'venv', 'env']) {
+  // Ein geöffneter Ordner darf eigene Umgebungen haben, sie gehören dem Nutzer
+  for (const bad of isFolderProject(id) ? [] : ['.venv', 'venv', 'env']) {
     if (fs.existsSync(path.join(dir, bad, 'pyvenv.cfg'))) problems.push(`The project contains its own Python environment (${bad}/). It is ignored and not packed into the saved file.`);
   }
   return { name: pj?.name ?? backup?.name ?? id, problems };
@@ -183,13 +218,20 @@ export function inspectProject(id: string): { name: string; problems: string[] }
 
 export function listProjects(): ProjectListEntry[] {
   const root = workspacesDir();
-  if (!fs.existsSync(root)) return [];
   const out: ProjectListEntry[] = [];
-  for (const id of fs.readdirSync(root)) {
-    if (!isProjectId(id)) continue;
+  const folders = readFolders();
+  for (const id of fs.existsSync(root) ? fs.readdirSync(root) : []) {
+    if (!isProjectId(id) || folders[id]) continue;
     const dir = path.join(root, id);
     const pj = readJson<ProjectJson>(path.join(dir, '.soma', 'project.json'));
     out.push({ id, name: pj?.name ?? id.slice(0, 8), modified: fs.statSync(dir).mtimeMs, saved: !!getAppState(id).zipPath });
+  }
+  // Geöffnete Ordner: Fehlt einer (verschoben, umbenannt, Laufwerk ab), bleibt er mit Hinweis in der Liste (E28: melden)
+  for (const [id, dir] of Object.entries(folders)) {
+    const pj = readJson<ProjectJson>(path.join(dir, '.soma', 'project.json'));
+    let modified = 0;
+    try { modified = fs.statSync(path.join(dir, '.soma')).mtimeMs; } catch { /* fehlt */ }
+    out.push({ id, name: pj?.name ?? path.basename(dir), modified, saved: true, folder: dir, ...(fs.existsSync(dir) ? {} : { missing: true }) });
   }
   return out.sort((a, b) => b.modified - a.modified);
 }
@@ -265,6 +307,7 @@ export function setSkillBase(id: string, hash: string | null): void {
  * Unter Windows hält ein eben beendetes Terminal den Ordner noch kurz als aktuelles Verzeichnis fest, daher mehrere Versuche.
  */
 export async function backupWorkspace(id: string): Promise<string> {
+  if (isFolderProject(id)) throw new Error('This model is a folder of yours. SOMA does not move it.');
   const src = projectDir(id);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dst = path.join(backupsDir(), `${id}-${stamp}`);
@@ -297,6 +340,7 @@ const hasFiles = (dir: string): boolean => {
  */
 export async function isUntouched(id: string): Promise<boolean> {
   try {
+    if (isFolderProject(id)) return false; // ein Ordner des Nutzers verschwindet nie von selbst
     const dir = projectDir(id);
     if (!fs.existsSync(dir) || getAppState(id).zipPath) return false;
     if (UNTRACKED_CONTENT.some((rel) => hasFiles(path.join(dir, rel)))) return false;
@@ -315,6 +359,7 @@ export async function isUntouched(id: string): Promise<boolean> {
  */
 export function forgetProject(id: string): void {
   if (!isProjectId(id)) return;
+  unregisterFolder(id);
   for (const p of [stateFile(id), path.join(previewsDir(), id), path.join(thumbnailsDir(), `${id}.jpg`)]) {
     try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* Cache, nächstes Mal */ }
   }
@@ -326,6 +371,7 @@ export function forgetProject(id: string): void {
  * halb gelöschten Ordner zu hinterlassen. Klappt es nicht, bleibt das Modell stehen. Liefert true, wenn es weg ist.
  */
 export async function discardWorkspace(id: string): Promise<boolean> {
+  if (isFolderProject(id)) return false;
   const src = projectDir(id);
   const tmp = path.join(workspacesDir(), `.tmp-verworfen-${randomUUID()}`);
   for (let attempt = 0; ; attempt++) {

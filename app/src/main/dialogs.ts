@@ -60,6 +60,22 @@ export async function chooseCadQueryScript(win: BrowserWindow | null): Promise<s
   return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
 }
 
+/** Ordner für „Open folder“ (Ordner-Modus). null: abgebrochen. */
+export async function chooseFolder(win: BrowserWindow | null): Promise<string | null> {
+  if (testMode()) return nextAnswer<string | null>('Open folder');
+  const opts = { title: 'Open folder', defaultPath: documentsDir(), buttonLabel: 'Open folder', properties: ['openDirectory' as const, 'createDirectory' as const] };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+}
+
+/** Skript, das im geöffneten Ordner das Modell baut. null: abgebrochen. */
+export async function chooseEntryScript(win: BrowserWindow | null, dir: string): Promise<string | null> {
+  if (testMode()) return nextAnswer<string | null>('Entry script');
+  const opts = { title: 'Script that builds the model', defaultPath: dir, filters: [{ name: 'Python script', extensions: ['py'] }], properties: ['openFile' as const] };
+  const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+}
+
 /** Markdown-Dateien, die als eigene Skills übernommen werden (E78). Leere Liste: abgebrochen. */
 export async function chooseSkillFiles(win: BrowserWindow | null): Promise<string[]> {
   if (testMode()) return nextAnswer<string[] | null>('Import skills') ?? [];

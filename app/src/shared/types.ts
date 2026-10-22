@@ -8,10 +8,15 @@ export interface ProjectInfo {
   /** Gefundene Auffaelligkeiten im Projekt (nur melden, nie automatisch reparieren, E28). */
   problems: string[];
   autoBuild: boolean;
+  /** Geöffneter Ordner des Nutzers (Ordner-Modus): kein Speichern als .soma, Verlauf nur lesen. */
+  folder: boolean;
+  /** Einstiegsdatei laut project.json (meist model.py). */
+  entry: string;
 }
 
 /** `saved`: Es gibt eine Modelldatei dazu (das Modell wurde mindestens einmal gespeichert). */
-export interface ProjectListEntry { id: string; name: string; modified: number; saved?: boolean }
+/** `folder`: geöffneter Ordner (Ordner-Modus) mit seinem Pfad, `missing`: den Ordner gibt es nicht mehr. */
+export interface ProjectListEntry { id: string; name: string; modified: number; saved?: boolean; folder?: string; missing?: boolean }
 /** Modell von der Startseite entfernen (E69). `cancelled`: Rückfrage abgebrochen, nichts geändert. */
 export interface RemoveResult { removed: boolean; cancelled?: boolean; error?: string }
 
@@ -433,6 +438,8 @@ export interface SomaApi {
     save(saveAs?: boolean): Promise<SaveResult>;
     /** Öffnet eine Modelldatei (.soma, auch .zip, E79). */
     openZip(): Promise<OpenResult>;
+    /** „Open folder“ (Ordner-Modus): Ordner wählen, Hinweis, was angelegt und geändert wird, dann öffnen. */
+    openFolder(): Promise<OpenResult>;
     /** Das ganze Modell als ZIP exportieren (E79), ohne Snapshot. Die Modelldatei bleibt, wie sie ist. */
     exportZip(): Promise<ExportResult>;
     /** Neues Modell aus einem CadQuery-Skript (E100): Dateidialog, Import, erster Build. */
@@ -444,6 +451,8 @@ export interface SomaApi {
     onSaveState(cb: (s: SaveState) => void): void;
     /** Zeigt die Modelldatei im Dateimanager (noch nicht gespeichert: den Arbeitsordner). */
     reveal(): Promise<void>;
+    /** Pfad des Arbeitsordners in die Zwischenablage, für Agenten-Apps außerhalb der App (Claude Desktop, Codex-App). */
+    copyPath(): Promise<FileOpResult>;
     /** Vorschaubild des offenen Modells für die Startseite (JPEG als Data-URL). */
     setThumb(dataUrl: string): Promise<void>;
     thumb(id: string): Promise<string | null>;

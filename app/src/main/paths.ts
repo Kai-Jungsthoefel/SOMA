@@ -10,6 +10,8 @@ export function userDataDir(): string {
 }
 
 export const workspacesDir = () => path.join(userDataDir(), 'workspaces');
+/** Geöffnete Ordner (Ordner-Modus): Kennung des Modells → Pfad. Ihre Modelle liegen nicht unter workspaces/. */
+export const foldersFile = () => path.join(userDataDir(), 'folders.json');
 /** Zweite Kopie des Projektzustands ausserhalb des Arbeitsordners (E27). */
 export const projectStateDir = () => path.join(userDataDir(), 'projects');
 export const appStateFile = () => path.join(userDataDir(), 'state.json');

@@ -37,6 +37,8 @@ export class VersionsBar {
   private log: GitLog = { commits: [], problems: [], head: null, dirtyFiles: 0 };
   private previewHash: string | null = null;
   private savedHead: string | null = null;
+  /** Ordner-Modus: Verlauf nur ansehen, die App stellt dort nichts wieder her. */
+  private readOnly = false;
   private seq = 0;
   private logSeq = 0;
 
@@ -48,6 +50,11 @@ export class VersionsBar {
   get previewing(): boolean { return this.previewHash !== null; }
   /** Der alte Stand, der gerade als Vorschau zu sehen ist. */
   get previewed(): CommitInfo | null { return this.previewHash ? this.log.commits.find((c) => c.hash === this.previewHash) ?? null : null; }
+
+  setReadOnly(on: boolean): void {
+    this.readOnly = on;
+    this.render();
+  }
 
   /** Stand der letzten Speicherung, für den grünen Punkt. */
   setSaved(head: string | null): void {
@@ -160,7 +167,7 @@ export class VersionsBar {
       ui.bannerSub.textContent = `${previewCommit.subject} · ${who(previewCommit)} · ${fmtWhen(previewCommit.date, true)}`;
       ui.bannerSub.title = ui.bannerSub.textContent;
     }
-    ui.restore.hidden = !previewCommit;
+    ui.restore.hidden = !previewCommit || this.readOnly;
     ui.live.hidden = !previewCommit;
     ui.problem.hidden = problems.length === 0;
     ui.problem.textContent = problems.join(' ');

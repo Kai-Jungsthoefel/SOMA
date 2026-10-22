@@ -27,13 +27,13 @@ const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/results', '.s
 const STORED = /^\.git\/objects\/|\.(png|jpe?g|webp|mp4|webm|zip|soma|gz|7z|pack)$/i;
 const MAX_UNPACKED = 2 * 1024 ** 3;
 
-function collect(root: string): string[] {
+function collect(root: string, withGit: boolean): string[] {
   const out: string[] = [];
   const walk = (dir: string, rel: string) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isSymbolicLink()) continue;
-      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name) && !SKIP_PATHS.has(r)) walk(path.join(dir, e.name), r); continue; }
+      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name) && !SKIP_PATHS.has(r) && (withGit || r !== '.git')) walk(path.join(dir, e.name), r); continue; }
       if (SKIP_FILES.has(r) || (r.startsWith('.git/') && r.endsWith('.lock'))) continue;
       out.push(r);
     }
@@ -43,8 +43,9 @@ function collect(root: string): string[] {
 }
 
 /** Packt den Projektordner (inklusive .git) atomar in `zipPath`: erst eine .part-Datei, dann umbenennen. */
-export async function saveProjectZip(dir: string, zipPath: string, info: ZipInfo): Promise<{ files: number; bytes: number }> {
-  const files = collect(dir);
+/** `withGit`: false für einen geöffneten Ordner (Ordner-Modus): Sein Repository gehört dem Nutzer und geht nicht mit. */
+export async function saveProjectZip(dir: string, zipPath: string, info: ZipInfo, withGit = true): Promise<{ files: number; bytes: number }> {
+  const files = collect(dir, withGit);
   const zip = new yazl.ZipFile();
   for (const rel of files) if (rel !== ZIP_INFO_PATH) zip.addFile(path.join(dir, rel), rel, { compress: !STORED.test(rel) });
   zip.addBuffer(Buffer.from(JSON.stringify(info, null, 2)), ZIP_INFO_PATH);

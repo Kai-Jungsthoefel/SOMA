@@ -5,6 +5,7 @@
 // installieren lässt, wird gemeldet und bleibt in der Liste. Ohne Netz: pip holt die Testpakete aus einem lokalen Ordner.
 // Aufruf: node test/run-all.mjs packages (nach npm run build).
 import { exec } from 'dugite';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -43,6 +44,9 @@ const listZip = (p) => new Promise((resolve, reject) => yauzl.open(p, { lazyEntr
   z.readEntry();
 }));
 
+// Temp-Pfade können Kurznamen (NAME~1) enthalten: nicht als Zeichenkette vergleichen
+const samePath = (a, b) => { try { return fs.realpathSync.native(a).toLowerCase() === fs.realpathSync.native(b).toLowerCase(); } catch { return false; } };
+
 const dirSize = (d) => {
   let n = 0;
   for (const e of fs.readdirSync(d, { withFileTypes: true })) n += e.isDirectory() ? dirSize(path.join(d, e.name)) : fs.statSync(path.join(d, e.name)).size;
@@ -75,6 +79,24 @@ try {
     && /^numpy==/m.test(fs.readFileSync(path.join(envDir, 'base-constraints.txt'), 'utf8')));
   check('.gitignore der Vorlage nennt .soma/env/', fs.readFileSync(path.join(dir, '.gitignore'), 'utf8').includes('.soma/env/'));
   check('Ohne Zusatzpakete entsteht keine requirements.txt', !fs.existsSync(req));
+
+  // ---- 1b) Agenten-App außerhalb der App (Claude Desktop, Codex-App): Pfad kopieren, soma über .soma/env ----
+  await ev(() => document.getElementById('btn-copy-path').click());
+  check('„Copy path for agent app“ kopiert den Arbeitsordner', samePath(await ev(() => window.soma.test.clipboard()), dir)
+    && /Path copied/.test(await ev(() => window.__t.toast().text)));
+  // Wie in einer Agenten-App: kein Python im PATH, keine Umgebungsvariablen der Terminals
+  const bare = { ...process.env, PATH: path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32'), SOMA_APP: '', SOMA_APP_TOKEN: '', SOMA_PROJECT: '' };
+  const envPy = path.join(envDir, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+  const runPy = (...args) => new Promise((resolve) => execFile(envPy, ['-m', 'soma', ...args], { cwd: dir, env: bare, timeout: 120000 }, (e, out, err) => resolve(`${out}${err}`)));
+  const outB = await runPy('build');
+  check('`python -m soma build` aus .soma/env ohne PATH', /Build ok/.test(outB), outB.trim().slice(-200));
+  const outR = await runPy('render', '--out', 'renders/agent-app.png');
+  check('`soma render` findet die App über bridge.json (ohne SOMA_APP)', fs.existsSync(path.join(dir, 'renders', 'agent-app.png')), outR.trim().slice(-200));
+  // CalculiX liegt neben der Basis, nicht in .soma/env: aus der Projektumgebung muss soma es trotzdem finden (sonst nur der eigene Löser)
+  const ccxOf = (py) => new Promise((resolve) => execFile(py, ['-c', 'from soma import ccx; print("CCX", ccx.version())'], { cwd: dir, env: bare, timeout: 60000 }, (e, out, err) => resolve(`${out}${err}`.trim())));
+  const basePy = JSON.parse(fs.readFileSync(path.join(envDir, 'soma-env.json'), 'utf8')).base_python;
+  const [ccxEnv, ccxBase] = [await ccxOf(envPy), await ccxOf(basePy)];
+  check('CalculiX wird aus .soma/env gefunden wie aus der Basis', ccxEnv === ccxBase && /^CCX /.test(ccxEnv), `${ccxEnv} / Basis ${ccxBase}`);
 
   // ---- 2) pip im Terminal ----
   const tid = await ev(() => window.__t.terminals.activeId);

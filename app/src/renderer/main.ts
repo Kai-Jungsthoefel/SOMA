@@ -145,7 +145,7 @@ function showCode(on: boolean): void {
   if (on && !code.activeFile) {
     const e = selection ? partEntry(selection.partId) : undefined;
     if (e?.file && e.line) void code.open(e.file, { ...lineRange(e), label: e.name, color: partInfo(e.id)?.color });
-    else if (project) void code.open('model.py');
+    else if (project) void code.open(project.entry);
   }
   renderLayout();
   renderDrawingsRail();
@@ -1159,7 +1159,10 @@ async function onProject(p: ProjectInfo): Promise<void> {
   if (panel === 'skills') void skills.refresh();
   paramsPanel.reset();
   if (panel === 'params') void paramsPanel.refresh();
-  if (codeOpen) void code.open('model.py'); // die Code-Spalte bleibt offen, dann nicht leer
+  if (codeOpen) void code.open(p.entry); // die Code-Spalte bleibt offen, dann nicht leer
+  // Ordner-Modus: Der Ordner ist das Modell (kein Speichern als .soma), den Verlauf gibt es nur zum Ansehen
+  versions.setReadOnly(p.folder);
+  $('btn-save').hidden = $('btn-saveas').hidden = p.folder;
   resetViewLists();
   applyDisplayDefaults();
   selection = null;
@@ -1202,12 +1205,13 @@ function renderSaveState(st: SaveState): void {
   let text: string;
   // Ungespeichertes im Editor zählt mit, auch wenn die Dateien auf der Platte dem gespeicherten Stand entsprechen
   const unsaved = st.unsaved || code.unsaved().length > 0;
-  if (!st.zipPath) { dot.style.background = 'var(--warn)'; text = 'Not saved yet'; }
+  if (project?.folder) { dot.style.background = unsaved ? 'var(--warn)' : 'var(--ok)'; text = unsaved ? 'Folder · unsaved edits' : 'Folder'; }
+  else if (!st.zipPath) { dot.style.background = 'var(--warn)'; text = 'Not saved yet'; }
   else if (unsaved) { dot.style.background = 'var(--warn)'; text = `Not saved${st.savedAt ? ` · last ${fmtWhen(st.savedAt)}` : ''}`; }
   else { dot.style.background = 'var(--ok)'; text = `Saved${st.savedAt ? ` · ${fmtWhen(st.savedAt)}` : ''}`; }
   const b = $('save-badge');
   b.replaceChildren(dot, text);
-  b.title = st.zipPath ? `File: ${st.zipPath}` : 'Not saved yet. Ctrl+S saves.';
+  b.title = project?.folder ? `Folder: ${project.dir}\nChanges are saved in the folder itself.` : st.zipPath ? `File: ${st.zipPath}` : 'Not saved yet. Ctrl+S saves.';
   versions.setSaved(st.zipPath ? st.savedHead : null);
   document.title = `SOMA – ${project?.name ?? ''}${unsaved ? ' ●' : ''}`;
 }
@@ -1249,6 +1253,15 @@ let saving = false;
  */
 async function doSave(saveAs = false): Promise<void> {
   if (saving) return;
+  // Ordner-Modus: Strg+S schreibt nur die Eingaben im Editor in den Ordner, eine .soma-Datei gibt es nicht
+  if (project?.folder) {
+    const c = await code.saveAll();
+    if (!c.ok) toast('Not everything in the editor could be saved (see the note in the code).', 'error');
+    else if (c.saved.length) { toast(`Saved in the folder: ${c.saved.join(', ')}`, 'ok'); if (c.saved.some(affectsBuild)) await api.build.run(); }
+    else toast('Nothing to save. This model is the folder itself. Export › Everything as ZIP makes a copy as a file.', 'info');
+    void refreshSaveState();
+    return;
+  }
   saving = true;
   const btn = $<HTMLButtonElement>('btn-save');
   const label = btn.innerHTML;
@@ -1306,6 +1319,14 @@ function closeCadQueryBusy(): void {
 }
 
 /** Neues Modell aus einem CadQuery-Skript (E100). Die Hinweise des Imports (Kompatibilitätsmodus, Werte) zeigt ein Toast. */
+/** „Open folder“ (Ordner-Modus): Fragen und Hinweis stellt der Hauptprozess. */
+async function doOpenFolder(): Promise<boolean> {
+  if (!(await leaveEditor('Open folder'))) return false;
+  const r = await api.project.openFolder().catch((e: unknown) => ({ cancelled: false, opened: false, error: e instanceof Error ? e.message : String(e) }));
+  if (r.error) toast(r.error, 'error');
+  return !!r.opened;
+}
+
 async function doNewFromCadQuery(): Promise<CadQueryImportResult | null> {
   if (!(await leaveEditor('New model'))) return null;
   let r: CadQueryImportResult;
@@ -1322,7 +1343,11 @@ async function doBuild(): Promise<void> {
   if (!r.ok) { toast('Not everything could be saved (see the note in the code panel). The build waits until then.', 'error'); return; }
   await api.build.run();
 }
-const openProject = async (id: string) => { if (await leaveEditor('Open model')) await api.project.open(id); };
+const openProject = async (id: string) => {
+  if (!(await leaveEditor('Open model'))) return;
+  // Ein geöffneter Ordner kann fehlen (verschoben, Laufwerk ab): Der Hauptprozess sagt es
+  await api.project.open(id).catch((e: unknown) => toast(String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'error'));
+};
 
 // F3 klappt den Strukturbaum auf und zu wie in CATIA (E82, Vorschlag aus dem Entwurf). Nicht beim Schreiben in Code, Terminal oder Feldern
 window.addEventListener('keydown', (e) => {
@@ -1364,6 +1389,7 @@ $('btn-doc').addEventListener('click', () => { void renderRecent().then(() => me
 $('btn-new').addEventListener('click', () => void doNew());
 $('btn-new-cq').addEventListener('click', () => { menus.close(); void doNewFromCadQuery(); });
 $('btn-open').addEventListener('click', () => void doOpen());
+$('btn-open-folder').addEventListener('click', () => { menus.close(); void doOpenFolder().then((ok) => { if (ok) showStart(false); }); });
 $('btn-save').addEventListener('click', () => void doSave(false));
 $('btn-save-menu').addEventListener('click', () => void doSave(false));
 $('btn-saveas').addEventListener('click', () => void doSave(true));
@@ -1636,6 +1662,9 @@ function renderAgentMenu(): void {
 }
 $('btn-term-add').addEventListener('click', () => { renderAgentMenu(); menus.toggle($('menu-agents'), $('btn-term-add')); });
 $('btn-term-plain').addEventListener('click', () => void terminals.add({ title: 'Terminal' }));
+$('btn-copy-path').addEventListener('click', () => void api.project.copyPath().then((r) => {
+  toast(r.ok ? 'Path copied. Open it as the project folder in your agent app.' : r.error ?? 'The path could not be copied.', r.ok ? 'ok' : 'error');
+}));
 
 // ---- Trennleisten -----------------------------------------------------------------------------------------------
 
@@ -1680,21 +1709,24 @@ async function showStart(on: boolean): Promise<void> {
     void api.project.thumb(p.id).then((url) => { if (url) th.replaceChildren(el('img', { src: url, alt: '' })); });
     const cur = p.id === project?.id;
     // Viele heißen „New model“: Ob es je gespeichert wurde, hilft beim Wiederfinden und beim Aufräumen
-    const when = p.saved ? `changed ${fmtWhen(p.modified, true)}` : fmtWhen(p.modified, true);
-    const card = el('button', { className: 'recent' + (cur ? ' cur' : ''), title: cur ? 'Currently open' : `Open ${p.name}` },
+    const when = p.folder ? (p.missing ? '' : `changed ${fmtWhen(p.modified, true)}`) : p.saved ? `changed ${fmtWhen(p.modified, true)}` : fmtWhen(p.modified, true);
+    // Ordner-Modus: Der Ordner steht im Tooltip, fehlt er, sagt die Karte es
+    const title = cur ? 'Currently open' : p.folder ? `Open ${p.name}\nFolder: ${p.folder}` : `Open ${p.name}`;
+    const card = el('button', { className: 'recent' + (cur ? ' cur' : ''), title },
       th, cur && el('span', { className: 'tag', textContent: 'Open' }),
       el('div', { className: 'meta' }, el('b', { textContent: p.name }),
-        el('span', { className: 'sub' }, el('span', { textContent: when }), !p.saved && el('span', { className: 'unsaved', textContent: 'never saved' }))));
+        el('span', { className: 'sub' }, p.folder && el('span', { className: 'c3', textContent: 'Folder' }), when && el('span', { textContent: when }),
+          !p.saved && el('span', { className: 'unsaved', textContent: 'never saved' }), p.missing && el('span', { className: 'unsaved', textContent: 'folder missing' }))));
     card.addEventListener('click', () => { if (!cur) void openProject(p.id); showStart(false); });
     const item = el('div', { className: 'recent-item' }, card);
     item.dataset.name = p.name.toLowerCase();
     if (cur) return item;
     // Entfernen (E69): Arbeitsordner in den Papierkorb, die Rückfrage im Hauptprozess sagt, was dabei verloren geht
-    const rm = el('button', { className: 'recent-rm', title: `Remove “${p.name}” from this computer`, ariaLabel: `Remove ${p.name}` }, icon('trash', 14));
+    const rm = el('button', { className: 'recent-rm', title: p.folder ? `Remove “${p.name}” from the list. The folder stays.` : `Remove “${p.name}” from this computer`, ariaLabel: `Remove ${p.name}` }, icon('trash', 14));
     rm.addEventListener('click', () => void (async () => {
       const r = await api.project.remove(p.id).catch((e: unknown) => ({ removed: false, error: e instanceof Error ? e.message : String(e) }));
       if (r.error) toast(r.error, 'error');
-      if (r.removed) { toast(`“${p.name}” removed. The working folder is in the Recycle Bin.`, 'ok'); void showStart(true); }
+      if (r.removed) { toast(p.folder ? `“${p.name}” removed from the list. The folder stays as it is.` : `“${p.name}” removed. The working folder is in the Recycle Bin.`, 'ok'); void showStart(true); }
     })());
     item.append(rm);
     return item;
@@ -1753,6 +1785,7 @@ $('start-empty-open').addEventListener('click', startOpen);
 $('start-new-more').addEventListener('click', () => menus.toggle($('menu-start-new'), $('start-new-more'), 'right'));
 $('start-new-cq').addEventListener('click', () => void doNewFromCadQuery());
 $('start-empty-cq').addEventListener('click', () => void doNewFromCadQuery());
+$('start-open-folder').addEventListener('click', () => { menus.close(); void doOpenFolder().then((ok) => { if (ok) showStart(false); }); });
 $('btn-start-tip-help').addEventListener('click', () => void help.open());
 /**
  * Pille „neue Version“ neben der Versionsnummer: neueste Version unter GitHub Releases (updates.ts, einmal je Sitzung). Ein

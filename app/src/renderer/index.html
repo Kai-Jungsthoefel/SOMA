@@ -415,6 +415,7 @@
     <button id="btn-new" class="mi" role="menuitem"><i data-icon="plus" data-size="15"></i><span>New model</span><span class="k">Ctrl N</span></button>
     <button id="btn-new-cq" class="mi" role="menuitem" title="A model from an existing CadQuery script (.py). The script stays as it is, the original is kept in inputs/."><i data-icon="f-py" data-size="15"></i><span>New from CadQuery script …</span></button>
     <button id="btn-open" class="mi" role="menuitem"><i data-icon="folder" data-size="15"></i><span>Open …</span><span class="k">Ctrl O</span></button>
+    <button id="btn-open-folder" class="mi" role="menuitem" title="Use SOMA in a folder of yours, for example a repository. SOMA says what it creates and changes there before it starts."><i data-icon="folder" data-size="15"></i><span>Open folder …</span></button>
     <div id="recent-wrap"><div class="msep"></div><div class="mh">RECENT</div><div id="recent-list"></div></div>
     <div class="msep"></div>
     <button id="btn-save-menu" class="mi" role="menuitem"><span class="noico"></span><span>Save</span><span class="k">Ctrl S</span></button>
@@ -473,6 +474,8 @@
     <div id="agent-list"></div>
     <div class="msep"></div>
     <button id="btn-term-plain" class="mi" role="menuitem"><i data-icon="term" data-size="15" data-stroke="2"></i><span>Empty terminal</span></button>
+    <div class="msep"></div>
+    <button id="btn-copy-path" class="mi two" role="menuitem"><i data-icon="copy" data-size="15"></i><span class="t"><span>Copy path for agent app</span><span class="sub">For Claude Desktop, the Codex app and others: open this folder there. SOMA shows their changes.</span></span></button>
   </div>
 
   <div id="menu-problems" class="menu wide" role="dialog" aria-label="Project issues" hidden>
@@ -588,6 +591,7 @@
   <div id="menu-start-new" class="menu" role="menu" hidden>
     <button id="start-new-tpl" class="mi two" role="menuitem"><i data-icon="plus" data-size="15"></i><span class="t"><span>From template</span><span class="sub">Example part, terminal in the model folder</span></span><span class="k">Ctrl N</span></button>
     <button id="start-new-cq" class="mi two" role="menuitem" title="A model from an existing CadQuery script (.py). The script stays as it is, the original is kept in inputs/."><i data-icon="f-py" data-size="15"></i><span class="t"><span>From CadQuery script …</span><span class="sub">The script stays as it is, the original is kept in inputs/</span></span></button>
+    <button id="start-open-folder" class="mi two" role="menuitem"><i data-icon="folder" data-size="15"></i><span class="t"><span>Open folder …</span><span class="sub">Use SOMA in a folder of yours, for example a repository</span></span></button>
   </div>
 
   <!-- Einstellungen (E78): Fenster über der App, zuerst die Bibliothek der Skills. Inhalt rechts baut settings.ts -->
