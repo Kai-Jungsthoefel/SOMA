@@ -153,6 +153,12 @@ function registerIpc(ctl: ProjectController): void {
     return err ? { ok: false, error: err } : { ok: true, path: String(rel ?? '') };
   });
   // Links aus Markdown-Dateien (E51). Nur Web und Mail: file:, Programme und eigene Protokolle könnten etwas ausführen.
+  // „Send to agent“ legt den Text auch in die Zwischenablage, für Agenten-Apps außerhalb der App (Claude Desktop, Codex-App)
+  ipcMain.handle('app:copyText', (_e, text: unknown): FileOpResult => {
+    if (typeof text !== 'string' || text.length > 1_000_000) return { ok: false, error: 'Nothing to copy.' };
+    if (process.env.SOMA_TEST === '1') testClipboard = text; else clipboard.writeText(text);
+    return { ok: true };
+  });
   ipcMain.handle('app:openUrl', async (_e, url: unknown): Promise<FileOpResult> => {
     const u = String(url ?? '');
     if (!/^(https?:\/\/|mailto:)/i.test(u)) return { ok: false, error: `Only web and mail addresses can be opened: ${u.slice(0, 100)}` };

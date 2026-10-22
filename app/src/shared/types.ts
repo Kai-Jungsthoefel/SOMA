@@ -627,6 +627,8 @@ export interface SomaApi {
   };
   /** Öffnet eine Web-Adresse (http, https, mailto) im Browser des Systems. Andere Adressen lehnt der Hauptprozess ab. */
   openUrl(url: string): Promise<FileOpResult>;
+  /** Text in die Zwischenablage (etwa „Send to agent“ für Agenten-Apps außerhalb der App). */
+  copyText(text: string): Promise<FileOpResult>;
 }
 
 /** Schnittstelle des unsichtbaren Render-Fensters (E58, render-preload.ts). */

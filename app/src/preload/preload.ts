@@ -150,6 +150,7 @@ const api: SomaApi = {
     },
   },
   openUrl: (url) => ipcRenderer.invoke('app:openUrl', url),
+  copyText: (text) => ipcRenderer.invoke('app:copyText', text),
   // Nur im Testmodus: vorbereitete Antworten für native Dialoge
   test: process.env.SOMA_TEST === '1'
     ? {

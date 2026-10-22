@@ -132,6 +132,7 @@ try {
   const afterInsert = await ev((id) => window.__t.termText(id), tid);
   check('„Send to agent" fügt den Text in die Eingabezeile ein, ohne abzuschicken', afterInsert.includes('[Selection: part "Lid"') && !/Selection:.*\n.*(nicht erkannt|not recognized)/.test(afterInsert));
   check('Bestätigung „Added to the input of Terminal"', (await ev(() => window.__t.toast())).text.includes('Added to the input of Terminal'));
+  check('… und derselbe Text in der Zwischenablage (für Agenten-Apps außerhalb der App)', (await ev(() => window.soma.test.clipboard())) === selText);
   await ev((id) => window.soma.term.write(id, '\x03'), tid); // Zeile verwerfen
 
   // Markierung (E16): Viewer-Bild einfrieren, zeichnen, als PNG nach .soma/feedback/, Pfad in die Eingabe

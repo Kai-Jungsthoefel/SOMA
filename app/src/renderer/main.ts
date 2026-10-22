@@ -583,11 +583,14 @@ function errorText(): string | null {
 function insertToAgent(text: string | null, done?: string): void {
   if (!text) return;
   const pre = done ? `${done}\n` : '';
-  if (!terminals.count) { toast(`${pre}No terminal is open. Start an agent or a terminal with +.`, 'error'); return; }
+  // Immer auch in die Zwischenablage: Eine Agenten-App außerhalb der App (Claude Desktop, Codex-App) erreicht die Notiz nur so.
+  // Ob im Terminal ein Agent läuft, lässt sich nicht für jeden Agenten verlässlich erkennen
+  void api.copyText(text);
+  if (!terminals.count) { toast(`${pre}Copied to the clipboard. Paste it into your agent, or start one with +.`, 'info'); return; }
   setAgentCollapsed(false);
   const title = terminals.insert(text);
-  if (title) toast(`${pre}Added to the input of ${title}. Enter sends it.`);
-  else toast(`${pre}All terminals have ended. Open a new one with +.`, 'error');
+  if (title) toast(`${pre}Added to the input of ${title}. Enter sends it. Also copied to the clipboard.`);
+  else toast(`${pre}Copied to the clipboard. All terminals have ended, open a new one with +.`, 'info');
 }
 
 // ---- Messen (E9) ------------------------------------------------------------------------------------------------
