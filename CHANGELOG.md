@@ -6,6 +6,8 @@ the version is bumped.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-22
+
 ### Added
 
 - "Open folder" uses SOMA in a folder of yours, for example a Git repository: viewer, skills, agent instructions and `soma`, without a .soma file. Before anything changes, SOMA lists the files it creates and changes, with Cancel. It adds a section to `AGENTS.md` and a line to `CLAUDE.md` (backed up first), leaves your Git history and `requirements.txt` alone, and never moves or deletes the folder.
