@@ -1,6 +1,6 @@
 # Python-Basisumgebung fuer die Entwicklung (CadQuery und alles, was soma braucht), fest gepinnt. Installiert von scripts/setup_env.ps1.
 aiohappyeyeballs==2.7.1
-aiohttp==3.14.3
+aiohttp==3.14.4
 aiosignal==1.4.0
 attrs==26.1.0
 cadquery==2.8.0
@@ -30,7 +30,7 @@ numpy==2.5.3
 packaging==26.3
 pdfminer-six==20260107
 pdfplumber==0.11.10
-pillow==12.3.0
+pillow==13.0.0
 pip==26.2.1
 propcache==0.5.4
 pyamg==5.3.0
