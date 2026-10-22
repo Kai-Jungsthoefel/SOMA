@@ -275,6 +275,8 @@ print(json.dumps(dict(errors=len(aud.errors), types=types, layers=layers, detail
   check('Im Projekt der App gebaut', ab.status === 0 && fs.existsSync(path.join(proj.dir, 'output', 'drawings', 'Bracket.pdf')), (ab.stderr || ab.stdout).slice(-200));
   await ev(() => window.__t.openCode('output/drawings/Bracket.pdf'));
   await waitFor('PDF gezeichnet', () => (window.__t.editor.state().pdf?.rendered ?? []).includes(1), 20000).catch(() => {});
+  // Die Textebene baut pdf.js erst nach dem Zeichnen auf (pdfview.ts, TextLayer): Unter Last wäre sie sonst noch unvollständig
+  await waitFor('Textebene', () => { const s = window.__t.editor.state().pdf?.text?.[0] ?? ''; return /Bracket/.test(s) && /120/.test(s) && /Ø/.test(s); }, 20000).catch(() => {});
   const pdf = (await ev(() => window.__t.editor.state())).pdf;
   const dark = await ev(() => {
     const c = document.querySelector('.pdf-page[data-page="1"] canvas');
