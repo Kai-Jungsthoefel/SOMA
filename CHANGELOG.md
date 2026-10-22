@@ -6,6 +6,14 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Added
+
+- The guide (F1) and the README explain how to work with an agent app such as the Codex app or Claude Desktop instead of an agent in SOMA's terminal.
+
+### Changed
+
+- "Send to agent" also copies its note to the clipboard, so you can paste it into an agent app outside SOMA. Without an open terminal it no longer shows an error, the note is in the clipboard.
+
 ### Security
 
 - The bundled Python environment uses Pillow 13.0.0 and aiohttp 3.14.4, which fix several reported vulnerabilities (crafted image files, HTTP server limits).

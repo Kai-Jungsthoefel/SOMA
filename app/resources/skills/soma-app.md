@@ -78,10 +78,23 @@ disappears like any new model you did not change.
    app, and SOMA shows its changes like those of an agent in a tab.
 
 Type your wishes into the agent and press Enter. Everything with **Send to agent** (a part, a measurement, an error,
-a drawing) puts a short note into the agent's input. Add your own words, then press Enter. You can also drag a file
+a drawing) puts a short note into the agent's input and copies it to the clipboard. Add your own words, then press Enter. You can also drag a file
 from Files into the terminal to name it.
 
 The agent works with your user rights. Permissions and safety settings are part of the agent, not of SOMA.
+
+### Agent apps
+
+A desktop agent app that works on a local folder and can run commands, such as the Codex app or Claude Code in Claude
+Desktop, works instead of an agent in a tab:
+
+1. Keep the model open in SOMA.
+2. Choose **Copy path for agent app** in the menu of the **+** above the terminal. For a model opened with **Open
+   folder**, the path is that folder itself.
+3. Open the path as the project folder in the agent app.
+
+**Send to agent** also copies its note to the clipboard: paste it into the agent app. A markup note names its picture in `.soma/feedback/`,
+the agent opens it itself. A plain chat without access to files and commands cannot work on the model.
 
 ## Viewer
 
