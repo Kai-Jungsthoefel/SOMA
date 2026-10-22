@@ -7,7 +7,7 @@ import time as _time
 # Vor dem Import von cadquery (dauert Sekunden): `soma build` meldet die ganze Wartezeit, nicht nur das Modell
 _STARTED = _time.perf_counter()
 
-__version__ = "0.10.0"   # Major.minor.bugfix (E68), eine Nummer fuer App und soma, gleich der in app/package.json
+__version__ = "0.10.1"   # Major.minor.bugfix (E68), eine Nummer fuer App und soma, gleich der in app/package.json
 API_VERSION = 1   # steht in .soma/project.json, sichert Abwaertskompatibilitaet (E36)
 
 __all__ = ["add_part", "import_assembly", "import_step", "param", "__version__", "API_VERSION"]

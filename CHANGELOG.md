@@ -6,6 +6,8 @@ the version is bumped.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-22
+
 ### Added
 
 - The guide (F1) and the README explain how to work with an agent app such as the Codex app or Claude Desktop instead of an agent in SOMA's terminal.
