@@ -305,6 +305,20 @@ EDGES = [(0, 1), (1, 2), (2, 0), (3, 0), (3, 2), (3, 1)]
 FACES = [(1, 2, 3), (0, 3, 2), (0, 1, 3), (0, 2, 1)]  # Flaeche k liegt gegenueber Ecke k
 
 
+def _mesh_failure(e, parts, h):
+    """Verstaendliche Meldung, wenn gmsh nicht vernetzen kann (die Meldung von gmsh steht am Ende fuer Rueckfragen)."""
+    msg = str(e).strip().splitlines()[-1] if str(e).strip() else type(e).__name__
+    other = [round(h * 1.6, 2), round(h / 2, 2)]
+    text = f"The mesher could not mesh the {'parts' if len(parts) > 1 else 'part'} (edge length {h:g} mm). "
+    if len(parts) > 1:
+        text += ("This usually comes from parts that overlap or almost touch, which leaves very thin slivers between them, "
+                 "or from very small details. Check the overlaps with soma analyze clearance, calculate fewer parts at once, or ")
+    else:
+        text += "This usually comes from very small details or sharp spots. "
+    size = f"set a different mesh size, e.g. Study(mesh={other[0]:g}) or Study(mesh={other[1]:g})"
+    return text + (size if len(parts) > 1 else size[0].upper() + size[1:]) + f". (gmsh: {msg[:200]})"
+
+
 def _mesh(parts, bcs, h, progress=None):
     """Vernetzt die Teile gemeinsam. Liefert Knoten, Tet10, Teil je Element und je Randbedingung die Flaechendreiecke
     (Ecken als Knotenindizes) samt Flaechenvergleich."""
@@ -340,10 +354,15 @@ def _mesh(parts, bcs, h, progress=None):
         gmsh.option.setNumber("Mesh.MeshSizeMin", h / 20)
         gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 12)
         gmsh.option.setNumber("Mesh.Optimize", 1)
-        gmsh.model.mesh.generate(3)
-        if progress:
-            progress.step(1)  # die Vernetzung als ein Schritt, danach zaehlen die Elemente
-        gmsh.model.mesh.setOrder(2)
+        # gmsh wirft rohe Meldungen ("unable to find 106 1110 0 1" aus der Randrekonstruktion). Typisch bei mehreren Teilen,
+        # die sich etwas durchdringen: fragment hinterlaesst dort hauchduenne Splitter, an denen das 3D-Netz scheitert
+        try:
+            gmsh.model.mesh.generate(3)
+            if progress:
+                progress.step(1)  # die Vernetzung als ein Schritt, danach zaehlen die Elemente
+            gmsh.model.mesh.setOrder(2)
+        except Exception as e:
+            raise FemError(_mesh_failure(e, parts, h)) from None
 
         def extract():
             tags, xyz, _ = gmsh.model.mesh.getNodes()
@@ -1342,7 +1361,12 @@ def run(root, study_rel, name=None, threshold=None):
     fine = _analyse(parts, study, mats, h, progress, bolts)
     coarse = None
     if study.check_mesh:
-        coarse = _analyse(parts, study, mats, h * 1.6, None, bolts)
+        # Die Gegenprobe darf das fertige Ergebnis nicht verhindern: scheitert nur das grobe Netz, fehlt die Pruefung (mit Hinweis)
+        try:
+            coarse = _analyse(parts, study, mats, h * 1.6, None, bolts)
+        except FemError as e:
+            fine["notes"] = list(fine.get("notes") or []) + [f"The check with a coarser mesh ({h * 1.6:g} mm) failed, so it is "
+                                                            f"not known whether the peak stress depends on the mesh: {e}"]
     progress.finish()
     seconds = time.perf_counter() - t_start
     return _write(root, rel, study, all_parts, parts, mats, fine, coarse, h, diag, safety, name, seconds)

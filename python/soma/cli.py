@@ -538,6 +538,13 @@ def main(argv=None):
     x.set_defaults(func=cmd_dxfview)
 
     args = ap.parse_args(argv)
+    # Ausgabe immer UTF-8: Agenten ausserhalb des SOMA-Terminals (ohne PYTHONUTF8) lesen die Pipe als UTF-8, Python schriebe
+    # dort die ANSI-Codepage, und ° oder ² kaemen als "�" an. In der Windows-Konsole aendert das nichts (die schreibt UTF-16)
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
     # Zusatzpakete des Projekts (E67): soma laeuft mit dem Python der Basis, das Modell darf sie trotzdem importieren
     if args.cmd != "env" and getattr(args, "project", None) is not None:
         from . import env

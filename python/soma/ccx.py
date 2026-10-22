@@ -6,8 +6,8 @@ nachgerechnete Lagerkraefte hatten 0.004 N Querkraft am Kragbalken) und Kontaktg
 rechnet `fem.py` aus den Verschiebungen selbst (je Teil, CalculiX mittelt ueber Werkstoffgrenzen hinweg).
 
 Gefunden wird ccx in dieser Reihenfolge: SOMA_CCX (Pfad zum Programm), mitgeliefert neben der Python-Umgebung
-(<sys.prefix>/ccx/ccx.exe unter Windows, <sys.prefix>/ccx/bin/ccx sonst, geholt mit python/scripts/fetch_ccx.py),
-dann `ccx` im PATH.
+(<sys.prefix>/ccx/ccx.exe unter Windows, <sys.prefix>/ccx/bin/ccx sonst, geholt mit python/scripts/fetch_ccx.py; aus der
+Projektumgebung heraus neben deren Basis), dann `ccx` im PATH.
 
 Robustheit: ccx bricht bei einem Teil, das wegrutscht oder abhebt, nicht von selbst ab, sondern rechnet minutenlang
 weiter (die Verschiebungen wachsen auf 1e11 mm). Die Ausgabe wird deshalb mitgelesen und die Rechnung abgebrochen,
@@ -51,14 +51,28 @@ def find():
     cands = []
     if os.environ.get("SOMA_CCX"):
         cands.append(Path(os.environ["SOMA_CCX"]))
-    base = Path(sys.prefix) / "ccx"
-    cands += [base / "ccx.exe", base / "bin" / "ccx"] if sys.platform == "win32" else [base / "bin" / "ccx", base / "ccx"]
+    for prefix in [Path(sys.prefix)] + _base_prefixes():
+        base = prefix / "ccx"
+        cands += [base / "ccx.exe", base / "bin" / "ccx"] if sys.platform == "win32" else [base / "bin" / "ccx", base / "ccx"]
     w = shutil.which("ccx")
     if w:
         cands.append(Path(w))
     exe = next((c for c in cands if c.is_file()), None)
     _found["exe"] = exe
     return exe
+
+
+def _base_prefixes():
+    """Ordner der Basisumgebung, wenn soma aus der Projektumgebung (.soma/env, E67) laeuft. So rufen Agent-Apps ausserhalb
+    des SOMA-Terminals soma auf; sys.prefix ist dann die Projektumgebung, ccx liegt aber neben der Basis. Deren Python steht
+    in soma-env.json. venv: <prefix>/Scripts/python.exe bzw. bin/python, eigenstaendiges Python unter Windows: <prefix>/python.exe."""
+    try:
+        import json
+        info = json.loads((Path(sys.prefix) / "soma-env.json").read_text(encoding="utf-8"))
+        exe = Path(info["base_python"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    return [exe.parent.parent, exe.parent]
 
 
 def version(exe=None):
