@@ -50,6 +50,7 @@ Press F1 in the app for a short guide with numbered screenshots. The agent knows
 - **Animation:** motion described in Python, played in the viewer or rendered to video
 - **Export:** STEP, STL, 3MF, DXF and more, technical drawings as PDF
 - **Plain CadQuery in and out:** start from an existing CadQuery script, export the model as a script for CQ-editor or VS Code
+- **Your own folder:** open an existing folder, for example a Git repository, and use SOMA there. Agent apps such as Claude Desktop or the Codex app can work on a model too
 
 ## Screenshots
 
