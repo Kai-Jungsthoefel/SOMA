@@ -18,6 +18,9 @@ the version is bumped.
 ### Fixed
 
 - Long animations with many steps build much faster (a two-minute animation in seconds instead of many minutes), so the app shows them again.
+- `soma analyze fem` no longer stops with a raw mesher error when several parts cannot be meshed together (for example parts that overlap slightly). It explains the likely cause and suggests mesh sizes. If only the check with the coarser mesh fails, the result is kept with a note.
+- `soma` writes its output as UTF-8, so ° and ² show correctly in agent apps outside the SOMA terminal.
+- `soma analyze fem` run from an agent app (through `.soma\env`) finds the bundled CalculiX. Before, it fell back to the built-in solver, without contact and bolt preload.
 
 ## [0.9.0] - 2026-10-16
 
