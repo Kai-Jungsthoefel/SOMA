@@ -6,6 +6,10 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Fixed
+
+- Exports as 3MF, AMF, STL and OBJ are now one closed, manifold mesh per body with shared vertices. Before, every CAD face was its own patch, and slicers reported open edges and repaired the mesh, sometimes leaving a crack in the wall along a fillet. Degenerate triangles at the corners of fillets are gone too. Curves are meshed a bit finer (at most 0.05 mm deviation). If a mesh still cannot be closed, for example for an open surface, `soma export` prints a warning.
+
 ## [0.10.1] - 2026-10-22
 
 ### Added

@@ -29,6 +29,7 @@ Details in `app/README.md`.
 
 **`python/soma/`** helper library and CLI
 - API: `add_part` (with `group=`, `role=`), `param` (`params.py`, E74), `import_step`, `import_assembly`, standard parts in `fasteners.py` (dimension tables from bd_warehouse in `data/fasteners/`). Plain CadQuery scripts (E100): compatibility mode for `show_object`, `ocp_vscode` and `result` in `cqcompat.py`.
+- Mesh exports (3MF, AMF, STL, OBJ): `meshexport.py`, one closed mesh per body with shared vertices (slicers need it).
 - CadQuery in and out (E100): `soma cadquery export|import` (`cqexport.py`), the block in exported scripts comes from `cqruntime.py`. `cqruntime.py` and `fasteners.py` are also under Apache 2.0 (E101), they must run without soma.
 - CLI: `soma build`, `export`, `glb`, `serve` (measuring service, `measure.py`), `anim` (`anim.py`, `animrun.py`), `analyze` (`analysis.py`, FEM in `fem.py`, CalculiX via `ccx.py`, E84), `drawing` (`drawing.py`, `drawrun.py`, E76), `dxfview` (E80), `render` (only via the app), `env` (`env.py`, `.soma/env` and `requirements.txt`, E67).
 - `python/scripts/`: `setup_env.ps1` (development environment from `python/requirements-base.txt`), `fetch_ccx.py` (CalculiX), `build_runtime.py` (standalone base environment for the installation packages).
