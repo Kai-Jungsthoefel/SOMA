@@ -34,6 +34,7 @@
     "test:updates": "npm run build && node test/updates.mjs",
     "test:unit": "node test/unit.mjs",
     "test:buildlock": "node test/buildlock.mjs",
+    "test:meshexport": "node test/meshexport.mjs",
     "help:shots": "npm run build && node test/helpshots.mjs",
     "dist": "npm run build && electron-builder --config electron-builder.config.cjs --publish never",
     "dist:dir": "npm run build && electron-builder --config electron-builder.config.cjs --publish never --dir",
