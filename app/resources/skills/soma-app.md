@@ -143,7 +143,7 @@ Mark up is the quickest way to show the agent what you mean: draw an arrow, writ
 1. **Parameters**: values of the model you can change yourself, such as sizes, counts or angles. The model rebuilds right away. The agent decides which values appear here. The arrow next to a changed value brings back the agent's value.
 2. **Files**: all files of the model. Click one to open it next to it.
 3. **Analysis**: results the agent calculated, such as strength (FEM), wall thickness, overhang or clearance. Click one to see it in color on the model, with its report.
-4. **Animation**: motion the agent made, for example an assembly sequence. Click one to play it in the viewer, "Make video" writes an MP4.
+4. **Animation**: motion the agent made, for example an assembly sequence. Click one to play it in the viewer, "Make video" writes an MP4. Below are the videos of the model, sorted by folder; click a folder to collapse it (SOMA remembers this per model). Right-click a video to play, rename or delete it, show it in the file tree or in Explorer.
 5. **Drawings**: all technical drawings of the model in one view, next to the viewer (no sidebar). See "Drawings" below.
 6. **Skills**: rule sets for the agent, such as 3D printing, CNC or tolerances. Off, On demand (the agent reads them when the topic comes up) or Always.
 7. **Help**: this guide (F1).
@@ -164,13 +164,18 @@ Ask the agent for a technical drawing ("Make a drawing of the bracket with all d
 
 ![Files and the code editor](../help/code.png)
 
-1. **File tree**: the model's files. Right-click for new, rename, show in Explorer and delete. "Managed by the app" holds files SOMA writes itself.
-2. **Drop zone**: drop STEP files, images or sketches here. They go to `inputs/`, where the agent can use them.
-3. **Open files**: one tab per open file.
-4. **Linked to selection**: when on, clicking a part in the viewer jumps to its code.
-5. **Editor**: you can edit the code yourself. Ctrl S saves the file and builds. If the agent changes the same file, SOMA asks before anything is overwritten.
+1. **Search**: shows only files whose name contains the text, with their folders opened. With a "/" in the text it searches the whole path. Escape clears it.
+2. **File tree**: the model's files. Folders start collapsed, click one to open it; the folder of a file you open in the editor opens by itself. Right-click for new, rename, show in Explorer and delete. "Managed by the app" holds files SOMA writes itself.
+3. **Drop zone**: drop STEP files, images or sketches here. They go to `inputs/`, where the agent can use them.
+4. **Open files**: one tab per open file.
+5. **Linked to selection**: when on, clicking a part in the viewer jumps to its code.
+6. **Editor**: you can edit the code yourself. Ctrl S saves the file and builds. If the agent changes the same file, SOMA asks before anything is overwritten.
 
 Markdown files (such as `NOTES.md`) open as a document, PDF and DXF files open as a drawing.
+
+Click a video (MP4, WebM) to play it over the viewer. The bar below it steps frame by frame (arrow keys), mutes (M) and sets the
+volume, "Mark up" draws on the current frame, "Time to agent" passes the file with the time, and "…" opens the file actions
+(show in file tree or Explorer, rename, delete).
 
 Click a STEP file (`.step`, `.stp`) to look at it in the viewer. A banner names the file. Measure, Section, Explode and the
 structure tree work as usual, but the parts have no link to code, and Animation and Analysis stay off. Builds of your model
