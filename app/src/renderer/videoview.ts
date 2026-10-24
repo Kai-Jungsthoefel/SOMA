@@ -3,11 +3,13 @@ import { icon } from './icons';
 
 // Videos aus dem Projekt abspielen (E58), etwa die von `soma render --video`. Anhalten, Bild für Bild, und ein Standbild mit
 // Zeitstempel markieren oder nur die Zeit an den Agenten geben. Der Player liegt über dem Viewer, das Modell bleibt dahinter.
+// Lautstärke und Stumm gelten für alle Videos und bleiben über den Neustart erhalten. „…“ öffnet das Menü der Datei.
 
 interface Ui {
   root: HTMLElement; video: HTMLVideoElement; title: HTMLElement;
   play: HTMLButtonElement; back: HTMLButtonElement; fwd: HTMLButtonElement;
   range: HTMLInputElement; time: HTMLElement; mark: HTMLButtonElement; agent: HTMLButtonElement; close: HTMLButtonElement;
+  mute: HTMLButtonElement; volume: HTMLInputElement; more: HTMLButtonElement;
 }
 interface Deps {
   readBinary(rel: string): Promise<ArrayBuffer>;
@@ -15,6 +17,11 @@ interface Deps {
   markFrame(label: string, frame: HTMLCanvasElement): Promise<void>;
   insert(text: string): void;
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
+  /** Menü der Datei (wie im Dateibaum) an dieser Stelle. */
+  fileMenu(rel: string, x: number, y: number): void;
+  /** Gemerkte Einstellungen des Benutzers (localStorage, darf fehlen). */
+  load(key: string): string | null;
+  save(key: string, value: string): void;
 }
 
 /** Schritt für „Bild vor/zurück“: Videos von soma haben 30 Bilder je Sekunde. */
@@ -33,6 +40,26 @@ export class VideoView {
     ui.close.addEventListener('click', () => this.close());
     ui.mark.addEventListener('click', () => void this.mark());
     ui.agent.addEventListener('click', () => { if (this.file) d.insert(`[Video: ${this.file} at ${videoStamp(v.currentTime)}] `); });
+    const raw = d.load('soma.video.volume');
+    const vol = raw === null ? 1 : Number(raw);
+    v.volume = Number.isFinite(vol) && vol >= 0 && vol <= 1 ? vol : 1;
+    v.muted = d.load('soma.video.muted') === '1';
+    ui.mute.addEventListener('click', () => this.toggleMute());
+    ui.volume.addEventListener('input', () => {
+      v.volume = Number(ui.volume.value);
+      // Regler ganz links heißt stumm, wieder hochziehen hebt es auf
+      v.muted = v.volume === 0;
+    });
+    v.addEventListener('volumechange', () => {
+      d.save('soma.video.volume', String(v.volume));
+      d.save('soma.video.muted', v.muted ? '1' : '0');
+      this.renderVolume();
+    });
+    ui.more.addEventListener('click', () => {
+      if (!this.file) return;
+      const r = ui.more.getBoundingClientRect();
+      d.fileMenu(this.file, r.left, r.top);
+    });
     for (const ev of ['timeupdate', 'seeked', 'loadedmetadata', 'play', 'pause', 'ended']) v.addEventListener(ev, () => this.render());
     v.addEventListener('click', () => (v.paused ? void v.play().catch(() => {}) : v.pause()));
     v.addEventListener('error', () => { if (this.file) d.toast(`${this.file} can't be played (format?). Right-click it in the file tree: “Open with default app”.`, 'error'); });
@@ -41,6 +68,7 @@ export class VideoView {
       if (e.key === ' ') { e.preventDefault(); if (v.paused) void v.play().catch(() => {}); else v.pause(); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); this.step(-1); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); this.step(1); }
+      else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.altKey && !e.metaKey) { e.preventDefault(); this.toggleMute(); }
       else if (e.key === 'Escape' && !document.querySelector('.menu:not([hidden])')) this.close();
     });
   }
@@ -75,6 +103,21 @@ export class VideoView {
     this.url = null;
   }
 
+  private toggleMute(): void {
+    const v = this.ui.video;
+    // Stumm aufheben, nachdem der Regler auf null gezogen wurde: mit halber Lautstärke statt lautlos weiter
+    if (v.muted && v.volume === 0) v.volume = 0.5;
+    v.muted = !v.muted;
+  }
+
+  private renderVolume(): void {
+    const v = this.ui.video;
+    const off = v.muted || v.volume === 0;
+    this.ui.volume.value = String(off ? 0 : v.volume);
+    this.ui.mute.replaceChildren(icon(off ? 'mute' : v.volume < 0.5 ? 'volumelow' : 'volume', 16, 1.9));
+    this.ui.mute.setAttribute('aria-label', off ? 'Unmute' : 'Mute');
+  }
+
   private step(dir: number): void {
     const v = this.ui.video;
     v.pause();
@@ -90,6 +133,7 @@ export class VideoView {
     this.ui.time.textContent = `${videoStamp(v.currentTime)} / ${videoStamp(dur)}`;
     this.ui.play.replaceChildren(icon(v.paused ? 'play' : 'pause', 16, 2));
     this.ui.play.setAttribute('aria-label', v.paused ? 'Play' : 'Pause');
+    this.renderVolume();
   }
 
   /** Das gerade gezeigte Bild in voller Auflösung. */
@@ -114,7 +158,8 @@ export class VideoView {
   /** Prüfhilfen. */
   state() {
     const v = this.ui.video;
-    return { open: this.isOpen, file: this.file, time: this.ui.time.textContent, width: v.videoWidth, height: v.videoHeight, duration: v.duration, ready: v.readyState, error: v.error?.code ?? null };
+    return { open: this.isOpen, file: this.file, time: this.ui.time.textContent, width: v.videoWidth, height: v.videoHeight, duration: v.duration, ready: v.readyState, error: v.error?.code ?? null,
+      volume: v.volume, muted: v.muted, slider: Number(this.ui.volume.value), muteLabel: this.ui.mute.getAttribute('aria-label') };
   }
   async testSeek(t: number): Promise<void> {
     const v = this.ui.video;

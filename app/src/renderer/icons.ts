@@ -77,6 +77,10 @@ const PATHS: Record<string, string> = {
   play: '<path d="M7 5v14l11-7z"/>',
   // Animation, Analyse und Video (E58)
   pause: '<path d="M8 5v14M16 5v14"/>',
+  // Lautstärke im Video-Player: Lautsprecher mit zwei, einer oder keiner Welle (stumm)
+  volume: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.3a8 8 0 0 1 0 11.4"/>',
+  volumelow: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/>',
+  mute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
   anim: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>',
   // Zeichnungen (E76): Blatt quer mit Schriftfeld unten rechts und einer Ansicht
   drawing: '<rect x="2.5" y="4.5" width="19" height="15" rx="1"/><path d="M13 19.5v-4.5h8.5"/><rect x="5.5" y="8" width="5" height="4.5"/><path d="M13.5 10.2h4.5"/>',

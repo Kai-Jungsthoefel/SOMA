@@ -70,6 +70,7 @@
           <button id="btn-folder-new" class="ibtn s" title="New folder" aria-label="New folder"><i data-icon="folderplus" data-size="15"></i></button>
           <button id="btn-reveal" class="ibtn s" title="Show in Explorer" aria-label="Show in Explorer"><i data-icon="openext" data-size="15"></i></button>
           <button class="ibtn s side-close" aria-label="Close files"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
+        <label class="ftree-search"><i data-icon="search" data-size="13" data-stroke="2"></i><input id="files-filter" type="search" placeholder="Search files" spellcheck="false" autocomplete="off" aria-label="Search files by name"></label>
         <div id="tab-files" class="ftree"></div>
         <div id="dropzone" class="dropzone" title="STEP files, images and sketches go to inputs/. Existing files are not overwritten."><i data-icon="upload" data-size="16"></i><span><b>Drop here:</b> goes to <code>inputs/</code></span></div>
       </section>
@@ -340,9 +341,13 @@
             <button id="btn-video-play" class="ibtn" aria-label="Play" title="Play or pause (Space)"><i data-icon="play" data-size="16" data-stroke="2"></i></button>
             <button id="btn-video-fwd" class="ibtn" aria-label="One frame forward" title="One frame forward (Right arrow)"><i data-icon="stepfwd" data-size="15" data-stroke="1.9"></i></button>
             <input id="video-range" type="range" min="0" max="1" step="0.01" value="0" aria-label="Time in the video">
-            <span id="video-time" class="an-time"></span><span class="vsep"></span>
+            <span id="video-time" class="an-time"></span>
+            <button id="btn-video-mute" class="ibtn" aria-label="Mute" title="Mute or unmute (M)"><i data-icon="volume" data-size="16" data-stroke="1.9"></i></button>
+            <input id="video-volume" class="vv-vol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" title="Volume">
+            <span class="vsep"></span>
             <button id="btn-video-mark" class="btn sm" title="Mark up this frame on the canvas and send it to the agent with a timestamp"><i data-icon="camera" data-size="14" data-stroke="1.9"></i>Mark up</button>
             <button id="btn-video-agent" class="btn sm acc" title="Add the file and timestamp to the agent's input"><i data-icon="send" data-size="14" data-stroke="1.9"></i>Time to agent</button>
+            <button id="btn-video-more" class="ibtn" aria-label="File actions" title="Show in file tree or Explorer, rename, delete …" aria-haspopup="menu"><i data-icon="more" data-size="16"></i></button>
             <button id="btn-video-close" class="ibtn" aria-label="Close video" title="Close video (Escape)"><i data-icon="x" data-size="15" data-stroke="2"></i></button>
           </div>
         </div>

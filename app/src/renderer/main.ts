@@ -326,11 +326,14 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
   rename: async (rel, name) => {
     if (!fileOpAllowed(rel, 'rename')) return true;
     const wasOpen = code.openUnder(rel);
+    const playing = videoView.current;
     const r = await api.fs.rename(rel, name);
     if (!r.ok || !r.path) { toast(r.error ?? `${rel} could not be renamed.`, 'error'); return false; }
     // Reiter wandern mit: der alte zu, die Datei unter neuem Namen wieder auf (ohne das Panel zu wechseln)
     code.forget(rel);
     for (const f of wasOpen) void code.open(r.path + f.slice(rel.length), undefined, false);
+    // Das laufende Video ebenso, sonst zeigte der Player einen Namen, den es nicht mehr gibt
+    if (playing && isUnder(playing, rel)) void videoView.open(r.path + playing.slice(rel.length));
     await refreshFiles();
     return true;
   },
@@ -340,6 +343,7 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
     if (r.canceled) return;
     if (!r.ok) { toast(r.error ?? `${rel} could not be deleted.`, 'error'); return; }
     code.forget(rel);
+    if (videoView.current && isUnder(videoView.current, rel)) videoView.close();
     await refreshFiles();
     toast(`${rel} is in the Recycle Bin.`);
   })(),
@@ -348,8 +352,20 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
   mark: (rel) => void markImage(rel),
   toAgent: (rel) => insertToAgent(`[File: ${rel}] `),
   copyPath: (rel) => void navigator.clipboard.writeText(rel).then(() => toast(`Path copied: ${rel}`), (e) => toast(`The path could not be copied: ${e instanceof Error ? e.message : String(e)}`, 'error')),
+  showInTree: (rel, rename) => void showInTree(rel, rename),
 });
 fileTree = files;
+files.attachSearch($<HTMLInputElement>('files-filter'));
+
+const isUnder = (rel: string, dir: string) => rel === dir || rel.startsWith(`${dir}/`);
+
+/** Aus einem anderen Panel (Videos im Reiter Animation): Dateibaum zeigen, die Datei darin finden, auf Wunsch umbenennen. */
+async function showInTree(rel: string, rename: boolean): Promise<void> {
+  showPanel('files');
+  await refreshFiles();
+  files.reveal(rel, !rename);
+  if (rename) files.startRenameAt(rel);
+}
 files.setActive(code.activeFile);
 
 async function openExternal(rel: string): Promise<void> {
@@ -838,6 +854,9 @@ const animPanel = new AnimPanel({
   tool: animTool, videos: () => viewLists.videos, openVideo: (rel) => void videoView.open(rel),
   openCode: (file, line) => void openCode(file, line ? { from: line, to: line, label: animTool.currentName ?? 'Animation' } : undefined),
   insert: (t) => insertToAgent(t), isNew: (k) => !seen.has(k), seen: (k) => { seen.add(k); },
+  fileMenu: (rel, x, y) => files.menuFor(rel, x, y),
+  closedDirs: () => { try { return project ? JSON.parse(store.get(`soma.anim.closedDirs.${project.id}`) ?? '[]') as string[] : []; } catch { return []; } },
+  setClosedDirs: (dirs) => { if (project) store.set(`soma.anim.closedDirs.${project.id}`, JSON.stringify(dirs)); },
 });
 // Messen und Explosion schalten die beiden aus, bevor sie selbst anfangen (Lauscher in der Erfassungsphase laufen vor denen
 // der Werkzeuge): Beide rechnen mit der Einbaulage
@@ -848,9 +867,11 @@ const videoView = new VideoView({
   root: $('videoview'), video: $<HTMLVideoElement>('video-el'), title: $('video-title'), play: $<HTMLButtonElement>('btn-video-play'),
   back: $<HTMLButtonElement>('btn-video-back'), fwd: $<HTMLButtonElement>('btn-video-fwd'), range: $<HTMLInputElement>('video-range'), time: $('video-time'),
   mark: $<HTMLButtonElement>('btn-video-mark'), agent: $<HTMLButtonElement>('btn-video-agent'), close: $<HTMLButtonElement>('btn-video-close'),
+  mute: $<HTMLButtonElement>('btn-video-mute'), volume: $<HTMLInputElement>('video-volume'), more: $<HTMLButtonElement>('btn-video-more'),
 }, {
   readBinary: (rel) => api.fs.readBinary(rel), insert: (t) => insertToAgent(t), toast,
   markFrame: (label, c) => markSource(label, c, c.width, c.height),
+  fileMenu: (rel, x, y) => files.menuFor(rel, x, y), load: store.get, save: store.set,
 });
 
 $('btn-mark').addEventListener('click', startMarkup);
@@ -2046,6 +2067,7 @@ if (api.testMode) {
     tourGo: (n: number) => tour.goTo(n),
     setAgentCollapsed,
     fileRows: () => [...document.querySelectorAll('#tab-files .frow .fn')].map((x) => x.textContent),
+    revealFile: (rel: string) => files.reveal(rel, false),
     codeText: () => code.text(),
     openCode: (file: string) => openCode(file),
     buildStarts: () => buildStarts,

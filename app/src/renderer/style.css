@@ -115,6 +115,10 @@ code { font-family:var(--mono); font-size:.95em; }
 
 /* Dateien */
 .ftree { flex:1; overflow:auto; padding:8px 0; }
+.ftree-search { display:flex; align-items:center; gap:7px; height:30px; flex-shrink:0; margin:8px 10px 0; padding:0 8px; border:1px solid var(--line2); border-radius:6px; background:var(--bg); color:var(--tx3); }
+.ftree-search:focus-within { border-color:var(--acc-line); }
+.ftree-search input { flex:1; min-width:0; height:26px; border:0; outline:0; background:none; color:var(--tx); font:inherit; padding:0; }
+.frow .fn .hit { color:var(--acc-tx); font-weight:600; }
 .frow { display:flex; align-items:center; gap:8px; height:26px; padding:0 8px; margin:0 6px; border-radius:6px; width:calc(100% - 12px); text-align:left; color:var(--tx); white-space:nowrap; }
 .frow:hover { background:var(--s3); }
 .frow .fn { overflow:hidden; text-overflow:ellipsis; }
@@ -734,6 +738,13 @@ code { font-family:var(--mono); font-size:.95em; }
 .al-row .m { font-size:12px; color:var(--tx3); margin-top:2px; }
 .al-row .m .w { color:var(--warn); }
 .al-row .tag { margin-left:2px; }
+/* Ordner der Videos (Wunsch des Nutzers): einklappbar, damit viele Einzelclips des Agenten die Hauptvideos nicht verdecken */
+.al-dir { display:flex; align-items:center; gap:6px; width:calc(100% - 12px); height:28px; margin:2px 6px 0; padding:0 10px 0 8px; border-radius:6px; color:var(--tx2); font:12px var(--mono); text-align:left; }
+.al-dir:hover { background:var(--s3); color:var(--tx); }
+.al-dir .chev { color:var(--tx3); display:flex; }
+.al-dir .cnt { margin-left:auto; color:var(--tx3); font-family:var(--sans); }
+.al-dir .tag { font-family:var(--sans); }
+.al-row.in { padding-left:30px; }
 .al-row .v { text-align:right; font-size:13px; color:var(--tx); white-space:nowrap; }
 .al-row .v span { display:block; font-size:12px; color:var(--tx3); margin-top:2px; }
 .al-row.cur { background:var(--acc-tint); }
@@ -828,6 +839,7 @@ code { font-family:var(--mono); font-size:.95em; }
 .videoview video { max-width:100%; max-height:100%; background:#000; border-radius:6px; box-shadow:var(--shadow); }
 .vv-bar { left:50%; bottom:12px; transform:translateX(-50%); width:min(940px, calc(100% - 24px)); display:flex; align-items:center; gap:4px; padding:4px 6px; }
 .vv-bar input[type=range] { flex:1 1 140px; min-width:90px; }
+.vv-bar input.vv-vol { flex:0 0 72px; min-width:0; }
 .vv-bar .an-time { flex-shrink:0; }
 .vv-title { display:flex; align-items:center; gap:7px; padding:0 6px; min-width:0; max-width:220px; flex-shrink:2; color:var(--tx2); }
 .vv-title b { color:var(--tx); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

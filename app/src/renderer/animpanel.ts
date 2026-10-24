@@ -5,6 +5,8 @@ import { el } from './ui';
 
 // Reiter Animation (E82): Liste der Animationen mit den Videos darunter und der Ablauf der gezeigten. Die Schritte kommen aus der
 // Animation (ausdrücklich oder aus den Untertiteln), ein Klick springt hin. Abgespielt wird in der Leiste unten im Bild (animtool.ts).
+// Videos stehen nach Ordnern, ein Ordner lässt sich einklappen (der Agent legt oft viele Einzelclips neben die Hauptvideos).
+// Rechtsklick auf ein Video öffnet das Menü der Datei wie im Dateibaum.
 
 interface Ui {
   list: HTMLElement; listCount: HTMLElement; rows: HTMLElement;
@@ -20,11 +22,17 @@ interface Deps {
   insert(text: string): void;
   isNew(key: string): boolean;
   seen(key: string): void;
+  /** Menü der Datei (wie im Dateibaum) an dieser Stelle. */
+  fileMenu(rel: string, x: number, y: number): void;
+  /** Eingeklappte Ordner der Videoliste, pro Modell gemerkt. */
+  closedDirs(): string[];
+  setClosedDirs(dirs: string[]): void;
 }
 
 export const animKey = (a: AnimEntry) => `a:${a.id}`;
 export const videoKey = (v: string) => `v:${v}`;
 const base = (rel: string) => rel.split('/').pop() ?? rel;
+const dirOf = (rel: string) => (rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '');
 
 export class AnimPanel {
   private mode: 'list' | 'report' = 'report';
@@ -66,13 +74,48 @@ export class AnimPanel {
     this.ui.body.querySelectorAll('.cx-seq').forEach((r, i) => r.classList.toggle('cur', i === cur));
   }
 
-  private videoRow(v: string): HTMLButtonElement {
-    const b = el('button', { className: 'al-row ic3', title: `${v}: open in the player` }, el('span', { className: 'ic' }, icon('f-video', 16)),
-      el('div', {}, el('div', { className: 't', textContent: base(v) }),
-        el('div', { className: 'm' }, v.slice(0, v.length - base(v).length) || './', this.d.isNew(videoKey(v)) ? el('span', { className: 'tag acc', textContent: 'new' }) : null)),
+  /** `showDir`: Ordner unter dem Namen (nur ohne Ordnerköpfe, sonst steht er schon darüber). */
+  private videoRow(v: string, showDir: boolean): HTMLButtonElement {
+    const isNew = this.d.isNew(videoKey(v));
+    const meta = showDir || isNew ? el('div', { className: 'm' }, showDir ? v.slice(0, v.length - base(v).length) || './' : '',
+      isNew ? el('span', { className: 'tag acc', textContent: 'new' }) : null) : null;
+    const b = el('button', { className: 'al-row ic3' + (showDir ? '' : ' in'), title: `${v}: open in the player. Right-click for file actions.` }, el('span', { className: 'ic' }, icon('f-video', 16)),
+      el('div', {}, el('div', { className: 't', textContent: base(v) }), meta),
       el('div', { className: 'v' }));
+    b.dataset.video = v;
     b.addEventListener('click', () => { this.d.seen(videoKey(v)); this.d.openVideo(v); this.render(); });
+    this.withFileMenu(b, v);
     return b;
+  }
+
+  private withFileMenu(b: HTMLElement, rel: string): void {
+    b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); this.d.fileMenu(rel, e.clientX, e.clientY); });
+  }
+
+  /** Videos nach Ordnern. Bei nur einem Ordner ohne Köpfe wie bisher. */
+  private videoRows(videos: string[]): HTMLElement[] {
+    const dirs = new Map<string, string[]>();
+    for (const v of videos) { const d = dirOf(v); const list = dirs.get(d); if (list) list.push(v); else dirs.set(d, [v]); }
+    if (dirs.size === 1) return videos.map((v) => this.videoRow(v, true));
+    const closed = new Set(this.d.closedDirs());
+    const rows: HTMLElement[] = [];
+    for (const [dir, list] of [...dirs].sort(([a], [b]) => a.localeCompare(b))) {
+      const open = !closed.has(dir);
+      const anyNew = !open && list.some((v) => this.d.isNew(videoKey(v)));
+      const head = el('button', { className: 'al-dir', title: `${dir || 'Project folder'}: ${open ? 'collapse' : 'expand'}` },
+        el('span', { className: 'chev' }, icon(open ? 'down' : 'right', 12, 2.2)), icon('folder', 14), el('span', { textContent: `${dir || '.'}/` }),
+        anyNew ? el('span', { className: 'tag acc', textContent: 'new' }) : null, el('span', { className: 'cnt', textContent: String(list.length) }));
+      head.dataset.dir = dir;
+      head.setAttribute('aria-expanded', String(open));
+      head.addEventListener('click', () => {
+        if (open) closed.add(dir); else closed.delete(dir);
+        this.d.setClosedDirs([...closed]);
+        this.render();
+      });
+      rows.push(head);
+      if (open) rows.push(...list.map((v) => this.videoRow(v, false)));
+    }
+    return rows;
   }
 
   private renderList(): void {
@@ -93,12 +136,14 @@ export class AnimPanel {
     if (!animations.length && !errors.length) rows.push(el('div', { className: 'al-empty', textContent: 'No animations yet.' }));
     const videos = this.d.videos();
     if (videos.length) {
-      rows.push(el('div', { className: 'al-sh' }, 'VIDEOS ', el('span', { className: 'cnt', textContent: String(videos.length) }), el('span', { className: 'r', textContent: 'renders/' })));
-      rows.push(...videos.map((v) => this.videoRow(v)));
+      // Mit Ordnerköpfen steht der Ordner schon darunter
+      const oneDir = new Set(videos.map(dirOf)).size === 1;
+      rows.push(el('div', { className: 'al-sh' }, 'VIDEOS ', el('span', { className: 'cnt', textContent: String(videos.length) }), oneDir ? el('span', { className: 'r', textContent: `${dirOf(videos[0]) || '.'}/` }) : null));
+      rows.push(...this.videoRows(videos));
     }
     this.ui.rows.replaceChildren(...rows, el('div', { className: 'al-note' },
       'The agent creates animations in ', el('code', { textContent: 'animations/' }), ' and videos with ', el('code', { textContent: 'soma render' }),
-      ' (skill “Animation and video”). A video opens in the player.'));
+      ' (skill “Animation and video”). A video opens in the player, right-click it to rename, delete or find it in the files.'));
   }
 
   private renderReport(): void {
@@ -129,6 +174,7 @@ export class AnimPanel {
     if (mine.length) vids.append(...mine.map((v) => {
       const b = el('button', { className: 'cx-file', title: `${v}: open in the player` }, icon('f-video', 15), el('span', { textContent: base(v) }), el('span', { className: 's' }));
       b.addEventListener('click', () => { this.d.seen(videoKey(v)); this.d.openVideo(v); });
+      this.withFileMenu(b, v);
       return b;
     }));
     else vids.append(el('div', { className: 'cx-empty', textContent: 'No video yet. “Make video” writes one to renders/.' }));
@@ -146,6 +192,8 @@ export class AnimPanel {
       hint: this.ui.body.querySelector('.cx-line')?.textContent ?? null,
       steps: [...this.ui.body.querySelectorAll<HTMLElement>('.cx-seq')].map((x) => ({ text: x.textContent, cur: x.classList.contains('cur') })),
       videos: [...this.ui.body.querySelectorAll<HTMLElement>('.cx-file')].map((x) => x.textContent),
+      dirs: [...this.ui.rows.querySelectorAll<HTMLElement>('.al-dir')].map((x) => ({ dir: x.dataset.dir ?? '', open: x.getAttribute('aria-expanded') === 'true' })),
+      listVideos: [...this.ui.rows.querySelectorAll<HTMLElement>('.al-row[data-video]')].map((x) => x.dataset.video ?? ''),
     };
   }
 }
