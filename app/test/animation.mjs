@@ -312,6 +312,7 @@ try {
 
   // 8) Video abspielen, Zeit und Standbild an den Agenten
   await ev(() => window.__t.showPanel('files'));
+  await ev(() => window.__t.revealFile('renders/deckel-oeffnen.mp4'));
   await waitFor('Video im Dateibaum', () => window.__t.fileRows().includes('deckel-oeffnen.mp4'), 10000).catch(() => {});
   await ev(() => document.querySelector('#tab-files .frow[data-path="renders/deckel-oeffnen.mp4"]')?.click());
   await waitFor('Video geladen', () => window.__t.video().ready >= 2 && window.__t.video().width > 0, 20000).catch(() => {});
@@ -321,6 +322,27 @@ try {
   await ev(() => window.__t.videoSeek(2));
   v = await ev(() => window.__t.video());
   check('Springen auf 2 s: Zeitanzeige', v.time.startsWith('00:02.00 / 00:08'), v.time);
+  // Lautstärke: stumm schalten, Regler, Taste M, gemerkt im localStorage
+  check('Lautstärke anfangs voll, nicht stumm', v.volume === 1 && !v.muted && v.slider === 1 && v.muteLabel === 'Mute', JSON.stringify(v));
+  await domClick('btn-video-mute');
+  v = await ev(() => window.__t.video());
+  check('Knopf „Mute“: stumm, Regler auf null, Knopf heißt „Unmute“', v.muted && v.slider === 0 && v.muteLabel === 'Unmute', JSON.stringify(v));
+  await ev(() => { const r = document.getElementById('video-volume'); r.value = '0.3'; r.dispatchEvent(new Event('input', { bubbles: true })); });
+  await sleep(100);
+  v = await ev(() => window.__t.video());
+  check('Regler auf 0.3: leiser und nicht mehr stumm', near(v.volume, 0.3) && !v.muted && near(v.slider, 0.3), JSON.stringify(v));
+  await ev(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })));
+  await sleep(100);
+  const vm = await ev(() => ({ ...window.__t.video(), saved: [localStorage.getItem('soma.video.volume'), localStorage.getItem('soma.video.muted')] }));
+  check('Taste M schaltet stumm, Lautstärke 0.3 bleibt gemerkt', vm.muted && near(vm.volume, 0.3) && vm.saved[0] === '0.3' && vm.saved[1] === '1', JSON.stringify(vm));
+  await domClick('btn-video-mute');
+  check('Wieder an: mit 0.3', near((await ev(() => window.__t.video())).volume, 0.3) && !(await ev(() => window.__t.video())).muted);
+  // „…“ im Player: Menü der Datei wie im Dateibaum, ohne Anlegen
+  await domClick('btn-video-more');
+  const moreItems = await ev(() => [...document.querySelectorAll('#menu-ctx .mi')].map((b) => b.textContent));
+  check('„…“ im Player: Show in file tree, Explorer, Umbenennen, Löschen, kein Anlegen', ['Show in file tree', 'Show in Explorer', 'Rename', 'Delete'].every((l) => moreItems.some((x) => x.startsWith(l)))
+    && !moreItems.some((x) => x.startsWith('New')), moreItems.join(','));
+  await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await shot('video-1');
   await domClick('btn-video-agent');
   await waitFor('Zeit im Terminal', (id) => window.__t.termText(id).includes('[Video: renders/deckel-oeffnen.mp4 at 00:02.00]'), 8000, tid).catch(() => {});
@@ -351,6 +373,58 @@ try {
   check('„Video erzeugen“: MP4 entsteht und spielt in der App', fs.existsSync(mp4) && (await ev(() => window.__t.video())).open, JSON.stringify(await ev(() => window.__t.toast())));
   await domClick('btn-video-close');
   await domClick('btn-anim-close');
+
+  // 9b) Videos nach Ordnern im Reiter Animation, Ordner einklappbar und gemerkt, Rechtsklick öffnet das Menü der Datei
+  const clips = path.join(dir, 'renders', 'clips');
+  fs.mkdirSync(clips, { recursive: true });
+  fs.copyFileSync(mp4, path.join(clips, 'clip-1.mp4'));
+  fs.copyFileSync(mp4, path.join(clips, 'clip-2.mp4'));
+  await ev(() => window.__t.showPanel('anim'));
+  await ev(() => document.getElementById('btn-am-back').click());
+  await waitFor('Clips in der Liste', () => window.__t.refreshViewLists().then(() => window.__t.animPanel().listVideos.includes('renders/clips/clip-2.mp4')), 15000).catch(() => {});
+  ap = await ev(() => window.__t.animPanel());
+  check('Videos nach Ordnern: renders/ und renders/clips/, beide offen', JSON.stringify(ap.dirs) === '[{"dir":"renders","open":true},{"dir":"renders/clips","open":true}]'
+    && ap.listVideos.length === 3, JSON.stringify([ap.dirs, ap.listVideos]));
+  await ev(() => document.querySelector('#am-rows .al-dir[data-dir="renders/clips"]').click());
+  await ev(() => window.__t.refreshViewLists());
+  ap = await ev(() => window.__t.animPanel());
+  check('Ordner clips eingeklappt, bleibt es nach dem Neuladen der Liste', ap.dirs[1]?.open === false && JSON.stringify(ap.listVideos) === '["renders/deckel-oeffnen.mp4"]', JSON.stringify([ap.dirs, ap.listVideos]));
+  await shot('anim-4-ordner');
+  await ev(() => document.querySelector('#am-rows .al-dir[data-dir="renders/clips"]').click());
+  const rowMenu = (rel) => ev((r) => {
+    const row = document.querySelector(`#am-rows .al-row[data-video="${CSS.escape(r)}"]`);
+    if (!row) return null;
+    const b = row.getBoundingClientRect();
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 20, clientY: b.top + 5 }));
+    return [...document.querySelectorAll('#menu-ctx .mi')].map((x) => x.textContent);
+  }, rel);
+  const pick = (label) => ev((l) => [...document.querySelectorAll('#menu-ctx .mi')].find((b) => b.textContent.startsWith(l))?.click(), label);
+  const items = await rowMenu('renders/clips/clip-1.mp4');
+  check('Rechtsklick auf ein Video: Play, Show in file tree, Explorer, Pfad, Umbenennen, Löschen', ['Play', 'Show in file tree', 'Show in Explorer', 'Open with default app', 'Copy path', 'Rename', 'Delete']
+    .every((l) => items?.some((x) => x.startsWith(l))), items?.join(','));
+  await pick('Rename');
+  await waitFor('Namensfeld im Dateibaum', () => document.querySelector('#tab-files .fedit')?.value === 'clip-1.mp4', 8000).catch(() => {});
+  const fedit = await ev(() => ({ panel: !document.getElementById('panel-files').hidden, value: document.querySelector('#tab-files .fedit')?.value ?? null }));
+  check('„Rename“: Dateibaum mit Namensfeld der Datei', fedit.panel && fedit.value === 'clip-1.mp4', JSON.stringify(fedit));
+  await ev(() => { const t = document.querySelector('#tab-files .fedit'); t.value = 'teaser.mp4'; t.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  await waitFor('umbenannt', () => window.__t.fileRows().includes('teaser.mp4'), 8000).catch(() => {});
+  check('Umbenannt auf der Platte', fs.existsSync(path.join(clips, 'teaser.mp4')) && !fs.existsSync(path.join(clips, 'clip-1.mp4')));
+  // Löschen über das Menü im Player schließt ihn
+  await ev(() => window.__t.videoOpen('renders/clips/clip-2.mp4'));
+  await waitFor('Clip geladen', () => window.__t.video().ready >= 2, 15000).catch(() => {});
+  await domClick('btn-video-more');
+  await app.answers([0]);
+  await pick('Delete');
+  await waitFor('Clip gelöscht', () => !window.__t.video().open, 8000).catch(() => {});
+  check('„Delete“ im Player: Datei im Papierkorb, Player zu', !fs.existsSync(path.join(clips, 'clip-2.mp4')) && !(await ev(() => window.__t.video())).open);
+  await ev(() => window.__t.showPanel('anim'));
+  await ev(() => document.getElementById('btn-am-back').click());
+  await ev(() => document.querySelector(`#am-rows .al-row[data-video="renders/deckel-oeffnen.mp4"]`)?.click());
+  await rowMenu('renders/deckel-oeffnen.mp4');
+  await pick('Show in file tree');
+  await waitFor('Datei im Baum', () => !document.getElementById('panel-files').hidden && document.activeElement?.dataset?.path === 'renders/deckel-oeffnen.mp4', 8000).catch(() => {});
+  check('„Show in file tree“: Dateibaum, Ordner aufgeklappt, Zeile hat den Fokus', await ev(() => document.activeElement?.dataset?.path === 'renders/deckel-oeffnen.mp4'));
+  await domClick('btn-video-close');
 
   // 10) Auswertungen
   r = soma(['analyze', 'overhang']);

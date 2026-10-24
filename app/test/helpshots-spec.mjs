@@ -104,6 +104,7 @@ export const SHOTS = [
     file: 'code.png',
     clip: ['#side', '#editor'],
     marks: [
+      { label: 'Search', sel: '#files-filter', at: 'r' },
       { label: 'File tree', sel: '#tab-files', at: 'c', box: true },
       { label: 'Drop zone', sel: '#dropzone', at: 't' },
       { label: 'Open files', sel: '#code-tabs', at: 'r' },

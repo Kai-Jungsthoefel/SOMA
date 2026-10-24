@@ -55,6 +55,7 @@ try {
 
   // 1) Klick im Dateibaum öffnet die Datei im Viewer
   await ev(() => window.__t.showPanel('files'));
+  await ev(() => window.__t.revealFile('inputs/box.step'));
   await waitFor('Datei im Dateibaum', () => window.__t.fileRows().includes('box.step'), 20000).catch(() => {});
   check('STEP-Datei steht im Dateibaum', await clickRow('inputs/box.step'));
   await waitFor('Datei im Viewer', () => window.__t.fileView().rel === 'inputs/box.step' && JSON.stringify(window.__t.treeNames()) === '["Body","Lid"]', 90000).catch(() => {});

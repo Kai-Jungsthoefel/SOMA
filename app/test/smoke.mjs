@@ -301,6 +301,10 @@ try {
 
   // Dateibaum: Markierungen sichtbar, anlegen, umbenennen, löschen über Menü und Tasten
   await ev(() => window.__t.showPanel('files'));
+  await waitFor('Gruppe Markups im Dateibaum', () => window.__t.fileRows().includes('Markups'), 10000).catch(() => {});
+  const rows1 = await ev(() => window.__t.fileRows());
+  check('Dateibaum: Ordner und Gruppen anfangs eingeklappt', rows1.includes('Markups') && !rows1.includes(fbFiles[0]), rows1.slice(-6).join(','));
+  await ev((f) => window.__t.revealFile(f), `.soma/feedback/${fbFiles[0]}`);
   await waitFor('Markierungen im Dateibaum', (f) => window.__t.fileRows().includes(f), 10000, fbFiles[0]).catch(() => {});
   const rows2 = await ev(() => window.__t.fileRows());
   check('Dateibaum: Gruppe „Markups“ mit dem Bild aus .soma/feedback/, sonst nichts aus .soma', rows2.includes('Markups') && rows2.includes(fbFiles[0]) && !rows2.includes('project.json'), rows2.slice(-6).join(','));
@@ -378,6 +382,18 @@ try {
   const bin = path.join(ud, 'test-papierkorb');
   check('Del mit Rückfrage: in den Papierkorb, Reiter zu', !fs.existsSync(skizze) && fs.existsSync(bin) && fs.readdirSync(bin).some((f) => f.endsWith('skizze.txt'))
     && !(await ev(() => window.__t.editor.state())).files.includes('skizze.txt'), fs.existsSync(bin) ? fs.readdirSync(bin).join(',') : 'kein Papierkorb');
+  // Suche im Dateibaum: nur Treffer mit ihren Ordnern (aufgeklappt), Treffer hervorgehoben, Escape leert und klappt wieder zu
+  const search = (q) => ev((v) => { const i = document.getElementById('files-filter'); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); }, q);
+  await search('MODEL');
+  const found = await ev(() => ({ rows: window.__t.fileRows(), hits: [...document.querySelectorAll('#tab-files .fn .hit')].map((x) => x.textContent) }));
+  check('Suche „MODEL“: model.py und output/model.step, sonst nichts, Treffer hervorgehoben', JSON.stringify(found.rows) === '["output","model.step","model.py"]'
+    && found.hits.length === 2 && found.hits.every((x) => x === 'model'), JSON.stringify(found));
+  await search('gibtsnicht');
+  check('Suche ohne Treffer: Hinweis', (await ev(() => document.querySelector('#tab-files .hint')?.textContent ?? '')).startsWith('No file name contains'));
+  await search('model');
+  await ev(() => document.getElementById('files-filter').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  const cleared = await ev(() => ({ value: document.getElementById('files-filter').value, rows: window.__t.fileRows() }));
+  check('Escape: Suche leer, output/ wieder eingeklappt', cleared.value === '' && cleared.rows.includes('output') && !cleared.rows.includes('model.step') && cleared.rows.includes('Markups'), JSON.stringify(cleared.rows));
   await ctx(`.soma/feedback/${fbFiles[0]}`); await menuItemClick('Send path to agent');
   await waitFor('Pfad der Markierung im Terminal', (f) => window.__t.termText(f[0]).includes(`[File: .soma/feedback/${f[1]}]`), 5000, [tid, fbFiles[0]]).catch(() => {});
   check('Markierung: Rechtsklick „Send path to agent“ fügt den Pfad ein', (await ev((id) => window.__t.termText(id), tid)).includes(`[File: .soma/feedback/${fbFiles[0]}]`));

@@ -97,6 +97,7 @@ try {
   const file = path.join(proj.dir, 'cut', 'plate.dxf');
   make(file, 200);
   await ev(() => window.__t.showPanel('files'));
+  await ev(() => window.__t.revealFile('cut/plate.dxf'));
   await waitFor('Datei im Dateibaum', () => window.__t.fileRows().includes('plate.dxf'), 20000).catch(() => {});
   await ev(() => document.querySelector('#tab-files .frow[data-path="cut/plate.dxf"]')?.click());
   await waitFor('DXF gezeichnet', () => { const s = window.__t.editor.state().dxf; return s && !s.loading && s.batches > 0; }, 60000).catch(() => {});
