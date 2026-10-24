@@ -80,10 +80,15 @@ def cmd_build(args):
     os._exit(0 if res["status"] == "ok" else 1)
 
 
-def _export_one(shape, fmt, path):
+def _export_one(shape, fmt, path, name="part"):
+    """Schreibt ein Bauteil. Liefert Hinweise fuer den Benutzer (z. B. ein Netz, das nicht geschlossen ist)."""
     import cadquery as cq
-    cq_type = {"step": "STEP", "stl": "STL", "amf": "AMF", "vrml": "VRML", "3mf": "3MF", "brep": "BREP", "svg": "SVG"}
+    from . import meshexport
+    cq_type = {"step": "STEP", "vrml": "VRML", "brep": "BREP", "svg": "SVG"}
     wp = cq.Workplane("XY").add(shape)
+    if fmt in meshexport.WRITERS:
+        # Eigene Netze statt CadQuerys Exporter: dort hat jede Flaeche eigene Ecken, Slicer sehen offene Kanten
+        return meshexport.export_mesh(shape, fmt, path, name)
     if fmt in cq_type:
         cq.exporters.export(wp, str(path), exportType=cq_type[fmt])
     elif fmt in ("glb", "gltf"):
@@ -99,15 +104,9 @@ def _export_one(shape, fmt, path):
         w.ComputeModel()
         if not w.Write(str(path)):
             raise RuntimeError("Writing the IGES file failed")
-    elif fmt == "obj":
-        from . import build, mesher
-        m = mesher.mesh_shape(shape, build.auto_tolerance([shape]), 0.3)
-        lines = [f"v {v[0]:.5f} {v[1]:.5f} {v[2]:.5f}" for v in m["positions"]]
-        lines += [f"vn {n[0]:.4f} {n[1]:.4f} {n[2]:.4f}" for n in m["normals"]]
-        lines += [f"f {a}//{a} {b}//{b} {c}//{c}" for a, b, c in m["indices"] + 1]
-        Path(path).write_text("\n".join(lines) + "\n")
     else:
         raise ValueError(f"Format not supported: {fmt}")
+    return []
 
 
 def cmd_export(args):
@@ -139,9 +138,11 @@ def cmd_export(args):
     for p in chosen:
         path = out_dir / f"{p['step_name']}.{fmt}"
         try:
-            _export_one(p["shape"], fmt, path)
+            notes = _export_one(p["shape"], fmt, path, p["name"])
             # Im Projekt relativ (so liest es der Agent), ein Ziel ausserhalb (Speicherdialog der App) absolut
             print(f"exported: {path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()}")
+            for n in notes:
+                print(f"warning: {n}")
         except Exception as e:
             print(f"Export of {p['name']!r} as {fmt} failed: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
