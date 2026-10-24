@@ -44,7 +44,7 @@ Instead of an agent in SOMA's terminal you can use a desktop agent app that work
 2. Click the **+** above the terminal and choose **Copy path for agent app**. For a model you opened with **Open folder**, the path is simply that folder.
 3. In the agent app, open this path as the project folder and tell the agent what you need.
 
-The agent reads its instructions from `AGENTS.md` (Codex) or `CLAUDE.md` (Claude) in that folder. SOMA rebuilds and shows every change, as with an agent in its own terminal. If `soma` is not on the agent's PATH, it runs it through the model's environment (`.soma/env/Scripts/python -m soma build` on Windows), the skill "Shell environment" explains this to the agent. `soma render` needs SOMA running with this model open. **Send to agent** also copies its note to the clipboard: paste it into the agent app. A markup note names its picture in `.soma/feedback/`, which the agent opens itself. A chat without file access and commands does not work.
+**Send to agent** also copies its note to the clipboard: paste it into the agent app. A markup note names its picture in `.soma/feedback/`, which the agent opens itself. A chat without file access and commands does not work.
 
 ## Features
 
