@@ -6,6 +6,8 @@ the version is bumped.
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-24
+
 ### Added
 
 - Search field above the file tree: it shows only files whose name contains the text, with their folders opened.
