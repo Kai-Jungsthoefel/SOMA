@@ -1,0 +1,39 @@
+# Checks for pull requests and pushes to main: typecheck, unit tests and build. The suites that start the real app still
+# run locally (CONTRIBUTING.md), they need the Python environment.
+#
+# pull_request instead of pull_request_target: code from forks runs without secrets and with read access only.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Typecheck and unit tests
+        run: |
+          npm run typecheck
+          npm run test:unit
+
+      - name: Build
+        run: npm run build
