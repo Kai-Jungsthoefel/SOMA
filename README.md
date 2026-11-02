@@ -90,7 +90,7 @@ Early prototype. The current version is on the [releases](https://github.com/Kai
 
 ## Feedback
 
-Bug reports, ideas and experiences with different agents are very welcome as [issues](https://github.com/Kai-Jungsthoefel/SOMA/issues/new/choose). Pull requests are not accepted for now, see [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports, ideas and experiences with different agents are very welcome as [issues](https://github.com/Kai-Jungsthoefel/SOMA/issues/new/choose). Pull requests are welcome too, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Running from source
 

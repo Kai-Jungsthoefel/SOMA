@@ -25,7 +25,7 @@ Details in `app/README.md`.
 - `src/shared/` `types.ts` (IPC contract), `settings.ts` (defaults, validation, mouse bindings, E81), `editable.ts`, `help.ts`, `skillname.ts`, `version.ts`.
 - `resources/` `template/` (template for user projects incl. `AGENTS.md`), `skills/` (bundled skills, among them `soma-app.md` as the user guide for help and agent, E83), `help/` (images of the guide), `icon.*` (generated with `scripts/make-icon.py`).
 - `test/` test suites, CDP client, screenshots. `SOMA_TEST_EXE` runs them against a packaged app.
-- `electron-builder.config.cjs` installation packages, `build-resources/` large icon for them. CI for all three systems in `.github/workflows/dist.yml`.
+- `electron-builder.config.cjs` installation packages, `build-resources/` large icon for them. CI for all three systems in `.github/workflows/dist.yml`, checks for pull requests and pushes in `checks.yml`.
 
 **`python/soma/`** helper library and CLI
 - API: `add_part` (with `group=`, `role=`), `param` (`params.py`, E74), `import_step`, `import_assembly`, standard parts in `fasteners.py` (dimension tables from bd_warehouse in `data/fasteners/`). Plain CadQuery scripts (E100): compatibility mode for `show_object`, `ocp_vscode` and `result` in `cqcompat.py`.
@@ -42,7 +42,7 @@ Details in `app/README.md`.
 
 **`docs/`** `images/` for the README, `phase0-ergebnisse.md` (finished prototype, code in the Git history up to `v0.5.0`).
 
-**Root:** `README.md`, `README.zh-CN.md` (AI translation, linked at the top of the README), `CHANGELOG.md`, `LICENSE`, `MODEL-EXCEPTION.md`, `THIRD_PARTY_NOTICES.md` (licenses of bundled components, shipped with the packages), `SECURITY.md`, `CONTRIBUTING.md` (issues only, no pull requests for now). Issue templates in `.github/ISSUE_TEMPLATE/`.
+**Root:** `README.md`, `README.zh-CN.md` (AI translation, linked at the top of the README), `CHANGELOG.md`, `LICENSE`, `MODEL-EXCEPTION.md`, `THIRD_PARTY_NOTICES.md` (licenses of bundled components, shipped with the packages), `SECURITY.md`, `CONTRIBUTING.md` (issues and pull requests). Issue templates in `.github/ISSUE_TEMPLATE/`, pull request template in `.github/pull_request_template.md`.
 
 ## Commands
 
@@ -78,8 +78,8 @@ npm run dist                         # installation package for this system, run
 
 ### Language (E73, E89)
 
-- **English:** everything users, contributors or the agent see: interface, messages, dialogs, output and errors of `soma`, docstrings of the public API, skills including their header, handover notes to the agent, `AGENTS.md` and `model.py` of the template. Also all public documents in the repo: `README.md`, `CHANGELOG.md`, this `CLAUDE.md`, `THIRD_PARTY_NOTICES.md`, `SECURITY.md`, issue templates, release texts. Numbers with a decimal point.
-- **German:** internal docs (`app/README.md`, `docs/phase0-ergebnisse.md`, the local working documents), code comments, commit messages, test descriptions.
+- **English:** everything users, contributors or the agent see: interface, messages, dialogs, output and errors of `soma`, docstrings of the public API, skills including their header, handover notes to the agent, `AGENTS.md` and `model.py` of the template. Also all public documents in the repo: `README.md`, `CHANGELOG.md`, this `CLAUDE.md`, `THIRD_PARTY_NOTICES.md`, `SECURITY.md`, issue templates, release texts. Numbers with a decimal point. Code comments, commit messages and test descriptions are in English too (since November 2026, older code still has German comments).
+- **German:** internal docs (`app/README.md`, `docs/phase0-ergebnisse.md`, the local working documents).
 - What the app recognizes from older projects (commit subjects, trailers) it also recognizes in the old German form.
 - `README.md` in the root is the start page on GitHub (E70): plain and short, no emojis, images in `docs/images/`. `README.zh-CN.md` is an AI translation of it, marked as such at the top: when the README changes, update the translation too.
 
@@ -117,12 +117,12 @@ npm run dist                         # installation package for this system, run
 
 ## Docs and way of working
 
-- The maintainer speaks German: answer in German. If a decision is really theirs, ask a single question. What I decide without asking goes into `PLAN.md` under "Noch nicht ausdrücklich bestätigt".
+- The maintainer speaks German: answer them in German. Contributors get answers in their own language. If a decision is really theirs, ask a single question. What I decide without asking goes into `PLAN.md` under "Noch nicht ausdrücklich bestätigt".
 - After a step, update:
   - `PLAN.md`: phase status, open points, risks.
   - `app/README.md` when commands or structure change, and the structure here.
   - `CHANGELOG.md`: what the user notices, briefly under "Unreleased", in English (E70, E89).
   - `README.md` only for big new features.
   - `THIRD_PARTY_NOTICES.md` when a bundled component is added, removed or changes its license.
-- Commits only on request, split by topic (e.g. `python/`, `app/`, docs), with a German message.
+- Commits only on request, split by topic (e.g. `python/`, `app/`, docs), with an English message. Pull requests from contributors are squash-merged.
 - **Version number (E68):** major.minor.bugfix, one for app and `soma`, in `app/package.json` and `python/soma/__init__.py` (change both the same, `npm run test:unit` checks it). Bump only on request: bugfix for fixes, minor for new features, major for breaks with older models or agent instructions. "Unreleased" in the changelog then becomes the new version with date, plus an annotated tag `vX.Y.Z`.

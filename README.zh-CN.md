@@ -96,7 +96,7 @@ SOMA 本身不是智能体。任何能读取文件并运行命令的 CLI 智能�
 
 ## 反馈
 
-非常欢迎以 [issues](https://github.com/Kai-Jungsthoefel/SOMA/issues/new/choose) 的形式提交错误报告、想法以及使用不同智能体的经验。最好用英文；也可以用中文，维护者会借助翻译工具阅读。目前不接受 Pull Request，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+非常欢迎以 [issues](https://github.com/Kai-Jungsthoefel/SOMA/issues/new/choose) 的形式提交错误报告、想法以及使用不同智能体的经验。最好用英文；也可以用中文，维护者会借助翻译工具阅读。也欢迎提交 Pull Request，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 从源码运行
 
