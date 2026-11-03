@@ -80,21 +80,19 @@ def cmd_build(args):
     os._exit(0 if res["status"] == "ok" else 1)
 
 
-def _export_one(shape, fmt, path, name="part"):
-    """Schreibt ein Bauteil. Liefert Hinweise fuer den Benutzer (z. B. ein Netz, das nicht geschlossen ist)."""
+def _export_one(shape, fmt, path, name="part", mesh_opts=None):
+    """Schreibt ein Bauteil. Liefert Hinweise fuer den Benutzer (z. B. ein Netz, das nicht geschlossen ist).
+    mesh_opts (units, up, detail, tol) gelten nur fuer Netzformate (meshexport.MESH_FORMATS)."""
     import cadquery as cq
     from . import meshexport
     cq_type = {"step": "STEP", "vrml": "VRML", "brep": "BREP", "svg": "SVG"}
     wp = cq.Workplane("XY").add(shape)
-    if fmt in meshexport.WRITERS:
-        # Eigene Netze statt CadQuerys Exporter: dort hat jede Flaeche eigene Ecken, Slicer sehen offene Kanten
-        return meshexport.export_mesh(shape, fmt, path, name)
+    if fmt in meshexport.MESH_FORMATS:
+        # Eigene Netze statt CadQuerys Exporter: dort hat jede Flaeche eigene Ecken, Slicer sehen offene Kanten.
+        # glTF ueber OCCT mit Einheit und Achse (Issue #8)
+        return meshexport.export_mesh(shape, fmt, path, name, **(mesh_opts or {}))
     if fmt in cq_type:
         cq.exporters.export(wp, str(path), exportType=cq_type[fmt])
-    elif fmt in ("glb", "gltf"):
-        a = cq.Assembly(name="root")
-        a.add(shape, name="part")
-        a.export(str(path))
     elif fmt == "dxf":  # 2D: Schnitt in Bauteilmitte
         cq.exporters.exportDXF(wp.section(shape.BoundingBox().center.z), str(path))
     elif fmt == "iges":
@@ -114,6 +112,23 @@ def cmd_export(args):
     fmt = args.format.lower()
     if fmt not in EXPORT_FORMATS:
         print(f"Format {fmt!r} not supported. Supported: {', '.join(EXPORT_FORMATS)}", file=sys.stderr)
+        return 2
+    from . import meshexport
+    given = [o for o, v in (("--units", args.units), ("--up", args.up), ("--detail", args.detail), ("--tolerance", args.tolerance))
+             if v is not None]
+    mesh_opts = None
+    if fmt in meshexport.MESH_FORMATS:
+        du, dup = meshexport.default_options(fmt)
+        mesh_opts = dict(units=args.units or du, up=args.up or dup, detail=args.detail or "normal", tol=args.tolerance)
+        err = meshexport.check_options(fmt, mesh_opts["units"], mesh_opts["up"], mesh_opts["detail"])
+        if err is None and args.tolerance is not None and not args.tolerance > 0:
+            err = "--tolerance must be greater than 0 (mm)"
+        if err:
+            print(err, file=sys.stderr)
+            return 2
+    elif given:
+        print(f"{', '.join(given)} only apply to mesh formats ({', '.join(meshexport.MESH_FORMATS)}), not to {fmt}",
+              file=sys.stderr)
         return 2
     from . import build
     try:
@@ -138,7 +153,7 @@ def cmd_export(args):
     for p in chosen:
         path = out_dir / f"{p['step_name']}.{fmt}"
         try:
-            notes = _export_one(p["shape"], fmt, path, p["name"])
+            notes = _export_one(p["shape"], fmt, path, p["name"], mesh_opts)
             # Im Projekt relativ (so liest es der Agent), ein Ziel ausserhalb (Speicherdialog der App) absolut
             print(f"exported: {path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()}")
             for n in notes:
@@ -457,6 +472,14 @@ def main(argv=None):
     g.add_argument("--all", action="store_true", help="all parts (without reference and purchased parts)")
     e.add_argument("--format", required=True, help=", ".join(EXPORT_FORMATS))
     e.add_argument("--out", help="target folder, relative to the project or absolute (default: exports)")
+    e.add_argument("--units", choices=["mm", "cm", "m", "in"],
+                   help="mesh formats: unit of the file (default: m for glb/gltf, mm otherwise)")
+    e.add_argument("--up", choices=["z", "y"],
+                   help="mesh formats: axis pointing up, y for game engines (default: y for glb/gltf, z otherwise)")
+    e.add_argument("--detail", choices=["coarse", "normal", "fine"],
+                   help="mesh formats: mesh density (default: normal)")
+    e.add_argument("--tolerance", type=float,
+                   help="mesh formats: maximum deviation of the mesh from the surface in mm, overrides --detail")
     e.add_argument("--project", default=".")
     e.set_defaults(func=cmd_export)
 

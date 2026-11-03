@@ -23,6 +23,56 @@ MERGE_GRID = 1e-5
 # Winkeltoleranz wie CadQuerys Exporter (0.1 rad, etwa 6 Grad): kleine Bohrungen und Radien bleiben rund
 ANGULAR_TOLERANCE = 0.1
 
+# Optionen fuer Netzformate (Issue #8, Export in Game Engines). Einheit: mm je Einheit. Modelliert wird immer in mm mit
+# Z nach oben, umgerechnet wird nur beim Schreiben.
+UNITS = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "in": 25.4}
+# Detailstufe: Faktor auf den Sehnenfehler von print_tolerance und Winkeltoleranz in rad
+DETAIL = {"coarse": (4.0, 0.3), "normal": (1.0, ANGULAR_TOLERANCE), "fine": (0.25, 0.05)}
+MESH_FORMATS = ("3mf", "amf", "stl", "obj", "glb", "gltf")
+# Einheiten in den Formaten, die eine kennen. AMF kennt keine Zentimeter.
+_UNIT_3MF = {"mm": "millimeter", "cm": "centimeter", "m": "meter", "in": "inch"}
+_UNIT_AMF = {"mm": "millimeter", "m": "meter", "in": "inch"}
+
+
+def default_options(fmt):
+    """Einheit und Achse nach oben, wenn der Benutzer nichts angibt: glTF ist laut Spezifikation in Metern mit Y nach
+    oben, alles andere bleibt bei mm und Z nach oben (Slicer erwarten mm, CAD Z nach oben)."""
+    return ("m", "y") if fmt in ("glb", "gltf") else ("mm", "z")
+
+
+def check_options(fmt, units, up, detail):
+    """Fehlermeldung fuer unpassende Optionen oder None."""
+    if units not in UNITS:
+        return f"Unknown unit {units!r}. Supported: {', '.join(UNITS)}"
+    if up not in ("z", "y"):
+        return f"Unknown up axis {up!r}. Supported: z, y"
+    if detail not in DETAIL:
+        return f"Unknown detail {detail!r}. Supported: {', '.join(DETAIL)}"
+    if fmt == "amf" and units not in _UNIT_AMF:
+        return f"AMF does not support the unit {units!r}. Use {', '.join(_UNIT_AMF)}"
+    return None
+
+
+def detail_tolerance(shape, detail="normal", tol=None):
+    """Sehnenfehler (mm) und Winkeltoleranz fuer eine Detailstufe. tol ersetzt den Sehnenfehler."""
+    f, ang = DETAIL[detail]
+    return (tol if tol else print_tolerance(shape) * f), ang
+
+
+def _convert(p, units, up):
+    """Punkte oder Normalen von mm und Z nach oben in die Zieleinheit und -achse. Y nach oben ist eine Drehung um -90 Grad
+    um X, wie bei CadQuerys glTF-Export: (x, y, z) -> (x, z, -y). Eine Drehung, die Orientierung bleibt erhalten."""
+    if up == "y":
+        p = np.column_stack((p[:, 0], p[:, 2], -p[:, 1]))
+    return p if units is None else p / UNITS[units]
+
+
+def convert_bodies(bodies, units, up):
+    """Rechnet die Koerper von body_meshes um. Erst nach dem Zusammenfuehren, MERGE_GRID gilt in mm."""
+    if units == "mm" and up == "z":
+        return bodies
+    return [dict(b, positions=_convert(b["positions"], units, up), normals=_convert(b["normals"], None, up)) for b in bodies]
+
 
 def print_tolerance(shape):
     """Sehnenfehler fuer den Export: wie im Viewer nach Bauteilgroesse, aber hoechstens 0.05 mm, damit Rundungen auch
@@ -58,12 +108,23 @@ def _face_mesh(face):
     return p, t, vn
 
 
+def _face_info(face):
+    """Art, Flaeche und Lage einer Flaeche, damit der Benutzer sie findet (Issue #10). Fehler beim Abfragen sollen den
+    Export nicht abbrechen, die Flaeche wird dann ohne Angaben gezaehlt."""
+    try:
+        bb = face.BoundingBox()
+        return dict(type=face.geomType(), area=face.Area(),
+                    box=((bb.xmin, bb.xmax), (bb.ymin, bb.ymax), (bb.zmin, bb.zmax)))
+    except Exception:
+        return None
+
+
 def _body(faces, name):
-    pos, tris, nrm, missing, off = [], [], [], 0, 0
+    pos, tris, nrm, missing, off = [], [], [], [], 0
     for f in faces:
         m = _face_mesh(f)
         if m is None:
-            missing += 1
+            missing.append(_face_info(f))
             continue
         pos.append(m[0]); tris.append(m[1] + off); nrm.append(m[2])
         off += len(m[0])
@@ -75,12 +136,13 @@ def _body(faces, name):
     t = inv[raw_t]
     keep = (t[:, 0] != t[:, 1]) & (t[:, 1] != t[:, 2]) & (t[:, 0] != t[:, 2])
     return dict(name=name, positions=raw_p[first], triangles=t[keep], normals=raw_n, normal_index=raw_t[keep],
-                missing_faces=missing, dropped=int((~keep).sum()))
+                missing_faces=len(missing), missing=missing, dropped=int((~keep).sum()))
 
 
 def body_meshes(shape, name="part", tol=None, ang=ANGULAR_TOLERANCE):
     """Vernetzt ein cq.Shape fuer den Export. Liefert pro Koerper (Solid) ein Dict mit positions (n,3), triangles (m,3)
-    mit gemeinsamen Ecken, normals und normal_index (Normalen pro Flaeche fuer OBJ), missing_faces und dropped.
+    mit gemeinsamen Ecken, normals und normal_index (Normalen pro Flaeche fuer OBJ), missing_faces, missing (Art, Flaeche
+    und Lage jeder nicht vernetzten Flaeche oder None) und dropped.
     Flaechen ausserhalb von Solids (offene Flaechen, Schalen) kommen als eigener, offener Koerper dazu statt zu fehlen."""
     tol = print_tolerance(shape) if tol is None else tol
     BRepMesh_IncrementalMesh(shape.wrapped, tol, False, ang, True)
@@ -111,6 +173,30 @@ def edge_report(triangles):
     return dict(open=int((cnt == 1).sum()), nonmanifold=int((cnt > 2).sum()), flipped=int((dcnt > 1).sum()))
 
 
+# Flaechen darunter (mm²) nennt die Warnung einen wahrscheinlichen Splitter: Reste, wo zwei Verrundungen oder Fasen
+# aufeinandertreffen, sind typisch weit unter 0.01 mm², echte kleine Flaechen eines Bauteils kaum
+SLIVER_AREA = 0.01
+# So viele nicht vernetzte Flaechen beschreibt die Warnung einzeln, den Rest nur als Anzahl
+MAX_LISTED = 5
+
+
+def _span(lo, hi):
+    def f(v):
+        s = f"{v:.1f}"
+        return "0.0" if s == "-0.0" else s
+    return f((lo + hi) / 2) if abs(hi - lo) < 0.05 else f"{f(lo)}..{f(hi)}"
+
+
+def _describe(info):
+    if info is None:
+        return "unknown face"
+    (x0, x1), (y0, y1), (z0, z1) = info["box"]
+    a = info["area"]
+    area = f"{a:.1f} mm²" if a >= 1 else f"{a:.2g} mm²"
+    sliver = ", probably a sliver" if a < SLIVER_AREA else ""
+    return f"{info['type']}, {area}{sliver} at x {_span(x0, x1)}, y {_span(y0, y1)}, z {_span(z0, z1)}"
+
+
 def problems(bodies):
     """Hinweise fuer den Benutzer, wenn ein Netz trotzdem nicht geschlossen ist (Bericht statt Reparatur, E28)."""
     out = []
@@ -118,7 +204,11 @@ def problems(bodies):
         r = edge_report(b["triangles"])
         bits = []
         if b["missing_faces"]:
-            bits.append(f"{b['missing_faces']} face(s) could not be meshed")
+            miss = b.get("missing") or []
+            desc = "; ".join(_describe(i) for i in miss[:MAX_LISTED])
+            if len(miss) > MAX_LISTED:
+                desc += f"; and {len(miss) - MAX_LISTED} more"
+            bits.append(f"{b['missing_faces']} face(s) could not be meshed" + (f" ({desc})" if desc else ""))
         if r["open"]:
             bits.append(f"{r['open']} open edge(s)")
         if r["nonmanifold"]:
@@ -140,7 +230,7 @@ def _coords(p):
     return [(_num(x), _num(y), _num(z)) for x, y, z in p]
 
 
-def write_3mf(path, bodies, name):
+def write_3mf(path, bodies, name, units="mm"):
     """3MF Core: ein Objekt pro Koerper. Mehrere Koerper fasst ein Objekt mit Komponenten zusammen, damit der Slicer sie
     als ein Teil auf das Druckbett legt und nicht einzeln verteilt."""
     res = []
@@ -156,7 +246,7 @@ def write_3mf(path, bodies, name):
         res.append(f'<object id="{item}" type="model" name={quoteattr(name)}><components>{comps}</components></object>')
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
-             '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+             f'<model unit="{_UNIT_3MF[units]}" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
              f'<metadata name="Application">SOMA</metadata><metadata name="CreationDate">{stamp}</metadata>'
              f'<resources>{"".join(res)}</resources><build><item objectid="{item}"/></build></model>')
     types = ('<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -173,7 +263,7 @@ def write_3mf(path, bodies, name):
         z.writestr("3D/3dmodel.model", model)
 
 
-def write_amf(path, bodies, name):
+def write_amf(path, bodies, name, units="mm"):
     """AMF: ein Objekt, eine gemeinsame Eckenliste, ein volume pro Koerper (so lesen Slicer mehrere Koerper als ein Teil)."""
     parts, vols, off = [], [], 0
     for b in bodies:
@@ -183,7 +273,7 @@ def write_amf(path, bodies, name):
                       for a, c, d in (b["triangles"] + off).tolist())
         vols.append(f'<volume><metadata type="name">{_xml_text(b["name"])}</metadata>{tri}</volume>')
         off += len(b["positions"])
-    text = ('<?xml version="1.0" encoding="UTF-8"?>\n<amf unit="millimeter" version="1.1">'
+    text = (f'<?xml version="1.0" encoding="UTF-8"?>\n<amf unit="{_UNIT_AMF[units]}" version="1.1">'
             f'<metadata type="producer">SOMA</metadata><object id="0"><metadata type="name">{_xml_text(name)}</metadata>'
             f'<mesh><vertices>{"".join(parts)}</vertices>{"".join(vols)}</mesh></object></amf>\n')
     with open(path, "w", encoding="utf-8", newline="\n") as f:
@@ -194,9 +284,10 @@ def _xml_text(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def write_stl(path, bodies, name):
+def write_stl(path, bodies, name, units="mm"):
     """Binaeres STL. Das Format kennt keine Indizes, Slicer verbinden ueber die Koordinaten; entartete Dreiecke fehlen
-    aber auch hier, und die Koordinaten kommen aus demselben Netz wie bei 3MF."""
+    aber auch hier, und die Koordinaten kommen aus demselben Netz wie bei 3MF. Keine Einheit im Format, die Koordinaten
+    sind schon umgerechnet."""
     t = [b["positions"][b["triangles"]] for b in bodies]
     tri = np.concatenate(t) if t else np.zeros((0, 3, 3))
     n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
@@ -212,9 +303,10 @@ def write_stl(path, bodies, name):
         f.write(rec.tobytes())
 
 
-def write_obj(path, bodies, name):
-    """OBJ mit gemeinsamen Ecken (v) und Normalen pro Flaeche (vn), damit Kanten in Grafikprogrammen hart bleiben."""
-    lines = [f"# SOMA export: {name}"]
+def write_obj(path, bodies, name, units="mm"):
+    """OBJ mit gemeinsamen Ecken (v) und Normalen pro Flaeche (vn), damit Kanten in Grafikprogrammen hart bleiben. OBJ
+    kennt keine Einheit, sie steht nur im Kommentar."""
+    lines = [f"# SOMA export: {name}", f"# units: {units}"]
     voff = noff = 0
     for b in bodies:
         lines.append(f"o {' '.join(b['name'].split())}")
@@ -231,10 +323,48 @@ def write_obj(path, bodies, name):
 WRITERS = {"3mf": write_3mf, "amf": write_amf, "stl": write_stl, "obj": write_obj}
 
 
-def export_mesh(shape, fmt, path, name="part"):
-    """Schreibt shape als Netz im Format fmt. Liefert Hinweise, wenn ein Netz nicht geschlossen ist."""
-    bodies = body_meshes(shape, name)
+def export_gltf(shape, path, name="part", units="m", up="y", detail="normal", tol=None):
+    """glTF/GLB ueber OCCT. Vorher CadQuerys exportGLTF: drehte nach Y oben, liess aber mm stehen, wo glTF Meter meint
+    (ein Teil von 100 mm kam in Blender oder einer Engine 100 m gross an), und vernetzte fest mit 0.001 mm. Der
+    Koordinatenumrechner des Writers erledigt Einheit und Achse, die Vernetzung folgt der Detailstufe."""
+    import cadquery as cq
+    from cadquery.occ_impl.assembly import toCAF
+    from OCP.Message import Message_ProgressRange
+    from OCP.RWGltf import RWGltf_CafWriter
+    from OCP.RWMesh import RWMesh_CoordinateSystem
+    from OCP.TCollection import TCollection_AsciiString
+    from OCP.TColStd import TColStd_IndexedDataMapOfStringString
+    lin, ang = detail_tolerance(shape, detail, tol)
+    a = cq.Assembly(name="root")
+    a.add(shape, name="part")
+    _, doc = toCAF(a, True, True, lin, ang)
+    writer = RWGltf_CafWriter(TCollection_AsciiString(str(path)), not str(path).lower().endswith(".gltf"))
+    # Eine Primitive pro Teil statt pro CAD-Flaeche: Engines machen sonst aus jeder Flaeche ein eigenes Submesh
+    writer.SetMergeFaces(True)
+    cs = writer.ChangeCoordinateSystemConverter()
+    cs.SetInputLengthUnit(0.001)
+    cs.SetInputCoordinateSystem(RWMesh_CoordinateSystem.RWMesh_CoordinateSystem_Zup)
+    cs.SetOutputLengthUnit(UNITS[units] / 1000)
+    cs.SetOutputCoordinateSystem(RWMesh_CoordinateSystem.RWMesh_CoordinateSystem_Yup if up == "y"
+                                 else RWMesh_CoordinateSystem.RWMesh_CoordinateSystem_Zup)
+    if not writer.Perform(doc, TColStd_IndexedDataMapOfStringString(), Message_ProgressRange()):
+        raise RuntimeError("Writing the glTF file failed")
+    return []
+
+
+def export_mesh(shape, fmt, path, name="part", units=None, up=None, detail="normal", tol=None):
+    """Schreibt shape als Netz im Format fmt (MESH_FORMATS). units und up ohne Angabe nach default_options. Liefert
+    Hinweise, wenn ein Netz nicht geschlossen ist."""
+    du, dup = default_options(fmt)
+    units, up = units or du, up or dup
+    err = check_options(fmt, units, up, detail)
+    if err:
+        raise ValueError(err)
+    if fmt in ("glb", "gltf"):
+        return export_gltf(shape, path, name, units, up, detail, tol)
+    lin, ang = detail_tolerance(shape, detail, tol)
+    bodies = body_meshes(shape, name, lin, ang)
     if not bodies:
         raise RuntimeError("The part could not be meshed (no faces with triangles)")
-    WRITERS[fmt](path, bodies, name)
+    WRITERS[fmt](path, convert_bodies(bodies, units, up), name, units)
     return problems(bodies)
