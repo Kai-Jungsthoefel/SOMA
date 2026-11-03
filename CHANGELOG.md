@@ -6,6 +6,18 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Added
+
+- Mesh settings in the Export menu for STL, 3MF, AMF, OBJ, GLB and GLTF: units (mm or m), the axis pointing up (Z or Y) and the mesh density (coarse, normal, fine), for example for game engines. `soma export` takes them as `--units`, `--up`, `--detail` and `--tolerance`.
+- Warnings from a mesh export (a mesh that is not closed) now show up in the app's message after the export, not only on the command line.
+
+### Changed
+
+- GLB and GLTF exports are now in meters with Y up, as the glTF format defines it. Before, a part of 100 mm arrived 100 m tall in Blender or a game engine. Each part is one mesh instead of one per CAD face, and the mesh density follows the part size like the other mesh formats instead of a fixed, very fine one.
+
+- The Windows installer is about twice as fast: it unpacks straight into the installation folder instead of extracting to a temporary folder first and copying from there. The installer download is larger in exchange (about 620 instead of 470 MB).
+- When a mesh export (3MF, AMF, STL, OBJ) warns that faces could not be meshed, it now names each face with its type, area and location, and marks tiny ones as a probable sliver, for example where two rounds meet.
+
 ### Fixed
 
 - Saving could crash with "A JavaScript error occurred in the main process: file data stream has unexpected number of bytes" when a file of the model changed while it was being packed, for example by a build or the agent. No build starts while the model is being saved or exported, a file that changes anyway is packed a second time, and if it keeps changing, saving reports it instead of crashing.
