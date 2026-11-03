@@ -72,6 +72,12 @@ module.exports = {
     license: '../LICENSE',
     deleteAppDataOnUninstall: false,
     shortcutName: 'SOMA',
+    // ZIP statt 7z: nsisunz entpackt direkt nach $INSTDIR. Der 7z-Weg entpackt erst nach %TEMP% und kopiert dann, jede
+    // der rund 19.000 Dateien wird zweimal geschrieben und vom Virenscanner zweimal geprüft (Installation etwa 6 statt
+    // 3 Minuten, Issue #9). Dafür ist der Installer größer. useZip verlangt differentialPackage: false, das Differenzpaket
+    // nutzt nur electron-updater, SOMA fragt nur die GitHub-Releases ab (updates.ts).
+    differentialPackage: false,
+    useZip: true,
   },
 
   linux: {
