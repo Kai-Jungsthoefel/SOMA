@@ -6,6 +6,8 @@ the version is bumped.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-03
+
 ### Added
 
 - Skill "Plasma cutting" for parts cut from metal plate on a CNC plasma table: kerf and accuracy, smallest holes, islands that fall out of text and cutouts, webs, heat distortion, tab and slot for welding, one DXF per plate. Settings for material, plate thickness, kerf and the smallest hole that is cut.
@@ -16,7 +18,6 @@ the version is bumped.
 ### Changed
 
 - GLB and GLTF exports are now in meters with Y up, as the glTF format defines it. Before, a part of 100 mm arrived 100 m tall in Blender or a game engine. Each part is one mesh instead of one per CAD face, and the mesh density follows the part size like the other mesh formats instead of a fixed, very fine one.
-
 - The Windows installer is about twice as fast: it unpacks straight into the installation folder instead of extracting to a temporary folder first and copying from there. The installer download is larger in exchange (about 620 instead of 470 MB).
 - When a mesh export (3MF, AMF, STL, OBJ) warns that faces could not be meshed, it now names each face with its type, area and location, and marks tiny ones as a probable sliver, for example where two rounds meet.
 
@@ -316,7 +317,11 @@ First numbered version. It sums up the state of the prototype.
 - Extra packages: `pip install` in the terminal goes into a small environment per model, `requirements.txt` travels with the model, on another computer the app reinstalls the packages.
 - Version number on the start page, on the logo and in `project.json`.
 
-[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.10.2...v0.11.0
+[0.10.2]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.10.1...v0.10.2
+[0.10.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.7.1...v0.7.2
