@@ -7,7 +7,7 @@ category: Design knowledge
 default: on-demand
 when: parts must fit together: clearances, holes for screws, sliding or press fits
 topics: Manufacturing: {{process}}; Clearances as named constants; Checking interference and gaps in code; Clearance holes ({{hole_fit}}) and tap drills; Counterbores for socket head screws; ISO fits for machined parts
-var process: unknown | | Manufacturing | unknown=not decided yet (agent asks), 3D printing=3D printing, CNC milling=CNC milling, laser cutting=Laser cutting, sheet metal=Sheet metal
+var process: unknown | | Manufacturing | unknown=not decided yet (agent asks), 3D printing=3D printing, CNC milling=CNC milling, laser cutting=Laser cutting, plasma cutting=Plasma cutting, sheet metal=Sheet metal
 var hole_fit: medium | | Clearance holes to ISO 273 | fine=fine, medium=medium, coarse=coarse
 var min_gap: 0.2 | mm | Minimum gap between parts | 0..5
 ---
