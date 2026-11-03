@@ -8,6 +8,7 @@ the version is bumped.
 
 ### Added
 
+- Skill "Plasma cutting" for parts cut from metal plate on a CNC plasma table: kerf and accuracy, smallest holes, islands that fall out of text and cutouts, webs, heat distortion, tab and slot for welding, one DXF per plate. Settings for material, plate thickness, kerf and the smallest hole that is cut.
 - Click an STL, 3MF, AMF or OBJ file in the file tree to look at it in the viewer, like STEP files, for example to check an export. Units in 3MF and AMF are converted to millimeters, sharp edges and open borders are drawn as lines. Section and Explode work, measuring does not, since a mesh has no CAD geometry.
 - Mesh settings in the Export menu for STL, 3MF, AMF, OBJ, GLB and GLTF: units (mm or m), the axis pointing up (Z or Y) and the mesh density (coarse, normal, fine), for example for game engines. `soma export` takes them as `--units`, `--up`, `--detail` and `--tolerance`.
 - Warnings from a mesh export (a mesh that is not closed) now show up in the app's message after the export, not only on the command line.
