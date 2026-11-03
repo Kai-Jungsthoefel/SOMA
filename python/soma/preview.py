@@ -21,13 +21,15 @@ def _flatten(assy, loc=None, groups=None):
         yield from _flatten(child, loc, inner)
 
 
-def step_to_glb(step_path, out_dir):
-    """Schreibt <out_dir>/model.glb und model.map.json. Liefert die Bauteilliste."""
+def step_to_glb(step_path, out_dir, name=None):
+    """Schreibt <out_dir>/model.glb und model.map.json. Liefert die Bauteilliste. name: fuer eine Datei ohne Baugruppe der
+    Name der Teile (die App wandelt eine Arbeitskopie source.step um, das Teil soll wie die Datei heissen)."""
+    from . import stepimport
     step_path, out = Path(step_path), Path(out_dir)
     if not step_path.is_file():
         raise FileNotFoundError(f"STEP file not found: {step_path}")
     out.mkdir(parents=True, exist_ok=True)
-    assy = cq.Assembly.importStep(str(step_path))
+    assy = stepimport.read_assembly(step_path, name)
     items = []
     groups = []
     for name, obj, color, loc, grp in _flatten(assy):

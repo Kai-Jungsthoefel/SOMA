@@ -168,10 +168,13 @@ def _register(name, shape, role, color, groups, where, unique_step=False, axis=N
 def import_step(path):
     """Imports a STEP file brought along (e.g. from inputs/) as one shape. The parts and groups of the file merge into
     one body. To keep them: import_assembly()."""
-    return cq.importers.importStep(str(path)).val()
+    from . import stepimport
+    return stepimport.read_shape(path)
 
 
 def import_assembly(path):
     """Imports a STEP file with its structure: parts with names and colors, sub-assemblies as groups.
-    Move it as a whole with `asm.loc = cq.Location((x, y, z))`, register it with add_part("Name", asm)."""
-    return cq.Assembly.importStep(str(path))
+    Move it as a whole with `asm.loc = cq.Location((x, y, z))`, register it with add_part("Name", asm).
+    A file without an assembly (a single body, or several side by side) gives one part per body."""
+    from . import stepimport
+    return stepimport.read_assembly(path)

@@ -165,10 +165,17 @@ def cmd_export(args):
 
 
 def cmd_glb(args):
-    """STEP -> GLB im Basismodus (Vorschau alter Staende, fremde Dateien)."""
-    from . import preview
+    """STEP -> GLB im Basismodus (Vorschau alter Staende, fremde Dateien). Netzdateien (STL, 3MF, AMF, OBJ) ueber
+    meshview, ohne Geometrie zum Messen."""
+    from . import meshview, preview
     try:
-        parts = preview.step_to_glb(args.step, args.out)
+        if Path(args.step).suffix.lower() in meshview.MESH_EXTS:
+            parts, _ = meshview.mesh_to_glb(args.step, args.out, args.name)
+        else:
+            parts = preview.step_to_glb(args.step, args.out, args.name)
+    except meshview.MeshFileError as e:
+        print(f"Conversion failed: {e}", file=sys.stderr)
+        return 1
     except Exception as e:
         print(f"Conversion failed: {type(e).__name__}: {e}", file=sys.stderr)
         return 1
@@ -492,9 +499,10 @@ def main(argv=None):
     q.add_argument("--json", action="store_true")
     q.set_defaults(func=cmd_cadquery)
 
-    g = sub.add_parser("glb", help="convert a STEP file to GLB for the viewer (basic mode)")
-    g.add_argument("step", help="STEP file")
+    g = sub.add_parser("glb", help="convert a STEP or mesh file (STL, 3MF, AMF, OBJ) to GLB for the viewer (basic mode)")
+    g.add_argument("step", help="STEP or mesh file")
     g.add_argument("--out", required=True, help="target folder (model.glb and model.map.json)")
+    g.add_argument("--name", help="name for parts without their own name (default: file name)")
     g.add_argument("--json", action="store_true")
     g.set_defaults(func=cmd_glb)
 

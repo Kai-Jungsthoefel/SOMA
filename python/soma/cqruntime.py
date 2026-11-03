@@ -50,13 +50,26 @@ def _soma_path(path):
 
 
 def import_step(path):
-    """Imports a STEP file as one shape."""
-    return _soma_cq.importers.importStep(_soma_path(path)).val()
+    """Imports a STEP file as one shape. Several bodies side by side become one compound."""
+    shapes = _soma_cq.importers.importStep(_soma_path(path)).vals()
+    return shapes[0] if len(shapes) == 1 else _soma_cq.Compound.makeCompound(shapes)
 
 
 def import_assembly(path):
-    """Imports a STEP file with its structure as a cq.Assembly."""
-    return _soma_cq.Assembly.importStep(_soma_path(path))
+    """Imports a STEP file with its structure as a cq.Assembly. A file without an assembly gives one part per body."""
+    try:
+        asm = _soma_cq.Assembly.importStep(_soma_path(path))
+        if any(a.obj is not None for _, a in asm.traverse()):  # a compound on top reads as an assembly without parts
+            return asm
+    except ValueError as e:
+        if "does not contain an assembly" not in str(e):
+            raise
+    name = _soma_os.path.splitext(_soma_os.path.basename(str(path)))[0] or "Part"
+    shapes = _soma_cq.importers.importStep(_soma_path(path)).vals()
+    asm = _soma_cq.Assembly()  # unnamed: a part may not have the name of the assembly above it
+    for i, s in enumerate(shapes):
+        asm.add(s, name=name if len(shapes) == 1 else f"{name} {i + 1}")
+    return asm
 
 
 def _soma_shape(obj):
