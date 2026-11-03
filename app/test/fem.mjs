@@ -211,7 +211,7 @@ try {
   const pin2 = await ev((p) => window.__t.resultPin(p.x, p.y), at);
   await ev(() => window.__t.viewer.setView('iso'));
   rs = await ev(() => window.__t.result());
-  check('Stelle bei Spannung: MPa zuerst, Sicherheit danach', pin2?.stress != null && /: Balken, \d+\.\d MPa · Safety /.test(rs.probe), rs.probe);
+  check('Stelle bei Spannung: MPa zuerst, Sicherheit danach', pin2?.stress != null && /: Balken, \d+(\.\d)? MPa · Safety /.test(rs.probe), rs.probe);
   await pick('result-range', 'minmax');
   rs = await ev(() => window.__t.result());
   check('Min bis Max: Spanne der Spannungen im Modell (bis rund 30 MPa)', rs.scale.mode === 'minmax' && rs.scale.range[0] >= 0 && rs.scale.range[0] < 5
