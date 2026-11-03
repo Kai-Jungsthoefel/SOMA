@@ -8,6 +8,7 @@ the version is bumped.
 
 ### Added
 
+- Click an STL, 3MF, AMF or OBJ file in the file tree to look at it in the viewer, like STEP files, for example to check an export. Units in 3MF and AMF are converted to millimeters, sharp edges and open borders are drawn as lines. Section and Explode work, measuring does not, since a mesh has no CAD geometry.
 - Mesh settings in the Export menu for STL, 3MF, AMF, OBJ, GLB and GLTF: units (mm or m), the axis pointing up (Z or Y) and the mesh density (coarse, normal, fine), for example for game engines. `soma export` takes them as `--units`, `--up`, `--detail` and `--tolerance`.
 - Warnings from a mesh export (a mesh that is not closed) now show up in the app's message after the export, not only on the command line.
 
@@ -20,6 +21,7 @@ the version is bumped.
 
 ### Fixed
 
+- Some STEP files could not be shown in the viewer ("Step file does not contain an assembly"), for example a single body like a logo from another CAD program. They now open with one part per body, keeping names and colors where the file has them. `import_assembly()` reads such files too, and `import_step()` no longer drops all bodies but the first when a file has several side by side.
 - Saving could crash with "A JavaScript error occurred in the main process: file data stream has unexpected number of bytes" when a file of the model changed while it was being packed, for example by a build or the agent. No build starts while the model is being saved or exported, a file that changes anyway is packed a second time, and if it keeps changing, saving reports it instead of crashing.
 
 ## [0.10.2] - 2026-10-24
