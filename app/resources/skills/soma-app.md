@@ -182,6 +182,10 @@ structure tree work as usual, but the parts have no link to code, and Animation 
 wait until you click **Back to model**. When the file changes on disk, the viewer loads it again. Large files can take a
 while the first time, after that they open from the preview cache.
 
+Mesh files (`.stl`, `.3mf`, `.amf`, `.obj`) open the same way, for example to check an export before printing. Each
+object in the file becomes a part. Units in 3MF and AMF are converted to millimeters, STL and OBJ are read as millimeters.
+Lines mark sharp edges and open borders. Section and Explode work, Measure does not: a mesh has no exact CAD geometry.
+
 ## Saving and history
 
 ![Looking at an earlier version](../help/history.png)

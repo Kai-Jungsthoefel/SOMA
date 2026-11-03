@@ -62,6 +62,8 @@ interface Session {
 
 /** Nur diese Dateien zeigt der Viewer aus dem Projekt. */
 const STEP_FILE = /\.(step|stp)$/i;
+/** Im Viewer zeigbar: STEP und Netzdateien (Netze ohne Messen, ihnen fehlt die CAD-Geometrie) */
+const VIEW_FILE = /\.(step|stp|stl|3mf|amf|obj)$/i;
 
 const POLL_MS = 2000;
 /** Letzte JSON-Zeile einer Ausgabe von `soma … --json` (davor können Meldungen von Bibliotheken stehen). */
@@ -748,14 +750,14 @@ export class ProjectController {
   private stepCache(s: Session): string { return path.join(previewsDir(), s.id, 'files'); }
 
   /**
-   * STEP-Datei aus dem Projekt für den Viewer (Klick im Dateibaum). Umgewandelt wird im Basismodus wie bei der Vorschau alter
+   * STEP- oder Netzdatei aus dem Projekt für den Viewer (Klick im Dateibaum). Umgewandelt wird im Basismodus wie bei der Vorschau alter
    * Stände, über den vorgewärmten Python-Prozess (runSoma). Gleichzeitige Aufrufe für dieselbe Datei teilen sich die Arbeit.
    */
   viewFile(rel: unknown): Promise<FileViewResult> {
     const s = this.need();
     const fail = (error: string): FileViewResult => ({ rel: typeof rel === 'string' ? rel : '', key: '', glb: new ArrayBuffer(0), map: { version: 0, parts: [] }, error });
     if (typeof rel !== 'string' || !rel || rel.length > 1000) return Promise.resolve(fail('Invalid file.'));
-    if (!STEP_FILE.test(rel)) return Promise.resolve(fail('Only STEP files (.step, .stp) can be shown in the viewer.'));
+    if (!VIEW_FILE.test(rel)) return Promise.resolve(fail('Only STEP files (.step, .stp) and mesh files (.stl, .3mf, .amf, .obj) can be shown in the viewer.'));
     let abs: string;
     try { abs = resolveInside(s.dir, rel); } catch { return Promise.resolve(fail('The file is outside the project.')); }
     const running = s.stepJobs.get(abs);

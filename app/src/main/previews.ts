@@ -53,7 +53,7 @@ export async function storeBuildAsPreview(dir: string, target: string, last: Las
   }
 }
 
-// ---- STEP-Dateien aus dem Projekt im Viewer ------------------------------------------------------------------------
+// ---- STEP- und Netzdateien aus dem Projekt im Viewer ------------------------------------------------------------------------
 
 /** Große Baugruppen einzulesen und zu vernetzen dauert Minuten, aber nicht ewig: danach gilt die Datei als zu groß. */
 export const STEP_VIEW_TIMEOUT_MS = 10 * 60 * 1000;
@@ -64,6 +64,8 @@ const STALE_TMP_MS = 24 * 60 * 60 * 1000;
 export function previewComplete(dir: string): boolean {
   try {
     const map = JSON.parse(fs.readFileSync(path.join(dir, 'model.map.json'), 'utf8')) as ModelMap;
+    // Netzdateien haben keine Geometrie zum Messen und deshalb keinen Build
+    if (map.mesh === true) return Array.isArray(map.parts) && completeGlb(path.join(dir, 'model.glb'));
     return typeof map.build === 'string' && /^[0-9a-f]{32}$/.test(map.build) && Array.isArray(map.parts)
       && completeGlb(path.join(dir, 'model.glb')) && fs.statSync(path.join(dir, 'geometry', `${map.build}.brep`)).isFile();
   } catch { return false; }
@@ -80,7 +82,8 @@ function sha1File(file: string): Promise<string> {
 export interface StepStamp { size: number; mtimeMs: number; key: string }
 
 /**
- * Wandelt eine STEP-Datei aus dem Projekt (`abs`, schon über resolveInside geprüft) mit `soma glb` für den Viewer um. Der
+ * Wandelt eine STEP- oder Netzdatei (STL, 3MF, AMF, OBJ) aus dem Projekt (`abs`, schon über resolveInside geprüft) mit
+ * `soma glb` für den Viewer um. Der
  * Cache liegt unter `root/<SHA-1 des Inhalts>`, in derselben Form wie die Vorschau alter Stände (model.glb, model.map.json,
  * geometry/), damit Messen, Schnitt und Explosion genauso gehen. Eine unveränderte Datei wird nicht neu umgewandelt.
  *
@@ -112,15 +115,19 @@ export async function stepPreview(abs: string, root: string, cwd: string, memo: 
     if (previewComplete(target)) { await drop(); return { key, dir: target }; }
 
     const t0 = Date.now();
-    const r = await runSoma(['glb', copy, '--out', tmp], cwd, STEP_VIEW_TIMEOUT_MS);
+    // --name: Die Arbeitskopie heißt source.*, ein Netz ohne eigenen Namen (binäres STL) soll wie die Datei heißen
+    const r = await runSoma(['glb', copy, '--out', tmp, '--name', path.basename(abs, path.extname(abs))], cwd, STEP_VIEW_TIMEOUT_MS);
     if (!r.ok) {
       await drop();
       if (Date.now() - t0 >= STEP_VIEW_TIMEOUT_MS - 1000) return { error: `Reading the file took longer than ${STEP_VIEW_TIMEOUT_MS / 60000} minutes and was stopped. The file may be too large for the viewer.` };
       // Die Meldung nennt sonst den Pfad der Arbeitskopie, mit dem der Nutzer nichts anfangen kann
       const last = ((r.err || r.out).trim().split(/\r?\n/).pop() ?? '').replace(/^Conversion failed:\s*/, '').replace(/^\w+(Error|Exception):\s*/, '')
         .split(copy).join(path.basename(abs));
-      if (/Error reading STEP file|could not be loaded/i.test(last)) return { error: 'The file is not a valid STEP file or it is damaged.' };
-      return { error: `The STEP file could not be read${last ? `: ${last}` : '.'}` };
+      const isStep = /\.(step|stp)$/i.test(abs);
+      if (isStep && /Error reading STEP file|could not be loaded/i.test(last)) return { error: 'The file is not a valid STEP file or it is damaged.' };
+      // Netzdateien: soma meldet schon einen ganzen Satz (z. B. „The 3MF file contains no triangles.“)
+      if (!isStep && last) return { error: last };
+      return { error: `The ${isStep ? 'STEP ' : ''}file could not be read${last ? `: ${last}` : '.'}` };
     }
     await fs.promises.rm(copy, { force: true });
     if (!previewComplete(tmp)) { await drop(); return { error: 'The conversion did not produce a complete result.' }; }

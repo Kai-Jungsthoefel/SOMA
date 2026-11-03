@@ -5,6 +5,8 @@ interface Ui {
   banner: HTMLElement;
   title: HTMLElement;
   sub: HTMLElement;
+  /** Was in der Ansicht geht, bei Netzdateien ohne Messen */
+  hint: HTMLElement;
   back: HTMLButtonElement;
   /** Bekommt die Klasse `fileview` (violetter Rahmen wie bei der Vorschau), solange eine Datei zu sehen ist. */
   viewer: HTMLElement;
@@ -20,10 +22,14 @@ interface Hooks {
 }
 
 const base = (rel: string) => rel.split('/').pop() ?? rel;
+const isMesh = (rel: string) => /\.(stl|3mf|amf|obj)$/i.test(rel);
+/** „STEP file“, „STL file“ … für Texte im Banner und für den Agenten */
+const kindOf = (rel: string) => `${isMesh(rel) ? (rel.split('.').pop() ?? '').toUpperCase() : 'STEP'} file`;
 
 /**
- * Eine STEP-Datei aus dem Projekt im Viewer (Klick im Dateibaum), schreibgeschützt wie die Vorschau eines alten Stands:
- * Messen, Schnitt, Explosion und Baum gehen, Klick zum Code, Animation und Analyse nicht. Solange sie offen ist, ersetzt
+ * Eine STEP- oder Netzdatei (STL, 3MF, AMF, OBJ) aus dem Projekt im Viewer (Klick im Dateibaum), schreibgeschützt wie die
+ * Vorschau eines alten Stands: Messen (nur STEP, Netzen fehlt die CAD-Geometrie), Schnitt, Explosion und Baum gehen, Klick
+ * zum Code, Animation und Analyse nicht. Solange sie offen ist, ersetzt
  * ein Build des Modells sie nicht. Ändert sich die Datei auf der Platte, wird sie neu geladen (der Hauptprozess wandelt
  * nur um, wenn sich der Inhalt geändert hat).
  */
@@ -46,6 +52,8 @@ export class FileView {
   /** Quelle für das Messen. */
   get source(): { file: string; key: string } | null { return this.cur ? { file: this.cur.rel, key: this.cur.key } : null; }
   get title(): string | null { return this.cur ? base(this.cur.rel) : null; }
+  /** Art der gezeigten Datei, etwa „STEP file“ oder „STL file“. */
+  get kind(): string { return this.cur ? kindOf(this.cur.rel) : 'file'; }
 
   /** Datei zeigen. `reload`: Die angezeigte Datei hat sich vielleicht geändert, nur bei neuem Inhalt neu laden. */
   async open(rel: string, reload = false): Promise<void> {
@@ -53,7 +61,7 @@ export class FileView {
     this.loading = true;
     // Abbrechen lässt die Umwandlung im Hauptprozess zu Ende laufen (ihr Ergebnis landet im Cache), es wird nur nicht gezeigt
     const busy = this.hooks.busy(`Loading ${base(rel)}`, () => { if (seq === this.seq) { this.seq++; this.loading = false; } });
-    busy.detail('Reading the STEP file. Large assemblies can take a while.');
+    busy.detail(isMesh(rel) ? `Reading the ${kindOf(rel)}. Large meshes can take a while.` : 'Reading the STEP file. Large assemblies can take a while.');
     let res: FileViewResult;
     try { res = await window.soma.project.viewFile(rel); }
     catch (e) { res = { rel, key: '', glb: new ArrayBuffer(0), map: { version: 0, parts: [] }, error: e instanceof Error ? e.message : String(e) }; }
@@ -107,7 +115,12 @@ export class FileView {
     if (!c) return;
     this.ui.title.textContent = `Viewing ${c.rel}`;
     this.ui.title.title = c.rel;
-    this.ui.sub.textContent = `STEP file · ${c.parts} part${c.parts === 1 ? '' : 's'} · shown in basic mode, without links to code`;
+    this.ui.sub.textContent = isMesh(c.rel)
+      ? `${kindOf(c.rel)} · ${c.parts} part${c.parts === 1 ? '' : 's'} · mesh only, cannot be measured`
+      : `STEP file · ${c.parts} part${c.parts === 1 ? '' : 's'} · shown in basic mode, without links to code`;
+    this.ui.hint.textContent = isMesh(c.rel)
+      ? 'Section and explode work as usual. Builds of your model wait until you go back.'
+      : 'Measure, section and explode work as usual. Builds of your model wait until you go back.';
   }
 
   /** Prüfhilfe (nur Tests). */

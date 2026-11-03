@@ -2,6 +2,7 @@
 // mit Banner, Messen, Schnitt und Explosion. Ein Build des Modells ersetzt sie nicht, eine Änderung der Datei lädt neu,
 // „Back to model“ kehrt zurück. Dazu Zusammenspiel mit der Versionsvorschau und Störfälle (kaputte, leere Datei, außerhalb).
 // Aufruf: npm run test:stepview (baut vorher). SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 legt Bilder in test/shots/ ab.
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -169,6 +170,72 @@ try {
   check('Andere Dateitypen werden abgelehnt', /Only STEP files/.test(notStep.error ?? ''), notStep.error);
   const badMeasure = await ev(() => window.soma.measure.prepare({ file: '../x.step', key: '0'.repeat(40) }, '0'.repeat(32)));
   check('Messquelle außerhalb oder unbekannt wird abgelehnt', !badMeasure.ok, badMeasure.error);
+
+  // 10) Netzdateien (STL, 3MF, AMF, OBJ): im Viewer wie STEP, Einheiten umgerechnet, aber ohne Messen (keine CAD-Geometrie)
+  const PY = process.env.SOMA_PYTHON || path.join(process.env.LOCALAPPDATA ?? '', 'soma-dev', 'venv', 'Scripts', 'python.exe');
+  const exp = (args) => spawnSync(PY, ['-m', 'soma', 'export', ...args, '--project', dir], { encoding: 'utf8', windowsHide: true, timeout: 5 * 60 * 1000 });
+  const e1 = exp(['Platte', '--format', '3mf', '--units', 'in', '--out', 'inputs/mesh']);
+  const e2 = exp(['Block', '--format', 'stl', '--out', 'inputs/mesh']);
+  fs.writeFileSync(path.join(inputs, 'tri.obj'), 'o Dreieck\nv 0 0 0\nv 10 0 0\nv 0 10 0\nf 1 2 3\n');
+  fs.writeFileSync(path.join(inputs, 'bad.3mf'), 'this is not a zip');
+  check('Netzdateien für den Test exportiert', e1.status === 0 && e2.status === 0, (e1.stderr + e2.stderr).slice(-200));
+  await ev(() => window.__t.revealFile('inputs/mesh/Platte.3mf'));
+  await waitFor('3MF im Dateibaum', () => window.__t.fileRows().includes('Platte.3mf'), 20000).catch(() => {});
+  await clickRow('inputs/mesh/Platte.3mf');
+  await waitFor('3MF geladen', () => window.__t.fileView().rel === 'inputs/mesh/Platte.3mf' && !window.__t.fileView().loading, 60000).catch(() => {});
+  f = await fv();
+  let plateBox = null;
+  try { plateBox = JSON.parse(fs.readFileSync(path.join(cacheRoot, f.key, 'model.map.json'), 'utf8')).parts[0].bbox; } catch { /* Prüfung schlägt fehl */ }
+  check('Klick auf eine 3MF-Datei: Viewer zeigt das Teil, Banner „3MF file … cannot be measured“', await names() === '["Platte"]' && (f.banner ?? '').includes('3MF file')
+    && (f.banner ?? '').includes('cannot be measured') && f.frame, `${await names()} ${f.banner}`);
+  check('3MF in Zoll: Größe im Viewer wieder in mm (40 x 30 x 5)', !!plateBox && Math.abs(plateBox[1][0] - plateBox[0][0] - 40) < 0.01 && Math.abs(plateBox[1][2] - plateBox[0][2] - 5) < 0.01, JSON.stringify(plateBox));
+  await shot('stepview-mesh');
+  await domClick('btn-measure');
+  await waitFor('Hinweis beim Messen', () => /no CAD geometry/.test(window.__t.measure().error ?? ''), 10000).catch(() => {});
+  check('Messen in einer Netzdatei: Hinweis statt Messung', /have no CAD geometry/.test((await ev(() => window.__t.measure())).error ?? ''), JSON.stringify(await ev(() => window.__t.measure())).slice(0, 160));
+  await domClick('btn-measure');
+  await ev(() => window.__t.openFile('inputs/mesh/Block.stl'));
+  check('STL-Datei: Teil „Block“ im Viewer', await names() === '["Block"]' && ((await fv()).banner ?? '').includes('STL file'), await names());
+  await ev(() => window.__t.openFile('inputs/tri.obj'));
+  check('OBJ-Datei mit offenem Netz: Teil „Dreieck“', await names() === '["Dreieck"]', await names());
+  await clickRow('inputs/bad.3mf');
+  await waitFor('Fehlermeldung', () => /bad\.3mf cannot be shown/.test(window.__t.toast().text) && !window.__t.fileView().loading, 60000).catch(() => {});
+  toastText = await ev(() => window.__t.toast());
+  check('Kaputte 3MF-Datei: verständliche Meldung', toastText.error && toastText.text.includes('not a valid ZIP package'), toastText.text);
+  await domClick('btn-file-back');
+  await waitFor('Modell wieder da', () => JSON.stringify(window.__t.treeNames()) === '["Platte","Block","Stift"]', 30000).catch(() => {});
+  check('Nach der Netzdatei zurück: Modell wieder messbar (Build vorhanden)', !!(await ev(() => window.__t.mapBuild())), await names());
+
+  // 11) STEP-Dateien ohne Baugruppe (ein Körper oder mehrere freie Formen, wie viele CAD-Programme ein Logo schreiben):
+  // CadQuerys Assembly.importStep lehnt sie ab („does not contain an assembly“), SOMA liest die freien Formen selbst.
+  // Auch import_assembly() und import_step() der API und im exportierten CadQuery-Block (cqruntime).
+  const plain = spawnSync(PY, ['-c', String.raw`
+import sys
+import cadquery as cq
+from OCP.STEPControl import STEPControl_Writer, STEPControl_AsIs
+from soma import registry, cqruntime
+def write(shapes, f):
+    w = STEPControl_Writer()
+    for s in shapes:
+        w.Transfer(s.wrapped, STEPControl_AsIs)
+    w.Write(f)
+a = cq.Workplane().box(10, 10, 2).val()
+b = cq.Workplane().center(30, 0).cylinder(5, 4).val()
+write([a], sys.argv[1] + "/Logo_KJ.step")
+write([a, b], sys.argv[1] + "/two.step")
+f = sys.argv[1] + "/two.step"
+print([c.name for c in registry.import_assembly(f).children], round(registry.import_step(f).Volume(), 1),
+      [c.name for c in cqruntime.import_assembly(f).children], round(cqruntime.import_step(f).Volume(), 1))
+`, inputs], { encoding: 'utf8', windowsHide: true, timeout: 120000 });
+  const vol = Math.round((200 + Math.PI * 16 * 5) * 10) / 10; // Platte 10 x 10 x 2 und Zylinder Höhe 5, Radius 4
+  check('API ohne Baugruppe: import_assembly ein Teil je Körper, import_step mit beiden Körpern (soma und cqruntime)',
+    plain.status === 0 && plain.stdout.trim() === `['two 1', 'two 2'] ${vol} ['two 1', 'two 2'] ${vol}`, (plain.stdout + plain.stderr).slice(-300));
+  await ev(() => window.__t.openFile('inputs/Logo_KJ.step'));
+  check('STEP-Datei ohne Baugruppe im Viewer: ein Teil, benannt nach der Datei', await names() === '["Logo_KJ"]', `${await names()} ${(await ev(() => window.__t.toast())).text}`);
+  await ev(() => window.__t.openFile('inputs/two.step'));
+  check('Zwei freie Formen: zwei Teile', await names() === '["two 1","two 2"]', await names());
+  await domClick('btn-file-back');
+  await waitFor('Modell wieder da', () => JSON.stringify(window.__t.treeNames()) === '["Platte","Block","Stift"]', 30000).catch(() => {});
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));

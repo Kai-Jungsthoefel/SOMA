@@ -135,9 +135,12 @@ export interface PartMap {
   group?: string | null;
   /** Achsparallele Hülle [[xmin, ymin, zmin], [xmax, ymax, zmax]] in mm. */
   bbox?: number[][];
+  /** Nur bei Netzdateien (STL, 3MF …): Anzahl Dreiecke und ob das Netz geschlossen ist. */
+  triangles?: number; closed?: boolean;
 }
 /** `build`: Kennung des Builds. Sie verbindet GLB, Mapping und die exakte Geometrie für das Messen. */
-export interface ModelMap { version: number; build?: string; parts: PartMap[] }
+/** `mesh`: aus einer Netzdatei (STL, 3MF, AMF, OBJ), ohne CAD-Geometrie und ohne `build`, also nicht messbar. */
+export interface ModelMap { version: number; build?: string; mesh?: boolean; notes?: string[]; parts: PartMap[] }
 
 /** Art eines Elements beim Messen: Fläche, Kante oder Eckpunkt. */
 export type MeasureKind = 'face' | 'edge' | 'vertex';

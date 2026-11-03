@@ -14,6 +14,8 @@ interface Deps {
   viewer: Viewer;
   /** Aktueller Stand oder Vorschau eines alten Stands. */
   source(): MeasureSource;
+  /** Warum es nichts zu messen gibt (Netzdatei im Viewer), sonst null. */
+  noGeometry?(): string | null;
   /** Kennung des angezeigten Builds (aus model.map.json). */
   build(): string | null;
   /** Den Build von der Platte in den Viewer laden. Danach ruft der Viewer reset(). */
@@ -129,7 +131,8 @@ export class MeasureTool {
   private prepare(): void {
     const build = this.deps.build();
     this.endPrepare();
-    if (!build) return; // ohne Geometrie meldet der erste Klick, was fehlt
+    // Ohne Geometrie meldet der erste Klick, was fehlt. Bei einer Netzdatei steht es gleich da, ein Klick bringt nichts.
+    if (!build) { const why = this.deps.noGeometry?.(); if (why) this.error = why; return; }
     const seq = this.prepSeq;
     const source = this.deps.source();
     const n = this.deps.viewer.partList().length;
@@ -191,7 +194,7 @@ export class MeasureTool {
 
   private async query(): Promise<void> {
     const build = this.deps.build();
-    if (!build) { this.error = 'This version has no geometry to measure. Building it again helps.'; this.render(); return; }
+    if (!build) { this.error = this.deps.noGeometry?.() ?? 'This version has no geometry to measure. Building it again helps.'; this.render(); return; }
     const seq = ++this.seq;
     this.busy = true;
     this.render();

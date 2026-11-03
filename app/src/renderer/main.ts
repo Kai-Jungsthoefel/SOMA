@@ -312,8 +312,8 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
     // Bilder (etwa Markierungen und Skizzen) öffnen auf der Zeichenfläche (E52), das Bildprogramm gibt es per Rechtsklick
     else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
     else if (VIDEO_EXT.test(n.name)) void videoView.open(n.path);
-    // STEP-Dateien des Projekts im Viewer, schreibgeschützt wie die Vorschau eines alten Stands
-    else if (/\.(step|stp)$/i.test(n.name)) void fileView.open(n.path);
+    // STEP- und Netzdateien des Projekts im Viewer, schreibgeschützt wie die Vorschau eines alten Stands
+    else if (/\.(step|stp|stl|3mf|amf|obj)$/i.test(n.name)) void fileView.open(n.path);
     else toast('The app has no view for this file type. Right-click: “Open with default app”.', 'info');
   },
   create: async (parent, name, dir) => {
@@ -571,8 +571,8 @@ async function renderSelection(): Promise<void> {
 /** Text für die Eingabe des Agenten. Zahlen mit Punkt, damit sie eindeutig bleiben. */
 function selectionText(): string | null {
   if (!selection) return null;
-  // In der Dateiansicht gehören die Teile zur STEP-Datei, nicht zum Modell: Das muss der Agent wissen
-  const inFile = fileView.rel ? ` in the STEP file ${fileView.rel}` : '';
+  // In der Dateiansicht gehören die Teile zur Datei, nicht zum Modell: Das muss der Agent wissen
+  const inFile = fileView.rel ? ` in the ${fileView.kind} ${fileView.rel}` : '';
   if (picked.length > 1) {
     const names = picked.map((id) => `"${partName(id)}"`);
     return `[Selection: ${picked.length} parts${inFile}: ${names.slice(0, 40).join(', ')}${names.length > 40 ? ` and ${names.length - 40} more` : ''}] `;
@@ -618,6 +618,7 @@ const measureTool = new MeasureTool({
   viewer,
   source: () => fileView.source ?? (versions.previewed ? { preview: versions.previewed.hash } : 'live'),
   build: () => map?.build ?? null,
+  noGeometry: () => (map?.mesh ? 'Mesh files (STL, 3MF, AMF, OBJ) have no CAD geometry, so they cannot be measured. Open the STEP file or the model to measure.' : null),
   reload: () => void (fileView.active ? fileView.filesChanged() : loadModel()),
   part: (id) => partEntry(id),
   insert: (t) => insertToAgent(t),
@@ -1144,12 +1145,13 @@ async function showForeign(glb: ArrayBuffer, m: ModelMap, what: string): Promise
 }
 
 const fileView = new FileView({
-  banner: $('file-banner'), title: $('fb-title'), sub: $('fb-sub'), back: $<HTMLButtonElement>('btn-file-back'), viewer: $('viewer'),
+  banner: $('file-banner'), title: $('fb-title'), sub: $('fb-sub'), hint: $('fb-hint'), back: $<HTMLButtonElement>('btn-file-back'), viewer: $('viewer'),
 }, {
   async show(res) {
     if (!res) { tree.setTitle(project?.name ?? ''); await loadModel(); return; }
     tree.setTitle(fileView.title ?? '');
     await showForeign(res.glb, res.map, 'The file');
+    if (res.map.notes?.length) toast(res.map.notes.join('\n'), 'info');
   },
   beforeShow: () => versions.endPreview(),
   busy: (title, cancel) => busy.show(title, cancel),
