@@ -78,8 +78,8 @@ npm run dist                         # installation package for this system, run
 
 ### Language (E73, E89)
 
-- **English:** everything users, contributors or the agent see: interface, messages, dialogs, output and errors of `soma`, docstrings of the public API, skills including their header, handover notes to the agent, `AGENTS.md` and `model.py` of the template. Also all public documents in the repo: `README.md`, `CHANGELOG.md`, this `CLAUDE.md`, `THIRD_PARTY_NOTICES.md`, `SECURITY.md`, issue templates, release texts. Numbers with a decimal point. Code comments, commit messages and test descriptions are in English too (since November 2026, older code still has German comments).
-- **German:** internal docs (`app/README.md`, `docs/phase0-ergebnisse.md`, the local working documents).
+- **English:** everything users, contributors or the agent see: interface, messages, dialogs, output and errors of `soma`, docstrings of the public API, skills including their header, handover notes to the agent, `AGENTS.md` and `model.py` of the template. Also all public documents in the repo: `README.md`, `CHANGELOG.md`, this `CLAUDE.md`, `THIRD_PARTY_NOTICES.md`, `SECURITY.md`, issue templates, release texts. Numbers with a decimal point.
+- **Everything new is English too (since November 2026):** code comments, commit and tag messages, test descriptions, internal docs (`app/README.md`, `docs/phase0-ergebnisse.md`, the local working documents). Older code and docs still have German text: it stays, no bulk translation.
 - What the app recognizes from older projects (commit subjects, trailers) it also recognizes in the old German form.
 - `README.md` in the root is the start page on GitHub (E70): plain and short, no emojis, images in `docs/images/`. `README.zh-CN.md` is an AI translation of it, marked as such at the top: when the README changes, update the translation too.
 
@@ -117,7 +117,7 @@ npm run dist                         # installation package for this system, run
 
 ## Docs and way of working
 
-- The maintainer speaks German: answer them in German. Contributors get answers in their own language. If a decision is really theirs, ask a single question. What I decide without asking goes into `PLAN.md` under "Noch nicht ausdrücklich bestätigt".
+- Answer the maintainer in English (their wish since 2026-11-03), contributors in their own language. If a decision is really theirs, ask a single question. What I decide without asking goes into `PLAN.md` under "Noch nicht ausdrücklich bestätigt".
 - After a step, update:
   - `PLAN.md`: phase status, open points, risks.
   - `app/README.md` when commands or structure change, and the structure here.
