@@ -126,12 +126,37 @@ def bundle_linux_libs(rt):
         print(f"  bundled {soname} from {src}")
 
 
+def precompile(rt):
+    """Bytecode fuer die ganze Umgebung (Standardbibliothek und site-packages) vorab, als unchecked-hash: Python prueft
+    dann nicht die Aenderungszeit der Quelle, die beim Kopieren und Packen nicht erhalten bleiben muss. Die App startet
+    Python mit PYTHONDONTWRITEBYTECODE (paths.ts, pythonEnv), damit nichts in das installierte und unter macOS signierte
+    Paket geschrieben wird. Ohne diese .pyc uebersetzte Python CadQuery und OCP sonst bei jedem Start neu."""
+    py = python_exe(rt)
+    stdlib = subprocess.run([str(py), "-I", "-c", "import sysconfig; print(sysconfig.get_path('stdlib'))"],
+                            check=True, capture_output=True, text=True).stdout.strip()
+    # Kein check=True: Einzelne Dateien in Paketen sind absichtlich kein gueltiges Python (Testdaten, Vorlagen), die
+    # meldet compileall als Fehler. Ob etwas fehlt, das wirklich importiert wird, zeigt check(). -B: Die Worker
+    # importieren selbst Module (concurrent.futures) und schrieben deren .pyc sonst gleichzeitig mit compileall (unter
+    # Windows "Zugriff verweigert").
+    r = subprocess.run([str(py), "-I", "-B", "-m", "compileall", "-q", "-f", "-j", "0", "--invalidation-mode", "unchecked-hash",
+                        stdlib], capture_output=True, text=True)
+    if r.returncode:
+        print(f"  compileall: some files could not be compiled (exit {r.returncode}), first lines:")
+        print("\n".join(r.stdout.strip().splitlines()[:10]))
+    print(f"Bytecode compiled in {stdlib}")
+
+
+def pyc_files(rt):
+    return set(rt.rglob("*.pyc"))
+
+
 def check(rt):
     """Laeuft die Umgebung von einem anderen Ort aus? Kopie in einen Ordner mit Leerzeichen, dort soma und Basispakete."""
     with tempfile.TemporaryDirectory(prefix="soma check ") as tmp:
         moved = Path(tmp) / "py rt"
         shutil.copytree(rt, moved, symlinks=True)
         py = python_exe(moved)
+        before = pyc_files(moved)
         if sys.platform.startswith("linux"):
             # Alles, was libgmsh braucht, muss sich aufloesen lassen, die mitgelieferten aus dem verschobenen Ordner
             libgmsh = next((moved / "lib").glob("libgmsh.so*"))
@@ -141,6 +166,11 @@ def check(rt):
                 sys.exit(f"Libraries of {libgmsh.name} do not resolve to the runtime (see ldd above)")
         run(py, "-I", "-c", "import cadquery, OCP, vtk, gmsh, numpy, scipy, ezdxf, pdfplumber, soma, soma.ccx as c; "
                             "print('cadquery', cadquery.__version__, '| soma', soma.__version__, '| ccx', c.version())")
+        # Mit -I schreibt Python Bytecode (PYTHONDONTWRITEBYTECODE gilt nicht): Jede neue .pyc fehlte im Paket, und die
+        # App muesste das Modul bei jedem Start neu uebersetzen
+        new = sorted(str(f.relative_to(moved)) for f in pyc_files(moved) - before)
+        if new:
+            sys.exit(f"{len(new)} modules were imported without precompiled bytecode, e.g. {new[:5]}")
         # Startprogramme ueber den PATH wie im Terminal der App, die Ausgabe muss vom verschobenen Ordner kommen
         bindir = moved / ("Scripts" if WIN else "bin")
         env = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ.get("PATH", ""))
@@ -180,6 +210,7 @@ def main():
     if not args.skip_ccx:
         run(py, ROOT / "python" / "scripts" / "fetch_ccx.py", "--target", target / "ccx")
     write_launchers_windows(target) if WIN else write_launchers_unix(target)
+    precompile(target)
     if sys.platform.startswith("linux"):
         bundle_linux_libs(target)
     freeze = subprocess.run([str(py), "-m", "pip", "list", "--format=freeze"], check=True, capture_output=True, text=True).stdout
