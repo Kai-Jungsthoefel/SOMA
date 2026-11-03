@@ -77,6 +77,16 @@ export function pythonExe(): string {
   return process.platform === 'win32' ? 'python.exe' : 'python3';
 }
 
+/**
+ * Umgebung für alle Python-Prozesse der App und die Terminals. PYTHONDONTWRITEBYTECODE: Python legt keine __pycache__
+ * an. Die mitgelieferte Basisumgebung liegt unter macOS im signierten SOMA.app, jede neue .pyc darin machte die
+ * Signatur ungültig (Fork mjoconr/SOMA). Schnell bleibt der Start trotzdem: build_runtime.py übersetzt die Basis
+ * vorab. Nebenbei entsteht auch in Projektordnern kein __pycache__ mehr.
+ */
+export function pythonEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  return { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1', ...extra };
+}
+
 /** Ordner des mitgelieferten Git (dugite). Kommt in die Terminals, damit Agent und App dasselbe Git benutzen (E31). */
 export function gitCmdDir(): string | null {
   try {

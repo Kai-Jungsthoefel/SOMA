@@ -7,7 +7,7 @@ import { exec } from 'dugite';
 import type { AboutInfo, AgentInfo, ComponentInfo } from '../shared/types';
 import { SOMA_VERSION } from '../shared/version';
 import { logTail } from './log';
-import { logsDir, pythonExe, userDataDir, userSkillsDir, warmDir } from './paths';
+import { logsDir, pythonEnv, pythonExe, userDataDir, userSkillsDir, warmDir } from './paths';
 
 /**
  * Angaben für „About“ in den Einstellungen (E81): Versionen, Komponenten mit Lizenz, gefundene Agenten, Pfade. Alles wird
@@ -77,7 +77,7 @@ function pythonInfo(): Promise<AboutInfo['python']> {
     const cwd = warmDir();
     try { fs.mkdirSync(cwd, { recursive: true }); } catch { /* dann eben ohne */ }
     // Leerer Startordner: Python setzt ihn bei -c vorn in den Suchpfad (siehe warmDir)
-    execFile(exe, ['-c', PY_INFO], { cwd, timeout: 30000, windowsHide: true, env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } }, (err, out, errOut) => {
+    execFile(exe, ['-c', PY_INFO], { cwd, timeout: 30000, windowsHide: true, env: pythonEnv() }, (err, out, errOut) => {
       if (err) { pyCache = null; resolve({ exe, packages: [], error: (String(errOut).trim().split('\n').pop() || err.message).slice(0, 300) }); return; }
       try {
         const j = JSON.parse(String(out).trim().split('\n').pop() ?? '') as { version: string; executable: string; packages: ComponentInfo[] };

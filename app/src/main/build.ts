@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { affectsBuild } from '../shared/editable';
 import type { BuildResult, BuildStatus, ParamInfo } from '../shared/types';
 import { log } from './log';
-import { pythonExe, warmDir } from './paths';
+import { pythonEnv, pythonExe, warmDir } from './paths';
 import { IGNORED_TOP } from './watcher';
 
 const DEBOUNCE_MS = 700;
@@ -315,7 +315,7 @@ function spawnWarm(): WarmProcess {
   try { fs.mkdirSync(cwd, { recursive: true }); } catch { /* dann scheitert der Start und meldet es */ }
   const child = spawn(pythonExe(), ['-m', 'soma', 'warm'], {
     cwd, windowsHide: true,
-    env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
+    env: pythonEnv({ PYTHONUNBUFFERED: '1' }),
   });
   const w: WarmProcess = { child, out: '', err: '', lines: [], ended: false, error: null, onLine: null, onError: null, onClose: null };
   let partial = '';

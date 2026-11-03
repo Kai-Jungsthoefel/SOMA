@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { samePath } from './animations';
 import { resolveInside } from './files';
-import { pythonExe, warmDir } from './paths';
+import { pythonEnv, pythonExe, warmDir } from './paths';
 
 /**
  * Projektumgebung (E25, E67): eine kleine venv je Modell unter .soma/env, angelegt von `soma env` (python/soma/env.py).
@@ -54,7 +54,7 @@ function run(exe: string, args: string[], cwd: string, timeoutMs: number): Promi
     let out = '', err = '';
     let child: ChildProcess;
     try {
-      child = spawn(exe, args, { cwd, windowsHide: true, env: { ...process.env, PIP_PYTHON: undefined, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' } });
+      child = spawn(exe, args, { cwd, windowsHide: true, env: pythonEnv({ PIP_PYTHON: undefined }) });
     } catch (e) { resolve({ code: null, out, err: e instanceof Error ? e.message : String(e) }); return; }
     const timer = setTimeout(() => { err += '\nTime limit exceeded.'; child.kill(); }, timeoutMs);
     child.stdout?.on('data', (d: Buffer) => { out += d.toString('utf8'); });

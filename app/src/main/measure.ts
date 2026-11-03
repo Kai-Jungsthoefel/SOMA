@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { MeasurePrepared, MeasureRequest, MeasureResponse } from '../shared/types';
-import { pythonExe } from './paths';
+import { pythonEnv, pythonExe } from './paths';
 
 const START_TIMEOUT_MS = 60_000; // cadquery zu laden dauert beim ersten Mal einige Sekunden
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -65,7 +65,7 @@ export class MeasureService {
     this.buf = '';
     const child = spawn(pythonExe(), ['-m', 'soma', 'serve'], {
       cwd: this.cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
+      env: pythonEnv({ PYTHONUNBUFFERED: '1' }),
     });
     this.proc = child;
     let err = '';

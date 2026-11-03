@@ -4,7 +4,7 @@ import * as pty from 'node-pty';
 import { logAgentStart } from './agents';
 import { bridgeEnv } from './bridge';
 import { envPaths } from './packages';
-import { gitCmdDir, pythonBinDirs } from './paths';
+import { gitCmdDir, pythonBinDirs, pythonEnv } from './paths';
 
 /**
  * Umgebung fuer Terminals: vorn im PATH die Projektumgebung (E67, `python` sieht Basis und Zusatzpakete), dahinter die
@@ -12,7 +12,7 @@ import { gitCmdDir, pythonBinDirs } from './paths';
  * Adresse und Schluessel der App fuer `soma render` (E58).
  */
 export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUTF8: '1', SOMA_PROJECT: projectDir, ...bridgeEnv() };
+  const env: NodeJS.ProcessEnv = pythonEnv({ SOMA_PROJECT: projectDir, ...bridgeEnv() });
   const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
   const pe = envPaths(projectDir);
   const front: string[] = [pe.scripts];
