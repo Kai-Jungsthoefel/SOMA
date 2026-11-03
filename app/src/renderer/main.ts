@@ -1,6 +1,6 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
-import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
+import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, MeshExportOptions, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
@@ -1478,6 +1478,7 @@ function renderExportScope(): void {
 function openExportMenu(anchor: HTMLElement = $('btn-export')): void {
   renderExportScope();
   const m = $('menu-export');
+  if (!menus.isOpen(m)) setMeshOptsOpen(false);
   if (!menus.isOpen(m)) menus.toggle(m, anchor, anchor.id === 'btn-export' ? 'right' : 'left');
 }
 $('btn-export').addEventListener('click', () => {
@@ -1490,6 +1491,51 @@ $('btn-sel-export').addEventListener('click', () => {
   exportScope = 'sel';
   openExportMenu($('btn-sel-export'));
 });
+// Netz-Einstellungen (Issue #8): gemerkt in diesem Fenster, leer heißt die Vorgabe des Formats in `soma export`
+const MESH_OPTS_KEY = 'soma.exportMesh';
+let meshOpts: MeshExportOptions = (() => {
+  try {
+    const o = JSON.parse(store.get(MESH_OPTS_KEY) ?? '{}') as Record<string, unknown>;
+    return {
+      ...(o.units === 'mm' || o.units === 'm' ? { units: o.units } : {}),
+      ...(o.up === 'z' || o.up === 'y' ? { up: o.up } : {}),
+      ...(o.detail === 'coarse' || o.detail === 'fine' ? { detail: o.detail } : {}),
+    };
+  } catch { return {}; }
+})();
+const MESH_SEGS: [string, keyof MeshExportOptions, string][] = [['exp-units', 'units', ''], ['exp-up', 'up', ''], ['exp-detail', 'detail', 'normal']];
+function renderMeshOpts(): void {
+  for (const [id, key, dflt] of MESH_SEGS) {
+    const cur = meshOpts[key] ?? dflt;
+    for (const b of $(id).querySelectorAll<HTMLButtonElement>('button')) {
+      b.classList.toggle('on', b.dataset.v === cur);
+      b.setAttribute('aria-pressed', String(b.dataset.v === cur));
+    }
+  }
+  // Zugeklappt zeigt die Zeile, was vom Normalfall abweicht, damit eine Einstellung von früher nicht übersehen wird
+  const { units, up, detail } = meshOpts;
+  const sum = [units, up && `${up.toUpperCase()} up`, detail && detail[0].toUpperCase() + detail.slice(1)].filter(Boolean).join(' · ');
+  $('exp-mesh-sum').textContent = sum || 'Auto';
+}
+/** Netz-Einstellungen auf- oder zuklappen. Normalerweise braucht man sie nicht, deshalb startet das Menü zugeklappt. */
+function setMeshOptsOpen(open: boolean): void {
+  $('exp-mesh').hidden = !open;
+  $('exp-mesh-toggle').setAttribute('aria-expanded', String(open));
+}
+$('exp-mesh-toggle').addEventListener('click', () => setMeshOptsOpen($('exp-mesh').hidden));
+for (const [id, key, dflt] of MESH_SEGS) {
+  $(id).addEventListener('click', (ev) => {
+    const b = (ev.target as HTMLElement).closest<HTMLButtonElement>('button[data-v]');
+    if (!b) return;
+    const v = b.dataset.v ?? '';
+    const next: Record<string, string> = { ...meshOpts };
+    if (v && v !== dflt) next[key] = v; else delete next[key];
+    meshOpts = next as MeshExportOptions;
+    store.set(MESH_OPTS_KEY, JSON.stringify(meshOpts));
+    renderMeshOpts();
+  });
+}
+renderMeshOpts();
 $('exp-all').addEventListener('click', () => { exportScope = 'all'; renderExportScope(); });
 $('exp-sel').addEventListener('click', () => { exportScope = 'sel'; renderExportScope(); });
 document.querySelectorAll<HTMLButtonElement>('#menu-export [data-fmt]').forEach((b) => b.addEventListener('click', () => void doExport(b.dataset.fmt!, b.textContent!)));
@@ -1528,11 +1574,13 @@ async function doExport(fmt: string, label: string): Promise<ExportResult> {
   menus.close();
   const e = selection ? partEntry(selection.partId) : undefined;
   const part = exportScope === 'sel' ? e?.name ?? partInfo(selection?.partId ?? '')?.name ?? null : null;
-  const r = await api.build.export(fmt, part);
+  const r = await api.build.export(fmt, part, meshOpts);
   if (r.cancelled) return r;
   const name = (f: string) => f.split(/[\\/]/).pop() ?? f;
-  if (r.ok && part) toast(`“${part}” exported as ${label}:\n${r.target ?? r.files[0] ?? ''}`);
-  else if (r.ok) toast(`${r.files.length} file${r.files.length === 1 ? '' : 's'} exported as ${label} to ${r.target ?? ''}:\n${r.files.map(name).join(', ') || '(no file)'}`);
+  // Hinweise von soma (Netz nicht geschlossen, welche Flächen) gehören dazu: Bericht statt stiller Reparatur (E28)
+  const warn = r.warnings?.length ? `\n${r.warnings.join('\n')}` : '';
+  if (r.ok && part) toast(`“${part}” exported as ${label}:\n${r.target ?? r.files[0] ?? ''}${warn}`, warn ? 'error' : 'ok');
+  else if (r.ok) toast(`${r.files.length} file${r.files.length === 1 ? '' : 's'} exported as ${label} to ${r.target ?? ''}:\n${r.files.map(name).join(', ') || '(no file)'}${warn}`, warn ? 'error' : 'ok');
   else toast(`Export failed: ${r.error}`, 'error');
   return r;
 }

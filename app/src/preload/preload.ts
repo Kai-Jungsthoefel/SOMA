@@ -39,7 +39,7 @@ const api: SomaApi = {
     setAuto: (on) => ipcRenderer.invoke('build:setAuto', on),
     status: () => ipcRenderer.invoke('build:status'),
     onStatus: (cb) => { ipcRenderer.on('build:status', (_e, s) => cb(s)); },
-    export: (format, part) => ipcRenderer.invoke('build:export', format, part),
+    export: (format, part, mesh) => ipcRenderer.invoke('build:export', format, part, mesh ?? null),
   },
   fs: {
     list: () => ipcRenderer.invoke('fs:list'),

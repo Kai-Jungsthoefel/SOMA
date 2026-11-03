@@ -201,6 +201,72 @@ try {
   fs.writeFileSync(path.join(open, 'model.py'), 'import cadquery as cq\nfrom soma import add_part\nadd_part("Sheet", cq.Workplane().box(10, 10, 10).faces(">Z").val())\n');
   const o = soma(['export', 'Sheet', '--format', '3mf', '--project', open, '--out', path.join(work, 'out-open')]);
   check('Offene Fläche: exportiert mit Warnung zu offenen Kanten', o.status === 0 && /exported: /.test(o.stdout) && /warning: mesh of 'Sheet' is not closed: \d+ open edge/.test(o.stdout), (o.stdout + o.stderr).slice(-200));
+
+  // Netz-Optionen (Issue #8): Einheit, Achse nach oben, Detailstufe. Ein Quader 100 x 50 x 20 mm, unten auf z = 0, mit
+  // eigenem Leser geprüft: Ausdehnung je Achse in der Zieleinheit, glTF standardmäßig in Metern mit Y nach oben
+  const opt = path.join(work, 'opts');
+  fs.mkdirSync(opt);
+  fs.writeFileSync(path.join(opt, 'model.py'), 'import cadquery as cq\nfrom soma import add_part\nadd_part("Box", cq.Workplane().box(100, 50, 20).translate((0, 0, 10)).edges().fillet(3))\n');
+  const runs = [
+    ['glb', []], ['gltf', ['--units', 'mm', '--up', 'z']], ['stl', ['--units', 'm', '--up', 'y']], ['3mf', ['--units', 'in']],
+    ['obj', ['--detail', 'coarse']], ['amf', ['--detail', 'fine']],
+  ];
+  for (const [fmt, extra] of runs) {
+    const r = soma(['export', 'Box', '--format', fmt, ...extra, '--project', opt, '--out', path.join(work, 'out-opts')]);
+    check(`Optionen: ${fmt} ${extra.join(' ')} exportiert`, r.status === 0 && /exported: /.test(r.stdout), (r.stdout + r.stderr).slice(-200));
+  }
+  const bounds = spawnSync(PY, ['-c', String.raw`
+import json, re, struct, sys, zipfile
+from pathlib import Path
+import numpy as np
+d = Path(sys.argv[1]); out = {}
+def box(p): p = np.asarray(p, float); return [p.min(0).round(4).tolist(), p.max(0).round(4).tolist()]
+for ext in ("glb", "gltf"):
+    f = d / f"Box.{ext}"
+    if ext == "glb":
+        b = f.read_bytes(); n = struct.unpack("<I", b[12:16])[0]; g = json.loads(b[20:20 + n])
+    else:
+        g = json.loads(f.read_text())
+    acc = [a for a in g["accessors"] if "min" in a and len(a["min"]) == 3]
+    out[ext] = [np.min([a["min"] for a in acc], 0).round(4).tolist(), np.max([a["max"] for a in acc], 0).round(4).tolist()]
+    out[ext + "_prims"] = sum(len(m["primitives"]) for m in g["meshes"])
+r = (d / "Box.stl").read_bytes()
+v = np.frombuffer(r[84:], dtype=np.dtype([("n", "<f4", 3), ("v", "<f4", (3, 3)), ("a", "<u2")]))
+out["stl"] = box(v["v"].reshape(-1, 3))
+m = zipfile.ZipFile(d / "Box.3mf").read("3D/3dmodel.model").decode()
+out["3mf_unit"] = re.search(r'<model unit="(\w+)"', m)[1]
+out["3mf"] = box([[float(x) for x in t] for t in re.findall(r'<vertex x="([-\d.e]+)" y="([-\d.e]+)" z="([-\d.e]+)"', m)])
+o = (d / "Box.obj").read_text()
+out["obj_tris"] = o.count("\nf ")
+a = (d / "Box.amf").read_text()
+out["amf_tris"] = a.count("<triangle>")
+print(json.dumps(out))
+`, path.join(work, 'out-opts')], { encoding: 'utf8', env: ENV });
+  const B = bounds.status === 0 ? JSON.parse(bounds.stdout) : {};
+  const near = (a, b) => Array.isArray(a) && a.flat().every((x, i) => Math.abs(x - b.flat()[i]) < 1e-3 * Math.max(1, Math.abs(b.flat()[i])));
+  check('GLB ohne Optionen: Meter, Y nach oben, eine Primitive', near(B.glb, [[-0.05, 0, -0.025], [0.05, 0.02, 0.025]]) && B.glb_prims === 1, JSON.stringify([B.glb, B.glb_prims, bounds.stderr.slice(-200)]));
+  check('GLTF mit --units mm --up z: mm, Z nach oben', near(B.gltf, [[-50, -25, 0], [50, 25, 20]]), JSON.stringify(B.gltf));
+  check('STL mit --units m --up y: Meter, Y nach oben', near(B.stl, [[-0.05, 0, -0.025], [0.05, 0.02, 0.025]]), JSON.stringify(B.stl));
+  check('3MF mit --units in: Einheit inch, Koordinaten in Zoll', B['3mf_unit'] === 'inch' && near(B['3mf'], [[-50 / 25.4, -25 / 25.4, 0], [50 / 25.4, 25 / 25.4, 20 / 25.4]]), JSON.stringify([B['3mf_unit'], B['3mf']]));
+  check('Detail: coarse hat weniger Dreiecke als fine', B.obj_tris > 0 && B.obj_tris < B.amf_tris, `coarse ${B.obj_tris}, fine ${B.amf_tris}`);
+  const badAmf = soma(['export', 'Box', '--format', 'amf', '--units', 'cm', '--project', opt, '--out', path.join(work, 'out-opts')]);
+  check('AMF mit cm: verständlicher Fehler', badAmf.status === 2 && /AMF does not support the unit 'cm'/.test(badAmf.stderr), badAmf.stderr.slice(-200));
+  const badStep = soma(['export', 'Box', '--format', 'step', '--up', 'y', '--project', opt, '--out', path.join(work, 'out-opts')]);
+  check('STEP mit --up: Fehler, nur für Netzformate', badStep.status === 2 && /--up only apply to mesh formats/.test(badStep.stderr), badStep.stderr.slice(-200));
+
+  // Nicht vernetzte Flächen: Die Warnung nennt Art, Fläche und Lage, winzige als Splitter (Issue #10). Eine Fläche, an der
+  // OCC sicher scheitert, lässt sich nicht gezielt bauen, deshalb mit einem Körper, dem eine echte Splitterfläche fehlt.
+  const miss = spawnSync(PY, ['-c', String.raw`
+import cadquery as cq
+from soma import meshexport as m
+sliver = cq.Workplane().center(42.6, 24).rect(0.05, 0.02).extrude(1).faces("<Z").val()
+box = cq.Workplane().box(10, 10, 10).val()
+b = dict(m.body_meshes(box, "Case")[0], missing_faces=7, missing=[m._face_info(sliver)] + [m._face_info(box.Faces()[0])] * 5 + [None])
+print(m.problems([b])[0])
+`], { encoding: 'utf8', env: ENV });
+  check('Nicht vernetzte Flächen: Warnung mit Art, Fläche, Lage und Splitter-Hinweis',
+    miss.status === 0 && miss.stdout.includes("7 face(s) could not be meshed (PLANE, 0.001 mm², probably a sliver at x 42.6, y 24.0, z 0.0; PLANE, 100.0 mm² at x ")
+      && miss.stdout.includes('; and 2 more)'), (miss.stdout + miss.stderr).slice(-300));
 } catch (e) {
   check('Ablauf ohne Ausnahme', false, String(e?.stack ?? e).slice(0, 300));
 } finally {

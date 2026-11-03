@@ -93,6 +93,14 @@ try {
   const expDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-export-test-'));
   await domClick('btn-sel-export');
   const expMenu = await ev(() => ({ open: !document.getElementById('menu-export').hidden, sel: document.getElementById('exp-sel').classList.contains('on') ? document.getElementById('exp-sel').textContent : '' }));
+  // Netz-Einstellungen (Issue #8): zugeklappt, ein Klick klappt auf, ohne das Menü zu schließen, die Zeile fasst zusammen
+  const meshClosed = await ev(() => ({ hidden: document.getElementById('exp-mesh').hidden, sum: document.getElementById('exp-mesh-sum').textContent }));
+  await domClick('exp-mesh-toggle');
+  await ev(() => document.querySelector('#exp-up [data-v="y"]').click());
+  const meshOpen = await ev(() => ({ menu: !document.getElementById('menu-export').hidden, hidden: document.getElementById('exp-mesh').hidden, sum: document.getElementById('exp-mesh-sum').textContent }));
+  await ev(() => document.querySelector('#exp-up [data-v=""]').click());
+  check('Export-Menü: Netz-Einstellungen zugeklappt, aufklappbar, Zusammenfassung „Y up“', meshClosed.hidden && meshClosed.sum === 'Auto' && meshOpen.menu && !meshOpen.hidden && meshOpen.sum === 'Y up'
+    && await ev(() => document.getElementById('exp-mesh-sum').textContent) === 'Auto', JSON.stringify([meshClosed, meshOpen]));
   await ev(() => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await app.answers([path.join(expDir, 'Deckel.step')]);
   const one = await ev(() => window.__t.exportAs('step', 'sel'));

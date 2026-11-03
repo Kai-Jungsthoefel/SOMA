@@ -73,6 +73,12 @@ export interface BuildStatus {
  * Export über einen Dateidialog. `files`: geschriebene Dateien mit absolutem Pfad, `target`: gewählte Datei oder gewählter
  * Ordner. `cancelled`: Dialog oder Rückfrage abgebrochen, nichts geschrieben.
  */
+/**
+ * Einstellungen für Netzformate (STL, 3MF, AMF, OBJ, GLB, GLTF) beim Export, Issue #8. Fehlt ein Wert, gilt die Vorgabe des
+ * Formats in `soma export`: GLB/GLTF in Metern mit Y nach oben, alles andere in mm mit Z nach oben.
+ */
+export interface MeshExportOptions { units?: 'mm' | 'm'; up?: 'z' | 'y'; detail?: 'coarse' | 'normal' | 'fine' }
+
 export interface ExportResult { ok: boolean; files: string[]; target?: string; cancelled?: boolean; error?: string; warnings?: string[] }
 /** Neues Modell aus einem CadQuery-Skript (E100). `info`: das geöffnete Modell, `warnings`: Hinweise des Imports. */
 export interface CadQueryImportResult { info?: ProjectInfo; warnings: string[]; cancelled?: boolean; error?: string }
@@ -482,8 +488,8 @@ export interface SomaApi {
     setAuto(on: boolean): Promise<void>;
     status(): Promise<BuildStatus>;
     onStatus(cb: (s: BuildStatus) => void): void;
-    /** `part` null = alle Bauteile ohne Referenzen. */
-    export(format: string, part: string | null): Promise<ExportResult>;
+    /** `part` null = alle Bauteile ohne Referenzen. `mesh` gilt nur für Netzformate, bei anderen ignoriert. */
+    export(format: string, part: string | null, mesh?: MeshExportOptions): Promise<ExportResult>;
   };
   fs: {
     list(): Promise<FileNode[]>;

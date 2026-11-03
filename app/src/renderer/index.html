@@ -458,6 +458,15 @@
   <div id="menu-export" class="menu wide" role="menu" hidden>
     <div class="mh">SCOPE</div>
     <div class="seg"><button id="exp-all" class="on" aria-pressed="true">All parts</button><button id="exp-sel" aria-pressed="false" disabled>Selection only</button></div>
+    <button id="exp-mesh-toggle" class="mi keep meshtoggle" aria-expanded="false" aria-controls="exp-mesh" title="Units, up axis and mesh density for STL, 3MF, AMF, OBJ, GLB and GLTF"><i data-icon="right" data-size="14" data-stroke="2"></i><span>Mesh settings</span><span id="exp-mesh-sum" class="k">Auto</span></button>
+    <div id="exp-mesh" hidden>
+    <div class="expopts">
+      <span>Units</span><div id="exp-units" class="seg" aria-label="Units of mesh files"><button data-v="" title="GLB and GLTF in meters, the other formats in millimeters">Auto</button><button data-v="mm">mm</button><button data-v="m">m</button></div>
+      <span>Up</span><div id="exp-up" class="seg" aria-label="Axis pointing up in mesh files"><button data-v="" title="GLB and GLTF with Y up, the other formats with Z up as in the model">Auto</button><button data-v="z">Z</button><button data-v="y">Y</button></div>
+      <span>Detail</span><div id="exp-detail" class="seg" aria-label="Mesh density"><button data-v="coarse" title="Fewer triangles, for example for game engines">Coarse</button><button data-v="normal">Normal</button><button data-v="fine" title="More triangles, smoother curves">Fine</button></div>
+    </div>
+    <div class="mnote">For STL, 3MF, AMF, OBJ, GLB and GLTF. Auto: GLB and GLTF in meters with Y up, as game engines and Blender expect them, the others in millimeters with Z up.</div>
+    </div>
     <div class="mh">3D PRINTING</div>
     <div class="chips"><button class="chip" data-fmt="stl">STL</button><button class="chip" data-fmt="3mf">3MF</button><button class="chip" data-fmt="amf">AMF</button></div>
     <div class="mh">CAD EXCHANGE</div>

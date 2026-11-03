@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type {
-  AnimBuildResult, AnimList, CadQueryImportResult, DrawingBuildResult, DrawingList, ExportResult, FileViewResult, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
+  AnimBuildResult, AnimList, CadQueryImportResult, DrawingBuildResult, DrawingList, ExportResult, FileViewResult, MeshExportOptions, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
   ParamResult, ParamState, ParamValue, ProjectInfo, RemoveResult, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
@@ -73,6 +73,18 @@ function lastJson<T>(out: string): T | null {
 }
 const safeFileName = (n: string) => n.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'Model';
 /** Modelle werden als .soma gespeichert (E79), innen eine ZIP. Geöffnet wird auch eine .zip. */
+/** Netzformate, für die `soma export` Einheit, Achse und Detailstufe kennt (Issue #8) */
+const MESH_EXPORT_FORMATS = ['stl', '3mf', 'amf', 'obj', 'glb', 'gltf'];
+/** Einstellungen aus dem Renderer als Argumente für `soma export`. Was nicht passt, fällt weg: Dann gilt die Vorgabe des Formats. */
+function meshExportArgs(mesh: unknown): string[] {
+  const o = (mesh && typeof mesh === 'object' ? mesh : {}) as MeshExportOptions;
+  const out: string[] = [];
+  if (o.units === 'mm' || o.units === 'm') out.push('--units', o.units);
+  if (o.up === 'z' || o.up === 'y') out.push('--up', o.up);
+  if (o.detail === 'coarse' || o.detail === 'normal' || o.detail === 'fine') out.push('--detail', o.detail);
+  return out;
+}
+
 const MODEL_EXT = '.soma';
 const isModelFile = (p: string) => p.toLowerCase().endsWith(MODEL_EXT);
 /** Pfad mit .soma: „x“ und „x.zip“ werden „x.soma“. */
@@ -355,9 +367,10 @@ export class ProjectController {
    * Zukaufteile) als je eine Datei in einen gewählten Ordner. soma schreibt in einen leeren Ordner unter Temp, die App
    * kopiert danach. So landet nichts in exports/ des Projekts, und eine vorhandene Datei wird nie ohne Rückfrage ersetzt.
    */
-  async exportModel(format: string, part: string | null): Promise<ExportResult> {
+  async exportModel(format: string, part: string | null, mesh?: unknown): Promise<ExportResult> {
     const s = this.need();
     if (!/^[a-z0-9]{2,5}$/.test(format)) return { ok: false, files: [], error: `Unknown format: ${format}` };
+    const meshArgs = MESH_EXPORT_FORMATS.includes(format) ? meshExportArgs(mesh) : [];
     const last = getAppState(s.id).exportDir;
     const startDir = last && fs.existsSync(last) ? last : documentsDir();
     const target = await chooseExportTarget(this.getWin(), part
@@ -368,7 +381,7 @@ export class ProjectController {
     try {
       tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-export-'));
       // `--` vor dem Namen: Bauteilnamen dürfen mit einem Minus beginnen, ohne als Option zu gelten
-      const args = ['export', '--format', format, '--project', s.dir, '--out', tmp, ...(part ? ['--', part] : ['--all'])];
+      const args = ['export', '--format', format, ...meshArgs, '--project', s.dir, '--out', tmp, ...(part ? ['--', part] : ['--all'])];
       const r = await runSoma(args, s.dir, 10 * 60 * 1000);
       if (!r.ok) {
         const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
@@ -400,7 +413,9 @@ export class ProjectController {
       }
       const dest = part ? plan[0][1] : target;
       patchAppState(s.id, { exportDir: part ? path.dirname(dest) : target });
-      return { ok: true, files: plan.map(([, d]) => d), target: dest };
+      // Hinweise von soma (z. B. ein Netz, das nicht geschlossen ist, mit den betroffenen Flächen) an den Benutzer weitergeben
+      const warnings = r.out.split(/\r?\n/).filter((l) => l.startsWith('warning: ')).map((l) => l.slice(9).trim());
+      return { ok: true, files: plan.map(([, d]) => d), target: dest, ...(warnings.length ? { warnings } : {}) };
     } catch (e) {
       return { ok: false, files: [], error: `Export failed: ${e instanceof Error ? e.message : String(e)}` };
     } finally {
