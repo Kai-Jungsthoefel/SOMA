@@ -22,6 +22,7 @@ the version is bumped.
 
 ### Fixed
 
+- The macOS app no longer changes its own files while it runs: Python wrote cached bytecode into the app bundle, which breaks the code signature. The bundled Python now comes precompiled and writes no cache, so model folders no longer get a `__pycache__` folder either. Thanks to Mike O'Connor (fork mjoconr/SOMA) for spotting this.
 - Some STEP files could not be shown in the viewer ("Step file does not contain an assembly"), for example a single body like a logo from another CAD program. They now open with one part per body, keeping names and colors where the file has them. `import_assembly()` reads such files too, and `import_step()` no longer drops all bodies but the first when a file has several side by side.
 - Saving could crash with "A JavaScript error occurred in the main process: file data stream has unexpected number of bytes" when a file of the model changed while it was being packed, for example by a build or the agent. No build starts while the model is being saved or exported, a file that changes anyway is packed a second time, and if it keeps changing, saving reports it instead of crashing.
 
