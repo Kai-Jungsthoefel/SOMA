@@ -47,7 +47,7 @@ The logo at the top left opens the start page.
 
 1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts"), and **Open folder**, which uses SOMA in a folder of yours (see "Your own folder").
 2. **Open**: opens a .soma or ZIP file (Ctrl O).
-3. **Tutorial**: a short guided tour of the app with an example model. No agent needed. The cross hides the card.
+3. **Tutorial**: **Watch video** opens the video tutorial on YouTube in your browser (9 min, from installing to export). **Start tutorial** is a short guided tour of the app with an example model, no agent needed. The cross hides the card.
 4. **Recent**: models you worked on, the newest first. The field above filters them by name. "Open" marks the model that is open right now, "never saved" one that was never saved as a .soma file. The bin on a card removes the model from this computer, a saved .soma file stays.
 5. **Agents**: the agents SOMA found. Any other agent that runs in a terminal works too. You install them yourself, SOMA does not bring one.
 6. **Help**: this guide (F1).
@@ -63,7 +63,8 @@ fails, a grey label says so. Settings > About > **Check for new versions** turns
 **Start tutorial** opens a new example model called "Tutorial" and walks you through the window in ten steps: starting
 the agent, the code, clicking a part, measuring, marking up, parameters, history, saving and export, and help. An orange
 frame shows where to look, and you can try everything right away. Back, Skip and Next move through the steps, Esc ends
-the tour. To see it again, click **Start tutorial** at the top of Help. If you leave the example model unchanged, it
+the tour. To see it again, click **Start tutorial** at the top of Help. **Watch video** next to it opens the
+[video tutorial](https://www.youtube.com/watch?v=FJrgMl8ZGKI) on YouTube. If you leave the example model unchanged, it
 disappears like any new model you did not change.
 
 ## The agent
