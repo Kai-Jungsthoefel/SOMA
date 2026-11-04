@@ -2,7 +2,7 @@
 
 **Solid Object Modeling with Agents.** A desktop app for designing parametric 3D models together with a coding agent.
 
-**[somacad.app](https://somacad.app)** · [Download](https://somacad.app/download/) · [Changelog](CHANGELOG.md) · [简体中文 (AI translation)](README.zh-CN.md)
+**[somacad.app](https://somacad.app)** · [Download](https://somacad.app/download/) · [Video tutorial](https://www.youtube.com/watch?v=FJrgMl8ZGKI) · [Changelog](CHANGELOG.md) · [简体中文 (AI translation)](README.zh-CN.md)
 
 https://github.com/user-attachments/assets/3294d1e4-1f06-477d-9770-c91f3470330d
 
@@ -33,6 +33,8 @@ Download SOMA from [somacad.app/download](https://somacad.app/download/), which 
 2. Start your agent with the **+** above the terminal on the right. SOMA lists the agents it found on your computer.
 3. Tell the agent what you need, for example *"A case for a Raspberry Pi 5 with vents in the lid, printed in PETG"*. SOMA builds the model on every change and shows it.
 4. Click parts, measure, or draw on the view and send it to the agent until it fits. Then export it from the menu, for example as STL or 3MF.
+
+The [video tutorial](https://www.youtube.com/watch?v=FJrgMl8ZGKI) (9 min) shows all of this and more: drawing on the view, parameters, animation, FEM, drawings, skills and export.
 
 Press F1 in the app for a short guide with numbered screenshots. The agent knows the same guide, so you can also just ask it how something works.
 

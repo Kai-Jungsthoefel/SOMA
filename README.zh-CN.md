@@ -8,7 +8,7 @@
 
 **Solid Object Modeling with Agents（用智能体进行实体建模）。** 一款桌面应用，让你与编程智能体（coding agent）一起设计参数化 3D 模型。
 
-**[somacad.app](https://somacad.app)** · [下载](https://somacad.app/download/) · [更新日志（英文）](CHANGELOG.md)
+**[somacad.app](https://somacad.app)** · [下载](https://somacad.app/download/) · [视频教程（英文）](https://www.youtube.com/watch?v=FJrgMl8ZGKI) · [更新日志（英文）](CHANGELOG.md)
 
 https://github.com/user-attachments/assets/3294d1e4-1f06-477d-9770-c91f3470330d
 
@@ -39,6 +39,8 @@ SOMA 本身不是智能体。任何能读取文件并运行命令的 CLI 智能�
 2. 用右侧终端上方的 **+** 启动你的智能体。SOMA 会列出在你电脑上找到的智能体。
 3. 告诉智能体你需要什么，例如 *“A case for a Raspberry Pi 5 with vents in the lid, printed in PETG”*（一个树莓派 5 外壳，盖子上有通风孔，用 PETG 打印）。也可以用中文描述，取决于你的智能体和模型。SOMA 在每次修改后构建并显示模型。
 4. 点击零件、测量，或在视图上绘制标注并发送给智能体，直到满意为止。然后从菜单导出，例如 STL 或 3MF。
+
+[视频教程](https://www.youtube.com/watch?v=FJrgMl8ZGKI)（英文，9 分钟）演示了以上全部内容以及更多功能：在视图上绘制标注、参数、动画、有限元分析（FEM）、工程图、技能和导出。
 
 在应用中按 F1 可打开一份带编号截图的简短指南（英文）。智能体也知道这份指南，所以你也可以直接问它某个功能怎么用。
 
