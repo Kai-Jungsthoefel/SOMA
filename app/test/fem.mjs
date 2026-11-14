@@ -220,20 +220,38 @@ try {
       const close = document.getElementById('btn-result-close');
       const rect = close.getBoundingClientRect();
       const controls = document.getElementById('result-controls');
-      controls.scrollLeft = controls.scrollWidth;
-      const last = document.getElementById('btn-result-bcs').getBoundingClientRect();
       const area = controls.getBoundingClientRect();
+      const visibleControls = [...controls.querySelectorAll('button, select')].filter((c) => c.getClientRects().length);
       return {
         visible: rect.left >= viewer.left && rect.right <= viewer.right && rect.top >= viewer.top && rect.bottom <= viewer.bottom,
         x: rect.x + rect.width / 2, y: rect.y + rect.height / 2,
         reachable: close.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
-        scrollable: controls.scrollWidth > controls.clientWidth,
-        lastControl: last.right <= area.right + 1 && last.right > area.left,
+        fits: visibleControls.every((c) => {
+          const r = c.getBoundingClientRect();
+          return r.left >= area.left - 1 && r.right <= area.right + 1 && r.top >= viewer.top && r.bottom <= viewer.bottom;
+        }),
+        noScroll: controls.scrollWidth <= controls.clientWidth + 1 && controls.scrollHeight <= controls.clientHeight + 1,
       };
     });
     check(`Analysis close stays visible and clickable at ${width}×${height}`, layout.visible && layout.reachable, JSON.stringify(layout));
-    check(`Overflow controls remain reachable at ${width}×${height}`, layout.lastControl, JSON.stringify(layout));
-    if (width === 220) await shot('fem-playback-narrow');
+    check(`Analysis controls fit without scrolling at ${width}×${height}`, layout.fits && layout.noScroll, JSON.stringify(layout));
+    if (width === 360) {
+      await ev(() => {
+        const quantity = document.getElementById('result-field-select');
+        quantity.value = 'stress'; quantity.dispatchEvent(new Event('change'));
+      });
+      check('Compact quantity dropdown changes the result field', await ev(() => window.__t.result().scale.field === 'stress'));
+      await ev(() => {
+        const quantity = document.getElementById('result-field-select');
+        quantity.value = 'value'; quantity.dispatchEvent(new Event('change'));
+        const scale = document.getElementById('result-deform-select');
+        scale.value = '1'; scale.dispatchEvent(new Event('change'));
+      });
+      check('Compact deformation dropdown selects scale and stops playback', await ev(() => window.__t.result().fem.scale === 1 && !window.__t.result().fem.playing));
+      await ev(() => window.__t.resultDeform(10));
+      await domClick('btn-result-play');
+    }
+    if (width === 600 || width === 360 || width === 220) await shot(`fem-toolbar-${width}`);
     await app.page.click(layout.x, layout.y);
     check(`Close exits playback at ${width}×${height}`, await ev(() => !window.__t.result().active && !window.__t.result().fem?.playing));
     await ev(() => window.__t.resultShow('balken'));
@@ -243,7 +261,6 @@ try {
   await ev((style) => {
     const viewer = document.getElementById('viewer');
     if (style === null) viewer.removeAttribute('style'); else viewer.setAttribute('style', style);
-    document.getElementById('result-controls').scrollLeft = 0;
   }, viewerStyle);
   await domClick('btn-result-play');
   const pausedScale = (await ev(() => window.__t.result())).fem.scale;

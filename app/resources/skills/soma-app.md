@@ -152,7 +152,7 @@ Mark up is the quickest way to show the agent what you mean: draw an arrow, writ
 
 For FEM, **Static shape** plays or pauses a four-second cycle between the undeformed shape and the selected deformation scale. With deformation Off, playback uses the suggested scale. Colors, probe values and the report always describe the solved load case. This illustrates a static solution; it does not calculate motion over time. Choosing a deformation scale stops playback at that scale.
 
-When the canvas is narrow, the analysis controls scroll horizontally. The **Close the analysis** button stays visible at the right end of the bar. Tab to a control to bring it into view, or focus the control strip and use the arrow keys to scroll.
+When the canvas is narrow, the analysis bar uses dropdowns for the result quantity and deformation scale, and icon buttons for playback and the load case. The controls flow into rows as needed. The **Close the analysis** button stays visible at the right end of the bar.
 
 A dot on Analysis, Animation or Drawings means the agent made something new you have not looked at yet.
 

@@ -21,6 +21,7 @@ interface Ui {
   bar: HTMLElement; field: HTMLElement; deform: HTMLElement; deformLabel: HTMLElement; bcs: HTMLButtonElement; name: HTMLElement; close: HTMLButtonElement;
   viewerEl: HTMLElement;
   play: HTMLButtonElement;
+  fieldSelect: HTMLSelectElement; deformSelect: HTMLSelectElement;
 }
 interface Deps {
   layer: ResultLayer;
@@ -108,6 +109,10 @@ export class ResultTool {
   private readonly tip = el('div', { className: 'rs-tip', hidden: true }, el('div', { className: 'rs-tip-v' }, this.tipDot, this.tipVal), this.tipName);
 
   constructor(private readonly ui: Ui, private readonly d: Deps) {
+    // Wrapped controls need more room below the legend and tool cards.
+    new ResizeObserver(() => ui.viewerEl.style.setProperty('--result-bar-height', `${ui.bar.offsetHeight}px`)).observe(ui.bar);
+    ui.fieldSelect.addEventListener('change', () => ui.field.querySelector<HTMLButtonElement>(`[data-field="${ui.fieldSelect.value}"]`)?.click());
+    ui.deformSelect.addEventListener('change', () => ui.deform.querySelector<HTMLButtonElement>(`[data-scale="${ui.deformSelect.value}"]`)?.click());
     ui.play.addEventListener('click', () => this.togglePlayback());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.pausePlayback(); });
     ui.close.addEventListener('click', () => this.setActive(false));
@@ -314,11 +319,13 @@ export class ResultTool {
     this.ui.name.hidden = fem || !r;
     this.ui.name.textContent = r?.title ?? '';
     this.ui.field.hidden = !fem;
+    this.ui.fieldSelect.hidden = !fem;
     this.ui.deform.hidden = this.ui.deformLabel.hidden = !fem || l.autoScale <= 0;
+    this.ui.deformSelect.hidden = this.ui.deform.hidden;
     this.ui.bcs.hidden = !fem;
     this.ui.play.hidden = !fem || l.autoScale <= 0;
     this.ui.play.disabled = !fem || l.autoScale <= 0;
-    this.ui.play.replaceChildren(icon(this.playing ? 'pause' : 'play', 14), 'Static shape');
+    this.ui.play.replaceChildren(icon(this.playing ? 'pause' : 'play', 14), el('span', { className: 'rs-button-label', textContent: 'Static shape' }));
     this.ui.play.setAttribute('aria-label', this.playing ? 'Pause deformation' : 'Play deformation');
     this.ui.play.setAttribute('aria-pressed', String(this.playing));
     for (const sep of this.ui.bar.querySelectorAll<HTMLElement>('.vsep[data-fem]')) sep.hidden = !fem;
@@ -335,6 +342,8 @@ export class ResultTool {
       });
       return b;
     }));
+    this.ui.fieldSelect.replaceChildren(...fields.map((f) => new Option(FIELD_LABEL[f], f)));
+    this.ui.fieldSelect.value = l.field;
     const scales: [number, string][] = [[0, 'Off'], [1, '1×']];
     if (l.autoScale > 1) scales.push([l.autoScale, `${fmtScale(l.autoScale)}×`]);
     this.ui.deform.replaceChildren(...scales.map(([s, t]) => {
@@ -346,6 +355,8 @@ export class ResultTool {
       b.addEventListener('click', () => { this.pausePlayback(); this.playbackTime = 0; this.playbackScale = s; l.setScale(s); this.hideTip(); this.renderBar(); this.renderLegend(); this.renderTags(); });
       return b;
     }));
+    this.ui.deformSelect.replaceChildren(...scales.map(([s, t]) => new Option(s === 0 ? 'Undeformed' : `Deform ${t}`, String(s))));
+    this.ui.deformSelect.value = String(this.playing || this.playbackTime > 0 ? this.playbackScale : l.scale);
     this.ui.bcs.setAttribute('aria-pressed', String(l.bcsVisible));
   }
 
@@ -568,7 +579,7 @@ export class ResultTool {
       tip: this.tip.hidden ? null : `${this.tipVal.textContent} · ${this.tipName.textContent}`,
       tags: [...this.ui.viewerEl.querySelectorAll('.v-overlay .c3d')].map((x) => x.textContent),
       // Nur was zu sehen ist (ohne FEM fehlen Größe, Verformung und Lastfall)
-      bar: this.ui.bar.hidden ? null : [...this.ui.bar.querySelectorAll<HTMLElement>('#result-controls > *, #btn-result-close')].filter((c) => !c.hidden).map((c) => c.textContent?.trim()).filter(Boolean).join(' · '),
+      bar: this.ui.bar.hidden ? null : [this.ui.name, this.ui.field, this.ui.deformLabel, this.ui.deform, this.ui.play, this.ui.bcs].filter((c) => !c.hidden).map((c) => c.textContent?.trim()).filter(Boolean).join(' · '),
       scale: { field: l.field, mode: this.mode, canStress: l.canStress, canDisp: l.canDisp, canPress: l.canPress, range: l.view?.range ?? null,
         threshold: l.view?.threshold ?? null, unit: l.view?.unit ?? null, legend: this.ui.legend.hidden ? '' : `${this.ui.legend.textContent ?? ''} ${this.ui.scaleMenu.textContent ?? ''}`.replace(/\s+/g, ' ').trim() },
       fem: this.current?.fem && this.active ? {

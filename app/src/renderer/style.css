@@ -686,10 +686,30 @@ code { font-family:var(--mono); font-size:.95em; }
 .dbar { left:50%; bottom:14px; transform:translateX(-50%); display:flex; align-items:center; gap:8px; padding:5px 6px 5px 8px; white-space:nowrap; z-index:3; max-width:calc(100% - 24px); }
 .dbar .dl { font-size:12px; color:var(--tx3); margin-left:2px; }
 /* Keep closing available even when panels leave less room than one control group needs. */
-#result-bar { width:max-content; flex-wrap:nowrap; }
-#result-controls { display:flex; align-items:center; gap:8px; min-width:0; overflow-x:auto; }
+#result-bar { width:max-content; flex-wrap:nowrap; align-items:flex-start; }
+#result-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; }
 #result-controls > * { flex-shrink:0; }
+#result-name { min-width:0; flex-shrink:1; }
 #result-bar > .vsep, #btn-result-close { flex-shrink:0; }
+#result-bar > .vsep { align-self:stretch; height:auto; margin:4px 0; }
+.rs-deformation { display:flex; align-items:center; gap:8px; }
+.rs-deformation:has(#result-deform[hidden]) { display:none; }
+#result-controls .rs-select { display:none; height:30px; min-width:0; padding:0 6px; border:1px solid var(--line2); border-radius:7px;
+  background:var(--term); color:var(--tx2); font:12px var(--sans); }
+@container viewer (max-width: 760px) {
+  #result-bar { width:520px; }
+  #result-controls { flex:1; }
+  #result-controls .rs-select { display:block; }
+  #result-field, #result-deform, #result-deform-label, #result-controls .rs-button-label { display:none; }
+  #result-field-select, .rs-deformation { flex:1 1 120px; max-width:180px; min-width:0; }
+  #result-deform-select { width:100%; }
+  #result-controls .tgl { width:30px; padding:0; justify-content:center; }
+}
+@container viewer (max-width: 280px) {
+  #result-controls:has(#result-field:not([hidden])) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; flex:1; }
+  #result-field-select, .rs-deformation, #result-controls .tgl { width:100%; max-width:none; }
+  #result-bar > .vsep { display:none; }
+}
 .dbar .dl.strong { color:var(--tx); font-size:12.5px; max-width:280px; overflow:hidden; text-overflow:ellipsis; }
 .dbar .seg { display:flex; margin:0; padding:0; gap:0; border:1px solid var(--line2); border-radius:7px; overflow:hidden; flex-shrink:0; background:none; }
 .dbar .seg button { flex:none; height:28px; padding:0 10px; font-size:12px; font-weight:400; color:var(--tx2); border-radius:0; box-shadow:none; }
@@ -723,6 +743,7 @@ code { font-family:var(--mono); font-size:.95em; }
 @container viewer (max-width: 760px) { .tbar .tgl { padding:0 8px; font-size:0; gap:0; } .tbar .tgl svg.ic { margin:0; } }
 /* Unten liegen die Leisten der Analyse und Animation: Karten (Messen, Schnitt, Auswahl) rücken darüber */
 #viewer.analyzing .cards, #viewer.animating .cards { bottom:66px; }
+#viewer.analyzing .lg, #viewer.analyzing .cards { bottom:calc(var(--result-bar-height, 40px) + 26px); }
 /* Vorschau und Dateiansicht: Die Karten (Messen, Schnitt, Explosion) stehen über dem Banner, --bn-h setzt main.ts */
 #viewer.preview .cards, #viewer.fileview .cards { bottom:calc(var(--bn-h, 108px) + 24px); }
 

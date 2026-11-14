@@ -831,6 +831,7 @@ const resultTool = new ResultTool({
   scaleMenu: $('menu-scale'), legendFull: $('result-q-full'), legendFoot: $('result-lg-foot'),
   range: $('result-range'), custom: $('result-custom'), lo: $<HTMLInputElement>('result-lo'), hi: $<HTMLInputElement>('result-hi'),
   bar: $('result-bar'), field: $('result-field'), deform: $('result-deform'), deformLabel: $('result-deform-label'), bcs: $<HTMLButtonElement>('btn-result-bcs'),
+  fieldSelect: $<HTMLSelectElement>('result-field-select'), deformSelect: $<HTMLSelectElement>('result-deform-select'),
   name: $('result-name'), close: $<HTMLButtonElement>('btn-result-close'), play: $<HTMLButtonElement>('btn-result-play'), viewerEl: $('viewer'),
 }, {
   layer: resultLayer, viewer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
