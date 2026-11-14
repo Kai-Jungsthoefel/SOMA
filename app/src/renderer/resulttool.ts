@@ -568,7 +568,7 @@ export class ResultTool {
       tip: this.tip.hidden ? null : `${this.tipVal.textContent} · ${this.tipName.textContent}`,
       tags: [...this.ui.viewerEl.querySelectorAll('.v-overlay .c3d')].map((x) => x.textContent),
       // Nur was zu sehen ist (ohne FEM fehlen Größe, Verformung und Lastfall)
-      bar: this.ui.bar.hidden ? null : [...this.ui.bar.children].filter((c) => !(c as HTMLElement).hidden).map((c) => c.textContent?.trim()).filter(Boolean).join(' · '),
+      bar: this.ui.bar.hidden ? null : [...this.ui.bar.querySelectorAll<HTMLElement>('#result-controls > *, #btn-result-close')].filter((c) => !c.hidden).map((c) => c.textContent?.trim()).filter(Boolean).join(' · '),
       scale: { field: l.field, mode: this.mode, canStress: l.canStress, canDisp: l.canDisp, canPress: l.canPress, range: l.view?.range ?? null,
         threshold: l.view?.threshold ?? null, unit: l.view?.unit ?? null, legend: this.ui.legend.hidden ? '' : `${this.ui.legend.textContent ?? ''} ${this.ui.scaleMenu.textContent ?? ''}`.replace(/\s+/g, ' ').trim() },
       fem: this.current?.fem && this.active ? {

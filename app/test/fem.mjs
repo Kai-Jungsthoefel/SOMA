@@ -206,6 +206,45 @@ try {
       && JSON.stringify(s.scale.range) === JSON.stringify(playbackBefore.scale.range)
       && s.note === playbackBefore.note && s.scale.legend.includes('Static deformation playback')));
   await shot('fem-playback');
+  // Panel splits constrain the canvas independently of the window size.
+  const viewerStyle = await ev(() => document.getElementById('viewer').getAttribute('style'));
+  for (const [width, height] of [[900, 600], [600, 400], [360, 240], [220, 160], [120, 120]]) {
+    await ev(([w, h]) => {
+      const viewer = document.getElementById('viewer');
+      viewer.style.width = `${w}px`; viewer.style.maxWidth = '100%';
+      viewer.style.height = `${h}px`; viewer.style.flex = 'none';
+    }, [width, height]);
+    await sleep(100);
+    const layout = await ev(() => {
+      const viewer = document.getElementById('viewer').getBoundingClientRect();
+      const close = document.getElementById('btn-result-close');
+      const rect = close.getBoundingClientRect();
+      const controls = document.getElementById('result-controls');
+      controls.scrollLeft = controls.scrollWidth;
+      const last = document.getElementById('btn-result-bcs').getBoundingClientRect();
+      const area = controls.getBoundingClientRect();
+      return {
+        visible: rect.left >= viewer.left && rect.right <= viewer.right && rect.top >= viewer.top && rect.bottom <= viewer.bottom,
+        x: rect.x + rect.width / 2, y: rect.y + rect.height / 2,
+        reachable: close.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
+        scrollable: controls.scrollWidth > controls.clientWidth,
+        lastControl: last.right <= area.right + 1 && last.right > area.left,
+      };
+    });
+    check(`Analysis close stays visible and clickable at ${width}×${height}`, layout.visible && layout.reachable, JSON.stringify(layout));
+    check(`Overflow controls remain reachable at ${width}×${height}`, layout.lastControl, JSON.stringify(layout));
+    if (width === 220) await shot('fem-playback-narrow');
+    await app.page.click(layout.x, layout.y);
+    check(`Close exits playback at ${width}×${height}`, await ev(() => !window.__t.result().active && !window.__t.result().fem?.playing));
+    await ev(() => window.__t.resultShow('balken'));
+    await waitFor('FEM reopened after narrow close', () => !!window.__t.result().fem);
+    await domClick('btn-result-play');
+  }
+  await ev((style) => {
+    const viewer = document.getElementById('viewer');
+    if (style === null) viewer.removeAttribute('style'); else viewer.setAttribute('style', style);
+    document.getElementById('result-controls').scrollLeft = 0;
+  }, viewerStyle);
   await domClick('btn-result-play');
   const pausedScale = (await ev(() => window.__t.result())).fem.scale;
   await sleep(150);
