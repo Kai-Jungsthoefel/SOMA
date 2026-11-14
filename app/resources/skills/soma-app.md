@@ -150,6 +150,8 @@ Mark up is the quickest way to show the agent what you mean: draw an arrow, writ
 7. **Help**: this guide (F1).
 8. **Settings**: see below.
 
+For FEM, **Static shape** plays or pauses a four-second cycle between the undeformed shape and the selected deformation scale. With deformation Off, playback uses the suggested scale. Colors, probe values and the report always describe the solved load case. This illustrates a static solution; it does not calculate motion over time. Choosing a deformation scale stops playback at that scale.
+
 A dot on Analysis, Animation or Drawings means the agent made something new you have not looked at yet.
 
 ## Drawings

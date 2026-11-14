@@ -8,6 +8,7 @@ the version is bumped.
 
 ### Added
 
+- Play or pause static FEM deformation in Analysis. Solved colors and values stay fixed during the shape cycle.
 - Video tutorial on YouTube (9 min, from installing to export): "Watch video" on the start page card and at the top of Help opens it in your browser.
 
 ## [0.11.0] - 2026-11-03

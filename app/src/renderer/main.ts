@@ -831,7 +831,7 @@ const resultTool = new ResultTool({
   scaleMenu: $('menu-scale'), legendFull: $('result-q-full'), legendFoot: $('result-lg-foot'),
   range: $('result-range'), custom: $('result-custom'), lo: $<HTMLInputElement>('result-lo'), hi: $<HTMLInputElement>('result-hi'),
   bar: $('result-bar'), field: $('result-field'), deform: $('result-deform'), deformLabel: $('result-deform-label'), bcs: $<HTMLButtonElement>('btn-result-bcs'),
-  name: $('result-name'), close: $<HTMLButtonElement>('btn-result-close'), viewerEl: $('viewer'),
+  name: $('result-name'), close: $<HTMLButtonElement>('btn-result-close'), play: $<HTMLButtonElement>('btn-result-play'), viewerEl: $('viewer'),
 }, {
   layer: resultLayer, viewer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
   beforeOn: () => endOthers('result'), toast,
@@ -2066,6 +2066,7 @@ if (api.testMode) {
     resultShow: (id: string) => resultTool.show(id),
     resultField: (f: 'value' | 'stress' | 'disp' | 'press') => resultTool.testField(f),
     resultDeform: (sc: number) => resultTool.testDeform(sc),
+    resultPlaybackAt: (seconds: number) => resultTool.testPlaybackAt(seconds),
     analysis: () => analysisPanel.state(),
     analysisToggle: (key: string) => analysisPanel.testToggle(key),
     animShow: (id: string) => animTool.show(id),

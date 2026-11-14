@@ -109,6 +109,7 @@ study.bolt("Screw 2", preload=3000, grade="10.9")
 2. `soma render --result bracket` and open the picture: colours by safety, the load case in blue (held faces strong,
    loaded faces light, forces as arrows), the deflection exaggerated as the legend says. Check that it bends the way you
    expect. A part that bends the wrong way has the wrong load or support.
+   In the Analysis viewer, **Static shape** plays or pauses the displayed displacement between undeformed and the selected scale. Colors and numbers remain those of the solved load case. Playback is a visualization of the final static displacement, not a transient solution or intermediate contact state. `soma render --result` still renders a static image.
 3. Change the design, build, compute again. Report numbers: "smallest safety 2.4 (was 0.9), highest stress 8.3 MPa,
    deflection 0.6 mm at the tip".
 

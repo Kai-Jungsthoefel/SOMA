@@ -685,6 +685,7 @@ code { font-family:var(--mono); font-size:.95em; }
 @container viewer (max-height: 520px) { .lg-body { height:100px; } }
 .dbar { left:50%; bottom:14px; transform:translateX(-50%); display:flex; align-items:center; gap:8px; padding:5px 6px 5px 8px; white-space:nowrap; z-index:3; max-width:calc(100% - 24px); }
 .dbar .dl { font-size:12px; color:var(--tx3); margin-left:2px; }
+#result-bar { width:max-content; flex-wrap:wrap; justify-content:center; }
 .dbar .dl.strong { color:var(--tx); font-size:12.5px; max-width:280px; overflow:hidden; text-overflow:ellipsis; }
 .dbar .seg { display:flex; margin:0; padding:0; gap:0; border:1px solid var(--line2); border-radius:7px; overflow:hidden; flex-shrink:0; background:none; }
 .dbar .seg button { flex:none; height:28px; padding:0 10px; font-size:12px; font-weight:400; color:var(--tx2); border-radius:0; box-shadow:none; }

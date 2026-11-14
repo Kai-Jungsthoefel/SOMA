@@ -191,6 +191,31 @@ try {
   check('An Agent geben: Sicherheit, Spannung und Verschiebung', /^\[Result: "Balken unter Last" \(\.soma\/results\/balken\.glb, limit 2\.00\), part "Balken": safety factor (over 99|\d+\.\d\d) \(\d+\.\d MPa, displacement 0\.2\d\d mm\) at \(/.test(rs.note), rs.note);
   await ev(() => window.__t.viewer.setView('iso'));
   await shot('fem-1');
+  const playbackBefore = await ev(() => window.__t.result());
+  await domClick('btn-result-play');
+  const samples = await ev(() => [0, 1, 2, 4].map((seconds) => {
+    window.__t.resultPlaybackAt(seconds);
+    return window.__t.result();
+  }));
+  check('Static playback reaches solved, half, undeformed and solved shapes',
+    samples.every((s) => s.fem.playing) && near(samples[0].fem.scale, 10, 1e-6)
+    && near(samples[1].fem.scale, 5, 1e-6) && near(samples[2].fem.scale, 0, 1e-6)
+    && near(samples[3].fem.scale, 10, 1e-6), JSON.stringify(samples.map((s) => s.fem)));
+  check('Playback preserves solved values and identifies the static visualization',
+    samples.every((s) => JSON.stringify(s.meta) === JSON.stringify(playbackBefore.meta)
+      && JSON.stringify(s.scale.range) === JSON.stringify(playbackBefore.scale.range)
+      && s.note === playbackBefore.note && s.scale.legend.includes('Static deformation playback')));
+  await shot('fem-playback');
+  await domClick('btn-result-play');
+  const pausedScale = (await ev(() => window.__t.result())).fem.scale;
+  await sleep(150);
+  check('Pausing freezes the displayed deformation', await ev((scale) => !window.__t.result().fem.playing
+    && window.__t.result().fem.scale === scale, pausedScale));
+  await domClick('btn-result-play');
+  await ev(() => window.__t.resultDeform(1));
+  check('Choosing a deformation scale stops playback at that scale', await ev(() => !window.__t.result().fem.playing
+    && window.__t.result().fem.scale === 1));
+  await ev(() => window.__t.resultDeform(10));
   await ev(() => window.__t.resultDeform(0));
   await domClick('btn-result-bcs');
   rs = await ev(() => window.__t.result());
@@ -266,7 +291,9 @@ try {
   an = await ev(() => window.__t.analysis());
   check('Neu berechnen: Lagerkraft jetzt 100 N, Verschiebung doppelt', !an.stale && an.details.some((x) => x.includes('Reaction100 N upward'))
     && an.table.some((row) => row[0] === 'Balken' && /^0\.5[67]\d$/.test(row[3])), JSON.stringify(an));
+  await domClick('btn-result-play');
   await domClick('btn-result-close');
+  check('Closing a result cancels deformation playback', await ev(() => !window.__t.result().active && document.getElementById('btn-result-play').getAttribute('aria-pressed') === 'false'));
   check('× in der Leiste: Analyse aus, Modell wieder sichtbar, Baum mit allen Teilen, Bericht wird zur Liste', !(await ev(() => window.__t.viewer.animViewState())).modelHidden
     && (await ev(() => window.__t.tree())).names.length === 9 && (await ev(() => window.__t.analysis())).mode === 'list');
 
@@ -274,6 +301,12 @@ try {
   // steht. Sonst füllt der Deckel des Schnitts auch Stellen, an denen der Blick durch diese Fläche geht
   await ev(() => window.__t.resultShow('winkel'));
   await waitFor('Ergebnis Winkel geladen', () => window.__t.result().id === 'winkel', 20000);
+  await domClick('btn-result-play');
+  await ev(() => window.__t.resultShow('balken'));
+  await waitFor('Beam result replaces playing result', () => window.__t.result().id === 'balken', 20000);
+  check('Replacing a playing result stops playback', !(await ev(() => window.__t.result())).fem.playing);
+  await ev(() => window.__t.resultShow('winkel'));
+  await waitFor('Angle result restored', () => window.__t.result().id === 'winkel', 20000);
   const scaleW = (await ev(() => window.__t.result())).fem.scale;
   // Waagerecht durch die Wand bei z = 40, behalten wird darunter: Die Kontur folgt der Überhöhung (die Wand kippt nach −X)
   await ev(() => window.__t.viewer.setSection({ normal: [0, 0, -1], constant: 40 }));
