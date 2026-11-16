@@ -23,6 +23,7 @@ Paths are relative to the installation folder (macOS: `SOMA.app/Contents`, where
 | pdf.js data (fonts, decoders) | `resources/app/dist/renderer/pdfjs/LICENSE`, `.../pdfjs/standard_fonts/LICENSE_*`, `.../pdfjs/wasm/LICENSE_*` |
 | Git (dugite) | `resources/app/node_modules/dugite/git/LICENSE.txt` and the `share/licenses` folders below it |
 | node-pty | `resources/app/node_modules/node-pty/LICENSE`, winpty in `resources/app/dist/licenses/node-pty__winpty/` |
+| pi (SOMA AI) | `resources/app/resources/somaai/LICENSE-pi.txt`; the packages pi needs: their folders under `resources/app/node_modules/` and `resources/app/dist/licenses/` |
 | Python | `resources/python/LICENSE.txt` (Windows) or `resources/python/lib/python3.12/LICENSE.txt` |
 | Python packages | `resources/python/.../site-packages/<package>.dist-info/` (`LICENSE*`, `licenses/`), some inside the package folder |
 | gmsh | `resources/python/share/doc/gmsh/LICENSE.txt` |
@@ -61,9 +62,21 @@ ship as their package folders.
 | winpty (in node-pty, Windows) | as in node-pty 1.1.0 | MIT | https://github.com/rprichard/winpty | yes |
 | ConPTY / OpenConsole (in node-pty, Windows) | as in node-pty 1.1.0 | MIT | https://github.com/microsoft/terminal | yes |
 | dugite | 3.2.3 | MIT | https://github.com/desktop/dugite | yes |
+| pi (@earendil-works/pi-coding-agent, with pi-ai, pi-agent-core, pi-tui, pi-codemode, pi-mcp compiled in), the agent of SOMA AI | 1.5.2 | MIT | https://github.com/earendil-works/pi | yes |
+| Packages compiled into the bundle of pi (provider SDKs such as openai, @anthropic-ai/sdk, @google/genai, @aws-sdk/*, and undici, yaml, diff …) | as in pi 1.5.2, see `dist/licenses` | MIT, Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, Unlicense, 0BSD | see `dist/licenses` | yes |
+| @gotgenes/pi-permission-system | 42.0.2 | MIT | https://github.com/gotgenes/pi-packages | yes |
+| jiti | 2.7.0 | MIT | https://github.com/unjs/jiti | yes |
+| typebox | 1.3.27 | MIT | https://github.com/sinclairzx81/typebox | yes |
+| zod | 4.6.7 | MIT | https://github.com/colinhacks/zod | yes |
+| web-tree-sitter, tree-sitter-bash | 0.26.13, 0.25.1 | MIT | https://github.com/tree-sitter/tree-sitter, https://github.com/tree-sitter/tree-sitter-bash | yes |
+| @silvia-odwyer/photon-node | 0.3.4 | Apache-2.0 | https://github.com/silvia-odwyer/photon | yes |
 
 `dist/licenses` also holds the license texts of packages that npm installs as dependencies of the above but that are not
 needed at run time (for example the download helpers of dugite).
+
+SOMA AI runs pi as a separate Node process from its package folder, so pi and the packages it needs at run time ship as
+package folders under `resources/app/node_modules/` (see `app/electron-builder.config.cjs`). The npm package of pi has
+no license file; its MIT license is in `resources/app/resources/somaai/LICENSE-pi.txt`.
 
 ## Bundled Python runtime
 
