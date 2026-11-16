@@ -26,6 +26,7 @@ import { StructureTree } from './tree';
 import { Tour, tourSteps, type TourContext } from './tutorial';
 import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
+import { SomaChat, type ChatState } from './chat';
 import { TerminalTabs } from './terminals';
 import { $, ask, el, fmtWhen, menuItem, menus, toast } from './ui';
 import { VersionsBar } from './versions';
@@ -602,10 +603,22 @@ function insertToAgent(text: string | null, done?: string): void {
   // Immer auch in die Zwischenablage: Eine Agenten-App außerhalb der App (Claude Desktop, Codex-App) erreicht die Notiz nur so.
   // Ob im Terminal ein Agent läuft, lässt sich nicht für jeden Agenten verlässlich erkennen
   void api.copyText(text);
-  if (!terminals.count) { toast(`${pre}Copied to the clipboard. Paste it into your agent, or start one with +.`, 'info'); return; }
+  const toChat = () => {
+    setAgentCollapsed(false);
+    showChat(true);
+    chat.insert(text);
+    toast(`${pre}Added to the input of SOMA AI. Enter sends it. Also copied to the clipboard.`);
+  };
+  if (chatOn) { toChat(); return; }
+  if (!terminals.count) {
+    if (!chatTab.hidden) { toChat(); return; }
+    toast(`${pre}Copied to the clipboard. Paste it into your agent, or start one with +.`, 'info');
+    return;
+  }
   setAgentCollapsed(false);
   const title = terminals.insert(text);
   if (title) toast(`${pre}Added to the input of ${title}. Enter sends it. Also copied to the clipboard.`);
+  else if (!chatTab.hidden) toChat();
   else toast(`${pre}Copied to the clipboard. All terminals have ended, open a new one with +.`, 'info');
 }
 
@@ -1181,6 +1194,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   fileView.drop();
   tree.setTitle(p.name);
   terminals.closeAll();
+  chat.reset();
   code.reset();
   skills.reset();
   if (panel === 'skills') void skills.refresh();
@@ -1205,7 +1219,11 @@ async function onProject(p: ProjectInfo): Promise<void> {
   if (panel === 'files') void refreshFiles();
   void versions.refresh();
   void refreshSaveState();
-  void terminals.add({ title: 'Terminal' });
+  // SOMA AI is in front unless the user prefers a terminal (tests keep the terminal, their suites type into it)
+  const wantChat = !chatTab.hidden && (store.get('soma.agentTab') ?? (api.testMode ? 'terminal' : 'ai')) === 'ai';
+  // Ready when the agent area shows what it should (the loading screen of "New model" waits for it)
+  const agentReady = terminals.add({ title: 'Terminal' }).then(() => (wantChat ? showChat(true) : undefined));
+  void agentReady;
   void refreshAgents();
   const st = await api.build.status();
   renderBuild(st);
@@ -1732,6 +1750,64 @@ function setAgentCollapsed(on: boolean): void {
 $('btn-agent-expand').addEventListener('click', () => setAgentCollapsed(false));
 terminals.onStripClick = () => setAgentCollapsed(false);
 
+// ---- SOMA AI (chat.ts): the built-in agent as the first tab of the agent area -------------------------------------
+
+// The dots first: the chat reports its state from its constructor on
+const chatDot = el('span', { className: 'ai-dot' });
+const chatStripDot = el('span', { className: 'ai-dot' });
+const chat = new SomaChat({
+  api, toast, store,
+  openTerminal: () => { void terminals.add({ title: 'Terminal' }); },
+  onState: (s) => renderChatDot(s),
+});
+$('term-panes').append(chat.el);
+const chatLabel = el('button', { className: 't', title: 'SOMA AI, the agent built into SOMA' }, chatDot, el('span', { textContent: 'SOMA AI' }));
+const chatX = el('button', { className: 'x', title: 'Close SOMA AI' }, icon('x', 12, 2.2));
+chatX.setAttribute('aria-label', 'Close SOMA AI');
+const chatTab = el('div', { className: 'tab ai-tab' }, chatLabel, chatX);
+$('term-tabs').prepend(chatTab);
+const chatStrip = el('button', { title: 'SOMA AI (expand the agent area)' }, chatStripDot, el('span', { className: 'v', textContent: 'SOMA AI' }));
+terminals.stripLead = chatStrip;
+terminals.renderStrip();
+let chatOn = false;
+
+function renderChatDot(s: ChatState): void {
+  for (const d of [chatDot, chatStripDot]) {
+    d.dataset.state = s;
+    d.replaceChildren(...(s === 'work' ? [el('span', { className: 'spin' }, icon('spin', 12, 2.4))] : []));
+  }
+}
+renderChatDot('off');
+
+/** SOMA AI to the front (or away from it, when a terminal comes to the front). */
+function showChat(on: boolean): Promise<void> {
+  chatOn = on;
+  chat.el.hidden = !on;
+  chatTab.classList.toggle('on', on);
+  chatStrip.classList.toggle('on', on);
+  if (!on) return Promise.resolve();
+  chatTab.hidden = chatStrip.hidden = false;
+  terminals.deselect();
+  store.set('soma.agentTab', 'ai');
+  return chat.show().then(() => chat.focus());
+}
+chatLabel.addEventListener('click', () => showChat(true));
+chatStrip.addEventListener('click', () => { showChat(true); setAgentCollapsed(false); });
+terminals.onActivate = () => {
+  if (!chatOn) return;
+  showChat(false);
+  store.set('soma.agentTab', 'terminal');
+};
+// Closing ends SOMA AI of this model. The conversation stays, the + menu brings it back
+chatX.addEventListener('click', () => {
+  showChat(false);
+  chatTab.hidden = chatStrip.hidden = true;
+  store.set('soma.agentTab', 'terminal');
+  void api.ai.stop();
+  if (!terminals.activateLast()) void terminals.add({ title: 'Terminal' });
+});
+$('btn-ai-tab').addEventListener('click', () => { setAgentCollapsed(false); showChat(true); });
+
 function renderAgentMenu(): void {
   $('agent-list').replaceChildren(...(agents.length ? agents : []).map((a) => {
     const d = el('span', { className: 'dot' });
@@ -2053,6 +2129,9 @@ if (api.testMode) {
     picked: () => picked.map(partName),
     treeExpandAll: () => tree.expandAll(),
     termText: (id: number) => terminals.text(id),
+    chat: () => chat.state(),
+    showChat: (on: boolean) => showChat(on),
+    toAgent: (text: string) => insertToAgent(text),
     versions: () => versions.state(),
     saveState: () => saveState,
     toast: () => ({ text: $('toast').textContent, hidden: $('toast').hidden, error: $('toast').classList.contains('error') }),

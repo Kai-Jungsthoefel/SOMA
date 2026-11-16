@@ -1,5 +1,6 @@
 // Von Hauptprozess, Preload und Renderer gemeinsam genutzte Typen (IPC-Vertrag).
 import type { SettingsPatch, SettingsResult, SettingsState } from './settings';
+import type { AiAccount } from './somaai';
 
 export interface ProjectInfo {
   id: string;
@@ -139,6 +140,8 @@ export interface AiResult { ok: boolean; error?: string; data?: unknown }
 export interface AiEvent { gen: number; record: Record<string, unknown> }
 /** pi has ended. `error` only when it ended on its own with an error, not when SOMA stopped it. */
 export interface AiExit { gen: number; code: number | null; error?: string }
+/** Result of "Sign in with ChatGPT". `cancelled`: the user stopped it. */
+export interface AiSignInResult { ok: boolean; error?: string; cancelled?: boolean }
 
 export interface PartMap {
   id: string; name: string; step_name: string; role: string;
@@ -562,6 +565,15 @@ export interface SomaApi {
     stop(): Promise<void>;
     onEvent(cb: (e: AiEvent) => void): void;
     onExit(cb: (e: AiExit) => void): void;
+    /** Saved sign-ins (shared/somaai.ts), never their secrets. */
+    accounts(): Promise<AiAccount[]>;
+    saveKey(provider: string, key: string): Promise<{ ok: boolean; error?: string }>;
+    /** "Sign in with ChatGPT": opens the sign-in page in the browser, ends when signed in, failed or cancelled. */
+    signIn(): Promise<AiSignInResult>;
+    cancelSignIn(): Promise<void>;
+    signOut(provider: string): Promise<{ ok: boolean; error?: string }>;
+    /** The sign-in page, as soon as it is known (a link in case the browser did not open). */
+    onSignInUrl(cb: (url: string) => void): void;
   };
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: {

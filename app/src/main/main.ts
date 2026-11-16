@@ -22,6 +22,7 @@ import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
 import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
 import { piEntry } from './somaai';
+import { aiAccounts, cancelSignIn, saveApiKey, signInChatGPT, signOut } from './somaaiauth';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -202,6 +203,17 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('ai:command', (_e, cmd: unknown) => ctl.session?.ai.command(cmd) ?? noModel);
   ipcMain.on('ai:respond', (_e, res: unknown) => ctl.session?.ai.respond(res));
   ipcMain.handle('ai:stop', () => ctl.session?.ai.stopAndWait());
+  // Sign-in (somaaiauth.ts) holds for the whole app. A running pi of the open model ends, the next message starts it
+  // again with the new sign-in and model (the conversation continues)
+  const restartAi = <T extends { ok: boolean }>(r: T): T => { if (r.ok) ctl.session?.ai.restart(); return r; };
+  ipcMain.handle('ai:accounts', () => aiAccounts());
+  ipcMain.handle('ai:saveKey', (_e, provider: unknown, key: unknown) => restartAi(saveApiKey(provider, key)));
+  ipcMain.handle('ai:signIn', async (e) => restartAi(await signInChatGPT((url) => {
+    if (!e.sender.isDestroyed()) e.sender.send('ai:signInUrl', url);
+    if (process.env.SOMA_TEST !== '1') void shell.openExternal(url);
+  })));
+  ipcMain.handle('ai:cancelSignIn', () => cancelSignIn());
+  ipcMain.handle('ai:signOut', (_e, provider: unknown) => restartAi(signOut(provider)));
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('measure:start', () => ctl.measureStart());
   ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));

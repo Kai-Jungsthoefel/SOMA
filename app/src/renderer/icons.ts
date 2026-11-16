@@ -102,6 +102,16 @@ const PATHS: Record<string, string> = {
   thumbs: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M5.3 8h1.4M5.3 12h1.4M5.3 16h1.4"/>',
   fitw: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M7 12h10M9.5 9.5 7 12l2.5 2.5M14.5 9.5 17 12l-2.5 2.5"/>',
   fitp: '<rect x="3" y="3" width="18" height="18" rx="1.5"/><rect x="7.5" y="6" width="9" height="12" rx="1"/>',
+  // SOMA AI (chat.ts): Funke als Zeichen der KI, Büroklammer für Bilder, Stopp, Sprechblasen, Konto, Schlüssel für API keys
+  sparkle: '<path d="M12 3c.5 4.5 2.5 6.5 7 7-4.5.5-6.5 2.5-7 7-.5-4.5-2.5-6.5-7-7 4.5-.5 6.5-2.5 7-7z"/>',
+  clip: '<path d="m20 11.5-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>',
+  stop: '<rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" stroke="none"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/>', chatplus: '<path d="M4 5h16v11H9l-5 4z"/><path d="M12 8v5M9.5 10.5h5"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  wifioff: '<path d="M3 3l18 18"/><path d="M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5-2.7M19 13a10 10 0 0 0-2.5-1.8M2 9.5a15 15 0 0 1 4.5-2.8M22 9.5A15 15 0 0 0 12 5.5c-.7 0-1.4 0-2 .1"/><path d="M12 20h.01"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  apikey: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14.5 8.5l2 2"/>',
 };
 
 export function icon(name: string, size = 16, stroke = 1.8): SVGSVGElement {

@@ -24,6 +24,10 @@ export class TerminalTabs {
   private used: number[] = [];
   /** Klick auf einen Tab der eingeklappten Leiste: der Bereich soll aufgehen. */
   onStripClick: () => void = () => {};
+  /** A terminal came to the front (SOMA AI's chat, main.ts, steps back then). */
+  onActivate: (id: number) => void = () => {};
+  /** Entry of SOMA AI at the top of the collapsed strip (main.ts), or null. */
+  stripLead: HTMLElement | null = null;
 
   constructor(private tabBar: HTMLElement, private panes: HTMLElement, private anchor: HTMLElement, private strip: HTMLElement) {
     window.soma.term.onData((id, data) => this.tabs.get(id)?.term.write(data));
@@ -110,6 +114,22 @@ export class TerminalTabs {
     this.used = [...this.used.filter((x) => x !== id), id];
     this.renderStrip();
     requestAnimationFrame(() => { this.fitActive(); this.tabs.get(id)?.term.focus(); });
+    this.onActivate(id);
+  }
+
+  /** The terminal used last comes to the front (SOMA AI's tab was closed). False when there is none. */
+  activateLast(): boolean {
+    const t = this.live()[0] ?? [...this.tabs.values()].pop();
+    if (!t) return false;
+    this.activate(t.id);
+    return true;
+  }
+
+  /** Another tab (SOMA AI) is in front: no terminal is shown. The order of use stays for insert(). */
+  deselect(): void {
+    for (const t of this.tabs.values()) { t.pane.hidden = true; t.tab.classList.remove('on'); }
+    this.active = null;
+    this.renderStrip();
   }
 
   close(id: number): void {
@@ -154,8 +174,8 @@ export class TerminalTabs {
   /** Nach dem Ausklappen: Größe neu berechnen. */
   refit(): void { requestAnimationFrame(() => this.fitActive()); }
 
-  private renderStrip(): void {
-    this.strip.replaceChildren(...[...this.tabs.values()].map((t) => {
+  renderStrip(): void {
+    this.strip.replaceChildren(...(this.stripLead ? [this.stripLead] : []), ...[...this.tabs.values()].map((t) => {
       const b = el('button', { className: (t.id === this.active ? 'on' : '') + (t.exited ? ' exited' : ''), title: `${t.title} (expand the agent area)` },
         t.agent ? el('span', { className: 'dot' }) : icon('term', 14, 2), el('span', { className: 'v', textContent: t.title }));
       b.addEventListener('click', () => { this.activate(t.id); this.onStripClick(); });

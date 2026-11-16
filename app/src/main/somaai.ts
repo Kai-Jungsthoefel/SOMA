@@ -39,6 +39,22 @@ export function piEntry(): string | null {
   return fs.existsSync(f) ? f : null;
 }
 
+/** pi's SDK (ModelRuntime …) in the same bundle as the RPC entry, for the sign-in (somaaiauth.ts). */
+export function piIndex(): string | null {
+  const f = path.join(app.getAppPath(), ...PI_PACKAGE, 'dist', 'bundle', 'index.js');
+  return fs.existsSync(f) ? f : null;
+}
+
+/**
+ * Environment for every pi process: the Electron of the app as Node, pi's own folder, no telemetry or version check.
+ * NODE_USE_ENV_PROXY: Node's fetch follows HTTPS_PROXY and NO_PROXY, as in company networks. pi's RPC entry sets up
+ * its own proxy handling, the sign-in (resources/somaai/signin.mjs) uses pi's SDK without it: there the token request
+ * failed behind a proxy with "fetch failed" after the sign-in in the browser had worked (reported by the user).
+ */
+export function piProcessEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return { ...base, ELECTRON_RUN_AS_NODE: '1', NODE_USE_ENV_PROXY: '1', PI_CODING_AGENT_DIR: aiDir(), PI_TELEMETRY: '0', PI_SKIP_VERSION_CHECK: '1' };
+}
+
 export function piVersion(): string | null {
   try { return (JSON.parse(fs.readFileSync(path.join(app.getAppPath(), ...PI_PACKAGE, 'package.json'), 'utf8')) as { version?: string }).version ?? null; }
   catch { return null; }
@@ -81,20 +97,18 @@ function aiEnv(dir: string): NodeJS.ProcessEnv {
   const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
   const sh = windowsShell();
   if (sh) env[key] = [sh.bin, env[key] ?? ''].join(path.delimiter);
-  return {
-    ...env, ELECTRON_RUN_AS_NODE: '1', PI_CODING_AGENT_DIR: aiDir(), PI_TELEMETRY: '0', PI_SKIP_VERSION_CHECK: '1', PI_OFFLINE: '1',
-  };
+  return { ...piProcessEnv(env), PI_OFFLINE: '1' };
 }
 
 /** Writes a JSON file of SOMA in pi's folder. One that is not valid JSON goes into a backup next to it first. */
-function writeJson(file: string, data: unknown): void {
+export function writeJson(file: string, data: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const text = `${JSON.stringify(data, null, 2)}\n`;
   if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) return;
   fs.writeFileSync(file, text, { encoding: 'utf8', mode: 0o600 });
 }
 
-function readJson(file: string): Record<string, unknown> {
+export function readJson(file: string): Record<string, unknown> {
   if (!fs.existsSync(file)) return {};
   const text = fs.readFileSync(file, 'utf8');
   try {
@@ -190,6 +204,8 @@ export class SomaAI {
   private endWait: () => void = () => {};
   /** SOMA ends pi itself (model left, chat stopped): its exit code is no error then. */
   private stopping = false;
+  /** The model is being left or closed: this SomaAI never starts pi again (a late request would land in its folder). */
+  private disposed = false;
 
   constructor(private readonly wc: WebContents, private readonly dir: string) {}
 
@@ -199,6 +215,7 @@ export class SomaAI {
 
   /** Starts pi if it is not running and waits until it answers. */
   start(): Promise<AiResult> {
+    if (this.disposed) return Promise.resolve({ ok: false, error: 'This model has been closed.' });
     if (this.child) return Promise.resolve({ ok: true });
     this.starting ??= this.launch().finally(() => { this.starting = null; });
     return this.starting;
@@ -209,6 +226,7 @@ export class SomaAI {
     const guard = guardDir();
     // Never without the permission extension: then SOMA AI does not start at all
     if (!entry || !guard) return this.failed('SOMA AI is missing from this installation. Please reinstall SOMA.');
+    if (!fs.existsSync(this.dir)) return this.failed('The folder of this model no longer exists.');
     try { prepareAiDir(); } catch (e) { return this.failed(`SOMA AI could not write its settings: ${e instanceof Error ? e.message : String(e)}`); }
     const args = [entry, '--continue', '--no-approve', '--offline', '--no-mcp', '-ne', '-ns', '-np', '--no-themes', '-e', guard];
     const own = path.join(aiResources(), 'soma.ts');
@@ -248,10 +266,17 @@ export class SomaAI {
       // Diagnostics of pi, never the conversation (that only travels on stdout)
       for (const l of d.split(/\r?\n/).filter((x) => x.trim())) console.log(`[somaai] ${l.slice(0, 300)}`);
     });
-    child.on('error', (e) => { this.lastError = `SOMA AI could not start: ${e.message}`; });
+    // The process could not start at all (no 'exit' then): say so now, not after the request timeout
+    let spawnError = '';
+    child.on('error', (e) => {
+      spawnError = `SOMA AI could not start: ${e.message}`;
+      console.error(`[somaai] ${spawnError}`);
+      if (this.child === child) this.closed(gen, null, child, spawnError);
+    });
     child.once('exit', (code) => this.closed(gen, code, child));
 
     const ready = await this.request({ type: 'get_state' });
+    if (spawnError) return this.failed(spawnError);
     if (!ready.ok) { this.stop(); return this.failed(ready.error ?? 'SOMA AI did not answer.'); }
     return { ok: true, data: ready.data };
   }
@@ -263,6 +288,8 @@ export class SomaAI {
   }
 
   private record(gen: number, line: string): void {
+    // A pi SOMA let go of (release) may still say something until it ends: it no longer counts for the chat
+    if (gen !== this.gen || !this.child) return;
     let rec: Record<string, unknown>;
     try { rec = JSON.parse(line) as Record<string, unknown>; } catch { console.log(`[somaai] not JSON: ${line.slice(0, 200)}`); return; }
     if (rec.type === 'response' && typeof rec.id === 'string' && this.pending.has(rec.id)) {
@@ -275,14 +302,15 @@ export class SomaAI {
     if (!this.wc.isDestroyed()) this.wc.send('ai:event', { gen, record: rec });
   }
 
-  private closed(gen: number, code: number | null, child: ChildProcess): void {
+  private closed(gen: number, code: number | null, child: ChildProcess, startError?: string): void {
     // The last records may still be on their way. After that, let go of the pipes, even if a leftover process holds them
     setTimeout(() => { child.stdout?.destroy(); child.stderr?.destroy(); }, 2000).unref();
     // Already let go of (release) or replaced by a newer pi: only note its end
     if (gen !== this.gen || this.child !== child) { console.log(`[somaai] earlier pi (process ${child.pid}) ended (code ${code})`); return; }
     this.child = null;
+    this.endWait();
     const tail = this.stderr.trim().split(/\r?\n/).slice(-3).join(' ').slice(0, 600);
-    const error = code && !this.stopping ? `SOMA AI stopped unexpectedly (code ${code}).${tail ? ` ${tail}` : ''}` : undefined;
+    const error = startError ?? (code && !this.stopping ? `SOMA AI stopped unexpectedly (code ${code}).${tail ? ` ${tail}` : ''}` : undefined);
     if (error) this.lastError = error;
     console.log(`[somaai] pi ended (code ${code})`);
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve({ ok: false, error: error ?? 'SOMA AI has stopped.' }); }
@@ -334,7 +362,8 @@ export class SomaAI {
    */
   stop(): void {
     const child = this.child;
-    if (!child) return;
+    // Closing and leaving a model both stop it: once is enough
+    if (!child || this.stopping) return;
     const gen = this.gen;
     this.stopping = true;
     console.log(`[somaai] stopping pi (process ${child.pid})`);
@@ -360,8 +389,8 @@ export class SomaAI {
   }
 
   /** Lets go of a pi that does not end: for SOMA it has ended, its real end only goes into the log (closed()). */
-  private release(gen: number, child: ChildProcess): void {
-    console.log(`[somaai] pi (process ${child.pid}) has not ended 5 s after stopping, SOMA goes on without it`);
+  private release(gen: number, child: ChildProcess, why = 'has not ended 5 s after stopping'): void {
+    console.log(`[somaai] pi (process ${child.pid}) ${why}, SOMA goes on without it`);
     this.child = null;
     this.endWait();
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve({ ok: false, error: 'SOMA AI has stopped.' }); }
@@ -375,5 +404,22 @@ export class SomaAI {
     const done = this.exited;
     this.stop();
     return Promise.race([done, new Promise<void>((r) => setTimeout(r, ms))]);
+  }
+
+  /**
+   * A new sign-in or model: the next request starts a new pi right away. The old one ends in the background, there is
+   * no need to wait for it (unlike leaving the model, where the folder has to be free). Its end only goes into the log.
+   */
+  restart(): void {
+    const child = this.child;
+    if (!child) return;
+    this.stop();
+    this.release(this.gen, child, 'restarted with a new sign-in');
+  }
+
+  /** For good: the model is left. Ends pi and refuses every later start. */
+  dispose(): Promise<void> {
+    this.disposed = true;
+    return this.stopAndWait();
   }
 }

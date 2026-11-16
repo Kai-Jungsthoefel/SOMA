@@ -80,6 +80,12 @@ const api: SomaApi = {
     stop: () => ipcRenderer.invoke('ai:stop'),
     onEvent: (cb) => { ipcRenderer.on('ai:event', (_e, ev) => cb(ev)); },
     onExit: (cb) => { ipcRenderer.on('ai:exit', (_e, ev) => cb(ev)); },
+    accounts: () => ipcRenderer.invoke('ai:accounts'),
+    saveKey: (provider, key) => ipcRenderer.invoke('ai:saveKey', provider, key),
+    signIn: () => ipcRenderer.invoke('ai:signIn'),
+    cancelSignIn: () => ipcRenderer.invoke('ai:cancelSignIn'),
+    signOut: (provider) => ipcRenderer.invoke('ai:signOut', provider),
+    onSignInUrl: (cb) => { ipcRenderer.on('ai:signInUrl', (_e, url) => cb(url)); },
   },
   measure: {
     query: (source, req) => ipcRenderer.invoke('measure:query', source, req),

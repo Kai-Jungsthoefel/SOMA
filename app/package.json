@@ -32,6 +32,7 @@
     "test:settings": "npm run build && node test/settings.mjs",
     "test:tutorial": "npm run build && node test/tutorial.mjs",
     "test:somaai": "npm run build && node test/somaai.mjs",
+    "test:aichat": "npm run build && node test/aichat.mjs",
     "test:updates": "npm run build && node test/updates.mjs",
     "test:unit": "node test/unit.mjs",
     "test:buildlock": "node test/buildlock.mjs",

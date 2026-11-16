@@ -17,6 +17,12 @@ export async function startMockLlm(steps) {
       requests.push(parsed);
       const turn = (parsed.messages ?? []).filter((m) => m.role === 'assistant').length;
       const step = steps[Math.min(turn, steps.length - 1)];
+      // { status, message }: the provider refuses, e.g. 401 for a wrong key
+      if (step.status) {
+        res.writeHead(step.status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { message: step.message ?? 'error', type: 'invalid_request_error' } }));
+        return;
+      }
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
       const base = { id: `mock-${turn}`, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: 'mock-cad' };
       const send = (delta, finish = null, usage) => res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta, finish_reason: finish }], ...(usage ? { usage } : {}) })}\n\n`);

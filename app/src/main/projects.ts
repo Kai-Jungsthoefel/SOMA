@@ -129,7 +129,7 @@ export class ProjectController {
     s.drawings.dispose();
     s.builds.dispose();
     s.terminals.killAll();
-    s.ai.stop();
+    void s.ai.dispose();
     s.measure.stop();
     this.session = null;
   }
@@ -142,9 +142,11 @@ export class ProjectController {
   async leave(): Promise<void> {
     const s = this.session;
     if (!s) return;
+    // SOMA AI first: no request from the chat may start it again in this folder while the model is being left
+    const aiGone = s.ai.dispose();
     const untouched = await isUntouched(s.id);
     // Die Shells halten den Ordner fest, bis sie wirklich beendet sind. SOMA AI and the commands it runs as well
-    const shells = untouched ? Promise.all([s.terminals.killAllAndWait(), s.ai.stopAndWait()]) : null;
+    const shells = untouched ? Promise.all([s.terminals.killAllAndWait(), aiGone]) : null;
     this.close();
     if (shells) await shells;
     if (untouched && !(await discardWorkspace(s.id))) console.error(`[soma] Could not discard the unchanged model ${s.id} (folder in use), it stays.`);
