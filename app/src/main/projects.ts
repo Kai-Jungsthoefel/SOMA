@@ -25,6 +25,7 @@ import { stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
 import {
   agentsEntries, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
 } from './skills';
+import { SomaAI } from './somaai';
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
@@ -41,6 +42,8 @@ interface Session {
   folder: boolean;
   builds: BuildManager;
   terminals: TerminalManager;
+  /** SOMA AI, the built-in agent (somaai.ts). Starts on the first request from the chat. */
+  ai: SomaAI;
   git: GitRepo;
   measure: MeasureService;
   /** Animationen bauen (E58), ausgelöst vom Watcher, der Oberfläche oder vor einem Video. */
@@ -126,6 +129,7 @@ export class ProjectController {
     s.drawings.dispose();
     s.builds.dispose();
     s.terminals.killAll();
+    s.ai.stop();
     s.measure.stop();
     this.session = null;
   }
@@ -139,8 +143,8 @@ export class ProjectController {
     const s = this.session;
     if (!s) return;
     const untouched = await isUntouched(s.id);
-    // Die Shells halten den Ordner fest, bis sie wirklich beendet sind
-    const shells = untouched ? s.terminals.killAllAndWait() : null;
+    // Die Shells halten den Ordner fest, bis sie wirklich beendet sind. SOMA AI and the commands it runs as well
+    const shells = untouched ? Promise.all([s.terminals.killAllAndWait(), s.ai.stopAndWait()]) : null;
     this.close();
     if (shells) await shells;
     if (untouched && !(await discardWorkspace(s.id))) console.error(`[soma] Could not discard the unchanged model ${s.id} (folder in use), it stays.`);
@@ -154,6 +158,7 @@ export class ProjectController {
     if (folder && !fs.existsSync(dir)) throw new Error(`The folder no longer exists: ${dir}. Open it again with “Open folder” at its new place.`);
     const builds = new BuildManager(dir);
     const terminals = new TerminalManager(this.wc, dir);
+    const ai = new SomaAI(this.wc, dir);
     const git = new GitRepo(dir);
     // Ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten. Im Ordner-Modus gehört das Repository
     // dem Nutzer, dort hält .soma/.gitignore die Zwischenergebnisse heraus
@@ -170,7 +175,7 @@ export class ProjectController {
     // Projektumgebung (E67): Meist steht sie schon, sonst legt `soma env` sie in rund 0,5 s an. Die Terminals kennen ihre
     // Pfade vorab, gewartet wird nur vor dem Installieren von Paketen
     const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
-    const session: Session = { id, dir, folder, builds, terminals, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    const session: Session = { id, dir, folder, builds, terminals, ai, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
     builds.on('status', (st) => {

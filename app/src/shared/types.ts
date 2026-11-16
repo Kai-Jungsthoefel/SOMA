@@ -128,6 +128,18 @@ export interface FileNode { name: string; path: string; dir: boolean; children?:
 
 export interface AgentInfo { id: string; label: string; command: string; found: boolean }
 
+/** SOMA AI (somaai.ts): `available` false when the installation lacks pi or its permission extension. */
+export interface AiStatus { available: boolean; running: boolean; version?: string; error?: string }
+/** Answer of SOMA AI to a command from the chat. `data` is pi's answer as it is. */
+export interface AiResult { ok: boolean; error?: string; data?: unknown }
+/**
+ * A record of pi (session event, or extension_ui_request: a question for the user), passed on unchanged. `gen` numbers
+ * the pi process: after a model switch, records of the old one are ignored.
+ */
+export interface AiEvent { gen: number; record: Record<string, unknown> }
+/** pi has ended. `error` only when it ended on its own with an error, not when SOMA stopped it. */
+export interface AiExit { gen: number; code: number | null; error?: string }
+
 export interface PartMap {
   id: string; name: string; step_name: string; role: string;
   file?: string; line?: number; end_line?: number; volume?: number;
@@ -538,6 +550,18 @@ export interface SomaApi {
     onExit(cb: (id: number, code: number) => void): void;
   };
   agents: { detect(): Promise<AgentInfo[]> };
+  /** SOMA AI, the built-in agent of the open model (somaai.ts). pi starts on the first command. */
+  ai: {
+    status(): Promise<AiStatus>;
+    start(): Promise<AiResult>;
+    /** A command of pi's RPC protocol (prompt, abort, new_session, set_model …), without `id`. */
+    command(cmd: Record<string, unknown>): Promise<AiResult>;
+    /** Answer to a question of pi (extension_ui_request): `value`, `confirmed` or `cancelled`. */
+    respond(res: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }): void;
+    stop(): Promise<void>;
+    onEvent(cb: (e: AiEvent) => void): void;
+    onExit(cb: (e: AiExit) => void): void;
+  };
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: {
     query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse>;

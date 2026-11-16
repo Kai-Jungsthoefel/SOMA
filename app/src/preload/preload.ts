@@ -72,6 +72,15 @@ const api: SomaApi = {
     onExit: (cb) => { ipcRenderer.on('term:exit', (_e, id, code) => cb(id, code)); },
   },
   agents: { detect: () => ipcRenderer.invoke('agents:detect') },
+  ai: {
+    status: () => ipcRenderer.invoke('ai:status'),
+    start: () => ipcRenderer.invoke('ai:start'),
+    command: (cmd) => ipcRenderer.invoke('ai:command', cmd),
+    respond: (res) => ipcRenderer.send('ai:respond', res),
+    stop: () => ipcRenderer.invoke('ai:stop'),
+    onEvent: (cb) => { ipcRenderer.on('ai:event', (_e, ev) => cb(ev)); },
+    onExit: (cb) => { ipcRenderer.on('ai:exit', (_e, ev) => cb(ev)); },
+  },
   measure: {
     query: (source, req) => ipcRenderer.invoke('measure:query', source, req),
     start: () => ipcRenderer.invoke('measure:start'),

@@ -35,6 +35,20 @@ module.exports = {
     'node_modules/node-pty/**',
     '!node_modules/node-pty/{src,deps,scripts,third_party,typings}/**',
     '!node_modules/node-pty/build/**/*.{obj,pdb,lib,iobj,ipdb,tlog}',
+    // SOMA AI (somaai.ts): pi runs as its own process from its bundle, which needs only these packages besides itself
+    // (tried out with a copy that had nothing else). jiti loads the TypeScript extensions, typebox is imported by the
+    // bundle, photon resizes images. The permission extension brings zod and the bash parser (tree-sitter).
+    'node_modules/@earendil-works/pi-coding-agent/{package.json,LICENSE,README.md}',
+    'node_modules/@earendil-works/pi-coding-agent/dist/bundle/**',
+    'node_modules/@earendil-works/pi-coding-agent/docs/**',
+    'node_modules/jiti/**',
+    'node_modules/typebox/**',
+    'node_modules/@silvia-odwyer/photon-node/**',
+    'node_modules/@gotgenes/pi-permission-system/**',
+    'node_modules/zod/**',
+    'node_modules/web-tree-sitter/**',
+    'node_modules/tree-sitter-bash/**',
+    '!node_modules/tree-sitter-bash/{src,bindings,prebuilds}/**',
   ],
   afterPack: async (ctx) => {
     const res = ctx.packager.getResourcesDir(ctx.appOutDir);

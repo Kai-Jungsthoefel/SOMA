@@ -20,7 +20,8 @@ import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, renameOldSkillFiles, saveLibrarySkill } from './skilllibrary';
 import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
-import type { FileOpResult, LibraryResult, StorageClear } from '../shared/types';
+import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
+import { piEntry } from './somaai';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -194,6 +195,13 @@ function registerIpc(ctl: ProjectController): void {
 
   const agents = () => detectAgents(ctl.session ? terminalEnv(dir()) : process.env);
   ipcMain.handle('agents:detect', () => agents());
+  // SOMA AI (somaai.ts): one pi process per open model, only reachable through the commands SomaAI allows
+  const noModel: AiResult = { ok: false, error: 'No model is open.' };
+  ipcMain.handle('ai:status', (): AiStatus => ctl.session?.ai.status() ?? { available: !!piEntry(), running: false });
+  ipcMain.handle('ai:start', () => ctl.session?.ai.start() ?? noModel);
+  ipcMain.handle('ai:command', (_e, cmd: unknown) => ctl.session?.ai.command(cmd) ?? noModel);
+  ipcMain.on('ai:respond', (_e, res: unknown) => ctl.session?.ai.respond(res));
+  ipcMain.handle('ai:stop', () => ctl.session?.ai.stopAndWait());
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('measure:start', () => ctl.measureStart());
   ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));
