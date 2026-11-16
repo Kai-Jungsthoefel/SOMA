@@ -111,6 +111,9 @@ the agent opens it itself. A plain chat without access to files and commands can
 Mouse (default): left drag rotates, right drag pans, the wheel zooms to the mouse position. A double-click sets the
 pivot. You can switch to the mouse buttons of SolidWorks, Fusion 360, Onshape and others in Settings, Viewer.
 
+When the model rebuilds, the camera stays where you put it. It fits the model again by itself (in the same direction)
+only when the change takes the model out of the picture, or when the model becomes much larger or smaller.
+
 Click selects a part, Ctrl+click adds more. Right-click a part for isolate, hide, transparent, zoom, code and agent.
 Keys: H hides, Shift H shows all, I isolates, T makes transparent, Esc clears the selection.
 
@@ -164,6 +167,7 @@ Ask the agent for a technical drawing ("Make a drawing of the bracket with all d
 - Point at a view or a dimension on the sheet to highlight it. Click it to see it on the model: a view turns the camera to its direction, a section sets the section tool to the same plane, a detail zooms in, a dimension shows its points and value. The card below has "Code" and "Send to agent". Escape clears it.
 - The bar of the viewer switches between all pages and single pages, shows page previews on the left and fits the page width or the whole page. Select text and click "Quote to agent" to send it with its page.
 - "Export" at the top saves all sheets as one PDF, or each sheet as PDF, DXF or both into a folder. The export button above a sheet saves just that sheet.
+- A note "has not been built yet" names drawing files without sheets here, for example in a model saved with an older SOMA. "Build" builds them.
 
 ## Files and code
 

@@ -16,6 +16,9 @@ the version is bumped.
 
 - Exporting a single part as STEP or BREP could write only a shell instead of a solid, when the part was a CadQuery compound holding one solid. Thanks to SukbeomH (fork SukbeomH/SOMA) for spotting this.
 - "Open folder" is more careful with the folder: a `model.py` that appears while the confirmation is open is kept instead of replaced, `.soma/project.json` is backed up before it changes (an unreadable one is listed as a change first), and a folder where `.soma` is a file is refused with a message before anything is written. Thanks to vasilipuchko (fork zihotki/SOMA).
+- The viewer fits the model again when a rebuild takes it out of the picture, for example when the agent replaces the starter box with a table. A small change keeps the camera where you put it. "Fit" in a viewer narrower than high no longer cuts off the sides.
+- Drawings were missing after saving and opening a `.soma` file: the "Drawings" view said "No drawings yet", although the PDFs were there. The file now keeps the list of sheets. For files saved before, the view names the drawing files that are not built yet, with a button to build them. Opening a `.soma` file also keeps the files' modification times, so sheets no longer show "older than the code" right after opening.
+- `soma drawing build <file>` without a list of sheets (for example in a cloned folder) builds all drawings, so `output/drawings.pdf` keeps every sheet instead of only that file's.
 
 ## [0.11.0] - 2026-11-03
 
