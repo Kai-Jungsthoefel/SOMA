@@ -9,7 +9,13 @@ the version is bumped.
 ### Added
 
 - Play or pause static FEM deformation in Analysis. Solved colors and values stay fixed during the shape cycle. On narrow canvases, compact controls flow into rows while the close button stays visible. Thanks to Ryan Hailey (fork RyanHailey21/SOMA, issue #12).
+- "As one STEP file" in the Export menu: the whole model in a single STEP file with its groups as sub-assemblies, part names and colors, for other CAD programs. Purchased parts such as screws are included, reference parts too, in a group "Reference". On the command line: `soma export --assembly --format step` (issue #11).
 - Video tutorial on YouTube (9 min, from installing to export): "Watch video" on the start page card and at the top of Help opens it in your browser.
+
+### Fixed
+
+- Exporting a single part as STEP or BREP could write only a shell instead of a solid, when the part was a CadQuery compound holding one solid. Thanks to SukbeomH (fork SukbeomH/SOMA) for spotting this.
+- "Open folder" is more careful with the folder: a `model.py` that appears while the confirmation is open is kept instead of replaced, `.soma/project.json` is backed up before it changes (an unreadable one is listed as a change first), and a folder where `.soma` is a file is refused with a message before anything is written. Thanks to vasilipuchko (fork zihotki/SOMA).
 
 ## [0.11.0] - 2026-11-03
 
