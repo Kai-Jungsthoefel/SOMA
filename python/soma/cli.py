@@ -92,7 +92,9 @@ def _export_one(shape, fmt, path, name="part", mesh_opts=None):
         # glTF ueber OCCT mit Einheit und Achse (Issue #8)
         return meshexport.export_mesh(shape, fmt, path, name, **(mesh_opts or {}))
     if fmt in cq_type:
-        cq.exporters.export(wp, str(path), exportType=cq_type[fmt])
+        # The shape itself, not the Workplane: CadQuery takes a Workplane apart into its objects, and a cq.Compound
+        # that holds a single solid would come out as a bare shell (STEP without a solid)
+        cq.exporters.export(shape, str(path), exportType=cq_type[fmt])
     elif fmt == "dxf":  # 2D: Schnitt in Bauteilmitte
         cq.exporters.exportDXF(wp.section(shape.BoundingBox().center.z), str(path))
     elif fmt == "iges":
@@ -112,6 +114,9 @@ def cmd_export(args):
     fmt = args.format.lower()
     if fmt not in EXPORT_FORMATS:
         print(f"Format {fmt!r} not supported. Supported: {', '.join(EXPORT_FORMATS)}", file=sys.stderr)
+        return 2
+    if args.assembly and fmt != "step":
+        print("--assembly only works with --format step", file=sys.stderr)
         return 2
     from . import meshexport
     given = [o for o, v in (("--units", args.units), ("--up", args.up), ("--detail", args.detail), ("--tolerance", args.tolerance))
@@ -136,6 +141,8 @@ def cmd_export(args):
     except build.BuildError as e:
         print(f"Cannot export, the model does not build: {e.message}", file=sys.stderr)
         return 1
+    if args.assembly:
+        return _export_assembly(root, parts, root / (args.out or "exports"))
     if args.all:
         # Referenzen (E34) und Zukaufteile wie Schrauben (E48) gehoeren nicht zu --all, einzeln gehen sie
         chosen = [p for p in parts if p["role"] not in ("reference", "hardware")]
@@ -161,6 +168,22 @@ def cmd_export(args):
         except Exception as e:
             print(f"Export of {p['name']!r} as {fmt} failed: {type(e).__name__}: {e}", file=sys.stderr)
             return 1
+    return 0
+
+
+def _export_assembly(root, parts, out_dir):
+    """The whole model as one STEP file (issue #11): the same assembly as output/model.step with groups, names and
+    colors, references under "Reference". Built fresh from the code, unlike output/model.step from the last build."""
+    from . import build, registry
+    name = build.read_project_json(root).get("name") or root.name
+    path = out_dir / f"{registry.ascii_name(name)}.step"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        build.step_assembly(parts, name).export(str(path))
+    except Exception as e:
+        print(f"Export of the model as one STEP file failed: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print(f"exported: {path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()}")
     return 0
 
 
@@ -473,10 +496,13 @@ def main(argv=None):
     b.add_argument("--json", action="store_true", help="print the result as JSON")
     b.set_defaults(func=cmd_build)
 
-    e = sub.add_parser("export", help="export single parts")
+    e = sub.add_parser("export", help="export single parts, or the whole model as one STEP file")
     g = e.add_mutually_exclusive_group(required=True)
     g.add_argument("part", nargs="?", help="name of the part")
-    g.add_argument("--all", action="store_true", help="all parts (without reference and purchased parts)")
+    g.add_argument("--all", action="store_true", help="all parts, one file each (without reference and purchased parts)")
+    g.add_argument("--assembly", action="store_true",
+                   help="the whole model as one STEP file with groups, names and colors, reference parts under "
+                        "\"Reference\" (only with --format step)")
     e.add_argument("--format", required=True, help=", ".join(EXPORT_FORMATS))
     e.add_argument("--out", help="target folder, relative to the project or absolute (default: exports)")
     e.add_argument("--units", choices=["mm", "cm", "m", "in"],
