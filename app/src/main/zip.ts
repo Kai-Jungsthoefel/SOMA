@@ -23,7 +23,13 @@ const SKIP_FILES = new Set(['.soma/model.glb', '.soma/model.map.json', '.soma/bu
  * soma render entstehen aus dem Code neu (E75, beim Hotwire 41 % der ZIP). Die Bilder der Anleitung kopiert die App beim
  * Öffnen ins Projekt (E83).
  */
-const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/results', '.soma/drawings', '.soma/env', '.soma/help', 'renders']);
+const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/results', '.soma/env', '.soma/help', 'renders']);
+/**
+ * Folders of which only these files are packed. The drawings index (E97) is what the "Drawings" view lists and links to
+ * the model. Without it the view was empty after opening the file, although the PDFs in output/drawings were there.
+ * The pictures of the sheets for the agent stay out (E76), `soma drawing build` writes them again.
+ */
+const ONLY_FILES = new Map([['.soma/drawings', new Set(['index.json'])]]);
 /** Schon gepackt (Git-Objekte sind zlib, Bilder und Videos komprimiert): nur ablegen, nochmal Deflate kostet nur Zeit. */
 const STORED = /^\.git\/objects\/|\.(png|jpe?g|webp|mp4|webm|zip|soma|gz|7z|pack)$/i;
 const MAX_UNPACKED = 2 * 1024 ** 3;
@@ -31,9 +37,11 @@ const MAX_UNPACKED = 2 * 1024 ** 3;
 function collect(root: string, withGit: boolean): string[] {
   const out: string[] = [];
   const walk = (dir: string, rel: string) => {
+    const only = ONLY_FILES.get(rel);
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isSymbolicLink()) continue;
+      if (only) { if (e.isFile() && only.has(e.name)) out.push(r); continue; }
       if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name) && !SKIP_PATHS.has(r) && (withGit || r !== '.git')) walk(path.join(dir, e.name), r); continue; }
       if (SKIP_FILES.has(r) || (r.startsWith('.git/') && r.endsWith('.lock'))) continue;
       out.push(r);
@@ -135,9 +143,17 @@ export async function extractZip(zipPath: string, dest: string): Promise<number>
       if (target !== root && !target.startsWith(root + path.sep)) { reject(new Error(`Unsafe path in the ZIP: ${entry.fileName}`)); zip.close(); return; }
       if (entry.fileName.endsWith('/')) { fs.mkdirSync(target, { recursive: true }); zip.readEntry(); return; }
       fs.mkdirSync(path.dirname(target), { recursive: true });
+      // Keep the modification time from the file (to the second). The app and soma compare times to tell what is out of
+      // date ("older than the code"). With the time of unpacking, a file packed after the PDFs, such as parameters.json,
+      // made every drawing look out of date.
+      const mtime = entry.getLastModDate();
       zip.openReadStream(entry, (err, stream) => {
         if (err || !stream) { reject(err ?? new Error('Entry not readable')); return; }
-        pipeline(stream, fs.createWriteStream(target)).then(() => { count++; zip.readEntry(); }, reject);
+        pipeline(stream, fs.createWriteStream(target)).then(() => {
+          if (Number.isFinite(mtime.getTime())) try { fs.utimesSync(target, mtime, mtime); } catch { /* the time is only a hint */ }
+          count++;
+          zip.readEntry();
+        }, reject);
       });
     });
     zip.readEntry();

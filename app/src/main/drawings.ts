@@ -86,7 +86,19 @@ export function readDrawingList(dir: string, building = false): DrawingList {
   const errors: DrawingFileError[] = (Array.isArray(idx.errors) ? idx.errors : []).map((x) => x as Record<string, unknown>)
     .filter((x) => typeof x.file === 'string' && typeof x.message === 'string' && exists(x.file))
     .map((x) => ({ file: x.file as string, line: line(x.line), message: (x.message as string).slice(0, 4000) }));
-  return { drawings, errors, building };
+  // Drawing files the index knows nothing about: not built yet, or the index is missing (an older .soma file, a cloned
+  // folder). The view says so and offers to build, otherwise it claimed "No drawings yet" next to the PDFs in output/.
+  // A file that ran without a sheet is an error in soma ("creates no sheet"), so sheets and errors cover every file that ran
+  const known = new Set([...drawings.map((d) => d.file), ...errors.map((e) => e.file)].filter((f): f is string => !!f).map((f) => f.toLowerCase()));
+  const unbuilt = drawingFiles(dir).filter((f) => !known.has(f.toLowerCase()));
+  return { drawings, errors, building, unbuilt };
+}
+
+/** drawings/*.py like `drawing_files` in soma (drawrun.py): files starting with "_" are helpers, not drawings. */
+function drawingFiles(dir: string): string[] {
+  let names: fs.Dirent[];
+  try { names = fs.readdirSync(path.join(dir, 'drawings'), { withFileTypes: true }); } catch { return []; }
+  return names.filter((e) => e.isFile() && /\.py$/i.test(e.name) && !e.name.startsWith('_')).map((e) => `drawings/${e.name}`).sort();
 }
 
 /** Eine Zeichnungsdatei (drawings/x.py)? Nur solche baut die App einzeln. */

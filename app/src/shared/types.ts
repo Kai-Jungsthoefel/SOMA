@@ -367,7 +367,8 @@ export interface DrawingEntry {
   linked: boolean;
 }
 export interface DrawingFileError { file: string; line: number | null; message: string }
-export interface DrawingList { drawings: DrawingEntry[]; errors: DrawingFileError[]; building: boolean }
+/** `unbuilt`: drawing files (drawings/*.py) without a sheet or error in the index, e.g. a model saved before the index went into the .soma file. */
+export interface DrawingList { drawings: DrawingEntry[]; errors: DrawingFileError[]; building: boolean; unbuilt: string[] }
 export interface DrawingBuildResult extends DrawingList { ok: boolean; error?: string }
 
 /** Ergebnis einer Auswertung (`soma analyze`, E58), Metadaten aus extras.soma_result der GLB. */

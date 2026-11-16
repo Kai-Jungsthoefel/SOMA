@@ -48,7 +48,7 @@ const where = (file: string | null, line: number | null) => (file ? `${file}${li
 export class DrawingsView implements Pane {
   readonly root: HTMLElement;
   private pdf: PdfView;
-  private list: DrawingList = { drawings: [], errors: [], building: false };
+  private list: DrawingList = { drawings: [], errors: [], building: false, unbuilt: [] };
   private byKey = new Map<string, DrawingEntry>();
   private heads = new Map<string, HTMLElement>();
   private overlays = new Map<string, HTMLElement>();
@@ -60,8 +60,15 @@ export class DrawingsView implements Pane {
   private status: HTMLElement;
   private rebuildAll: HTMLButtonElement;
   private exportBtn: HTMLButtonElement;
-  /** Hinweis, wenn Blätter von einem älteren soma stammen: Ohne Neubau keine Verknüpfung mit 3D. */
+  /**
+   * Hinweis, wenn Blätter von einem älteren soma stammen: Ohne Neubau keine Verknüpfung mit 3D. Also when drawing files
+   * have not been built yet (their sheets are missing here), with a button to build them.
+   */
   private note: HTMLElement;
+  private noteText: HTMLElement;
+  private noteBtn: HTMLButtonElement;
+  /** Which empty page is shown: none built at all, or there are drawing files that were not built. */
+  private emptyKind: 'none' | 'unbuilt' = 'none';
   private loadSeq = 0;
   private down: { x: number; y: number } | null = null;
   private building = new Set<string>();
@@ -84,10 +91,10 @@ export class DrawingsView implements Pane {
     this.exportBtn.setAttribute('aria-haspopup', 'menu');
     this.exportBtn.addEventListener('click', () => this.openExport());
     const bar = el('div', { className: 'dw-bar' }, icon('drawing', 15, 1.8), el('b', { textContent: 'Drawings' }), this.status, el('span', { className: 'grow' }), this.exportBtn, this.rebuildAll);
-    const again = el('button', { className: 'btn sm acc', title: 'Build all drawings again (soma drawing build)' }, icon('refresh', 14, 1.9), 'Rebuild');
-    again.addEventListener('click', () => void this.rebuild(null));
-    this.note = el('div', { className: 'dw-note' }, icon('alert', 14, 2),
-      el('span', { textContent: 'Built with an older soma. Rebuild the drawings to click dimensions and to see views and sections on the model.' }), again);
+    this.noteBtn = el('button', { className: 'btn sm acc' });
+    this.noteBtn.addEventListener('click', () => this.buildNoted());
+    this.noteText = el('span');
+    this.note = el('div', { className: 'dw-note' }, icon('alert', 14, 2), this.noteText, this.noteBtn);
     this.note.hidden = true;
     this.root = el('div', { className: 'dwview' }, bar, this.note, el('div', { className: 'dw-pdf' }, this.pdf.root), this.card);
     this.pdf.setEmpty(this.emptyNote());
@@ -130,6 +137,8 @@ export class DrawingsView implements Pane {
     // Auswahl auf ein Blatt, das es nicht mehr gibt: aufheben. Sonst mit den neuen Angaben weiter
     if (this.sel && !this.byKey.has(this.sel.key)) this.select(null);
     this.d.listed(list);
+    const emptyKind = list.unbuilt.length ? 'unbuilt' : 'none';
+    if (emptyKind !== this.emptyKind) { this.emptyKind = emptyKind; this.pdf.setEmpty(this.emptyNote()); }
     if (!this.root.hidden && this.root.isConnected) for (const e of list.drawings) this.d.seen(e);
     this.renderHeads();
     this.renderBar();
@@ -139,10 +148,46 @@ export class DrawingsView implements Pane {
   }
 
   private emptyNote(): HTMLElement {
+    if (this.emptyKind === 'unbuilt') {
+      return el('div', { className: 'dw-empty' },
+        el('span', { className: 'ic' }, icon('drawing', 30, 1.4)),
+        el('b', { textContent: 'Drawings not built yet' }),
+        el('p', { textContent: 'The model has drawing files in drawings/, but their sheets have not been built here. Use “Build” above to build them.' }));
+    }
     return el('div', { className: 'dw-empty' },
       el('span', { className: 'ic' }, icon('drawing', 30, 1.4)),
       el('b', { textContent: 'No drawings yet' }),
       el('p', { textContent: 'Ask the agent for a technical drawing, for example “Make a drawing of the bracket with all dimensions for manufacturing.” It writes drawings/*.py and builds the sheets with soma drawing build. They appear here.' }));
+  }
+
+  /** Text and button of the note: drawing files without sheets first, then sheets of an older soma. */
+  private renderNote(busy: boolean): void {
+    const { unbuilt, drawings } = this.list;
+    const older = drawings.some((e) => !e.linked);
+    this.note.hidden = busy || (!unbuilt.length && !older);
+    if (this.note.hidden) return;
+    if (unbuilt.length) {
+      const names = unbuilt.slice(0, 3).join(', ') + (unbuilt.length > 3 ? ` and ${unbuilt.length - 3} more` : '');
+      this.noteText.textContent = unbuilt.length === 1
+        ? `${names} has not been built yet, so its sheets are missing here.`
+        : `${unbuilt.length} drawing files have not been built yet (${names}), so their sheets are missing here.`;
+      this.noteBtn.replaceChildren(icon('refresh', 14, 1.9), 'Build');
+      this.noteBtn.title = 'Build the missing drawings (soma drawing build)';
+    } else {
+      this.noteText.textContent = 'Built with an older soma. Rebuild the drawings to click dimensions and to see views and sections on the model.';
+      this.noteBtn.replaceChildren(icon('refresh', 14, 1.9), 'Rebuild');
+      this.noteBtn.title = 'Build all drawings again (soma drawing build)';
+    }
+  }
+
+  /**
+   * The button of the note. Only the missing files when the others are built and current, so their PDFs stay as they are.
+   * Nothing built at all (no index) or sheets of an older soma: all in one run.
+   */
+  private buildNoted(): void {
+    const { unbuilt, drawings, errors } = this.list;
+    if (!unbuilt.length || (!drawings.length && !errors.length) || drawings.some((e) => !e.linked)) void this.rebuild(null);
+    else for (const f of unbuilt) void this.rebuild(f);
   }
 
   private renderBar(): void {
@@ -152,10 +197,10 @@ export class DrawingsView implements Pane {
     this.status.textContent = busy ? 'Building …' : [n ? plural(n, 'sheet') : '', stale ? `${stale} older than the code` : '', this.list.errors.length ? plural(this.list.errors.length, 'error') : ''].filter(Boolean).join(' · ');
     this.status.classList.toggle('warn', !busy && (stale > 0 || this.list.errors.length > 0));
     this.rebuildAll.disabled = busy;
-    this.rebuildAll.hidden = !n && !this.list.errors.length;
+    this.rebuildAll.hidden = !n && !this.list.errors.length && !this.list.unbuilt.length;
     this.exportBtn.hidden = !n;
     this.exportBtn.disabled = busy;
-    this.note.hidden = busy || !this.list.drawings.some((e) => !e.linked);
+    this.renderNote(busy);
   }
 
   private async rebuild(file: string | null): Promise<void> {

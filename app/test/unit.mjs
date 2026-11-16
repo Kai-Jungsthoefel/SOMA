@@ -383,10 +383,10 @@ try {
   // Projekten ohne die Einträge in der .gitignore. dugite (und die CommonJS-Pakete für ZIP) bleiben extern, das Bündel
   // liegt deshalb in app/ (dort findet Node node_modules).
   const gz = path.join(APP, 'test', `.unit-gitzip-${process.pid}.mjs`);
-  await build({ stdin: { contents: "export { GitRepo } from './src/main/git.ts'; export { saveProjectZip, readZipTexts } from './src/main/zip.ts';", resolveDir: APP, loader: 'ts' },
+  await build({ stdin: { contents: "export { GitRepo } from './src/main/git.ts'; export { saveProjectZip, readZipTexts, extractZip } from './src/main/zip.ts';", resolveDir: APP, loader: 'ts' },
     outfile: gz, bundle: true, platform: 'node', format: 'esm', external: ['dugite', 'yazl', 'yauzl'], logLevel: 'silent' });
   try {
-    const { GitRepo, saveProjectZip, readZipTexts } = await import(pathToFileURL(gz).href);
+    const { GitRepo, saveProjectZip, readZipTexts, extractZip } = await import(pathToFileURL(gz).href);
     const old = path.join(tmp, 'altprojekt');
     const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(old, rel)), { recursive: true }); fs.writeFileSync(path.join(old, rel), text); };
     put('model.py', 'x = 1\n');
@@ -413,11 +413,23 @@ try {
     const tracked = (await repo.run(['ls-files'])).out;
     check('Snapshot nimmt Ergebnis und Bilder aus dem Verlauf, die Dateien bleiben', tracked.includes('model.py') && !tracked.includes('.soma/results')
       && !tracked.includes('renders/') && !tracked.includes('.soma/drawings') && fs.existsSync(path.join(old, '.soma', 'results', 'thickness.glb')), tracked);
+    // The drawings index goes along (E97): without it the "Drawings" view was empty after opening the file
+    put('.soma/drawings/index.json', '{"version": 2}');
+    put('.soma/drawings/old/x.png', 'BILD');
+    const fixed = new Date('2024-05-06T07:08:09Z');
+    fs.utimesSync(path.join(old, 'model.py'), fixed, fixed);
     const zip = path.join(tmp, 'altprojekt.zip');
     await saveProjectZip(old, zip, { savedAt: '', head: null, id: 'x', name: 'x' });
-    const inZip = await readZipTexts(zip, ['model.py', '.soma/results/thickness.glb', '.soma/anim/deckel.glb', 'renders/view-iso.png', '.soma/drawings/Halter.png']);
-    check('ZIP: ohne .soma/results, .soma/anim, .soma/drawings und renders/ (E75, E76), mit Modell', inZip['model.py'] === 'x = 2\n' && inZip['.soma/results/thickness.glb'] === null
-      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/view-iso.png'] === null && inZip['.soma/drawings/Halter.png'] === null, JSON.stringify(inZip));
+    const inZip = await readZipTexts(zip, ['model.py', '.soma/results/thickness.glb', '.soma/anim/deckel.glb', 'renders/view-iso.png', '.soma/drawings/Halter.png',
+      '.soma/drawings/index.json', '.soma/drawings/old/x.png']);
+    check('ZIP: without .soma/results, .soma/anim, renders/ and the drawing pictures (E75, E76), with the model and the drawings index', inZip['model.py'] === 'x = 2\n' && inZip['.soma/results/thickness.glb'] === null
+      && inZip['.soma/anim/deckel.glb'] === null && inZip['renders/view-iso.png'] === null && inZip['.soma/drawings/Halter.png'] === null
+      && inZip['.soma/drawings/old/x.png'] === null && inZip['.soma/drawings/index.json'] === '{"version": 2}', JSON.stringify(inZip));
+    const unpacked = path.join(tmp, 'entpackt');
+    await extractZip(zip, unpacked);
+    const unpackedTime = fs.statSync(path.join(unpacked, 'model.py')).mtimeMs;
+    check('Unpacking keeps the modification time (to the second), so "older than the code" stays right', Math.abs(unpackedTime - fixed.getTime()) < 1000
+      && fs.existsSync(path.join(unpacked, '.soma', 'drawings', 'index.json')), new Date(unpackedTime).toISOString());
 
     // Eine Datei ändert sich beim Packen (Build, Agent): yazl kennt ihre Größe vom addFile und meldet die Abweichung erst
     // beim Lesen. Früher eine Uncaught Exception im Main-Prozess, und das Speichern hing. Die große Datei vorn hält das
