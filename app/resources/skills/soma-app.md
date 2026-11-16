@@ -45,7 +45,7 @@ The logo at the top left opens the start page.
 
 ![The start page](../help/start.png)
 
-1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts"), and **Open folder**, which uses SOMA in a folder of yours (see "Your own folder").
+1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). A loading screen shows the steps for the few seconds until the new model is loaded. The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts"), and **Open folder**, which uses SOMA in a folder of yours (see "Your own folder").
 2. **Open**: opens a .soma or ZIP file (Ctrl O).
 3. **Tutorial**: **Watch video** opens the video tutorial on YouTube in your browser (9 min, from installing to export). **Start tutorial** is a short guided tour of the app with an example model, no agent needed. The cross hides the card.
 4. **Recent**: models you worked on, the newest first. The field above filters them by name. "Open" marks the model that is open right now, "never saved" one that was never saved as a .soma file. The bin on a card removes the model from this computer, a saved .soma file stays.
