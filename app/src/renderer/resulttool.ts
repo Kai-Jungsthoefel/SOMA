@@ -401,7 +401,11 @@ export class ResultTool {
     this.applyPlayback();
   }
 
-  /** Labels follow the displayed deformation; their values belong to the solved load case. */
+  /**
+   * Labels in the view: the force at the end of each arrow (only with the load case), the smallest value and the spot the
+   * report should show. A hidden part has no label. Labels follow the displayed deformation, also during playback; their
+   * values belong to the solved load case.
+   */
   renderTags(): void {
     const r = this.current, l = this.d.layer;
     if (!this.active || !r || !l.meta) { this.d.viewer.setTags(null); return; }

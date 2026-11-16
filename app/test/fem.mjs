@@ -289,7 +289,10 @@ try {
     && rs.scale.legend.includes('Red: above allowable'), JSON.stringify(rs.scale));
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
-  const pin2 = await ev((p) => window.__t.resultPin(p.x, p.y), at);
+  // The narrow layouts above resized the canvas; a hidden window may not have passed that on to the camera (ResizeObserver).
+  // So find the end of the beam (undeformed now) again instead of reusing the first screen point
+  const at2 = await ev(() => window.__t.viewer.screenAt([97, -5, 0]));
+  const pin2 = await ev((p) => window.__t.resultPin(p.x, p.y), at2);
   await ev(() => window.__t.viewer.setView('iso'));
   rs = await ev(() => window.__t.result());
   check('Stelle bei Spannung: MPa zuerst, Sicherheit danach', pin2?.stress != null && /: Balken, \d+(\.\d)? MPa · Safety /.test(rs.probe), rs.probe);
