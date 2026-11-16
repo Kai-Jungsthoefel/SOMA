@@ -270,9 +270,15 @@ export class Viewer {
 
   // ---- Laden ----------------------------------------------------------------------------------------------------
 
-  /** Ersetzt das Modell. Kamera, Sichtbarkeit und Auswahl bleiben erhalten, damit ein Rebuild nicht stört. */
+  /**
+   * Ersetzt das Modell. Kamera, Sichtbarkeit und Auswahl bleiben erhalten, damit ein Rebuild nicht stört. Only when the
+   * change takes the model out of the picture does the view fit again (see outgrown).
+   */
   async load(glb: ArrayBuffer): Promise<void> {
     const gltf = await new GLTFLoader().parseAsync(glb, '');
+    // The previous model and where it was in the picture, before it is replaced
+    const was = this.hasFitted ? this.visibleSphere() : null;
+    const wasView = was ? this.sphereInView(was) : 'out';
     const fresh = new Map<string, PartEntry>();
     gltf.scene.traverse((o) => {
       const meta = (o.userData as { soma?: PartMeta }).soma;
@@ -322,9 +328,51 @@ export class Viewer {
     this.updateExtent();
     this.buildAxes();
     if (!this.hasFitted && this.parts.size) { this.setView('iso'); this.hasFitted = true; }
+    else if (was && this.outgrown(was, wasView)) this.setView('fit');
     this.fitClip();
     this.syncSection();
     this.requestRender();
+  }
+
+  /**
+   * Fit again after a rebuild? Only when the change took the model out of the picture: it was whole in the picture and no
+   * longer fits, it could be seen and now cannot, or it is a different model (more than three times larger or smaller,
+   * e.g. a table instead of the box of the template). Otherwise the camera stays where the user put it, also when zoomed
+   * in on a detail. "Fit" keeps the direction of view.
+   */
+  private outgrown(was: THREE.Sphere, wasView: 'in' | 'part' | 'out'): boolean {
+    const now = this.visibleSphere();
+    if (!now) return false;
+    const ratio = now.radius / was.radius;
+    if (ratio > 3 || ratio < 1 / 3) return true;
+    const view = this.sphereInView(now);
+    return (wasView === 'in' && view !== 'in') || (wasView !== 'out' && view === 'out');
+  }
+
+  /** Sphere around the visible parts, as "Fit" frames them (viewFrom), or null without any. */
+  private visibleSphere(): THREE.Sphere | null {
+    const box = this.bounds();
+    if (box.isEmpty()) return null;
+    return new THREE.Sphere(box.getCenter(new THREE.Vector3()), Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1));
+  }
+
+  /**
+   * Where a sphere is in the picture: 'in' whole, 'out' not at all, else 'part'. Only the four sides of the view and the
+   * camera itself count, not the far plane (fitClip moves it after the model). 'in' allows the edge of the sphere a little
+   * outside: it is larger than the model, and a slight zoom after "Fit" should still count as the whole model.
+   */
+  private sphereInView(s: THREE.Sphere): 'in' | 'part' | 'out' {
+    this.camera.updateMatrixWorld();
+    const m = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    const planes = new THREE.Frustum().setFromProjectionMatrix(m).planes;
+    let inside = true;
+    // 0 to 3 are the sides, 5 the near plane (4 is the far plane)
+    for (const i of [0, 1, 2, 3, 5]) {
+      const d = planes[i].distanceToPoint(s.center);
+      if (d < -s.radius) return 'out';
+      if (i < 4 && d < s.radius * 0.85) inside = false;
+    }
+    return inside ? 'in' : 'part';
   }
 
   clear(): void {
@@ -596,7 +644,7 @@ export class Viewer {
     // Genau von oben oder unten hätte die Kamera keine Richtung für „oben“: minimal kippen wie bei top und bottom
     const dir = dir0.clone().normalize();
     if (Math.abs(dir.z) > 0.99999) dir.set(0, -0.0001, Math.sign(dir.z)).normalize();
-    const dist = radius / Math.sin(THREE.MathUtils.degToRad(this.persp.fov / 2)) * 1.05 / Math.max(zoom, 0.01);
+    const dist = this.fitDist(radius) / Math.max(zoom, 0.01);
     this.anim?.stop();
     this.placeAt(center, dir, dist);
     this.controls.update();
@@ -610,7 +658,7 @@ export class Viewer {
     const dir = dir0.clone().normalize();
     if (Math.abs(dir.z) > 0.99999) dir.set(0, -0.0001, Math.sign(dir.z)).normalize();
     this.anim?.stop();
-    this.placeAt(center, dir, radius / Math.sin(THREE.MathUtils.degToRad(this.persp.fov / 2)) * 1.05);
+    this.placeAt(center, dir, this.fitDist(radius));
     this.controls.update();
     this.fitClip();
     this.requestRender();
@@ -620,6 +668,15 @@ export class Viewer {
 
   /** tan des halben Bildwinkels: Höhe in der Ebene des Drehpunkts je Abstand. */
   private get halfTan(): number { return Math.tan(THREE.MathUtils.degToRad(this.persp.fov / 2)); }
+
+  /**
+   * Distance at which a sphere with `radius` fills the picture with a small margin. In a viewer narrower than high the
+   * width decides, before only the height counted and the sides of the model were cut off.
+   */
+  private fitDist(radius: number): number {
+    const half = Math.min(THREE.MathUtils.degToRad(this.persp.fov / 2), Math.atan(this.halfTan * this.persp.aspect));
+    return radius / Math.sin(half) * 1.05;
+  }
 
   /**
    * Kamera auf `target` aus Richtung `dir` (Einheitsvektor, vom Ziel zur Kamera) mit dem Abstand `dist`. Orthografisch wird

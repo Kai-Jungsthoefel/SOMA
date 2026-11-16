@@ -494,6 +494,24 @@ try {
   await shot('8-ansichtswuerfel');
   await ev(() => document.querySelector('#cube-view canvas').dispatchEvent(new PointerEvent('pointerleave', { bubbles: true })));
 
+  // 7c) Rebuild: the camera stays for a change inside the picture, but fits again when the model leaves it (the agent
+  // replaces the box with a table) and when it becomes much smaller again. The direction of view stays.
+  await ev(() => window.__t.viewer.setView('front'));
+  const f0 = await vs();
+  fs.writeFileSync(modelPy, original + '\nadd_part("Tiny", cq.Workplane("XY").box(2, 2, 2).translate((0, 0, 10)))\n');
+  await waitFor('kleines Teil', () => window.__t.partCount() === 3 && window.__t.status().state === 'ok', 60000).catch(() => {});
+  const f1 = await vs();
+  check('Rebuild with a change inside the picture: camera stays', near(f1.target, f0.target, 1e-9) && Math.abs(f1.dist - f0.dist) < 1e-9, `${f1.dist.toFixed(1)} vs ${f0.dist.toFixed(1)}`);
+  fs.writeFileSync(modelPy, original + '\nadd_part("Table", cq.Workplane("XY").box(1200, 800, 30).translate((0, 0, 740)))\n');
+  await waitFor('Tisch', () => window.__t.partCount() === 3 && window.__t.status().state === 'ok' && window.__t.parts().some((p) => p.name === 'Table'), 60000).catch(() => {});
+  const f2 = await vs();
+  check('Model grows out of the picture (table instead of the box): view fits again, same direction', f2.dist > f0.dist * 5 && near(f2.dir, f0.dir, 1e-6) && f2.target[2] > 300,
+    `Abstand ${f0.dist.toFixed(0)} -> ${f2.dist.toFixed(0)}, Ziel ${f2.target.map((x) => x.toFixed(0)).join(',')}`);
+  fs.writeFileSync(modelPy, original);
+  await waitFor('wieder die Box', () => window.__t.partCount() === 2 && window.__t.status().state === 'ok', 60000).catch(() => {});
+  const f3 = await vs();
+  check('Model becomes much smaller: view fits again', Math.abs(f3.dist - f0.dist) < f0.dist * 0.01 && near(f3.target, f0.target, 1e-3), `${f3.dist.toFixed(1)} vs ${f0.dist.toFixed(1)}`);
+
   // 8) Neues Projekt: anderer Ordner, Terminals des alten sind zu, frischer erster Build
   await domClick('btn-new');
   await waitFor('neues Projekt', (oldId) => window.__t.project().id !== oldId && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000, proj.id).catch(() => {});
