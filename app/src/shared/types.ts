@@ -1,6 +1,6 @@
 // Von Hauptprozess, Preload und Renderer gemeinsam genutzte Typen (IPC-Vertrag).
 import type { SettingsPatch, SettingsResult, SettingsState } from './settings';
-import type { AiAccount } from './somaai';
+import type { AiAccount, AiModel, AiSession } from './somaai';
 
 export interface ProjectInfo {
   id: string;
@@ -269,7 +269,7 @@ export interface LibraryResult {
   library: LibraryState;
 }
 /** Bereich der App-Daten in den Einstellungen (E81). Der Renderer nennt nur die Kennung, den Ordner kennt der Hauptprozess. */
-export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills' | 'logs';
+export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills' | 'logs' | 'somaai';
 /** Größe eines Bereichs. `other`: alles Übrige in den App-Daten. `models`: Zahl der Arbeitsordner. */
 export interface StorageEntry { id: StorageArea | 'other'; path: string | null; bytes: number; files: number; models?: number }
 export interface StorageStats { dir: string; total: number; areas: StorageEntry[] }
@@ -575,6 +575,15 @@ export interface SomaApi {
     signOut(provider: string): Promise<{ ok: boolean; error?: string }>;
     /** The sign-in page, as soon as it is known (a link in case the browser did not open). */
     onSignInUrl(cb: (url: string) => void): void;
+    /** Models of the saved sign-ins, without a model open (Settings > SOMA AI). */
+    models(): Promise<{ ok: boolean; models?: AiModel[]; error?: string }>;
+    /** The model pi starts with, null when pi chooses. */
+    defaultModel(): Promise<{ provider: string; id: string } | null>;
+    setDefaultModel(provider: string, id: string): Promise<{ ok: boolean; error?: string }>;
+    /** Conversations of the open model with SOMA AI, newest first. */
+    sessions(): Promise<{ ok: boolean; sessions?: AiSession[]; error?: string }>;
+    /** Back to one of them (pi continues it). */
+    switchSession(id: string): Promise<AiResult>;
   };
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: {

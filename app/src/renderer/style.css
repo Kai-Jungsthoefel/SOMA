@@ -1472,6 +1472,40 @@ select.ai-field { width:170px; flex-shrink:0; }
 .ai-own { display:flex; gap:8px; align-items:center; }
 .ai-q .answer { display:flex; gap:8px; align-items:center; color:var(--tx2); }
 .ai-q .answer svg { color:var(--ok); flex-shrink:0; }
+.ai-q .answer.skipped svg { color:var(--tx3); }
+/* Several questions in one card: one block each, picked answers orange (selection), Send answers below */
+.ai-qblock { display:flex; flex-direction:column; gap:8px; }
+.ai-qblock + .ai-qblock { border-top:1px solid var(--line); padding-top:12px; }
+.ai-qtext { display:flex; flex-direction:column; gap:3px; color:var(--tx); font-weight:500; line-height:1.4; }
+.ai-qhead { font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--acc-tx); }
+.ai-qhint { font-size:12px; color:var(--tx3); margin-top:-4px; }
+.ai-answers.inline { flex-direction:row; flex-wrap:wrap; }
+.ai-answers.inline .ai-ans { padding:6px 12px; }
+.ai-ans.on { border-color:var(--acc); background:var(--acc-tint); box-shadow:inset 0 0 0 1px var(--acc); }
+.ai-ans.on b { color:var(--acc-tx); }
+.ai-qacts { display:flex; align-items:center; gap:12px; }
+/* Search at the top of the model menu */
+.ai-msearch { display:block; width:100%; box-sizing:border-box; margin:0 0 6px; }
+
+/* Settings > SOMA AI (aisettings.ts): sign-ins, model, usage, safety */
+.st-ai .lnk { display:inline-flex; align-items:center; gap:4px; color:var(--acc-tx); font-size:12px; }
+.st-ai .lnk:hover { text-decoration:underline; text-underline-offset:3px; }
+.st-ai-keyfield { flex-direction:column; gap:10px; }
+.st-ai-key { display:flex; flex-direction:column; gap:8px; width:100%; }
+.st-ai-key .ai-keyrow .grow { flex:1; }
+.st-ai-key .acts { display:flex; align-items:center; gap:10px; }
+.st-ai-wait { display:flex; align-items:center; gap:10px; color:var(--tx2); font-size:12.5px; }
+.st-ai-model { min-width:220px; justify-content:space-between; }
+.st-ai-rec { display:flex; gap:7px; align-items:flex-start; margin-top:6px; font-size:12px; color:var(--tx2); line-height:1.5; }
+.st-ai-rec svg { color:var(--acc); margin-top:2px; flex-shrink:0; }
+.st-ai-rec b { font-weight:500; color:var(--tx); }
+.st-ai-usage .v { font-family:inherit; font-size:12.5px; word-break:normal; }
+.st-ai-rules { list-style:none; margin:10px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; font-size:12.5px; color:var(--tx2); line-height:1.5; }
+.st-ai-rules li { display:flex; gap:9px; align-items:flex-start; }
+.st-ai-rules svg { margin-top:2px; flex-shrink:0; color:var(--tx3); }
+.st-ai-rules b { font-weight:500; color:var(--tx); }
+.st-ai-pi { margin-top:26px; }
+.st-acct .st-store-act { min-width:0; }
 .ai-row { display:flex; align-items:center; gap:4px; }
 .ai-model { display:flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:7px; color:var(--tx2); font-size:12px; max-width:220px; }
 .ai-model span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -1479,5 +1513,8 @@ select.ai-field { width:170px; flex-shrink:0; }
 .ai-send { width:32px; height:32px; border-radius:8px; background:var(--acc); color:#1b1206; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .ai-send:disabled { background:var(--s3); color:var(--tx3); }
 .ai-send.stop { background:var(--s3); color:var(--tx); border:1px solid var(--line2); }
-.ai-menu { min-width:260px; max-width:340px; }
+.ai-menu, .st-ai-menu { min-width:260px; max-width:340px; }
+/* Long names (a conversation's first words) shorten, the provider or date beside them stays whole */
+:is(.ai-menu, .st-ai-menu) .mi > span:not(.sub):not(.noico) { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+:is(.ai-menu, .st-ai-menu) .mi .sub { flex-shrink:0; margin-left:auto; }
 .ai-menu-scroll { max-height:320px; overflow-y:auto; }

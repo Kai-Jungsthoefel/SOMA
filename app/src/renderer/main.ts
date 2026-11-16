@@ -19,7 +19,8 @@ import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
 import { HelpDialog } from './help';
-import { SettingsDialog } from './settings';
+import { AiPage } from './aisettings';
+import { SettingsDialog, type SettingsSection } from './settings';
 import { AboutPage, ShortcutsPage, StoragePage, ViewerPage } from './settingspages';
 import { SkillsPanel } from './skills';
 import { ParamsPanel } from './params';
@@ -265,6 +266,16 @@ const aboutPage = new AboutPage($('st-about'), {
   setUpdateCheck: async (on) => { const r = await changeSettings({ start: { updateCheck: on } }); if (!$('start').hidden) void renderUpdate(); return r; },
 });
 
+// Settings > SOMA AI: sign-ins and model also for the chat (created further down, only called on clicks). The chat
+// shows the change at once only when it is in front with a model open: without a model there is no pi to start
+const aiPage = new AiPage($('st-ai'), {
+  api, toast,
+  accountsChanged: (provider) => chat.accountsChanged(provider, chatOn && !!project),
+  useModel: (provider, id) => chat.useModel(provider, id),
+  showNote: () => chat.showNote(chatOn && !!project),
+  modelOpen: () => !!project,
+});
+
 // Einstellungen (E78, E81): Reiter Viewer, Skills, Speicher und Info, auch von der Startseite aus. Änderungen an den
 // Skills zeigt das Panel „Skills“ sofort
 const settings = new SettingsDialog({
@@ -281,7 +292,7 @@ const settings = new SettingsDialog({
   },
   changed: () => { if (project && skills.isLoaded) void skills.refresh(); },
   modelMode: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id)?.mode ?? 'off' : null),
-  pages: { viewer: viewerPage, keys: shortcutsPage, storage: storagePage, about: aboutPage },
+  pages: { viewer: viewerPage, keys: shortcutsPage, ai: aiPage, storage: storagePage, about: aboutPage },
 });
 // Hilfe (E83): Knopf in der Leiste und auf der Startseite, F1 überall außer in den Einstellungen
 const help = new HelpDialog({ root: $('help'), nav: $('help-nav'), body: $('help-body'), close: $('btn-help-close') as HTMLButtonElement, background: [$('topbar'), $('body'), $('start')] }, {
@@ -2054,6 +2065,13 @@ const tourCtx: TourContext = {
   showCode: (on) => showCode(on),
   openCode: (f) => void openCode(f),
   expandAgent: () => setAgentCollapsed(false),
+  showChat: () => { if (!chatOn) void showChat(true); },
+  chatPane: () => (chatOn ? chat.el : null),
+  chatSetUp: () => chat.setUp,
+  openAgentMenu: () => { if (!menus.isOpen($('menu-agents'))) $('btn-term-add').click(); },
+  closeAgentMenu: () => { if (menus.isOpen($('menu-agents'))) menus.close(); },
+  // Only while open: a closed menu has no place on the screen
+  agentMenu: () => (menus.isOpen($('menu-agents')) ? $('menu-agents') : null),
   // Die Liste nennt alle bekannten Agenten mit „found“. Leer heißt: Suche läuft noch
   agentsFound: () => (agents.length ? agents.filter((a) => a.found).map((a) => a.label) : null),
   selected: () => !!selection,
@@ -2216,8 +2234,8 @@ if (api.testMode) {
     settingsSelect: (id: string | null) => settings.select(id),
     settingsType: (text: string) => settings.type(text),
     settingsSave: () => settings.save(),
-    settingsShow: (sec: 'viewer' | 'keys' | 'skills' | 'storage' | 'about') => settings.open(undefined, sec),
-    settingsPages: () => ({ viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state() }),
+    settingsShow: (sec: SettingsSection) => settings.open(undefined, sec),
+    settingsPages: () => ({ viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state(), ai: aiPage.state() }),
     appSettings: () => appSettings,
     storageRefresh: () => storagePage.refresh(),
     axes: () => viewer.axesState(),

@@ -14,7 +14,11 @@ const { check } = t;
 
 const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-aichat-'));
 const steps = [
-  { tool: 'ask_user', args: { question: 'Which material?', options: [{ label: 'PLA', description: 'Easy to print' }, { label: 'PETG', description: 'Tougher, a bit harder to print' }] } },
+  { tool: 'ask_user', args: { questions: [
+    { question: 'Which material?', header: 'Material', options: [{ label: 'PLA', description: 'Easy to print' }, { label: 'PETG', description: 'Tougher, a bit harder to print' }] },
+    { question: 'What should the lid have?', header: 'Lid', multiSelect: true, options: [{ label: 'Hinge' }, { label: 'Snap fit' }, { label: 'Label recess' }] },
+  ] } },
+  { tool: 'ask_user', args: { questions: [{ question: 'Which colour?', options: [{ label: 'Red' }, { label: 'Blue' }] }] } },
   { tool: 'bash', args: { command: 'ls' } },
   { tool: 'bash', args: { command: 'ls -a' } },
   { tool: 'bash', args: { command: 'soma build' } },
@@ -96,7 +100,20 @@ try {
   await app.waitFor('model menu', () => !document.querySelector('.ai-menu').hidden && document.querySelector('.ai-menu').textContent.includes('Mock CAD'), 20000);
   const menuText = await ev(() => document.querySelector('.ai-menu').textContent);
   check('Model menu: the recommended models first', menuText.startsWith('RECOMMENDED FOR THE BEST RESULTS') && menuText.indexOf('Claude Opus 5.5') < menuText.indexOf('OTHER MODELS'), menuText.slice(0, 120));
-  await click('Mock CAD', '.ai-menu');
+  // Search: the field has the focus, words narrow the list, Enter takes the first match
+  const typeSearch = (v) => ev((x) => { const s = document.querySelector('.ai-menu .ai-msearch'); s.value = x; s.dispatchEvent(new Event('input')); }, v);
+  const visible = () => ev(() => ({
+    items: [...document.querySelectorAll('.ai-menu .mi')].filter((b) => !b.hidden).map((b) => b.textContent),
+    none: !document.querySelector('.ai-menu .mnote').hidden, focus: document.activeElement?.classList.contains('ai-msearch'),
+  }));
+  await typeSearch('zzzz');
+  const nothing = await visible();
+  await typeSearch('mock');
+  const found = await visible();
+  await shot('model-search');
+  check('Model menu: a search that narrows the list, with a word when nothing matches', nothing.focus && nothing.items.length === 0 && nothing.none && JSON.stringify(found.items) === '["Mock CAD"]' && !found.none,
+    JSON.stringify({ nothing, found }));
+  await ev(() => document.querySelector('.ai-menu .ai-msearch').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
   await app.waitFor('fake model chosen', () => window.__t.chat().model?.id === 'mock-cad', 20000);
   check('Dot on the tab: green (ready)', (await dot()) === 'idle', await dot());
   await shot('welcome');
@@ -108,20 +125,40 @@ try {
   await ev(() => { const i = document.querySelector('.ai-input'); i.value = 'Make the lid thicker.'; i.dispatchEvent(new Event('input')); });
   await ev(() => document.querySelector('.ai-send').click());
 
-  // A question of SOMA AI (tool ask_user), answered in own words
-  await app.waitFor('question of SOMA AI', () => window.__t.chat().questions.some((q) => !q.done), 120000);
+  // Questions of SOMA AI (tool ask_user): two in one card, answered together, one of them in own words
+  /** The tool results pi sent to the model, as text. */
+  const toolResults = () => mock.requests.flatMap((r) => (r.messages ?? []).filter((m) => m.role === 'tool')
+    .map((m) => (typeof m.content === 'string' ? m.content : (m.content ?? []).map((p) => p.text ?? '').join(''))));
+  const waitToolResult = async (part) => { for (const t0 = Date.now(); Date.now() - t0 < 20000 && !toolResults().some((x) => x.includes(part));) await sleep(200); return toolResults().some((x) => x.includes(part)); };
+  await app.waitFor('questions of SOMA AI', () => window.__t.chat().questions.some((q) => !q.done), 120000);
   st = await chat();
-  const q = st.questions.find((x) => !x.done);
-  const answers = await ev(() => [...document.querySelectorAll('.ai-q .ai-ans')].map((b) => b.textContent));
-  check('SOMA AI asks with answers to click, each with what it means', q.text.includes('Which material?') && answers.length === 2 && answers[0] === 'PLAEasy to print', JSON.stringify(answers));
-  check('While it waits: input locked, the indicator says so, with the time', st.locked && /^Waiting for your answer\s*· \d+ s/.test(st.status.trim()), st.status);
+  const card = await ev(() => {
+    const c = document.querySelector('.ai-q:not(.done)');
+    return {
+      title: c.querySelector('h4').textContent, blocks: c.querySelectorAll('.ai-qblock').length, owns: c.querySelectorAll('.ai-own input').length,
+      answers: [...c.querySelectorAll('.ai-ans')].map((b) => b.textContent), send: c.querySelector('.ai-qacts .btn').disabled,
+    };
+  });
+  check('SOMA AI asks two questions in one card, answers to click with what they mean, an own answer for each',
+    card.title === 'SOMA AI has 2 questions' && card.blocks === 2 && card.owns === 2 && card.answers[0] === 'PLAEasy to print' && card.answers.length === 5, JSON.stringify(card));
+  check('While it waits: input locked, the indicator says so, with the time; nothing answered, nothing to send',
+    st.locked && /^Waiting for your answer\s*· \d+ s/.test(st.status.trim()) && card.send, st.status);
+  await ev(() => { const i = document.querySelector('.ai-q:not(.done) .ai-own input'); i.value = 'Wood, actually'; i.dispatchEvent(new Event('input')); });
+  await click('Hinge', '.ai-q:not(.done)');
+  await click('Label recess', '.ai-q:not(.done)');
+  const on = await ev(() => [...document.querySelectorAll('.ai-q:not(.done) .ai-ans.on')].map((b) => b.querySelector('b').textContent));
+  check('Several answers to pick where several apply', JSON.stringify(on) === '["Hinge","Label recess"]', JSON.stringify(on));
   await shot('ask-user');
-  await ev(() => { const i = document.querySelector('.ai-q input'); i.value = 'Wood, actually'; });
-  await click('Send', '.ai-q');
-  await app.waitFor('answer reached the model', () => true, 1000);
-  await app.waitFor('question done', () => window.__t.chat().questions.every((x) => x.done), 20000);
-  for (const t0 = Date.now(); Date.now() - t0 < 20000 && !mock.requests.some((r) => JSON.stringify(r.messages ?? []).includes('The person answered: Wood, actually'));) await sleep(200);
-  check('An own answer reaches SOMA AI as the tool\'s result', mock.requests.some((r) => JSON.stringify(r.messages ?? []).includes('The person answered: Wood, actually')));
+  await click('Send answers', '.ai-q:not(.done)');
+  check('Both answers reach SOMA AI together, the own words as such',
+    await waitToolResult('Which material? → in their own words: "Wood, actually"') && toolResults().some((x) => x.includes('What should the lid have? → Hinge, Label recess')), toolResults().at(-1));
+  // One question with one answer to pick: a click sends it
+  await app.waitFor('one more question', () => window.__t.chat().questions.some((q) => !q.done && q.text.includes('Which colour?')), 60000);
+  await click('Red', '.ai-q:not(.done)');
+  check('One question: a click on an answer sends it', await waitToolResult('The person answered:\nWhich colour? → Red'), toolResults().at(-1));
+  st = await chat();
+  check('The cards say what was answered', st.questions.every((x) => x.done) && st.questions[0].text.includes('Material → Wood, actually') && st.questions[1].text.includes('You answered: Red'),
+    st.questions.map((x) => x.text).join(' | '));
 
   await app.waitFor('question', () => window.__t.chat().asks.some((a) => !a.done), 120000);
   st = await chat();
@@ -166,7 +203,23 @@ try {
   st = await chat();
   check('After a model switch the conversation of the model is back, steps grouped as before', JSON.stringify(st.rows.map((r) => [r.state, r.count])) === '[["ok",2],["ok",1],["denied",1],["stopped",1]]',
     JSON.stringify(st.rows.map((r) => [r.state, r.count])));
-  check('… and the question with its answer', st.quiet.some((x) => x.includes('SOMA AI asked: Which material? You answered: Wood, actually')), st.quiet.join(' | ').slice(0, 200));
+  check('… and the questions with their answers', st.quiet.some((x) => x.includes('SOMA AI asked: Which material? You answered: Wood, actually'))
+    && st.quiet.some((x) => x.includes('SOMA AI asked: What should the lid have? You answered: Hinge, Label recess'))
+    && st.quiet.some((x) => x.includes('SOMA AI asked: Which colour? You answered: Red')), st.quiet.join(' | ').slice(0, 400));
+
+  // ---- Earlier conversations: a new one, then back to the first ---------------------------------------------------
+  await ev(() => document.querySelector('.ai-top [aria-label="New conversation"]').click());
+  await app.waitFor('new conversation', () => window.__t.chat().user.length === 0 && !!document.querySelector('.ai-welcome'), 30000);
+  await ev(() => document.querySelector('.ai-top [aria-label="Earlier conversations"]').click());
+  await app.waitFor('conversations', () => !document.querySelector('.ai-menu').hidden && document.querySelectorAll('.ai-menu .mi').length > 0, 30000);
+  const convs = await ev(() => [...document.querySelectorAll('.ai-menu .mi')].map((b) => b.textContent));
+  check('Earlier conversations: the first one is listed with its first words and when, the new empty one is not', convs.length === 1 && convs[0].startsWith('[Part: Lid · top face] Make the lid thicker.') && /today \d\d:\d\d/.test(convs[0]),
+    JSON.stringify(convs));
+  await shot('conversations');
+  await ev(() => document.querySelector('.ai-menu .mi').click());
+  await app.waitFor('earlier conversation back', () => window.__t.chat().user.length === 2, 30000);
+  st = await chat();
+  check('… a click brings it back: messages, steps and its model', st.user.length === 2 && st.rows.length === 4 && st.model?.id === 'mock-cad', JSON.stringify({ user: st.user.length, rows: st.rows.length, model: st.model?.id }));
 
   // ---- Another sign-in: the conversation stays (the set-up has its own place) ----------------------------------
   const menu = async (item) => {
@@ -193,6 +246,35 @@ try {
   lo = await leftover();
   check('After a new sign-in: back in the conversation, the chip shows its recommended model', st.user.length === 2 && !lo.panel && !lo.setupInList
     && st.model?.provider === 'openrouter' && st.model?.id === 'anthropic/claude-opus-5.5', `${st.model?.provider} ${st.model?.id} ${JSON.stringify(lo)}`);
+
+  // ---- Settings > SOMA AI ---------------------------------------------------------------------------------------
+  const aiPage = () => ev(() => window.__t.settingsPages().ai);
+  await ev(() => window.__t.settingsShow('ai'));
+  await app.waitFor('models in Settings', () => window.__t.settingsPages().ai.models !== null && window.__t.settingsPages().ai.usage, 60000);
+  let ap = await aiPage();
+  check('Settings > SOMA AI: both sign-ins, ChatGPT to add, the models of the sign-ins, the recommendation',
+    JSON.stringify(ap.accounts.map((a) => a.provider).sort()) === '["anthropic","openrouter"]' && ap.text.includes('Sign in with ChatGPT') && ap.models > 5
+    && ap.text.includes('we recommend') && ap.current?.provider === 'openrouter', JSON.stringify({ accounts: ap.accounts, models: ap.models, current: ap.current, err: ap.modelsError }));
+  check('… what the conversation of the open model used', /Messages\s+2 from you/.test(ap.text) && /Tokens\s+[\d.]+ k read/.test(ap.text), ap.text.slice(ap.text.indexOf('USAGE'), ap.text.indexOf('USAGE') + 200));
+  await shot('settings-ai');
+  // The model: chosen in the same menu with search, the open conversation takes it at once
+  await ev(() => document.querySelector('#st-ai [data-act="model"]').click());
+  await app.waitFor('model menu in Settings', () => !document.querySelector('.st-ai-menu').hidden, 10000);
+  await ev(() => { const s = document.querySelector('.st-ai-menu .ai-msearch'); s.value = 'mock'; s.dispatchEvent(new Event('input')); s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  await app.waitFor('model taken', () => window.__t.settingsPages().ai.current?.id === 'mock-cad' && window.__t.chat().model?.id === 'mock-cad', 20000);
+  settings = readJson('settings.json');
+  check('… choosing a model there: saved for new conversations, the open conversation takes it too', settings.defaultProvider === 'mock' && settings.defaultModel === 'mock-cad',
+    JSON.stringify({ provider: settings.defaultProvider, model: settings.defaultModel }));
+  // A key added and removed there, the chat knows about it
+  await ev(() => { const s = document.querySelector('#st-ai .ai-keyrow select'); s.value = 'google'; s.dispatchEvent(new Event('change')); document.querySelector('#st-ai .ai-keyrow input').value = 'AIza-test-789'; });
+  await ev(() => [...document.querySelectorAll('#st-ai button')].find((b) => b.textContent === 'Save key').click());
+  await app.waitFor('key added in Settings', () => window.__t.settingsPages().ai.accounts.some((a) => a.provider === 'google'), 20000);
+  check('… an API key added there is in auth.json, the page lists it', readJson('auth.json').google?.key === 'AIza-test-789');
+  await ev(() => document.querySelector('#st-ai [data-provider="google"] [data-act="signout"]').click());
+  await app.waitFor('key removed in Settings', () => !window.__t.settingsPages().ai.accounts.some((a) => a.provider === 'google'), 20000);
+  ap = await aiPage();
+  check('… and signed out there again', !readJson('auth.json').google && !(await ev(() => document.body.innerText)).includes('AIza-test-789'));
+  await ev(() => window.__t.closeSettings());
 
   // ---- Signing out ------------------------------------------------------------------------------------------------
   await menu('Sign out of OpenRouterAPI key');

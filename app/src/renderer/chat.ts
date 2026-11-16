@@ -1,8 +1,9 @@
-import { accountLabel, AI_KEY_PROVIDERS, CHATGPT_PROVIDER, isRecommendedModel, RECOMMENDED_MODEL, type AiAccount } from '../shared/somaai';
+import { accountLabel, CHATGPT_PROVIDER, RECOMMENDED_MODEL, type AiAccount } from '../shared/somaai';
 import type { AiEvent, AiExit, SomaApi } from '../shared/types';
+import { keyForm, searchMenu, showModelMenu } from './aiparts';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
-import { el, menuItem, menus } from './ui';
+import { el, fmtWhen, menuItem, menus } from './ui';
 
 /*
  * Chat of SOMA AI, the agent built into SOMA (main/somaai.ts). Made for people who never used a coding agent
@@ -35,8 +36,34 @@ const NOTE_KEY = 'soma.aiNoteSeen';
 /** An icon, the spinner turning (style.css .spin). */
 const ico = (name: string, size = 16, sw = 1.8): Element => (name === 'spin' ? el('span', { className: 'spin' }, icon(name, size, sw)) : icon(name, size, sw));
 const MAX_IMAGE = 8 * 1024 * 1024;
-/** Start of the title of a question from SOMA's tool ask_user (resources/somaai/soma.ts, same text there). */
+/** Start of the title of the input dialog from SOMA's tool ask_user (resources/somaai/soma.ts, same text there), JSON follows. */
 const ASK_MARK = 'SOMA AI asks:\n';
+
+/** A question of ask_user. `at`: its place in the call, the answers go back in that order. */
+interface AskQ { at: number; question: string; header: string; options: { label: string; description: string }[]; multi: boolean }
+
+/** The questions of an ask_user call from its JSON, only what can be shown: it comes from the agent. */
+function askQuestions(json: string): AskQ[] {
+  let p: unknown;
+  try { p = JSON.parse(json); } catch { return []; }
+  return arr(obj(p).questions).slice(0, 8).map(obj).map((q, at) => ({
+    at,
+    question: str(q.question).trim(),
+    header: str(q.header).trim().slice(0, 40),
+    options: arr(q.options).map(obj).map((o) => ({ label: str(o.label).trim(), description: str(o.description).trim() })).filter((o) => o.label).slice(0, 8),
+    multi: q.multiSelect === true,
+  })).filter((q) => q.question);
+}
+
+/** "SOMA AI asked: … You answered: …" for each question of an ask_user call in the history. */
+function askedLines(args: Json, details: Json): string[] {
+  const given = arr(details.answers).map(obj);
+  return arr(args.questions).map(obj).flatMap((q, i) => {
+    if (!str(q.question).trim()) return [];
+    const a = str(given[i]?.answer);
+    return [`SOMA AI asked: ${str(q.question).trim()}${a ? ` You answered: ${a}` : ' You skipped it.'}`];
+  });
+}
 /**
  * Words of the working indicator, like Claude Code's "Elucidating …" (wish of the user): something visibly happens,
  * with a wink at the workshop. One every few seconds, never the same twice in a row.
@@ -235,6 +262,8 @@ export class SomaChat {
    */
   private wantModel: { provider: string; modelId: string } | null = null;
   private starting: Promise<boolean> | null = null;
+  /** Open question cards by request id: closed when the run ends without an answer (pi drops its dialogs then). */
+  private closers = new Map<string, () => void>();
 
   constructor(private readonly deps: ChatDeps) {
     this.top = el('div', { className: 'ai-top' });
@@ -304,6 +333,7 @@ export class SomaChat {
     clearInterval(this.ticker);
     this.runStart = 0;
     this.asking = null;
+    this.closers.clear();
     this.model = null;
     this.steps.clear();
     this.turnRows.clear();
@@ -379,32 +409,7 @@ export class SomaChat {
     this.top.replaceChildren();
     const chatgpt = el('button', { className: 'btn primary', textContent: 'Sign in with ChatGPT' });
     chatgpt.addEventListener('click', () => void this.signIn());
-    const select = el('select', { className: 'ai-field' });
-    for (const p of AI_KEY_PROVIDERS) select.append(el('option', { value: p.id, textContent: p.label }));
-    select.setAttribute('aria-label', 'Provider');
-    const key = el('input', { className: 'ai-field grow', type: 'password', placeholder: AI_KEY_PROVIDERS[0].placeholder, autocomplete: 'off' });
-    key.setAttribute('aria-label', 'API key');
-    select.addEventListener('change', () => { key.placeholder = AI_KEY_PROVIDERS.find((p) => p.id === select.value)?.placeholder ?? ''; });
-    const err = el('div', { className: 'ai-err' });
-    const save = el('button', { className: 'btn sm', textContent: 'Save key' });
-    const doSave = async () => {
-      save.disabled = true;
-      const r = await this.deps.api.ai.saveKey(select.value, key.value).catch((e) => ({ ok: false, error: String(e) }));
-      save.disabled = false;
-      if (!r.ok) { err.textContent = r.error ?? 'The key could not be saved.'; return; }
-      key.value = '';
-      this.deps.toast(`API key saved for ${AI_KEY_PROVIDERS.find((p) => p.id === select.value)?.label ?? select.value}.`);
-      this.useRecommended(select.value);
-      this.piUp = false;
-      await this.show();
-    };
-    save.addEventListener('click', () => void doSave());
-    key.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); void doSave(); } });
-    const help = el('button', { className: 'lnk' }, 'How do I get a key?', icon('openext', 12, 2));
-    help.addEventListener('click', () => {
-      const url = AI_KEY_PROVIDERS.find((p) => p.id === select.value)?.keyUrl;
-      if (url) void this.deps.api.openUrl(url);
-    });
+    const key = keyForm({ api: this.deps.api, toast: this.deps.toast, saved: (provider) => this.accountsChanged(provider) });
     const term = el('button', { className: 'btn sm', textContent: 'Open a terminal' });
     term.addEventListener('click', () => this.deps.openTerminal());
     const backBtn = back ? el('button', { className: 'lnk ai-back' }, icon('left', 13, 2), 'Back to the conversation') : null;
@@ -422,9 +427,7 @@ export class SomaChat {
       el('div', { className: 'ai-opt' },
         el('h4', {}, icon('apikey', 16), 'Use an API key'),
         el('p', { textContent: 'Pay per use, billed by the provider. Works with Claude, OpenAI, Google Gemini, OpenRouter and OpenCode (Zen or Go).' }),
-        el('div', { className: 'ai-keyrow' }, select, key),
-        err,
-        el('div', { className: 'acts' }, save, el('span', { className: 'grow' }), help)),
+        ...key),
       el('div', { className: 'ai-or', textContent: 'or' }),
       el('div', { className: 'ai-opt plain' },
         el('h4', {}, icon('term', 16), 'I already use Claude Code or another agent'),
@@ -440,7 +443,7 @@ export class SomaChat {
     this.renderSigning();
     const r = await this.deps.api.ai.signIn().catch((e) => ({ ok: false, error: String(e), cancelled: false }));
     this.setPhase('setup');
-    if (r.ok) { this.deps.toast('Signed in with ChatGPT.'); this.piUp = false; this.useRecommended(CHATGPT_PROVIDER); await this.show(); return; }
+    if (r.ok) { this.deps.toast('Signed in with ChatGPT.'); await this.accountsChanged(CHATGPT_PROVIDER); return; }
     this.renderSetup(this.accounts.length > 0);
     if (!r.cancelled) this.deps.toast(`Signing in did not work: ${r.error ?? 'unknown reason'}`, 'error');
   }
@@ -512,11 +515,14 @@ export class SomaChat {
     const fresh = el('button', { className: 'ibtn s', title: 'New conversation' }, icon('chatplus', 16));
     fresh.setAttribute('aria-label', 'New conversation');
     fresh.addEventListener('click', () => void this.newConversation());
+    const past = el('button', { className: 'ibtn s', title: 'Earlier conversations' }, icon('history', 16));
+    past.setAttribute('aria-label', 'Earlier conversations');
+    past.addEventListener('click', () => void this.openSessions(past));
     const more = el('button', { className: 'ibtn s', title: 'Sign-in' }, icon('more', 16));
     more.setAttribute('aria-label', 'Sign-in and more');
     more.addEventListener('click', () => this.openAccountMenu(more));
-    this.top.replaceChildren(el('span', { className: 'ai-safe' }, icon('shield', 13), 'SOMA AI works with your permissions on this computer · ', details),
-      el('span', { className: 'grow' }), fresh, more);
+    this.top.replaceChildren(el('span', { className: 'ai-safe' }, icon('shield', 13), 'Works with your permissions · ', details),
+      el('span', { className: 'grow' }), past, fresh, more);
   }
 
   private renderWelcome(): void {
@@ -631,6 +637,39 @@ export class SomaChat {
     this.wantModel = modelId ? { provider, modelId } : null;
   }
 
+  /**
+   * A sign-in was added or removed (here or in Settings > SOMA AI): pi of the open model has been ended by then
+   * (main.ts), the next start takes the new sign-in. `provider`: just signed in, its recommended model is chosen.
+   */
+  async accountsChanged(provider?: string, refresh = true): Promise<void> {
+    if (provider) this.useRecommended(provider);
+    this.piUp = false;
+    if (refresh) await this.show();
+  }
+
+  /**
+   * Another model, from the model menu or Settings > SOMA AI: at once when pi runs, otherwise at its next start (a
+   * continued conversation would keep its own model).
+   */
+  async useModel(provider: string, modelId: string): Promise<void> {
+    if (!this.piUp) { this.wantModel = { provider, modelId }; return; }
+    const s = await this.deps.api.ai.command({ type: 'set_model', provider, modelId });
+    if (s.ok) this.setModel(obj(s.data));
+    else this.deps.toast(s.error ?? 'The model could not be changed.', 'error');
+  }
+
+  /**
+   * Settings > SOMA AI, "Show again": the note before the first message comes back before the next one. `refresh`:
+   * the tab is in front with a model open (main.ts), it shows the note right away.
+   */
+  showNote(refresh: boolean): void {
+    this.deps.store.set(NOTE_KEY, '0');
+    if (refresh) void this.show();
+  }
+
+  /** Signed in and past the set-up (the tutorial words its step after it). */
+  get setUp(): boolean { return this.phase === 'chat' || this.phase === 'note'; }
+
   private setModel(m: Json): void {
     this.model = str(m.id) ? { provider: str(m.provider), id: str(m.id), name: str(m.name) || str(m.id) } : null;
     this.renderComposer();
@@ -669,12 +708,53 @@ export class SomaChat {
     this.renderWelcome();
   }
 
+  /**
+   * "Earlier conversations" (wish of the user): back to a conversation of this model, the newest first, with a search.
+   * pi continues it where it ended, with its model.
+   */
+  private async openSessions(anchor: HTMLElement): Promise<void> {
+    if (menus.isOpen(this.menu)) { menus.close(); return; }
+    const [r, st] = await Promise.all([
+      this.deps.api.ai.sessions().catch((e) => ({ ok: false, error: String(e), sessions: undefined })),
+      this.piUp ? this.deps.api.ai.command({ type: 'get_state' }) : Promise.resolve(null),
+    ]);
+    if (!r.ok) { this.deps.toast(r.error ?? 'The conversations could not be listed.', 'error'); return; }
+    const now = str(obj(st?.data).sessionId);
+    searchMenu(this.menu, anchor, [{
+      title: 'EARLIER CONVERSATIONS', scroll: true,
+      entries: (r.sessions ?? []).map((s) => {
+        const title = s.title || 'A picture without words';
+        return {
+          label: title.length > 70 ? `${title.slice(0, 69)}…` : title, sub: fmtWhen(s.modified, true), find: title, on: s.id === now,
+          onClick: () => { if (s.id !== now) void this.switchTo(s.id); },
+        };
+      }),
+    }], { placeholder: 'Search conversations …', empty: 'No conversations in this model yet.', align: 'right' });
+  }
+
+  private async switchTo(id: string): Promise<void> {
+    if (this.running) await this.stop();
+    const r = await this.deps.api.ai.switchSession(id);
+    if (!r.ok) { this.deps.toast(r.error ?? 'The conversation could not be opened.', 'error'); return; }
+    if (obj(r.data).cancelled === true) return;
+    // main.ts started pi for it if needed
+    this.piUp = true;
+    this.closeQuestions();
+    const m = await this.deps.api.ai.command({ type: 'get_messages' });
+    if (m.ok) this.renderHistory(arr(obj(m.data).messages));
+    if (!this.list.childElementCount) this.renderWelcome();
+    const s = await this.deps.api.ai.command({ type: 'get_state' });
+    if (s.ok) this.setModel(obj(obj(s.data).model));
+    this.focus();
+  }
+
   private openAccountMenu(anchor: HTMLElement): void {
     const items: HTMLElement[] = [el('div', { className: 'mh', textContent: 'SIGNED IN' })];
     for (const a of this.accounts) {
       items.push(menuItem(`Sign out of ${accountLabel(a)}`, { icon: 'user', sub: a.type === 'oauth' ? 'Account' : 'API key', onClick: () => void this.signOut(a) }));
     }
     items.push(el('div', { className: 'msep' }), menuItem('Use another sign-in …', { icon: 'apikey', onClick: () => this.renderSetup(true) }));
+    this.menu.onkeydown = null;
     this.menu.replaceChildren(...items);
     menus.toggle(this.menu, anchor, 'right');
   }
@@ -689,24 +769,11 @@ export class SomaChat {
   }
 
   private async openModelMenu(): Promise<void> {
+    if (menus.isOpen(this.menu)) { menus.close(); return; }
     if (!(await this.ensureStarted())) return;
     const r = await this.deps.api.ai.command({ type: 'get_available_models' });
     const models = arr(obj(r.data).models).map(obj).map((m) => ({ provider: str(m.provider), id: str(m.id), name: str(m.name) || str(m.id) }));
-    const rec = models.filter((m) => isRecommendedModel(m.id));
-    const rest = models.filter((m) => !isRecommendedModel(m.id)).sort((a, b) => a.name.localeCompare(b.name));
-    const item = (m: { provider: string; id: string; name: string }) => {
-      const on = this.model?.id === m.id && this.model?.provider === m.provider;
-      return menuItem(m.name, {
-        icon: on ? 'check' : undefined, sub: models.some((x) => x !== m && x.name === m.name) ? m.provider : undefined,
-        onClick: () => void this.deps.api.ai.command({ type: 'set_model', provider: m.provider, modelId: m.id }).then((s) => { if (s.ok) this.setModel(obj(s.data)); }),
-      });
-    };
-    this.menu.replaceChildren(
-      ...(rec.length ? [el('div', { className: 'mh', textContent: 'RECOMMENDED FOR THE BEST RESULTS' }), ...rec.map(item), el('div', { className: 'msep' })] : []),
-      el('div', { className: 'mh', textContent: rec.length ? 'OTHER MODELS' : 'MODELS' }),
-      el('div', { className: 'ai-menu-scroll' }, ...rest.map(item)),
-      ...(models.length ? [] : [el('div', { className: 'mnote', textContent: 'No models: sign in first.' })]));
-    menus.toggle(this.menu, this.modelBtn, 'right');
+    showModelMenu(this.menu, this.modelBtn, models, this.model, (m) => void this.useModel(m.provider, m.id));
   }
 
   // ---- Records of pi ---------------------------------------------------------------------------------------------
@@ -718,7 +785,7 @@ export class SomaChat {
     const r = e.record;
     switch (r.type) {
       case 'agent_start': this.setRunning(true); break;
-      case 'agent_settled': this.setRunning(false); this.settleSteps(); break;
+      case 'agent_settled': this.closeQuestions(); this.setRunning(false); this.settleSteps(); break;
       case 'message_start': this.messageStart(obj(r.message)); break;
       case 'message_update': this.messageUpdate(obj(r.assistantMessageEvent)); break;
       case 'message_end': this.messageEnd(obj(r.message)); break;
@@ -734,8 +801,8 @@ export class SomaChat {
   private onExit(e: AiExit): void {
     if (e.gen < this.minGen) return;
     this.piUp = false;
+    this.closeQuestions();
     this.setRunning(false);
-    this.asking = null;
     this.settleSteps();
     if (e.error) this.problem(e.error, true);
     this.renderComposer();
@@ -847,6 +914,16 @@ export class SomaChat {
     else this.paintStep(ref, isError ? 'fail' : 'ok');
   }
 
+  /**
+   * The run ended (stopped with Esc, pi ended) while a question was open: pi forgets its dialog without a record, so
+   * the card says so and the input is free again.
+   */
+  private closeQuestions(): void {
+    for (const close of this.closers.values()) close();
+    this.closers.clear();
+    if (this.asking) { this.asking = null; this.renderComposer(); }
+  }
+
   /** A step that was still running when the run ended (stopped, crashed): no spinner forever. */
   private settleSteps(): void {
     for (const ref of this.steps.values()) if (ref.state === 'run') this.paintStep(ref, 'fail');
@@ -947,16 +1024,15 @@ export class SomaChat {
     this.list.replaceChildren();
     this.steps.clear();
     this.turnRows.clear();
-    const results = new Map<string, { text: string; isError: boolean }>();
-    for (const m of messages.map(obj)) if (m.role === 'toolResult') results.set(str(m.toolCallId), { text: resultText(m), isError: m.isError === true });
+    const results = new Map<string, { text: string; isError: boolean; details: Json }>();
+    for (const m of messages.map(obj)) if (m.role === 'toolResult') results.set(str(m.toolCallId), { text: resultText(m), isError: m.isError === true, details: obj(m.details) });
     for (const m of messages.map(obj)) {
       if (m.role === 'user') { this.turnRows.clear(); this.append(this.userBubble(m.content)); }
       else if (m.role === 'assistant') {
         for (const c of arr(m.content).map(obj)) {
           if (c.type === 'text' && str(c.text).trim()) this.append(el('div', { className: 'ai-msg' }, this.who(), this.markdown(str(c.text))));
           else if (c.type === 'toolCall' && c.name === 'ask_user') {
-            const answer = /answered: (.*)$/s.exec(results.get(str(c.id))?.text ?? '')?.[1];
-            this.quiet('help', `SOMA AI asked: ${str(obj(c.arguments).question)}${answer ? ` You answered: ${answer}` : ' You skipped it.'}`);
+            for (const line of askedLines(obj(c.arguments), results.get(str(c.id))?.details ?? {})) this.quiet('help', line);
           } else if (c.type === 'toolCall') {
             const ref = this.ensureStep(str(c.id), str(c.name), obj(c.arguments));
             const res = results.get(str(c.id));
@@ -975,7 +1051,12 @@ export class SomaChat {
     const id = str(r.id);
     const method = str(r.method);
     if (method === 'select' && /^Permission Required/.test(str(r.title))) { this.permission(id, str(r.title), arr(r.options).map(String)); return; }
-    if (method === 'select' && str(r.title).startsWith(ASK_MARK)) { this.agentQuestion(id, str(r.title).slice(ASK_MARK.length), arr(r.options).map(String)); return; }
+    if (method === 'input' && str(r.title).startsWith(ASK_MARK)) {
+      const qs = askQuestions(str(r.title).slice(ASK_MARK.length));
+      // Nothing sensible to show: skipped, SOMA AI decides itself (the tool tells it so)
+      if (qs.length) this.agentQuestions(id, qs); else this.deps.api.ai.respond({ id, cancelled: true });
+      return;
+    }
     if (method === 'select' || method === 'confirm') { this.genericQuestion(id, method, str(r.title), str(r.message), arr(r.options).map(String)); return; }
     if (method === 'input' || method === 'editor') { this.deps.api.ai.respond({ id, cancelled: true }); return; }
     // Notes of extensions are written for programmers ("project is not trusted — skipping project-scoped permission
@@ -999,6 +1080,7 @@ export class SomaChat {
       if (this.asking !== id) return;
       this.deps.api.ai.respond(value ? { id, value } : { id, cancelled: true });
       this.asking = null;
+      this.closers.delete(id);
       card.classList.add('done');
       acts.replaceChildren(el('span', { className: 'c3 small', textContent: said }));
       this.renderComposer();
@@ -1017,41 +1099,86 @@ export class SomaChat {
       el('div', { className: 'in' }, el('div', { className: 'what', title: q.full }, el('span', { className: 'c3' }, icon(q.whatIcon, 14)), el('span', { textContent: q.what }))),
       acts, detBtn, det);
     this.asking = id;
+    this.closers.set(id, () => { card.classList.add('done'); acts.replaceChildren(el('span', { className: 'c3 small', textContent: 'Not answered: SOMA AI stopped.' })); });
     this.append(card);
     this.renderComposer();
   }
 
   /**
-   * A question of SOMA AI (tool ask_user, resources/somaai/soma.ts): answers to click, "label — what it means", and a
-   * field for an own answer, like the questions in Claude Code. The input below stays locked until it is answered.
+   * Questions of SOMA AI (tool ask_user, resources/somaai/soma.ts), like AskUserQuestion in Claude Code: all questions
+   * of one call in one card, answered together (wish of the user: not one after the other). Answers to click with what
+   * they mean, and an own answer for each question. One question with one answer to pick: a click sends it. The input
+   * below stays locked until the card is answered.
    */
-  private agentQuestion(id: string, question: string, options: string[]): void {
+  private agentQuestions(id: string, qs: AskQ[]): void {
     const card = el('div', { className: 'ai-ask ai-q' });
-    const done = (value: string | null, said: string) => {
+    const one = qs.length === 1;
+    const picks = qs.map(() => new Set<string>());
+    const owns: HTMLInputElement[] = [];
+    const paints: (() => void)[] = [];
+    const answered = (i: number) => picks[i].size > 0 || !!owns[i].value.trim();
+    const send = el('button', { className: 'btn sm acc', textContent: one ? 'Send' : 'Send answers' });
+    const skip = el('button', { className: 'lnk', textContent: 'Skip' });
+    const refresh = () => {
+      send.disabled = !qs.some((_, i) => answered(i));
+      paints.forEach((p) => p());
+    };
+    const done = (sending: boolean) => {
       if (this.asking !== id) return;
-      this.deps.api.ai.respond(value === null ? { id, cancelled: true } : { id, value });
+      const answers = qs.map((_, i) => (sending && answered(i) ? { picked: [...picks[i]], own: owns[i].value.trim() } : null));
+      // In the order of the call: a question the card left out (no text) counts as skipped
+      const inOrder: (typeof answers[number])[] = Array.from({ length: Math.max(...qs.map((q) => q.at)) + 1 }, () => null);
+      qs.forEach((q, i) => { inOrder[q.at] = answers[i]; });
+      this.deps.api.ai.respond(sending ? { id, value: JSON.stringify({ answers: inOrder }) } : { id, cancelled: true });
       this.asking = null;
+      this.closers.delete(id);
       card.classList.add('done');
-      body.replaceChildren(el('div', { className: 'answer' }, icon(value === null ? 'x' : 'check', 14, 2.2), el('span', { textContent: said })));
+      const words = answers.map((a) => (a ? [...a.picked, ...(a.own ? [a.own] : [])].join(', ') : ''));
+      const line = (ok: boolean, text: string) => el('div', { className: ok ? 'answer' : 'answer skipped' }, icon(ok ? 'check' : 'x', 14, 2.2), el('span', { textContent: text }));
+      body.replaceChildren(...(one || words.every((w) => !w)
+        ? [line(!!words[0], words[0] ? `You answered: ${words[0]}` : `You skipped ${one ? 'this question' : 'these questions'}.`)]
+        : qs.map((q, i) => line(!!words[i], `${q.header || q.question} ${words[i] ? `→ ${words[i]}` : '→ skipped'}`))));
       this.renderComposer();
     };
-    const answers = options.map((o) => {
-      const [label, ...rest] = o.split(' — ');
-      const b = el('button', { className: 'ai-ans' }, el('b', { textContent: label }), rest.length ? el('span', { textContent: rest.join(' — ') }) : null);
-      b.addEventListener('click', () => done(o, `You answered: ${label}`));
-      return b;
+    const blocks = qs.map((q, i) => {
+      const btns = q.options.map((o) => {
+        const b = el('button', { className: 'ai-ans' }, el('b', { textContent: o.label }), o.description ? el('span', { textContent: o.description }) : null);
+        b.addEventListener('click', () => {
+          if (one && !q.multi) { picks[i] = new Set([o.label]); owns[i].value = ''; done(true); return; }
+          if (q.multi) { if (!picks[i].delete(o.label)) picks[i].add(o.label); } else { picks[i] = new Set([o.label]); owns[i].value = ''; }
+          refresh();
+        });
+        return [o.label, b] as const;
+      });
+      paints.push(() => { for (const [label, b] of btns) { b.classList.toggle('on', picks[i].has(label)); b.setAttribute('aria-pressed', String(picks[i].has(label))); } });
+      const own = el('input', { className: 'ai-field grow', placeholder: q.multi ? 'Something else, in your own words …' : 'Or in your own words …' });
+      own.setAttribute('aria-label', `Your own answer: ${q.question}`);
+      own.addEventListener('input', () => { if (!q.multi && own.value.trim()) picks[i].clear(); refresh(); });
+      // Enter: on to the next question without an answer, after the last one send
+      own.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const next = owns.find((_, j) => j > i && !answered(j));
+        if (next) next.focus(); else if (!send.disabled) done(true);
+      });
+      owns.push(own);
+      return el('div', { className: 'ai-qblock' },
+        one ? null : el('div', { className: 'ai-qtext' }, q.header ? el('span', { className: 'ai-qhead', textContent: q.header }) : null, el('span', { textContent: q.question })),
+        q.multi ? el('div', { className: 'ai-qhint', textContent: 'Pick one or more.' }) : null,
+        // Answers without an explanation side by side: short ones ("PLA", "PETG") would waste the narrow column
+        el('div', { className: q.options.some((o) => o.description) ? 'ai-answers' : 'ai-answers inline' }, ...btns.map(([, b]) => b)),
+        el('div', { className: 'ai-own' }, own, one ? send : null, one ? skip : null));
     });
-    const own = el('input', { className: 'ai-field grow', placeholder: 'Or answer in your own words …' });
-    own.setAttribute('aria-label', 'Your own answer');
-    const send = el('button', { className: 'btn sm', textContent: 'Send' });
-    const sendOwn = () => { const t = own.value.trim(); if (t) done(t, `You answered: ${t}`); };
-    send.addEventListener('click', sendOwn);
-    own.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendOwn(); } });
-    const skip = el('button', { className: 'lnk', textContent: 'Skip' });
-    skip.addEventListener('click', () => done(null, 'You skipped this question.'));
-    const body = el('div', { className: 'ai-qbody' }, el('div', { className: 'ai-answers' }, ...answers), el('div', { className: 'ai-own' }, own, send, skip));
-    card.append(el('h4', {}, icon('help', 18), el('span', { textContent: question })), body);
+    send.addEventListener('click', () => done(true));
+    skip.addEventListener('click', () => done(false));
+    const body = el('div', { className: 'ai-qbody' }, ...blocks, one ? null : el('div', { className: 'ai-qacts' }, send, skip));
+    card.append(el('h4', {}, icon('help', 18), el('span', { textContent: one ? qs[0].question : `SOMA AI has ${qs.length} questions` })), body);
+    refresh();
     this.asking = id;
+    this.closers.set(id, () => {
+      card.classList.add('done');
+      body.replaceChildren(el('div', { className: 'answer skipped' }, icon('x', 14, 2.2), el('span', { textContent: 'Not answered: SOMA AI stopped.' })));
+    });
     this.append(card);
     this.renderComposer();
   }
@@ -1063,6 +1190,7 @@ export class SomaChat {
       if (this.asking !== id) return;
       this.deps.api.ai.respond({ id, ...res });
       this.asking = null;
+      this.closers.delete(id);
       card.classList.add('done');
       acts.replaceChildren(el('span', { className: 'c3 small', textContent: said }));
       this.renderComposer();
@@ -1075,6 +1203,7 @@ export class SomaChat {
     if (message) card.append(el('div', { className: 'in', textContent: message }));
     card.append(acts);
     this.asking = id;
+    this.closers.set(id, () => { card.classList.add('done'); acts.replaceChildren(el('span', { className: 'c3 small', textContent: 'Not answered: SOMA AI stopped.' })); });
     this.append(card);
     this.renderComposer();
   }

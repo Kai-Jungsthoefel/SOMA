@@ -86,6 +86,11 @@ const api: SomaApi = {
     cancelSignIn: () => ipcRenderer.invoke('ai:cancelSignIn'),
     signOut: (provider) => ipcRenderer.invoke('ai:signOut', provider),
     onSignInUrl: (cb) => { ipcRenderer.on('ai:signInUrl', (_e, url) => cb(url)); },
+    models: () => ipcRenderer.invoke('ai:models'),
+    defaultModel: () => ipcRenderer.invoke('ai:defaultModel'),
+    setDefaultModel: (provider, id) => ipcRenderer.invoke('ai:setDefaultModel', provider, id),
+    sessions: () => ipcRenderer.invoke('ai:sessions'),
+    switchSession: (id) => ipcRenderer.invoke('ai:switchSession', id),
   },
   measure: {
     query: (source, req) => ipcRenderer.invoke('measure:query', source, req),

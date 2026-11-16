@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AI_KEY_PROVIDERS, CHATGPT_PROVIDER, RECOMMENDED_MODEL, type AiAccount } from '../shared/somaai';
+import { AI_KEY_PROVIDERS, CHATGPT_PROVIDER, RECOMMENDED_MODEL, type AiAccount, type AiModel, type AiSession } from '../shared/somaai';
 import type { AiSignInResult } from '../shared/types';
 import { aiDir, piIndex, piProcessEnv, readJson, writeJson } from './somaai';
 
@@ -143,6 +143,91 @@ export function signInChatGPT(onUrl: (url: string) => void): Promise<AiSignInRes
     child.once('error', (e) => { error = e.message; done(null); });
     child.once('exit', (code) => done(code));
   });
+}
+
+/**
+ * A list from pi's SDK through resources/somaai/lists.mjs (offline, see there): there without a model open and
+ * without pi running. The JSON line it printed, or an error.
+ */
+function piList(args: string[], what: string): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
+  const index = piIndex();
+  const helper = path.join(app.getAppPath(), 'resources', 'somaai', 'lists.mjs');
+  if (!index || !fs.existsSync(helper)) return Promise.resolve({ ok: false, error: 'SOMA AI is missing from this installation. Please reinstall SOMA.' });
+  try { fs.mkdirSync(aiDir(), { recursive: true }); } catch { /* the helper reports it */ }
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [helper, index, ...args], { cwd: aiDir(), env: { ...piProcessEnv(), PI_OFFLINE: '1' }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    let out = '';
+    let err = '';
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (d: string) => { out = (out + d).slice(-8_000_000); });
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (d: string) => { err = (err + d).slice(-2000); });
+    const timer = setTimeout(() => child.kill(), 30_000);
+    let settled = false;
+    const done = (r: { ok: true; data: Record<string, unknown> } | { ok: false; error: string }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (!r.ok) console.log(`[somaai] list of ${what} failed: ${r.error}`);
+      resolve(r);
+    };
+    child.once('error', (e) => done({ ok: false, error: e.message }));
+    child.once('exit', () => {
+      let m: Record<string, unknown> = {};
+      try { m = JSON.parse(out.trim().split('\n').at(-1) ?? '') as Record<string, unknown>; } catch { /* below */ }
+      if (typeof m.error === 'string' || !Object.keys(m).length) {
+        done({ ok: false, error: (typeof m.error === 'string' ? m.error : err.trim().split(/\r?\n/).at(-1) || `The ${what} could not be listed.`).slice(0, 400) });
+      } else done({ ok: true, data: m });
+    });
+  });
+}
+
+/** The models of the saved sign-ins, for Settings > SOMA AI. */
+export async function listModels(): Promise<{ ok: boolean; models?: AiModel[]; error?: string }> {
+  const r = await piList(['models'], 'models');
+  if (!r.ok) return r;
+  // Only what can be shown and chosen: the list comes from another process
+  const models = (Array.isArray(r.data.models) ? r.data.models : []).flatMap((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    return typeof o.provider === 'string' && typeof o.id === 'string' ? [{ provider: o.provider, id: o.id, name: typeof o.name === 'string' && o.name ? o.name : o.id }] : [];
+  });
+  return { ok: true, models };
+}
+
+/** The conversations of a model folder with SOMA AI, newest first, with the file pi keeps each one in. */
+export async function listSessions(dir: string): Promise<{ ok: boolean; sessions?: (AiSession & { path: string })[]; error?: string }> {
+  const r = await piList(['sessions', dir], 'conversations');
+  if (!r.ok) return r;
+  const sessions = (Array.isArray(r.data.sessions) ? r.data.sessions : []).flatMap((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    return typeof o.id === 'string' && typeof o.path === 'string'
+      ? [{ id: o.id, path: o.path, title: typeof o.title === 'string' ? o.title : '', modified: typeof o.modified === 'number' ? o.modified : 0, messages: typeof o.messages === 'number' ? o.messages : 0 }]
+      : [];
+  });
+  return { ok: true, sessions };
+}
+
+/** The model pi starts with (settings.json), null when pi chooses. */
+export function defaultModel(): { provider: string; id: string } | null {
+  let s: Record<string, unknown>;
+  try { s = readJson(settingsFile()); } catch { return null; }
+  return typeof s.defaultProvider === 'string' && typeof s.defaultModel === 'string' ? { provider: s.defaultProvider, id: s.defaultModel } : null;
+}
+
+/** Settings > SOMA AI: the model pi starts with. Only a model of a saved sign-in (as the list shows them). */
+export async function setDefaultModel(provider: unknown, id: unknown): Promise<{ ok: boolean; error?: string }> {
+  if (typeof provider !== 'string' || typeof id !== 'string') return { ok: false, error: 'Unknown model.' };
+  const list = await listModels();
+  if (!list.ok) return { ok: false, error: list.error };
+  if (!list.models?.some((m) => m.provider === provider && m.id === id)) return { ok: false, error: 'This model is not available with your sign-ins.' };
+  try {
+    const s = readJson(settingsFile());
+    s.defaultProvider = provider;
+    s.defaultModel = id;
+    writeJson(settingsFile(), s);
+  } catch (e) { return { ok: false, error: `The model could not be saved: ${e instanceof Error ? e.message : String(e)}` }; }
+  console.log(`[somaai] model for new conversations: ${provider}/${id}`);
+  return { ok: true };
 }
 
 /** Closing stdin cancels pi's login. The callback server on 127.0.0.1 goes with the process. */

@@ -211,6 +211,14 @@ export interface TourContext {
   showCode(on: boolean): void;
   openCode(file: string): void;
   expandAgent(): void;
+  /** SOMA AI's tab to the front, its pane (null without it). `chatSetUp`: signed in, the chat is ready. */
+  showChat(): void;
+  chatPane(): HTMLElement | null;
+  chatSetUp(): boolean;
+  /** The + menu of the agent area: open it (the step about an own agent shows it), close it, is it open. */
+  openAgentMenu(): void;
+  closeAgentMenu(): void;
+  agentMenu(): HTMLElement | null;
   /** Gefundene Agenten (Namen), null solange die Suche läuft. */
   agentsFound(): string[] | null;
   selected(): boolean;
@@ -232,27 +240,41 @@ export function tourSteps(c: TourContext): TourStep[] {
   return [
     {
       title: 'Welcome to SOMA',
-      text: 'This is an example model: a box with a lid. In the middle is the 3D view, on the right the agent’s terminal, on the left the sidebar. Rotate the view with the left mouse button, zoom with the wheel.',
+      text: 'This is an example model: a box with a lid. In the middle is the 3D view, on the right the agent, on the left the sidebar. Rotate the view with the left mouse button, zoom with the wheel.',
       target: () => [byId('center')],
       enter: () => { c.showCode(false); c.showPanel(null); },
     },
+    // SOMA AI, the agent built into SOMA (wish of the user: explain its window, and show at + that an own agent works too)
     {
-      title: 'Start your agent',
+      title: 'SOMA AI, your agent',
+      text: () => 'SOMA AI is the AI agent built into SOMA. Tell it in your own words what you want, for example “Make the lid 5 mm thicker”, or add a photo of a sketch with the clip. It writes the model and you see it in the middle right away.'
+        + (c.chatSetUp() ? '' : ' The first time it needs a sign-in: your ChatGPT plan or an API key. You can follow this tutorial without one.'),
+      target: () => [c.chatPane()],
+      enter: () => { c.expandAgent(); c.showChat(); },
+    },
+    {
+      title: 'While SOMA AI works',
+      text: 'Every step shows up in plain words, Details tells exactly what happened. When it needs a decision, it asks with answers to click, or you type your own. Above the input you see that it is working and for how long, Esc stops it. The button next to Send picks the AI model, the clock at the top brings back earlier conversations.',
+      target: () => [c.chatPane()],
+      enter: () => { c.expandAgent(); c.showChat(); },
+    },
+    {
+      title: 'Or your own agent',
       text: () => {
         const found = c.agentsFound();
-        const intro = 'You describe what you want, an AI agent writes the model. SOMA does not bring its own agent.';
+        const intro = 'Already working with Claude Code, Codex or another coding agent? Start it from the + menu in a terminal instead of SOMA AI. It works on the same model, with its own sign-in and settings.';
         // Nicht jeder Agent ist in der Liste: über „Empty terminal“ startet man jeden selbst mit seinem Befehl
-        const own = 'Yours is not listed? Choose Empty terminal in the same menu and start it there with its command.';
-        if (found === null) return `${intro} Click + to start one. ${own}`;
-        if (!found.length) return `${intro} None was found on this computer: install one, for example Claude Code or OpenCode, then it appears in the + menu. Or choose Empty terminal there and start yours with its command. You can follow this tutorial without one.`;
-        return `${intro} Click + and choose one: ${found.join(', ')}. ${own}`;
+        const own = 'Not listed? Choose Empty terminal and start it there with its command.';
+        if (found === null || !found.length) return `${intro} ${own}`;
+        return `${intro} Found on this computer: ${found.join(', ')}. ${own}`;
       },
-      target: () => [byId('btn-term-add')],
-      enter: () => c.expandAgent(),
+      target: () => [byId('btn-term-add'), c.agentMenu()],
+      enter: () => { c.expandAgent(); c.openAgentMenu(); },
+      leave: () => c.closeAgentMenu(),
     },
     {
       title: 'The model is code',
-      text: 'The agent writes the model as CadQuery code in model.py. You can read it and edit it here too. Files shows everything in the model folder.',
+      text: 'The agent writes the model as CadQuery code in model.py. You don’t have to read or edit it: telling the agent what you want is enough. If you like, you can read and change it here too. Files shows everything in the model folder.',
       target: () => [byId('side'), byId('editor')],
       enter: () => { c.showPanel('files'); c.openCode('model.py'); },
     },

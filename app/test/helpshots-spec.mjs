@@ -45,9 +45,25 @@ export const SHOTS = [
     marks: [
       { label: 'Tabs', sel: '#term-tabs .tab', at: 'b' },
       { label: 'New tab', sel: '#btn-term-add', at: 'r' },
+      { label: 'SOMA AI', sel: '#btn-ai-tab', at: 'r' },
       { label: 'Start agent', sel: '#agent-list', at: 'r', box: true },
       { label: 'Empty terminal', sel: '#btn-term-plain', at: 'r' },
       { label: 'Copy path for agent app', sel: '#btn-copy-path', at: 'r' },
+    ],
+  },
+  {
+    file: 'chat.png',
+    clip: ['#terminals'],
+    marks: [
+      { label: 'Earlier conversations', sel: '.ai-top [aria-label="Earlier conversations"]', at: 't' },
+      { label: 'New conversation', sel: '.ai-top [aria-label="New conversation"]', at: 't' },
+      { label: 'Sign-in', sel: '.ai-top [aria-label="Sign-in and more"]', at: 't' },
+      { label: 'Steps', sel: '.ai-steps', at: 'tr', box: true },
+      { label: 'Questions', sel: '.ai-q', at: 'tr', box: true },
+      { label: 'Working', sel: '.ai-status', at: 'tr', box: true },
+      { label: 'Add a picture', sel: '.ai-composer [aria-label="Add a picture"]', at: 't' },
+      { label: 'Model', sel: '.ai-model', at: 't' },
+      { label: 'Send and stop', sel: '.ai-send', at: 't' },
     ],
   },
   {
@@ -142,6 +158,7 @@ export const SHOTS = [
     marks: [
       { label: 'Viewer', sel: '#st-nav [data-sec=viewer]', at: 'r' },
       { label: 'Shortcuts', sel: '#st-nav [data-sec=keys]', at: 'r' },
+      { label: 'SOMA AI', sel: '#st-nav [data-sec=ai]', at: 'r' },
       { label: 'Skills', sel: '#st-nav [data-sec=skills]', at: 'r' },
       { label: 'Storage', sel: '#st-nav [data-sec=storage]', at: 'r' },
       { label: 'About', sel: '#st-nav [data-sec=about]', at: 'r' },

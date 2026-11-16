@@ -344,6 +344,16 @@ export class SomaAI {
     return this.request(c);
   }
 
+  /**
+   * "Earlier conversations" in the chat: back to one of this model's conversations. The file comes from main.ts
+   * (listSessions for this model folder), never from the window.
+   */
+  async switchSession(sessionPath: string): Promise<AiResult> {
+    const started = await this.start();
+    if (!started.ok) return started;
+    return this.request({ type: 'switch_session', sessionPath });
+  }
+
   /** Answer to a question of an extension (confirm, select, input). Only the fields pi knows. */
   respond(res: unknown): void {
     const r = (res && typeof res === 'object' ? res : {}) as Record<string, unknown>;

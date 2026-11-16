@@ -86,7 +86,7 @@ try {
   await waitFor('Einstellungen offen', () => window.__t.settings().open, 5000);
   const nav = await ev(() => [...document.querySelectorAll('#st-nav button')].map((b) => `${b.dataset.sec}:${b.textContent.trim()}`));
   const st0 = await ev(() => window.__t.settings());
-  check('Einstellungen: Reiter Viewer, Shortcuts, Skills, Storage, About, ohne Ziel offen im Reiter Viewer', JSON.stringify(nav) === '["viewer:Viewer","keys:Shortcuts","skills:Skills","storage:Storage","about:About"]'
+  check('Settings: tabs Viewer, Shortcuts, SOMA AI, Skills, Storage, About, without a target open in Viewer', JSON.stringify(nav) === '["viewer:Viewer","keys:Shortcuts","ai:SOMA AI","skills:Skills","storage:Storage","about:About"]'
     && st0.section === 'viewer' && await ev(() => !document.getElementById('st-viewer').hidden && document.getElementById('st-skills').hidden), nav.join(','));
   let pv = (await pages()).viewer.text;
   let cam = await vs();
@@ -259,7 +259,7 @@ try {
   let sp = (await pages()).storage;
   const area = (id) => sp.stats.areas.find((a) => a.id === id);
   check('Storage: Gesamtgröße, Modelle (2), Vorschau-Cache ≥ 1 MB, Sicherungen, eigene Skills, Übriges', sp.stats.total > 1024 * 1024 && area('workspaces')?.models === 2
-    && area('previews')?.bytes >= 1024 * 1024 && ['backups', 'thumbnails', 'skills', 'other'].every((id) => !!area(id)) && sp.text.includes('Models on this computer') && sp.text.includes('2 models'),
+    && area('previews')?.bytes >= 1024 * 1024 && ['backups', 'thumbnails', 'skills', 'somaai', 'other'].every((id) => !!area(id)) && sp.text.includes('Models on this computer') && sp.text.includes('2 models'),
     `${sp.stats.total} B, ${area('workspaces')?.models} Modelle`);
   check('Storage: Summe der Bereiche gleich der Gesamtgröße', sp.stats.areas.reduce((s, a) => s + a.bytes, 0) === sp.stats.total);
   await shot('settings-3-storage');

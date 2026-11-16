@@ -63,17 +63,34 @@ try {
   let s = await tour();
   check('„Start tutorial“: neues Modell „Tutorial“ mit Kiste und Deckel, Startseite zu', m1.name === 'Tutorial' && fs.existsSync(m1.dir)
     && await ev(() => document.getElementById('start').hidden) && JSON.stringify(await ev(() => window.__t.treeNames())) === '["Body","Lid"]', m1.name);
-  check('Schritt 1 von 10 mit Titel, Back gesperrt, Next', s.step === 1 && s.count === 10 && s.title === 'Welcome to SOMA' && s.backDisabled && s.next === 'Next'
-    && (await ev(() => document.getElementById('tour-card').textContent)).includes('Step 1 of 10'), JSON.stringify(s).slice(0, 160));
+  check('Step 1 of 12 with title, Back locked, Next', s.step === 1 && s.count === 12 && s.title === 'Welcome to SOMA' && s.backDisabled && s.next === 'Next'
+    && (await ev(() => document.getElementById('tour-card').textContent)).includes('Step 1 of 12'), JSON.stringify(s).slice(0, 160));
   check('Schritt 1 hebt den Viewer hervor', s.target && s.spot);
   await shot('tutorial-step1');
 
   await domClick('btn-tour-next');
   await waitFor('Schritt 2', () => window.__t.tour().step === 2, 5000);
   s = await tour();
-  check('Next: Schritt 2 „Start your agent“, + hervorgehoben, Agenten genannt oder Hinweis zum Installieren', s.title === 'Start your agent' && s.target
-    && /SOMA does not bring its own agent/.test(s.text) && (/Click \+ and choose one: /.test(s.text) || /install one/.test(s.text)), s.text.slice(0, 120));
+  check('Next: step 2 "SOMA AI, your agent", its tab in front and highlighted, without a sign-in it says one is needed', s.title === 'SOMA AI, your agent' && s.target
+    && /SOMA AI is the AI agent built into SOMA/.test(s.text) && /needs a sign-in/.test(s.text) && await ev(() => !document.querySelector('.ai-pane').hidden), s.text.slice(0, 120));
   await shot('tutorial-step2');
+  await domClick('btn-tour-next');
+  await waitFor('step 3', () => window.__t.tour().step === 3, 5000);
+  s = await tour();
+  check('Step 3 "While SOMA AI works": steps, questions, Esc, model and earlier conversations explained', s.title === 'While SOMA AI works' && s.target
+    && /asks with answers to click/.test(s.text) && /Esc stops it/.test(s.text) && /earlier conversations/.test(s.text), s.text.slice(0, 120));
+  await domClick('btn-tour-next');
+  await waitFor('step 4', () => window.__t.tour().step === 4, 5000);
+  await waitFor('+ menu open', () => !document.getElementById('menu-agents').hidden, 5000).catch(() => {});
+  s = await tour();
+  check('Step 4 "Or your own agent": the + menu is open and highlighted, an own agent in a terminal or Empty terminal', s.title === 'Or your own agent' && s.target
+    && await ev(() => !document.getElementById('menu-agents').hidden) && /instead of SOMA AI/.test(s.text) && /Empty terminal/.test(s.text), s.text.slice(0, 160));
+  await shot('tutorial-step4-own-agent');
+  await domClick('btn-tour-next');
+  await waitFor('step 5', () => window.__t.tour().step === 5, 5000);
+  check('Next closes the + menu again', await ev(() => document.getElementById('menu-agents').hidden));
+  await ev(() => window.__t.tourGo(2));
+  await waitFor('step 2', () => window.__t.tour().step === 2, 5000);
   await domClick('btn-tour-back');
   await waitFor('zurück', () => window.__t.tour().step === 1, 5000);
   check('Back: wieder Schritt 1', (await tour()).title === 'Welcome to SOMA');
@@ -89,19 +106,20 @@ try {
     if (!(s.step === n && s.target && s.spot && inView)) bad.push(`${n} ${s.title}: Ziel ${s.target}, Rahmen ${s.spot}, im Fenster ${inView}`);
   }
   check('Jeder Schritt findet sein Element, hebt es hervor, Karte ganz im Fenster', !bad.length, bad.join(' | '));
-  check('Schritte: Agent, Code, Teil, Messen, Markieren, Parameter, Verlauf, Speichern, Hilfe', titles.join('|')
-    === 'Welcome to SOMA|Start your agent|The model is code|Click a part|Measure|Mark up and send|Change a value|History|Save and export|Help is always here', titles.join('|'));
+  check('Steps: SOMA AI, own agent, code, part, measure, mark up, parameters, history, save, help', titles.join('|')
+    === 'Welcome to SOMA|SOMA AI, your agent|While SOMA AI works|Or your own agent|The model is code|Click a part|Measure|Mark up and send|Change a value|History|Save and export|Help is always here', titles.join('|'));
 
-  // Schritt 3 öffnet Dateien und Code, Schritt 7 die Parameter
-  await ev(() => window.__t.tourGo(3));
+  // Step 5 opens Files and the code, step 9 the parameters
+  await ev(() => window.__t.tourGo(5));
   await waitFor('Code offen', () => window.__t.layout().code && window.__t.layout().side === 'files' && window.__t.codeText().includes('add_part'), 10000).catch(() => {});
-  check('Schritt 3 öffnet Files und model.py', (await ev(() => window.__t.layout())).side === 'files' && (await ev(() => window.__t.codeText())).includes('add_part'));
-  await shot('tutorial-step3');
+  check('Step 5 opens Files and model.py, and says the code is optional', (await ev(() => window.__t.layout())).side === 'files' && (await ev(() => window.__t.codeText())).includes('add_part')
+    && /You don’t have to read or edit it/.test((await tour()).text));
+  await shot('tutorial-step5');
 
-  // Schritt 4: Klick auf ein Teil gibt den Haken, Next geht auch ohne
-  await ev(() => window.__t.tourGo(4));
+  // Step 6: a click on a part gives the tick, Next works without
+  await ev(() => window.__t.tourGo(6));
   await sleep(600);
-  check('Schritt 4 schließt Code und Seitenleiste, noch ohne Haken', !(await ev(() => window.__t.layout().code)) && !(await tour()).done);
+  check('Step 6 closes code and sidebar, no tick yet', !(await ev(() => window.__t.layout().code)) && !(await tour()).done);
   const pos = await ev(() => {
     const v = window.__t.viewer; const id = window.__t.parts().find((p) => p.name === 'Lid').id;
     const f = v.facesOf(id).filter((x) => x.surface === 'PLANE').sort((a, b) => b.center[2] - a.center[2])[0];
@@ -111,29 +129,29 @@ try {
   await waitFor('Auswahl', () => window.__t.info().includes('Lid'), 10000).catch(() => {});
   await waitFor('Haken', () => window.__t.tour().done, 5000).catch(() => {});
   check('Klick auf den Deckel durch die Abdunklung: Auswahl, Haken im Schritt', (await ev(() => window.__t.info())).includes('Lid') && (await tour()).done);
-  await shot('tutorial-step4');
+  await shot('tutorial-step6');
   await ev(() => document.getElementById('btn-sel-close').click());
 
-  // Schritt 5: Messen an, Haken, Next schaltet es wieder aus
-  await ev(() => window.__t.tourGo(5));
+  // Step 7: measuring on, tick, Next switches it off again
+  await ev(() => window.__t.tourGo(7));
   await domClick('btn-measure');
   await waitFor('Haken Messen', () => window.__t.tour().done, 5000).catch(() => {});
-  check('Schritt 5: Messen an gibt den Haken, das Ziel ist dann die Karte des Messens', (await tour()).done && (await tour()).target);
+  check('Step 7: measuring on gives the tick, the target is then the measuring card', (await tour()).done && (await tour()).target);
   await domClick('btn-tour-next');
-  await waitFor('Schritt 6', () => window.__t.tour().step === 6, 5000);
+  await waitFor('Schritt 8', () => window.__t.tour().step === 8, 5000);
   check('Next beendet das Messen', !(await ev(() => window.__t.measure().active)));
 
-  // Schritt 7: Höhe ändern, der Haken kommt nach dem Build
-  await ev(() => window.__t.tourGo(7));
+  // Step 9: change the height, the tick comes after the build
+  await ev(() => window.__t.tourGo(9));
   await waitFor('Parameter', () => window.__t.layout().side === 'params' && !!document.getElementById('pm-HEIGHT'), 20000).catch(() => {});
   await ev(() => { const f = document.getElementById('pm-HEIGHT'); f.focus(); f.value = '35'; f.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
   await waitFor('Haken Parameter', () => window.__t.tour().done, 30000).catch(() => {});
-  check('Schritt 7: Parameter offen, Height 35 gibt den Haken', (await tour()).done && (await ev(() => window.__t.params().changed)).includes('HEIGHT'));
+  check('Step 9: parameters open, Height 35 gives the tick', (await tour()).done && (await ev(() => window.__t.params().changed)).includes('HEIGHT'));
   await waitFor('gebaut', () => window.__t.status().state === 'ok', 30000).catch(() => {});
-  await shot('tutorial-step7');
+  await shot('tutorial-step9');
 
   // Fehlendes Ziel (Oberfläche geändert): Karte ohne Rahmen in der Mitte
-  await ev(() => window.__t.tourGo(10));
+  await ev(() => window.__t.tourGo(12));
   await sleep(300);
   await ev(() => { document.getElementById('btn-help').style.display = 'none'; });
   await sleep(400);
@@ -144,7 +162,7 @@ try {
   await sleep(300);
   s = await tour();
   check('Letzter Schritt: „Done“ statt Next, Ziel wieder da', s.next === 'Done' && s.target && s.title === 'Help is always here');
-  await shot('tutorial-step10');
+  await shot('tutorial-step12');
   await domClick('btn-tour-next');
   await sleep(500);
   check('„Done“ beendet die Tour, Hinweis auf die Hilfe', !(await tour()).active && (await ev(() => window.__t.toast())).text.includes('Help'));

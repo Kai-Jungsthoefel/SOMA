@@ -33,6 +33,12 @@ export const RECOMMENDED_MODEL: Record<string, string> = {
 /** The models the recommendation names, under every provider that offers them. */
 export const isRecommendedModel = (id: string) => /^(claude-opus-5-5|gpt-6-astra|anthropic\/claude-opus-5\.5|openai\/gpt-6-astra)$/.test(id);
 
+/** A model SOMA AI can use (pi's provider and model id, the name people see). */
+export interface AiModel { provider: string; id: string; name: string }
+
+/** An earlier conversation of the open model: its first message (or name), last activity (ms), number of messages. */
+export interface AiSession { id: string; title: string; modified: number; messages: number }
+
 /** A saved sign-in, without its secret. `type`: account login (oauth) or API key. */
 export interface AiAccount { provider: string; type: 'oauth' | 'api_key' }
 

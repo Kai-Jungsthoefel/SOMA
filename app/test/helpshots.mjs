@@ -3,11 +3,28 @@
 // neu erzeugen und die Bilder ansehen, die Texte unter den Bildern stehen in resources/skills/soma-app.md.
 // Das Fenster läuft außerhalb des Bildschirms (unsichtbare Fenster zeichnen nicht neu).
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { SHOTS } from './helpshots-spec.mjs';
+import { startMockLlm, useMockModel } from './mockllm.mjs';
 
 process.env.SMOKE_VISIBLE = 'offscreen';
 const { APP, cleanup, sleep, startApp } = await import('./harness.mjs');
+
+// SOMA AI for chat.png: a fake model (mockllm.mjs) that reads, builds and then asks two questions. It carries the name
+// of the recommended model, the picture shows what people would see with it. An API key so that a sign-in exists
+const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-helpshots-'));
+const mock = await startMockLlm([
+  { say: '', tool: 'read', args: { path: 'model.py' } },
+  { say: '', tool: 'bash', args: { command: 'soma build' } },
+  { say: 'The lid is 3 mm thick now. Before I add the hinge, two questions:', tool: 'ask_user', args: { questions: [
+    { question: 'Where should the hinge go?', header: 'Hinge', options: [{ label: 'Long side' }, { label: 'Short side' }] },
+    { question: 'Which material will you print it in?', header: 'Material', options: [{ label: 'PLA' }, { label: 'PETG' }, { label: 'ASA' }] },
+  ] } },
+  { text: 'Done.' },
+]);
+useMockModel(ud, mock.port, 'Claude Opus 5.5');
+fs.writeFileSync(path.join(ud, 'somaai', 'auth.json'), JSON.stringify({ anthropic: { type: 'api_key', key: 'sk-ant-guide' } }));
 
 const OUT = path.join(APP, 'resources', 'help');
 const only = process.argv.slice(2);
@@ -75,7 +92,7 @@ function overlay(shot) {
 }
 
 try {
-  app = await startApp({ name: 'helpshots' });
+  app = await startApp({ name: 'helpshots', userData: ud, env: { NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' } });
   const { ev, waitFor, domClick, page } = app;
   const click = (sel) => ev((s) => document.querySelector(s).click(), sel);
   const esc = () => ev(() => document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
@@ -92,6 +109,16 @@ try {
     'window.png': async () => {},
     'start.png': async () => { await ev(() => window.__t.showStart(true)); await sleep(600); },
     'agent.png': async () => { await domClick('btn-term-add'); await sleep(400); },
+    'chat.png': async () => {
+      await ev(() => localStorage.setItem('soma.aiNoteSeen', '1'));
+      await ev(() => window.__t.showChat(true));
+      await waitFor('SOMA AI', () => { const c = window.__t.chat(); return c.phase === 'chat' && c.piUp && !c.starting; }, 60000);
+      await ev(() => { const i = document.querySelector('.ai-input'); i.value = 'Make the lid 3 mm thick and add a hinge.'; i.dispatchEvent(new Event('input')); });
+      await ev(() => document.querySelector('.ai-send').click());
+      await waitFor('Fragen', () => window.__t.chat().questions.some((q) => !q.done), 120000);
+      await ev(() => document.querySelector('.ai-q:not(.done) .ai-ans')?.click());
+      await sleep(1500);
+    },
     'viewer.png': async () => {
       await ev(() => window.__t.treeOpen(true));
       const pos = await ev(() => {
@@ -120,6 +147,12 @@ try {
   const reset = {
     'start.png': () => ev(() => window.__t.showStart(false)),
     'agent.png': esc,
+    'chat.png': async () => {
+      // Stop the run (the questions stay open otherwise), then the terminal to the front again for the other pictures
+      await ev(() => window.soma.ai.command({ type: 'abort' }));
+      await waitFor('Gestoppt', () => !window.__t.chat().running, 20000).catch(() => {});
+      await ev(() => document.querySelector('#term-tabs .tab:not(.ai-tab) .t')?.click());
+    },
     'viewer.png': async () => { await domClick('btn-sel-close'); await ev(() => window.__t.treeOpen(false)); },
     'tools.png': () => domClick('btn-section-close'),
     'markup.png': () => domClick('btn-mark-cancel'),
@@ -148,6 +181,7 @@ try {
   failed = true;
 } finally {
   await app?.stop();
-  if (app) cleanup(app.ud);
+  await mock.close();
+  cleanup(ud);
 }
 process.exit(failed ? 1 : 0);

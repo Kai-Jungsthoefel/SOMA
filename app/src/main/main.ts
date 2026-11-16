@@ -22,7 +22,7 @@ import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
 import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
 import { piEntry } from './somaai';
-import { aiAccounts, cancelSignIn, saveApiKey, signInChatGPT, signOut } from './somaaiauth';
+import { aiAccounts, cancelSignIn, defaultModel, listModels, listSessions, saveApiKey, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -214,6 +214,26 @@ function registerIpc(ctl: ProjectController): void {
   })));
   ipcMain.handle('ai:cancelSignIn', () => cancelSignIn());
   ipcMain.handle('ai:signOut', (_e, provider: unknown) => restartAi(signOut(provider)));
+  // Earlier conversations of the open model: the window gets ids, never files. Switching looks the file up again
+  ipcMain.handle('ai:sessions', async () => {
+    const s = ctl.session;
+    if (!s) return noModel;
+    const r = await listSessions(s.dir);
+    return r.ok ? { ok: true, sessions: (r.sessions ?? []).map(({ id, title, modified, messages }) => ({ id, title, modified, messages })) } : r;
+  });
+  ipcMain.handle('ai:switchSession', async (_e, id: unknown) => {
+    const s = ctl.session;
+    if (!s) return noModel;
+    if (typeof id !== 'string') return { ok: false, error: 'Unknown conversation.' };
+    const r = await listSessions(s.dir);
+    if (ctl.session !== s) return { ok: false, error: 'Another model was opened meanwhile.' };
+    const hit = r.sessions?.find((x) => x.id === id);
+    if (!hit) return { ok: false, error: r.error ?? 'This conversation is no longer there.' };
+    return s.ai.switchSession(hit.path);
+  });
+  ipcMain.handle('ai:models', () => listModels());
+  ipcMain.handle('ai:defaultModel', () => defaultModel());
+  ipcMain.handle('ai:setDefaultModel', (_e, provider: unknown, id: unknown) => setDefaultModel(provider, id));
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('measure:start', () => ctl.measureStart());
   ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));

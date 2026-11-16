@@ -1,6 +1,6 @@
 // A fake model for SOMA AI tests: an OpenAI-compatible chat completions server on 127.0.0.1 that plays a script.
 // Step n answers the request that already has n assistant messages, so every tool result leads to the next step.
-// A step is { tool, args } (one tool call) or { text } (final answer). Every request body is kept in `requests`.
+// A step is { tool, args, say? } (one tool call) or { text } (final answer). Every request body is kept in `requests`.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -27,7 +27,8 @@ export async function startMockLlm(steps) {
       const base = { id: `mock-${turn}`, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: 'mock-cad' };
       const send = (delta, finish = null, usage) => res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta, finish_reason: finish }], ...(usage ? { usage } : {}) })}\n\n`);
       if (step.tool) {
-        send({ role: 'assistant', content: `Step ${turn + 1}. ` });
+        // `say`: what the model writes before the step (the pictures of the guide), otherwise "Step n."
+        send({ role: 'assistant', content: step.say ?? `Step ${turn + 1}. ` });
         const a = JSON.stringify(step.args);
         send({ tool_calls: [{ index: 0, id: `call_${turn}`, type: 'function', function: { name: step.tool, arguments: a.slice(0, 8) } }] });
         send({ tool_calls: [{ index: 0, function: { arguments: a.slice(8) } }] });
@@ -46,14 +47,14 @@ export async function startMockLlm(steps) {
 }
 
 /** Points pi in SOMA's app data (`ud`) at the fake model: a provider "mock" in models.json, chosen in settings.json. */
-export function useMockModel(ud, port) {
+export function useMockModel(ud, port, name = 'Mock CAD') {
   const dir = path.join(ud, 'somaai');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'models.json'), JSON.stringify({
     providers: {
       mock: {
         name: 'Mock', baseUrl: `http://127.0.0.1:${port}/v1`, api: 'openai-completions', apiKey: 'mock-key',
-        models: [{ id: 'mock-cad', name: 'Mock CAD', input: ['text', 'image'], contextWindow: 200000, maxTokens: 8000, cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } }],
+        models: [{ id: 'mock-cad', name, input: ['text', 'image'], contextWindow: 200000, maxTokens: 8000, cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } }],
       },
     },
   }, null, 2));
