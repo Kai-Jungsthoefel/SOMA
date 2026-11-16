@@ -127,12 +127,32 @@ export interface FolderPlan {
   change: string[];
 }
 
-/** Was „Open folder“ in `dir` anlegen und ändern würde. Liest nur. */
+/**
+ * What the setup writes must have the right kind: `.soma` and `.soma/skills` folders, the other paths files. Otherwise say
+ * what is wrong before anything is written, instead of failing halfway (from the fork zihotki/SOMA). Throws.
+ */
+export function preflightFolder(dir: string): void {
+  const soma = resolveInside(dir, '.soma');
+  let link: fs.Stats | null = null;
+  try { link = fs.lstatSync(soma); } catch { /* not there yet */ }
+  if (link && (!fs.existsSync(soma) || !fs.statSync(soma).isDirectory())) throw new Error('.soma exists but is not a folder.');
+  const skills = resolveInside(dir, '.soma/skills');
+  if (fs.existsSync(skills) && !fs.statSync(skills).isDirectory()) throw new Error('.soma/skills exists but is not a folder.');
+  for (const rel of ['.soma/project.json', '.soma/.gitignore', 'AGENTS.md', 'CLAUDE.md']) {
+    const file = resolveInside(dir, rel);
+    if (fs.existsSync(file) && !fs.statSync(file).isFile()) throw new Error(`${rel} exists but is not a file.`);
+  }
+}
+
+/** Was „Open folder“ in `dir` anlegen und ändern würde. Liest nur, wirft bei einem Ordner, der nicht passt (preflightFolder). */
 export function planFolder(dir: string, entry: string, createModel: boolean): FolderPlan {
+  preflightFolder(dir);
   const create: string[] = [];
   const change: string[] = [];
-  const pj = readJson<ProjectJson>(path.join(dir, '.soma', 'project.json'));
+  const pjFile = path.join(dir, '.soma', 'project.json');
+  const pj = readJson<ProjectJson>(pjFile);
   if (!fs.existsSync(path.join(dir, '.soma'))) create.push('.soma/  app data, cache and skills (intermediate results are ignored by Git)');
+  else if (!pj && fs.existsSync(pjFile)) change.push('.soma/project.json  replaces a file that cannot be read');
   else if (!pj) create.push('.soma/project.json  ID and settings of the model');
   else if (pj.entry !== entry) change.push(`.soma/project.json  entry point ${entry}`);
   if (createModel) create.push('model.py  a model from the template with an example part');
@@ -161,7 +181,9 @@ function backupFile(file: string, backupDir: string): void {
  */
 export function applyFolder(plan: FolderPlan, backupRoot: string): { id: string; newId: boolean } {
   const { dir, entry } = plan;
-  const pjFile = path.join(dir, '.soma', 'project.json');
+  // Again: the folder may have changed while the confirmation was open
+  preflightFolder(dir);
+  const pjFile = resolveInside(dir, '.soma/project.json');
   const old = readJson<ProjectJson>(pjFile);
   const taken = (id: string) => {
     const other = folderOf(id);
@@ -173,24 +195,32 @@ export function applyFolder(plan: FolderPlan, backupRoot: string): { id: string;
   const backupDir = path.join(backupRoot, `${id}-folder-${new Date().toISOString().replace(/[:.]/g, '-')}`);
   const full = isFullModel(dir);
 
+  // The user or the agent may have written a model.py while the confirmation was open: that one stays
+  if (plan.createModel) {
+    try { fs.copyFileSync(path.join(templateDir(), 'model.py'), resolveInside(dir, 'model.py'), fs.constants.COPYFILE_EXCL); }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+  }
   fs.mkdirSync(path.join(dir, '.soma'), { recursive: true });
   const ignore = path.join(dir, '.soma', '.gitignore');
   if (!full && !fs.existsSync(ignore)) fs.writeFileSync(ignore, SOMA_GITIGNORE);
-  if (plan.createModel) fs.copyFileSync(path.join(templateDir(), 'model.py'), resolveInside(dir, 'model.py'));
 
-  const pj: ProjectJson = old
+  let pj: ProjectJson = old
     ? { ...old, id, entry }
     : { id, name: path.basename(dir), api_version: API_VERSION, app_version: SOMA_VERSION, entry, main_output: 'output/model.step', created: new Date().toISOString(), requirements: FOLDER_REQUIREMENTS };
-  if (!old || old.id !== id || old.entry !== entry) writeAtomic(pjFile, JSON.stringify(pj, null, 2));
+  const writePj = !old || old.id !== id || old.entry !== entry;
+  // Like AGENTS.md: a project.json that gets replaced (also one that cannot be read) goes into the backups first
+  if (writePj && fs.existsSync(pjFile)) backupFile(pjFile, backupDir);
 
   if (!full) {
     writeFolderFiles(dir, entry, backupDir);
     // Skills nach den Vorgaben (E46), nur beim ersten Einrichten. Ihre Liste kommt in den Abschnitt von AGENTS.md
     if (!old) {
       const skills = applyDefaultSkills(dir, skillDirs(), skillBackupsDir(id), getSkillDefaults());
-      writeAtomic(pjFile, JSON.stringify({ ...pj, ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) }, null, 2));
+      pj = { ...pj, ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) };
     }
   }
+  // Written once at the end, with the skills
+  if (writePj) writeAtomic(pjFile, JSON.stringify(pj, null, 2));
   return { id, newId: !!old && !keep };
 }
 

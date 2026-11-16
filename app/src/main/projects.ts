@@ -13,7 +13,7 @@ import { resolveInside } from './files';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, chooseCadQueryScript, chooseEntryScript, chooseExportTarget, chooseFolder, choosePath, documentsDir, trashItem } from './dialogs';
-import { applyFolder, planFolder, refreshFolderSection, topLevelScripts } from './folders';
+import { applyFolder, planFolder, preflightFolder, refreshFolderSection, topLevelScripts } from './folders';
 import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
@@ -200,12 +200,17 @@ export class ProjectController {
     if (!picked) return { cancelled: true };
     const dir = path.resolve(picked);
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return { cancelled: false, error: `Not a folder: ${dir}` };
-    const inside = (a: string, b: string) => { const r = path.relative(b, a); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
+    // `..name` is a name inside, only `..` itself or `../` leads out
+    const inside = (a: string, b: string) => { const r = path.relative(b, a); return r === '' || (r !== '..' && !r.startsWith(`..${path.sep}`) && !path.isAbsolute(r)); };
     if (inside(dir, userDataDir()) || inside(userDataDir(), dir)) return { cancelled: false, error: 'This folder holds the app data of SOMA. Choose another folder.' };
+    try { preflightFolder(dir); }
+    catch (e) { return { cancelled: false, error: `The folder could not be set up: ${e instanceof Error ? e.message : String(e)}` }; }
+    /** Inside the folder, also after following links (resolveInside). */
+    const within = (rel: string) => { try { resolveInside(dir, rel); return true; } catch { return false; } };
 
     // Schon eingetragen (gleicher Ordner): nur die Einstiegsdatei aus project.json prüfen
     const pj = (() => { try { return JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'project.json'), 'utf8')) as { entry?: unknown }; } catch { return null; } })();
-    let entry = typeof pj?.entry === 'string' && pj.entry && fs.existsSync(path.join(dir, pj.entry)) ? pj.entry : null;
+    let entry = typeof pj?.entry === 'string' && pj.entry && within(pj.entry) && fs.existsSync(path.join(dir, pj.entry)) ? pj.entry : null;
     let createModel = false;
     if (!entry && fs.existsSync(path.join(dir, 'model.py'))) entry = 'model.py';
     if (!entry) {
@@ -225,13 +230,15 @@ export class ProjectController {
           const file = await chooseEntryScript(this.getWin(), dir);
           if (!file) return { cancelled: true };
           const rel = path.relative(dir, file);
-          if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return { cancelled: false, error: 'The script must be inside the folder.' };
+          if (!rel || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel) || !within(rel)) return { cancelled: false, error: 'The script must be inside the folder.' };
           entry = rel.split(path.sep).join('/');
         }
       }
     }
 
-    const plan = planFolder(dir, entry, createModel);
+    let plan: ReturnType<typeof planFolder>;
+    try { plan = planFolder(dir, entry, createModel); }
+    catch (e) { return { cancelled: false, error: `The folder could not be set up: ${e instanceof Error ? e.message : String(e)}` }; }
     if (plan.create.length || plan.change.length) {
       const lines: string[] = [];
       if (plan.create.length) lines.push('Creates:', ...plan.create.map((l) => `  ${l}`));
