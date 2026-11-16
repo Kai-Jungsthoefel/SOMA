@@ -410,14 +410,14 @@
     </aside>
   </div>
 
-  <!-- Ladeanzeige über dem ganzen Fenster, solange ein CadQuery-Skript als neues Modell hereinkommt (E100) -->
+  <!-- Loading screen over the whole window while a model is created: new, tutorial, from a CadQuery script (loading.ts) -->
   <div id="app-busy" class="vbusy appbusy" hidden>
     <div class="float vb-card" role="status" aria-live="polite">
-      <div class="vb-hd"><span class="spin"><i data-icon="spin" data-size="16" data-stroke="2.4"></i></span><b>Loading CadQuery script</b><span class="grow"></span><span id="app-busy-time" class="c3 small"></span></div>
+      <div class="vb-hd"><span class="spin"><i data-icon="spin" data-size="16" data-stroke="2.4"></i></span><b id="app-busy-title"></b><span class="grow"></span><span id="app-busy-time" class="c3 small"></span></div>
       <div id="app-busy-step" class="vb-sub"></div>
-      <div id="app-busy-file" class="vb-sub c3"></div>
+      <div id="app-busy-file" class="vb-sub c3" hidden></div>
       <div class="vb-bar indet"><div></div></div>
-      <div class="vb-sub c3 small appbusy-note">The first build runs the script once. Large models can take a while.</div>
+      <div id="app-busy-note" class="vb-sub c3 small appbusy-note" hidden></div>
     </div>
   </div>
 

@@ -9,6 +9,7 @@ import { DRAWINGS_KEY, DrawingsView } from './drawings';
 import { DrawingLink } from './drawlink';
 import { AnimTool } from './animtool';
 import { Busy } from './busy';
+import { Loading } from './loading';
 import { DRAG_FILE, FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
 import { FileView } from './fileview';
 import { hydrateIcons, icon } from './icons';
@@ -1174,8 +1175,14 @@ const fileView = new FileView({
 
 // ---- Projekt ----------------------------------------------------------------------------------------------------
 
+/** Loading screen while a model is created (New model, tutorial, CadQuery script), until the window has loaded it. */
+const loading = new Loading();
+
 async function onProject(p: ProjectInfo): Promise<void> {
   project = p;
+  // Created behind the loading screen: it stays until viewer, files and agent panel have loaded this model (end of function)
+  const screen = loading.active;
+  if (screen) loading.step('Loading the viewer, files and agent');
   // Ein anderes Modell geöffnet (Menü, Startseite): Die Tour gehört zum Tutorial-Modell und endet
   if (tour.active && p.id !== tourProject) tour.stop(false, false);
   loadSeq++; // laufende Ladevorgänge des vorherigen Projekts verwerfen
@@ -1216,18 +1223,22 @@ async function onProject(p: ProjectInfo): Promise<void> {
   renderAuto();
   showProblems(p.problems);
   filesDirty = true;
-  if (panel === 'files') void refreshFiles();
+  const filesReady = refreshFiles(); // only with the Files panel open, otherwise it marks the list for later
   void versions.refresh();
   void refreshSaveState();
   // SOMA AI is in front unless the user prefers a terminal (tests keep the terminal, their suites type into it)
   const wantChat = !chatTab.hidden && (store.get('soma.agentTab') ?? (api.testMode ? 'terminal' : 'ai')) === 'ai';
   // Ready when the agent area shows what it should (the loading screen of "New model" waits for it)
   const agentReady = terminals.add({ title: 'Terminal' }).then(() => (wantChat ? showChat(true) : undefined));
-  void agentReady;
   void refreshAgents();
   const st = await api.build.status();
   renderBuild(st);
-  if (st.state === 'ok') void loadModel();
+  // A new model was built when it was created, so the screen waits until it is in the viewer. A build still running
+  // (e.g. packages to install first) has its own display in the viewer: the screen does not wait for it.
+  const modelReady = st.state === 'ok' ? loadModel() : Promise.resolve();
+  if (!screen) return;
+  await Promise.race([Promise.allSettled([modelReady, filesReady, agentReady]), new Promise((r) => setTimeout(r, 20000))]);
+  loading.end(screen);
 }
 
 function showProblems(problems: string[]): void {
@@ -1343,25 +1354,33 @@ async function doOpen(): Promise<boolean> {
   return !!r.opened;
 }
 
-const doNew = async () => { if (await leaveEditor('New model')) await api.project.create(); };
-// Ladeanzeige für den Import: erscheint mit dem ersten Schritt nach dem Dateidialog, zählt die Sekunden mit
-let cqBusyTick: ReturnType<typeof setInterval> | undefined;
-api.project.onCadQueryStep(({ step, file }) => {
-  const root = $('app-busy');
-  if (root.hidden) {
-    const t0 = performance.now();
-    $('app-busy-time').textContent = '';
-    clearInterval(cqBusyTick);
-    cqBusyTick = setInterval(() => { $('app-busy-time').textContent = `${Math.round((performance.now() - t0) / 1000)} s`; }, 1000);
-    root.hidden = false;
+/**
+ * Creates a model with `create` behind the loading screen. The screen comes at once (creating takes seconds) and stays
+ * until the window has loaded the new model (onProject). On an error it closes, and the error is a toast.
+ * Returns the result of `create`, or null after an error.
+ */
+async function createBehindLoading<T>(title: string, note: string, create: () => Promise<T>, failed: string): Promise<T | null> {
+  const id = loading.start(title, note);
+  let r: T;
+  try { r = await create(); } catch (e) {
+    loading.end(id);
+    toast(`${failed}: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    return null;
   }
-  $('app-busy-step').textContent = `${step} …`;
-  $('app-busy-file').textContent = file;
-});
-function closeCadQueryBusy(): void {
-  clearInterval(cqBusyTick);
-  $('app-busy').hidden = true;
+  // Safety net: onProject closes the screen when the window has loaded the model, it never stays for good
+  setTimeout(() => loading.end(id), 30000);
+  return r;
 }
+
+const doNew = async () => {
+  if (loading.active || !(await leaveEditor('New model'))) return; // a second Ctrl+N while one is being created
+  await createBehindLoading('Creating a new model', 'Setting up a new model takes a few seconds.', () => api.project.create(), 'The model could not be created');
+};
+// Steps from the main process. The import of a CadQuery script shows its screen with the first step, after the file dialog.
+api.project.onStep(({ step, file }) => {
+  if (!loading.active) loading.start('Loading CadQuery script', 'The first build runs the script once. Large models can take a while.');
+  loading.step(step, file);
+});
 
 /** Neues Modell aus einem CadQuery-Skript (E100). Die Hinweise des Imports (Kompatibilitätsmodus, Werte) zeigt ein Toast. */
 /** „Open folder“ (Ordner-Modus): Fragen und Hinweis stellt der Hauptprozess. */
@@ -1373,9 +1392,12 @@ async function doOpenFolder(): Promise<boolean> {
 }
 
 async function doNewFromCadQuery(): Promise<CadQueryImportResult | null> {
-  if (!(await leaveEditor('New model'))) return null;
+  if (loading.active || !(await leaveEditor('New model'))) return null;
   let r: CadQueryImportResult;
-  try { r = await api.project.createFromCadQuery(); } finally { closeCadQueryBusy(); }
+  // The screen comes with the first step (after the file dialog). Opened, onProject closes it once the model is loaded.
+  try { r = await api.project.createFromCadQuery(); } catch (e) { r = { warnings: [], error: e instanceof Error ? e.message : String(e) }; }
+  if (r.cancelled || r.error) loading.end(loading.active);
+  else setTimeout((id: number) => loading.end(id), 30000, loading.active);
   if (r.cancelled) return r;
   if (r.error) { toast(r.error, 'error'); return r; }
   showStart(false);
@@ -2081,16 +2103,16 @@ async function startTutorial(): Promise<void> {
     });
     if (c !== 0) return;
   }
-  if (!(await leaveEditor('Start tutorial'))) return;
+  if (loading.active || !(await leaveEditor('Start tutorial'))) return;
   help.close();
   tour.stop(false, false);
   void showStart(false);
-  let info: ProjectInfo;
-  try { info = await api.project.create('tutorial'); } catch (e) {
-    toast(`The example model could not be created: ${e instanceof Error ? e.message : String(e)}`, 'error');
-    return;
-  }
+  const info = await createBehindLoading('Creating the example model', 'The tour starts when the model is loaded.', () => api.project.create('tutorial'), 'The example model could not be created');
+  if (!info) return;
   tourProject = info.id;
+  // The tour points at the viewer, the files and the agent: start it on the loaded window, not under the loading screen
+  await loading.closed();
+  if (project?.id !== info.id) return; // another model was opened meanwhile
   tour.start(tourSteps(tourCtx));
 }
 $('btn-tour-start').addEventListener('click', () => void startTutorial());
@@ -2208,7 +2230,7 @@ if (api.testMode) {
     /** „As CadQuery script“ im Export-Menü und „New from CadQuery script“ (E100). */
     exportCadQuery: () => doExportCadQuery(),
     newFromCadQuery: () => doNewFromCadQuery(),
-    cqBusy: () => ({ hidden: $('app-busy').hidden, text: $('app-busy').textContent }),
+    loadingScreen: () => loading.state(),
     showStart: (on: boolean) => showStart(on),
     tour: () => tour.state(),
     tourGo: (n: number) => tour.goTo(n),

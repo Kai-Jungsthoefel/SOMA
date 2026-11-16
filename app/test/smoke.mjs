@@ -513,7 +513,20 @@ try {
   check('Model becomes much smaller: view fits again', Math.abs(f3.dist - f0.dist) < f0.dist * 0.01 && near(f3.target, f0.target, 1e-3), `${f3.dist.toFixed(1)} vs ${f0.dist.toFixed(1)}`);
 
   // 8) Neues Projekt: anderer Ordner, Terminals des alten sind zu, frischer erster Build
+  // A loading screen covers the window at once and names the steps, until the new model is loaded
   await domClick('btn-new');
+  const ls = await ev(() => window.__t.loadingScreen());
+  check('New model: loading screen at once, with title', ls.shown && ls.title === 'Creating a new model', JSON.stringify(ls));
+  const steps = new Set();
+  for (const t0 = Date.now(); Date.now() - t0 < 90000;) {
+    const s = await ev(() => window.__t.loadingScreen());
+    if (!s.shown) break;
+    if (s.step) steps.add(s.step.replace(/ …$/, ''));
+    await sleep(100);
+  }
+  const switched = await ev((oldId) => window.__t.project().id !== oldId && window.__t.partCount() === 2, proj.id);
+  check('Loading screen names the steps and closes once the new model is in the viewer', switched && steps.has('Building the model for the first time')
+    && [...steps].some((s) => /^Loading/.test(s)), [...steps].join(' | '));
   await waitFor('neues Projekt', (oldId) => window.__t.project().id !== oldId && window.__t.status().state === 'ok' && window.__t.partCount() === 2, 90000, proj.id).catch(() => {});
   const p2 = await ev(() => window.__t.project());
   check('„Neu" legt ein zweites Projekt mit eigener UUID an', p2.id !== proj.id, p2.id.slice(0, 8));

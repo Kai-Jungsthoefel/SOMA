@@ -274,8 +274,12 @@ export class ProjectController {
     return { cancelled: false, opened: true };
   }
 
+  /** Copying, the first build and the first commit take a few seconds: the window shows the steps on its loading screen. */
   async create(name?: string): Promise<ProjectInfo> {
-    const { id } = await createProject(name);
+    const step = (s: string) => this.send('project:step', { step: s });
+    step('Creating the model');
+    const { id } = await createProject(name, undefined, step);
+    step('Opening the model');
     return this.open(id);
   }
 
@@ -288,7 +292,7 @@ export class ProjectController {
     const file = await chooseCadQueryScript(this.getWin());
     if (!file) return { cancelled: true, warnings: [] };
     // Import, erster Build und Startcommit dauern einige Sekunden: Das Fenster zeigt die Schritte in einer Ladeanzeige
-    const step = (s: string) => this.send('cadquery:step', { step: s, file: path.basename(file) });
+    const step = (s: string) => this.send('project:step', { step: s, file: path.basename(file) });
     step('Reading the script');
     let warnings: string[] = [];
     try {
@@ -297,8 +301,7 @@ export class ProjectController {
         const res = lastJson<{ status?: string; error?: string; warnings?: string[] }>(r.out);
         if (!r.ok || res?.status !== 'ok') throw new Error(res?.error || (r.err || r.out).trim().split(/\r?\n/).pop() || 'unknown error');
         warnings = Array.isArray(res.warnings) ? res.warnings.map(String) : [];
-        step('Building the model for the first time');
-      });
+      }, step);
       step('Opening the model');
       return { info: await this.open(id), warnings };
     } catch (e) {

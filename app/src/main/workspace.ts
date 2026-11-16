@@ -92,7 +92,8 @@ export const readProjectJson = (id: string) => readJson<ProjectJson>(path.join(p
  * CadQuery-Skripts, E100), so beginnt schon der erste Stand mit dem fremden Skript. Wirft `prepare`, wird der halb
  * angelegte Ordner wieder entfernt und der Fehler weitergereicht.
  */
-export async function createProject(name = 'New model', prepare?: (dir: string, id: string) => Promise<void>): Promise<{ id: string; dir: string }> {
+/** `step`: the step that starts now, for the loading screen of the window (building takes a few seconds). */
+export async function createProject(name = 'New model', prepare?: (dir: string, id: string) => Promise<void>, step?: (s: string) => void): Promise<{ id: string; dir: string }> {
   const id = randomUUID();
   const dir = projectDir(id);
   fs.mkdirSync(dir, { recursive: true });
@@ -111,7 +112,9 @@ export async function createProject(name = 'New model', prepare?: (dir: string, 
   writeJson(stateFile(id), { ...pj, app: {} } satisfies ProjectState);
   // Einmal bauen, bevor der Startcommit entsteht: So enthält auch der erste Stand eine output/model.step
   // und lässt sich im Verlauf als Vorschau öffnen. Scheitert der Build, geht das Anlegen trotzdem weiter.
+  step?.('Building the model for the first time');
   await runSoma(['build', '--project', dir], dir, 90000);
+  step?.('Starting the version history');
   try {
     await new GitRepo(dir).init('New model created');
   } catch (e) {

@@ -470,7 +470,8 @@ export interface SomaApi {
     /** Neues Modell aus einem CadQuery-Skript (E100): Dateidialog, Import, erster Build. */
     createFromCadQuery(): Promise<CadQueryImportResult>;
     /** Schritte von createFromCadQuery nach dem Dateidialog, für die Ladeanzeige: `step` ist der laufende Schritt. */
-    onCadQueryStep(cb: (s: { step: string; file: string }) => void): void;
+    /** Steps of creating a model (new, from a CadQuery script) for the loading screen. `file`: the imported script. */
+    onStep(cb: (s: { step: string; file?: string }) => void): void;
     /** Das Modell als reines CadQuery-Skript (E100): eine .py, mit parts/ ein Ordner. */
     exportCadQuery(): Promise<ExportResult>;
     onSaveState(cb: (s: SaveState) => void): void;

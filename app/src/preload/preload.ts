@@ -17,7 +17,7 @@ const api: SomaApi = {
     openFolder: () => ipcRenderer.invoke('project:openFolder'),
     exportZip: () => ipcRenderer.invoke('project:exportZip'),
     createFromCadQuery: () => ipcRenderer.invoke('project:createFromCadQuery'),
-    onCadQueryStep: (cb) => { ipcRenderer.on('cadquery:step', (_e, s) => cb(s)); },
+    onStep: (cb) => { ipcRenderer.on('project:step', (_e, s) => cb(s)); },
     exportCadQuery: () => ipcRenderer.invoke('project:exportCadQuery'),
     onSaveState: (cb) => { ipcRenderer.on('save:state', (_e, st) => cb(st)); },
     reveal: () => ipcRenderer.invoke('project:reveal'),
