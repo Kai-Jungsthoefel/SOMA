@@ -130,6 +130,7 @@ export const SHOTS = [
       { label: 'Scope', sel: '#menu-export .seg', at: 'l' },
       { label: 'Mesh settings', sel: '#exp-mesh-toggle', at: 'l' },
       { label: 'Formats', sel: '#menu-export .chips', at: 'l', box: true },
+      { label: 'As one STEP file', sel: '#exp-step-asm', at: 'l' },
       { label: 'Everything as ZIP', sel: '#exp-zip', at: 'l' },
       { label: 'As CadQuery script', sel: '#exp-cq', at: 'l' },
     ],

@@ -368,22 +368,28 @@ export class ProjectController {
    * Export über `soma export` (E34) mit Dateidialog: ein Bauteil in eine gewählte Datei, alle Bauteile (ohne Referenz- und
    * Zukaufteile) als je eine Datei in einen gewählten Ordner. soma schreibt in einen leeren Ordner unter Temp, die App
    * kopiert danach. So landet nichts in exports/ des Projekts, und eine vorhandene Datei wird nie ohne Rückfrage ersetzt.
+   * `assembly`: the whole model as one STEP file (issue #11, `soma export --assembly`), saved like a single part.
    */
-  async exportModel(format: string, part: string | null, mesh?: unknown): Promise<ExportResult> {
+  async exportModel(format: string, part: string | null, mesh?: unknown, assembly = false): Promise<ExportResult> {
     const s = this.need();
     if (!/^[a-z0-9]{2,5}$/.test(format)) return { ok: false, files: [], error: `Unknown format: ${format}` };
+    if (assembly && (format !== 'step' || part)) return { ok: false, files: [], error: 'Only STEP can hold the whole model in one file.' };
     const meshArgs = MESH_EXPORT_FORMATS.includes(format) ? meshExportArgs(mesh) : [];
     const last = getAppState(s.id).exportDir;
     const startDir = last && fs.existsSync(last) ? last : documentsDir();
+    const modelName = safeFileName(readProjectJson(s.id)?.name ?? 'Model');
+    const single = !!part || assembly;
     const target = await chooseExportTarget(this.getWin(), part
       ? { kind: 'file', title: `Export “${part}”`, defaultPath: path.join(startDir, `${safeFileName(part)}.${format}`), ext: format }
-      : { kind: 'dir', title: 'Choose a folder for the export', defaultPath: startDir });
+      : assembly
+        ? { kind: 'file', title: 'Export the model as one STEP file', defaultPath: path.join(startDir, `${modelName}.step`), ext: 'step' }
+        : { kind: 'dir', title: 'Choose a folder for the export', defaultPath: startDir });
     if (!target) return { ok: false, files: [], cancelled: true };
     let tmp: string | null = null;
     try {
       tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-export-'));
       // `--` vor dem Namen: Bauteilnamen dürfen mit einem Minus beginnen, ohne als Option zu gelten
-      const args = ['export', '--format', format, ...meshArgs, '--project', s.dir, '--out', tmp, ...(part ? ['--', part] : ['--all'])];
+      const args = ['export', '--format', format, ...meshArgs, '--project', s.dir, '--out', tmp, ...(part ? ['--', part] : assembly ? ['--assembly'] : ['--all'])];
       const r = await runSoma(args, s.dir, 10 * 60 * 1000);
       if (!r.ok) {
         const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
@@ -394,14 +400,14 @@ export class ProjectController {
       const made = fs.readdirSync(dir).filter((n) => fs.statSync(path.join(dir, n)).isFile());
       if (!made.length) return { ok: false, files: [], error: 'soma did not write a file.' };
       const plan: [string, string][] = [];
-      if (part) {
+      if (single) {
         const main = made.find((n) => n.toLowerCase().endsWith(`.${format}`)) ?? made[0];
         const dest = path.extname(target) ? target : `${target}.${format}`;
         plan.push([path.join(dir, main), dest]);
         for (const n of made) if (n !== main) plan.push([path.join(dir, n), path.join(path.dirname(dest), n)]);
       } else for (const n of made) plan.push([path.join(dir, n), path.join(target, n)]);
       // Beim Einzelexport hat der Speichern-Dialog für die Hauptdatei schon gefragt, alles andere fragt die App
-      const exists = plan.filter(([, d], i) => !(part && i === 0) && fs.existsSync(d)).map(([, d]) => path.basename(d));
+      const exists = plan.filter(([, d], i) => !(single && i === 0) && fs.existsSync(d)).map(([, d]) => path.basename(d));
       if (exists.length) {
         const c = await choose(this.getWin(), {
           title: 'Export', message: exists.length === 1 ? 'This file already exists in the folder:' : `These ${exists.length} files already exist in the folder:`,
@@ -413,8 +419,8 @@ export class ProjectController {
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         fs.copyFileSync(src, dest);
       }
-      const dest = part ? plan[0][1] : target;
-      patchAppState(s.id, { exportDir: part ? path.dirname(dest) : target });
+      const dest = single ? plan[0][1] : target;
+      patchAppState(s.id, { exportDir: single ? path.dirname(dest) : target });
       // Hinweise von soma (z. B. ein Netz, das nicht geschlossen ist, mit den betroffenen Flächen) an den Benutzer weitergeben
       const warnings = r.out.split(/\r?\n/).filter((l) => l.startsWith('warning: ')).map((l) => l.slice(9).trim());
       return { ok: true, files: plan.map(([, d]) => d), target: dest, ...(warnings.length ? { warnings } : {}) };

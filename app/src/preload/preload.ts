@@ -40,6 +40,7 @@ const api: SomaApi = {
     status: () => ipcRenderer.invoke('build:status'),
     onStatus: (cb) => { ipcRenderer.on('build:status', (_e, s) => cb(s)); },
     export: (format, part, mesh) => ipcRenderer.invoke('build:export', format, part, mesh ?? null),
+    exportAssembly: () => ipcRenderer.invoke('build:exportAssembly'),
   },
   fs: {
     list: () => ipcRenderer.invoke('fs:list'),

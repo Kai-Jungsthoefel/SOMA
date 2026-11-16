@@ -209,8 +209,9 @@ after that Ctrl S saves to the same file. Copy or send the file like any other d
 1. **Scope**: all parts, or only the selected one.
 2. **Mesh settings**: closed by default, click to open. Units, the axis pointing up and the mesh density for STL, 3MF, AMF, OBJ, GLB and GLTF. "Auto" writes GLB and GLTF in meters with Y up, as game engines (Unity, Unreal, Godot) and Blender expect them, and the other formats in millimeters with Z up, as slicers expect them. "Coarse" gives fewer triangles, for example for a game, "Fine" smoother curves. The settings are remembered, and the closed row shows what differs from Auto.
 3. **Formats**: for 3D printing (STL, 3MF), CAD (STEP, IGES), graphics and 2D (DXF, SVG). All parts become one file per part in a folder you choose.
-4. **Everything as ZIP**: the whole model with code, results and history, for someone without SOMA.
-5. **As CadQuery script**: the model as plain CadQuery for CQ-editor, VS Code with ocp_vscode and other tools, without SOMA.
+4. **As one STEP file**: the whole model in a single STEP file, with the groups as sub-assemblies and the names and colors of the parts, for other CAD programs. Purchased parts such as screws are included, reference parts too, in a group "Reference".
+5. **Everything as ZIP**: the whole model with code, results and history, for someone without SOMA.
+6. **As CadQuery script**: the model as plain CadQuery for CQ-editor, VS Code with ocp_vscode and other tools, without SOMA.
 
 If a mesh is not closed, the message after the export says why, for example which faces could not be meshed and where they are.
 

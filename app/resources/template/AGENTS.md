@@ -13,7 +13,7 @@ The app shows the result in a 3D viewer next to this terminal. Notes and wishes 
 | `inputs/` | Files the user brought (STEP, images, PDF). Never modify them, load them from `model.py`. Read PDFs with `pdfplumber` (text, lines and coordinates, `page.to_image()` for a picture) |
 | `parameters.json` | Values the user set in the app's Parameters panel (rule 7). Written by the app |
 | `output/model.step` | Main result with all parts, written by `soma build`. Never write it yourself |
-| `exports/` | Single-part exports written by `soma export` |
+| `exports/` | Exports written by `soma export` |
 | `animations/` | Optional. Motion, camera flights and captions in Python (`soma.anim`), one file per topic. The skill for animation explains them |
 | `analyses/` | Optional. Load cases for `soma analyze fem` in Python (`soma.fem`), one file per load case. The skill for FEM explains them |
 | `drawings/` | Optional. Technical drawings in Python (`soma.drawing`), one file per drawing or set of sheets. `soma drawing build` writes PDF and DXF to `output/drawings/`, all sheets together to `output/drawings.pdf`. The skill for technical drawings explains them |
@@ -40,7 +40,8 @@ Run them in this terminal. They work without the app.
 |---|---|
 | `soma build` | Runs `model.py`, writes `output/model.step` and the viewer cache. **Run it after every change and read the result.** On errors it prints the file, line and message |
 | `soma export <Part> --format stl` | Exports one part (formats: step, stl, 3mf, amf, brep, iges, obj, vrml, glb, gltf, dxf, svg) |
-| `soma export --all --format step` | Exports all parts except references |
+| `soma export --all --format step` | Exports all parts except references, one file each |
+| `soma export --assembly --format step` | Exports the whole model as one STEP file with groups, names and colors, references under "Reference" |
 | `soma export <Part> --format glb --detail coarse` | Mesh formats (stl, 3mf, amf, obj, glb, gltf) take `--units mm\|cm\|m\|in`, `--up z\|y`, `--detail coarse\|normal\|fine` or `--tolerance <mm>`. Default: glb/gltf in m with Y up (game engines, Blender), the others in mm with Z up |
 | `soma render` | Saves a picture of the current model to `renders/view-iso.png` (`--view top` or a direction `--view=1,-2,1`, `--hide`/`--only` parts or groups, `--fit` parts, `--zoom 2`, `--size 1280x800`, `--out`). **Open the picture and look at it** to check your work, also inside: hide what is in the way. Needs the app with this model open, it renders with the app's viewer |
 | `soma analyze overhang` (or `thickness`, `clearance`) | Value at every spot of the surface with a summary per part. Details in the skill for analysis |

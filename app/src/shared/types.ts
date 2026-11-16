@@ -493,6 +493,8 @@ export interface SomaApi {
     onStatus(cb: (s: BuildStatus) => void): void;
     /** `part` null = alle Bauteile ohne Referenzen. `mesh` gilt nur für Netzformate, bei anderen ignoriert. */
     export(format: string, part: string | null, mesh?: MeshExportOptions): Promise<ExportResult>;
+    /** The whole model as one STEP file with groups, names and colors, without reference parts (issue #11). */
+    exportAssembly(): Promise<ExportResult>;
   };
   fs: {
     list(): Promise<FileNode[]>;

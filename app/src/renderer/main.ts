@@ -1542,6 +1542,7 @@ renderMeshOpts();
 $('exp-all').addEventListener('click', () => { exportScope = 'all'; renderExportScope(); });
 $('exp-sel').addEventListener('click', () => { exportScope = 'sel'; renderExportScope(); });
 document.querySelectorAll<HTMLButtonElement>('#menu-export [data-fmt]').forEach((b) => b.addEventListener('click', () => void doExport(b.dataset.fmt!, b.textContent!)));
+$('exp-step-asm').addEventListener('click', () => { menus.close(); void doExportAssembly(); });
 $('exp-zip').addEventListener('click', () => { menus.close(); void doExportZip(); });
 $('exp-cq').addEventListener('click', () => { menus.close(); void doExportCadQuery(); });
 
@@ -1554,6 +1555,15 @@ async function doExportCadQuery(): Promise<ExportResult> {
     const notes = [...(r.warnings ?? []), ...(open.length ? [`Not included (not saved in the editor): ${open.join(', ')}`] : [])];
     toast([`Model exported as CadQuery:\n${r.target ?? ''}`, ...notes].join('\n'), open.length ? 'error' : 'ok');
   } else toast(r.error ?? 'Export failed', 'error');
+  return r;
+}
+
+/** The whole model as one STEP file (issue #11), built from the code like any export, references in their own group. */
+async function doExportAssembly(): Promise<ExportResult> {
+  const r = await api.build.exportAssembly();
+  if (r.cancelled) return r;
+  if (r.ok) toast(`Model exported as one STEP file:\n${r.target ?? r.files[0] ?? ''}`, 'ok');
+  else toast(`Export failed: ${r.error}`, 'error');
   return r;
 }
 
@@ -2113,6 +2123,7 @@ if (api.testMode) {
     display: () => Object.fromEntries([...document.querySelectorAll<HTMLElement>('[data-display]')].map((b) => [b.dataset.display, b.getAttribute('aria-checked') === 'true'])),
     /** Export wie über das Menü (`sel`: das ausgewählte Bauteil), liefert das Ergebnis. */
     exportAs: (fmt: string, scope: 'all' | 'sel') => { exportScope = scope; return doExport(fmt, fmt.toUpperCase()); },
+    exportAssembly: () => doExportAssembly(),
     /** „Everything as ZIP“ im Export-Menü (E79). */
     exportZip: () => doExportZip(),
     /** „As CadQuery script“ im Export-Menü und „New from CadQuery script“ (E100). */

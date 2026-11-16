@@ -3,6 +3,7 @@
 // „hidden“ im Kopf und im Fuß, Suche, F3, Klick durch ein transparentes Teil, Gruppen in der Ausgabe-STEP. Aufruf: npm run test:groups (baut vorher). SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 legt Bilder ab.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { APP, checker, cleanup, sleep, startApp } from './harness.mjs';
 
@@ -240,9 +241,33 @@ walk(a)`);
   check('output/model.step: Gehaeuse › Schrauben › Schraube und Reference › Platine › Stecker › USB_C', lines.includes('  Gehaeuse') && lines.includes('    Schrauben') && lines.includes('      Schraube')
     && lines.includes('  Reference') && lines.includes('    Platine') && lines.includes('      Stecker') && lines.includes('        USB_C'), lines.join(' | ').slice(0, 120));
 
-  // 8) Referenz mit alpha=1 (Boden, Logo für eine Animation): deckend mit Tiefe, trotzdem nicht in export --all
-  fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL + 'add_part("Tisch", cq.Workplane().box(100, 80, 2).translate((0, 0, -12)), role="reference", alpha=1, color=(0.3, 0.3, 0.3))\n');
-  await waitFor('Modell mit deckender Referenz gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 7, 90000).catch(() => {});
+  // 7b) The whole model as one STEP file (issue #11) from the Export menu: at the chosen place, groups as sub-assemblies,
+  // references under "Reference" like in output/model.step, nothing in exports/ of the project
+  const asmDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-asm-'));
+  const asmFile = path.join(asmDir, 'Whole model.step');
+  await app.answers([asmFile]);
+  const asm = await ev(() => window.__t.exportAssembly());
+  const asmTree = py(`
+import cadquery as cq
+a = cq.Assembly.importStep(${JSON.stringify(asmFile)})
+def walk(x, d=0):
+    print("  " * d + x.name)
+    for c in x.children: walk(c, d + 1)
+walk(a)`);
+  const asmLines = asmTree.stdout.split(/\r?\n/).filter(Boolean).slice(1).map((l) => l.replace(/\s+$/, ''));
+  const asmText = fs.existsSync(asmFile) ? fs.readFileSync(asmFile, 'utf8') : '';
+  check('As one STEP file: Gehaeuse › Schrauben › Schraube and Reference › Platine › Stecker › USB_C, 6 solids, nothing in exports/', asm.ok && asm.target === asmFile
+    && asmLines.includes('  Gehaeuse') && asmLines.includes('    Boden') && asmLines.includes('    Schrauben') && asmLines.includes('      Schraube')
+    && asmLines.includes('  Reference') && asmLines.includes('    Platine') && asmLines.includes('      Stecker') && asmLines.includes('        USB_C')
+    && asmText.split('MANIFOLD_SOLID_BREP').length - 1 === 6
+    && !fs.existsSync(path.join(proj.dir, 'exports')) && (await ev(() => window.__t.toast())).text.includes('one STEP file'), `${JSON.stringify(asm).slice(0, 120)} ${asmLines.join(' | ').slice(0, 160)}`);
+  cleanup(asmDir);
+
+  // 8) Referenz mit alpha=1 (Boden, Logo für eine Animation): deckend mit Tiefe, trotzdem nicht in export --all.
+  // "Kappe" is a cq.Compound around a single solid: its STEP export must keep the solid (before, only a shell came out)
+  fs.writeFileSync(path.join(proj.dir, 'model.py'), MODEL + 'add_part("Tisch", cq.Workplane().box(100, 80, 2).translate((0, 0, -12)), role="reference", alpha=1, color=(0.3, 0.3, 0.3))\n'
+    + 'add_part("Kappe", cq.Compound(cq.Workplane().box(10, 10, 4).translate((0, 30, 30)).val().wrapped))\n');
+  await waitFor('Modell mit deckender Referenz gebaut', () => window.__t.status().state === 'ok' && window.__t.partCount() === 8, 90000).catch(() => {});
   const ids7 = await ev(() => Object.fromEntries(window.__t.parts().map((p) => [p.name, p.id])));
   const tisch = await ev((id) => window.__t.viewer.partLook(id), ids7.Tisch);
   const platine = await ev((id) => window.__t.viewer.partLook(id), ids7.Leiterplatte);
@@ -250,6 +275,10 @@ walk(a)`);
     && platine?.opacity < 1 && !platine.depthWrite, JSON.stringify({ tisch, platine }));
   const exp = spawnSync(PY, ['-m', 'soma', 'export', '--all', '--format', 'step', '--out', path.join(proj.dir, 'renders'), '--project', proj.dir], { encoding: 'utf8', env: { ...process.env, PYTHONUTF8: '1' } });
   check('soma export --all lässt auch die deckende Referenz aus', exp.status === 0 && !exp.stdout.includes('Tisch') && /not exported: \d+ reference/.test(exp.stdout), exp.stdout + exp.stderr);
+  const kappe = path.join(proj.dir, 'renders', 'Kappe.step');
+  check('STEP export of a cq.Compound around one solid keeps the solid', fs.existsSync(kappe) && fs.readFileSync(kappe, 'utf8').includes('MANIFOLD_SOLID_BREP'), exp.stdout.slice(-200));
+  const asmCli = spawnSync(PY, ['-m', 'soma', 'export', '--assembly', '--format', 'stl', '--project', proj.dir], { encoding: 'utf8', env: { ...process.env, PYTHONUTF8: '1' } });
+  check('soma export --assembly only with STEP', asmCli.status === 2 && asmCli.stderr.includes('only works with --format step'), asmCli.stderr.slice(-200));
 
   const relevant = page.errors.filter((e) => !/favicon/i.test(e));
   check('Keine Konsolenfehler im Renderer', relevant.length === 0, relevant.slice(0, 2).join(' | ').slice(0, 100));

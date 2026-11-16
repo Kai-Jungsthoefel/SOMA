@@ -111,6 +111,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('build:setAuto', (_e, on: boolean) => ctl.need().builds.setAuto(!!on));
   ipcMain.handle('build:status', () => ctl.need().builds.status);
   ipcMain.handle('build:export', (_e, format: string, part: string | null, mesh: unknown) => ctl.exportModel(String(format), part ? String(part) : null, mesh));
+  ipcMain.handle('build:exportAssembly', () => ctl.exportModel('step', null, undefined, true));
 
   ipcMain.handle('fs:list', () => listFiles(dir()));
   ipcMain.handle('fs:import', (_e, paths: string[]) => importInputs(dir(), Array.isArray(paths) ? paths.map(String) : []));
