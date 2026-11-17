@@ -520,8 +520,8 @@ try {
   const steps = new Set();
   for (const t0 = Date.now(); Date.now() - t0 < 90000;) {
     const s = await ev(() => window.__t.loadingScreen());
+    for (const x of s.steps ?? []) steps.add(x);
     if (!s.shown) break;
-    if (s.step) steps.add(s.step.replace(/ …$/, ''));
     await sleep(100);
   }
   const switched = await ev((oldId) => window.__t.project().id !== oldId && window.__t.partCount() === 2, proj.id);

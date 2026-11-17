@@ -10,6 +10,8 @@ export class Loading {
   private owner = 0;
   private shown = 0;
   private t0 = 0;
+  // Every step since start, for tests: short steps last less than their polling interval
+  private steps: string[] = [];
   private tick: ReturnType<typeof setInterval> | undefined;
   private waiters: (() => void)[] = [];
   private root = $('app-busy');
@@ -25,6 +27,7 @@ export class Loading {
     this.shown = id;
     this.title.textContent = title;
     this.stepEl.textContent = '';
+    this.steps = [];
     this.file.textContent = '';
     this.file.hidden = true;
     this.note.textContent = note;
@@ -45,6 +48,7 @@ export class Loading {
   step(text: string, file?: string): void {
     if (!this.shown) return;
     this.stepEl.textContent = `${text} …`;
+    this.steps.push(text);
     if (file !== undefined) { this.file.textContent = file; this.file.hidden = !file; }
   }
 
@@ -62,8 +66,8 @@ export class Loading {
     return this.shown ? new Promise((r) => this.waiters.push(r)) : Promise.resolve();
   }
 
-  /** For tests: shown, title, step and file. */
-  state(): { shown: boolean; title: string; step: string; file: string; note: string } {
-    return { shown: !this.root.hidden, title: this.title.textContent ?? '', step: this.stepEl.textContent ?? '', file: this.file.textContent ?? '', note: this.note.hidden ? '' : this.note.textContent ?? '' };
+  /** For tests: shown, title, step, all steps since start, file. */
+  state(): { shown: boolean; title: string; step: string; steps: string[]; file: string; note: string } {
+    return { shown: !this.root.hidden, steps: [...this.steps], title: this.title.textContent ?? '', step: this.stepEl.textContent ?? '', file: this.file.textContent ?? '', note: this.note.hidden ? '' : this.note.textContent ?? '' };
   }
 }

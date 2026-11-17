@@ -92,9 +92,10 @@ export function allowMicrophone(win: BrowserWindow): void {
 
 /** The system's side of the microphone: macOS asks the user once, Windows has a switch in its privacy settings. */
 export async function micAccess(): Promise<VoiceResult> {
+  // Tests record from Chromium's fake microphone. A CI runner has no microphone: macOS would ask and wait forever,
+  // Windows reports access as denied
+  if (process.env.SOMA_TEST === '1') return { ok: true };
   if (process.platform === 'darwin') {
-    // Tests cannot answer the system's question, on a CI runner it would wait forever
-    if (process.env.SOMA_TEST === '1') return { ok: true };
     if (await systemPreferences.askForMediaAccess('microphone')) return { ok: true };
     return { ok: false, error: 'SOMA may not use the microphone. Allow it in System Settings > Privacy & Security > Microphone, then try again.' };
   }
