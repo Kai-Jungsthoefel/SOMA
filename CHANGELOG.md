@@ -22,6 +22,10 @@ the version is bumped.
 - "Open folder" is more careful with the folder: a `model.py` that appears while the confirmation is open is kept instead of replaced, `.soma/project.json` is backed up before it changes (an unreadable one is listed as a change first), and a folder where `.soma` is a file is refused with a message before anything is written. Thanks to vasilipuchko (fork zihotki/SOMA).
 - The viewer fits the model again when a rebuild takes it out of the picture, for example when the agent replaces the starter box with a table. A small change keeps the camera where you put it. "Fit" in a viewer narrower than high no longer cuts off the sides.
 - Drawings were missing after saving and opening a `.soma` file: the "Drawings" view said "No drawings yet", although the PDFs were there. The file now keeps the list of sheets. For files saved before, the view names the drawing files that are not built yet, with a button to build them. Opening a `.soma` file also keeps the files' modification times, so sheets no longer show "older than the code" right after opening.
+- SOMA AI: a model chosen below the chat input is now also the one Settings > SOMA AI shows and new conversations start with.
+- SOMA AI: the chat follows new steps and answers while you are at its end, also while an answer is still being written. Scrolled up, it stays where you read.
+- SOMA AI no longer works unseen: when it starts working or asks something, the agent area opens if it was collapsed, and a question brings its chat to the front.
+- SOMA AI asks fewer rounds of questions: at most once before a task and only what really matters, otherwise it picks sensible defaults and names them.
 - `soma drawing build <file>` without a list of sheets (for example in a cloned folder) builds all drawings, so `output/drawings.pdf` keeps every sheet instead of only that file's.
 
 ## [0.11.0] - 2026-11-03

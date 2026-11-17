@@ -120,12 +120,13 @@ the first message, a note names the risks, **Got it** starts the chat.
 5. **Questions**: when SOMA AI needs your decision, it asks all its questions at once. Click an answer or write your own, then **Send answers**. A single question with answers to pick goes with one click. **Skip** lets SOMA AI decide.
 6. **Working**: shows that SOMA AI is working and for how long. Esc in the input stops it. At the end of its answer, "Worked for" says how long it took.
 7. **Add a picture**: a photo or a sketch with measurements. Pasting or dropping a picture into the chat works too. The **microphone** next to it is voice input (see "Voice input").
-8. **Model**: the AI model SOMA AI thinks with. The recommended models come first, the field at the top searches.
+8. **Model**: the AI model SOMA AI thinks with. The recommended models come first, the field at the top searches. The choice also applies to new conversations, like in Settings > SOMA AI.
 9. **Send and stop**: sends your message (Enter). While SOMA AI works and the input is empty, it stops SOMA AI.
 
 While SOMA AI works you can already type: it reads your message after the current step. **Send to agent** puts a
 part, a measurement or a markup into its input. A build that fails while it works is normal, it fixes the code
-itself. A dot on the tab shows its state: grey not set up, green ready, orange working, yellow waiting for you.
+itself. A dot on the tab shows its state: grey not set up, green ready, orange working, yellow waiting for you. When
+SOMA AI starts working or asks something while the agent area is collapsed, the area opens.
 
 ### Voice input
 
