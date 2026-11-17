@@ -117,7 +117,7 @@ npm run dist                         # installation package for this system, run
 
 ## Docs and way of working
 
-- Answer the maintainer in English (their wish since 2026-11-03), contributors in their own language. If a decision is really theirs, ask a single question. What I decide without asking goes into `PLAN.md` under "Noch nicht ausdrücklich bestätigt".
+- Answer the maintainer in German in the chat, contributors in their own language. Everything written into the repo is English (see Language). If a decision is really theirs, ask a single question. What I decide without asking goes into `PLAN.md` under "Noch nicht ausdrücklich bestätigt".
 - After a step, update:
   - `PLAN.md`: phase status, open points, risks.
   - `app/README.md` when commands or structure change, and the structure here.
