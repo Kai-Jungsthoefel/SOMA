@@ -1512,6 +1512,20 @@ select.ai-field { width:170px; flex-shrink:0; }
 .ai-model:hover { background:var(--s3); color:var(--tx); }
 .ai-send { width:32px; height:32px; border-radius:8px; background:var(--acc); color:#1b1206; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .ai-send:disabled { background:var(--s3); color:var(--tx3); }
+/* Voice input (voice.ts): orange while listening, the ring follows the loudness */
+.ai-mic.rec { color:var(--acc); background:var(--acc-tint); box-shadow:0 0 0 calc(1px + var(--lvl, 0) * 4px) var(--acc-line); transition:box-shadow .08s; }
+.ai-mic[data-state="download"] { color:var(--acc); }
+.vc-dlg { width:min(500px, 100%); gap:10px; }
+.vc-row { display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--tx2); }
+.vc-row select.ai-field { width:200px; }
+.vc-note { color:var(--warn); font-size:12px; }
+.vc-model { display:flex; gap:8px; align-items:flex-start; color:var(--tx2); font-size:12px; line-height:1.5; }
+.vc-model .ic { flex-shrink:0; margin-top:2px; color:var(--tx3); }
+.vc-bar { height:6px; border-radius:3px; background:var(--s3); overflow:hidden; }
+.vc-bar span { display:block; height:100%; width:0; background:var(--acc); transition:width .2s; }
+.vc-bar.unpack span { animation:pulse 1.2s ease-in-out infinite; }
+.vc-info { font-size:12px; color:var(--tx2); min-height:16px; }
+.vc-info:empty { display:none; }
 .ai-send.stop { background:var(--s3); color:var(--tx); border:1px solid var(--line2); }
 .ai-menu, .st-ai-menu { min-width:260px; max-width:340px; }
 /* Long names (a conversation's first words) shorten, the provider or date beside them stays whole */

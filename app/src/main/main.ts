@@ -22,6 +22,7 @@ import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
 import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
 import { piEntry } from './somaai';
+import { allowMicrophone, fakeMicrophone, micAccess, Voice } from './voice';
 import { aiAccounts, cancelSignIn, defaultModel, listModels, listSessions, saveApiKey, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
@@ -49,6 +50,9 @@ if (process.platform === 'linux' && fs.existsSync(softwareGlFlag())) app.command
 let win: BrowserWindow | null = null;
 /** Für Anfragen aus den Terminals (bridge.ts): das Projekt des Fensters. */
 let controller: ProjectController | null = null;
+/** Voice input for SOMA AI (voice.ts), for the whole app: the model does not belong to an open model. */
+const voice = new Voice((s) => { if (win && !win.isDestroyed()) win.webContents.send('voice:status', s); });
+fakeMicrophone();
 /** Im Testmodus landet Kopiertes hier statt in der echten Zwischenablage des Nutzers. */
 let testClipboard = '';
 
@@ -234,6 +238,14 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('ai:models', () => listModels());
   ipcMain.handle('ai:defaultModel', () => defaultModel());
   ipcMain.handle('ai:setDefaultModel', (_e, provider: unknown, id: unknown) => setDefaultModel(provider, id));
+  ipcMain.handle('voice:status', () => voice.status());
+  ipcMain.handle('voice:check', () => voice.check());
+  ipcMain.handle('voice:install', (_e, language: unknown) => voice.install(language));
+  ipcMain.handle('voice:cancel', () => voice.cancel());
+  ipcMain.handle('voice:remove', () => voice.remove());
+  ipcMain.handle('voice:micAccess', () => micAccess());
+  ipcMain.on('voice:warm', () => { voice.warm().catch(() => { /* reported with the recording */ }); });
+  ipcMain.handle('voice:transcribe', (_e, samples: unknown, rate: unknown) => voice.transcribe(samples, rate));
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('measure:start', () => ctl.measureStart());
   ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));
@@ -428,6 +440,7 @@ function createWindow(): void {
     },
   });
   win.setMenuBarVisibility(false);
+  allowMicrophone(win);
   if (testWindowMode === 'offscreen') { win.setBounds({ x: -20000, y: -20000, width: 1600, height: 950 }); win.showInactive(); }
   const wc = win.webContents;
   const ctl = new ProjectController(() => win, wc);
@@ -516,4 +529,4 @@ app.whenReady().then(async () => {
   });
   createWindow();
 });
-app.on('window-all-closed', () => { console.log('[soma] quit'); stopBridge(); stopWarm(); app.quit(); });
+app.on('window-all-closed', () => { console.log('[soma] quit'); stopBridge(); stopWarm(); voice.shutdown(); app.quit(); });

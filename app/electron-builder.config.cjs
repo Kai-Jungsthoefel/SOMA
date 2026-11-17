@@ -24,7 +24,7 @@ module.exports = {
   asar: false,
   // node-pty bringt fertige Binaries (N-API) mit, unter Linux baut npm install es. Neu bauen für Electron ist nicht nötig.
   npmRebuild: false,
-  // Alles außer den beiden nativen Paketen bündelt esbuild nach dist/
+  // Alles außer den nativen Paketen bündelt esbuild nach dist/
   files: [
     'package.json',
     'dist/**',
@@ -33,6 +33,9 @@ module.exports = {
     '!node_modules/**',
     'node_modules/dugite/**',
     'node_modules/node-pty/**',
+    // Voice input (voice.ts): sherpa-onnx and the native part for this system (onnxruntime inside), N-API like node-pty
+    'node_modules/sherpa-onnx-node/**',
+    'node_modules/sherpa-onnx-*/**',
     '!node_modules/node-pty/{src,deps,scripts,third_party,typings}/**',
     '!node_modules/node-pty/build/**/*.{obj,pdb,lib,iobj,ipdb,tlog}',
     // SOMA AI (somaai.ts): pi runs as its own process from its bundle, which needs only these packages besides itself
@@ -106,6 +109,8 @@ module.exports = {
     target: [{ target: 'dmg', arch: ['arm64'] }],
     icon: 'build-resources/icon.png',
     category: 'public.app-category.graphics-design',
+    // Voice input for SOMA AI: without this text macOS ends the app when it asks for the microphone
+    extendInfo: { NSMicrophoneUsageDescription: 'SOMA turns what you say into text for SOMA AI, on this computer.' },
     // Ohne Zertifikat ad-hoc signiert (Apple Silicon startet unsignierte Programme nicht), ohne Notarisierung
     identity: process.env.CSC_LINK ? undefined : '-',
     hardenedRuntime: false,

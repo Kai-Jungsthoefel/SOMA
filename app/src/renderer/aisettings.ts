@@ -1,10 +1,12 @@
 import { accountLabel, CHATGPT_PROVIDER, type AiAccount, type AiModel } from '../shared/somaai';
-import type { AiStatus, SomaApi } from '../shared/types';
+import type { AiStatus, SomaApi, VoiceStatus } from '../shared/types';
+import { VOICE_LANGUAGES, VOICE_MODEL } from '../shared/voice';
 import { keyForm, showModelMenu } from './aiparts';
 import { icon } from './icons';
 import type { SettingsPage } from './settings';
 import { field, group, head } from './settingspages';
-import { el } from './ui';
+import { ask, el } from './ui';
+import { voiceSetup } from './voice';
 
 /*
  * Settings > SOMA AI: the sign-ins, the model, what the conversation of the open model used, and what SOMA AI may do.
@@ -48,6 +50,7 @@ export class AiPage implements SettingsPage {
   private signInUrl = '';
   private seq = 0;
   private menu: HTMLElement;
+  private voice: VoiceStatus | null = null;
 
   constructor(private root: HTMLElement, private deps: AiPageDeps) {
     // Outside the settings window: menus lie above it (style.css .menu), what is behind it is locked
@@ -56,6 +59,15 @@ export class AiPage implements SettingsPage {
     this.menu.setAttribute('role', 'menu');
     document.body.append(this.menu);
     deps.api.ai.onSignInUrl((url) => { this.signInUrl = url; if (this.signing) this.render(); });
+    deps.api.voice.onStatus((s) => {
+      const was = this.voice?.download?.phase;
+      this.voice = s;
+      if (!this.root.isConnected || !this.status) return;
+      // Progress of the same step: only the text changes. Rendering the page anew would restart its spinner every 200 ms
+      const desc = this.root.querySelector<HTMLElement>('[data-voice-progress]');
+      if (desc && s.download && s.download.phase === was) desc.textContent = this.voiceProgress(s);
+      else this.render();
+    });
   }
 
   show(): void { void this.refresh(); }
@@ -64,10 +76,12 @@ export class AiPage implements SettingsPage {
     const seq = ++this.seq;
     this.render();
     const api = this.deps.api.ai;
-    const [status, accounts, current] = await Promise.all([
+    const [status, accounts, current, voice] = await Promise.all([
       api.status().catch(() => null), api.accounts().catch(() => [] as AiAccount[]), api.defaultModel().catch(() => null),
+      this.deps.api.voice.status().catch(() => null),
     ]);
     if (seq !== this.seq) return;
+    this.voice = voice;
     this.status = status;
     this.accounts = accounts;
     this.current = current;
@@ -205,6 +219,48 @@ export class AiPage implements SettingsPage {
     ];
   }
 
+  /** Voice input (voice.ts): set up, progress of the download, or the model with a way to remove it. */
+  private voiceRow(): HTMLElement {
+    const v = this.voice;
+    const mk = (label: string, act: string, fn: () => void, cls = 'btn sm') => {
+      const b = el('button', { className: cls, textContent: label });
+      b.dataset.act = act;
+      b.addEventListener('click', fn);
+      return b;
+    };
+    const setup = () => void voiceSetup(this.deps.api, this.deps.toast, v).then(() => this.refresh());
+    const title = 'Voice input';
+    if (!v) return field(title, 'Speak to SOMA AI instead of typing.', el('span'));
+    if (!v.available) return field(title, v.unavailable ?? 'Voice input does not work on this computer.', el('span'));
+    if (v.download) {
+      const row = field(title, this.voiceProgress(v), el('div', { className: 'st-ai-wait' }, el('span', { className: 'spin' }, icon('spin', 14, 2.4)), mk('Show', 'voice-show', setup), mk('Cancel', 'voice-cancel', () => void this.deps.api.voice.cancel())));
+      row.querySelector<HTMLElement>('.st-fl > span')?.setAttribute('data-voice-progress', '');
+      return row;
+    }
+    if (!v.installed) {
+      return field(title, `Speak to SOMA AI instead of typing, with the microphone button next to the chat input. Recognition runs on this computer. Needs a one-time download of ${Math.round(VOICE_MODEL.downloadBytes / 1e6)} MB.`,
+        mk('Set up …', 'voice-setup', setup, 'btn sm acc'), v.error ? el('div', { className: 'ai-err', textContent: `The last download did not work: ${v.error}` }) : null);
+    }
+    const lang = VOICE_LANGUAGES.find((l) => l.id === v.language)?.label;
+    return field(title, `Ready. ${VOICE_MODEL.name} by ${VOICE_MODEL.by} (license ${VOICE_MODEL.license}), ${Math.round(VOICE_MODEL.diskBytes / 1e6)} MB on this computer${lang ? `, set up for ${lang}` : ''}. It understands 25 European languages and recognizes which one you speak.`,
+      mk('Remove', 'voice-remove', () => void this.removeVoice()));
+  }
+
+  private voiceProgress(v: VoiceStatus): string {
+    const d = v.download;
+    if (!d) return '';
+    return d.phase === 'unpack' ? 'Unpacking the speech model …' : `Downloading the speech model: ${Math.round(d.received / 1e6)} of ${Math.round(d.total / 1e6)} MB …`;
+  }
+
+  private async removeVoice(): Promise<void> {
+    const i = await ask({ title: 'Voice input', message: 'Remove the speech model?', detail: `This frees ${Math.round(VOICE_MODEL.diskBytes / 1e6)} MB. Voice input then downloads it again on the next use.`, buttons: ['Remove', 'Cancel'] });
+    if (i !== 0) return;
+    const r = await this.deps.api.voice.remove().catch((e) => ({ ok: false, error: String(e) }));
+    if (r.ok) this.deps.toast('The speech model was removed.');
+    else this.deps.toast(r.error ?? 'The speech model could not be removed.', 'error');
+    await this.refresh();
+  }
+
   private safety(): HTMLElement[] {
     const li = (ic: string, b: string, t: string) => el('li', {}, icon(ic, 14, 1.9), el('span', {}, el('b', { textContent: b }), ` ${t}`));
     const again = el('button', { className: 'btn sm', textContent: 'Show again' });
@@ -234,6 +290,7 @@ export class AiPage implements SettingsPage {
         ...(this.accounts.length ? this.accounts.map((a) => this.accountRow(a)) : [el('p', { className: 'st-lead', textContent: 'Not signed in yet. SOMA AI needs one of these to work.' })]),
         ...this.signInRows()),
       group('Model', this.modelRow()),
+      group('Voice input', this.voiceRow()),
       group('Usage', ...this.usageRows()),
       group('Safety', ...this.safety()),
       s?.version ? el('p', { className: 'st-lead st-ai-pi', textContent: `SOMA AI runs on pi ${s.version} (pi.dev, MIT license). Its sign-ins, settings and conversations are listed under Storage.` }) : null,
@@ -244,7 +301,7 @@ export class AiPage implements SettingsPage {
   state() {
     return {
       text: this.root.innerText, accounts: this.accounts, models: this.models?.length ?? null, current: this.current, signing: this.signing,
-      usage: !!this.usage, modelsError: this.modelsError,
+      usage: !!this.usage, modelsError: this.modelsError, voice: this.voice,
     };
   }
 }

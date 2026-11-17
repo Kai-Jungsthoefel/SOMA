@@ -92,6 +92,17 @@ const api: SomaApi = {
     sessions: () => ipcRenderer.invoke('ai:sessions'),
     switchSession: (id) => ipcRenderer.invoke('ai:switchSession', id),
   },
+  voice: {
+    status: () => ipcRenderer.invoke('voice:status'),
+    check: () => ipcRenderer.invoke('voice:check'),
+    install: (language) => ipcRenderer.invoke('voice:install', language),
+    cancel: () => ipcRenderer.invoke('voice:cancel'),
+    remove: () => ipcRenderer.invoke('voice:remove'),
+    micAccess: () => ipcRenderer.invoke('voice:micAccess'),
+    warm: () => ipcRenderer.send('voice:warm'),
+    transcribe: (samples, sampleRate) => ipcRenderer.invoke('voice:transcribe', samples, sampleRate),
+    onStatus: (cb) => { ipcRenderer.on('voice:status', (_e, s) => cb(s)); },
+  },
   measure: {
     query: (source, req) => ipcRenderer.invoke('measure:query', source, req),
     start: () => ipcRenderer.invoke('measure:start'),

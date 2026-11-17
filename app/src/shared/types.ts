@@ -143,6 +143,23 @@ export interface AiExit { gen: number; code: number | null; error?: string }
 /** Result of "Sign in with ChatGPT". `cancelled`: the user stopped it. */
 export interface AiSignInResult { ok: boolean; error?: string; cancelled?: boolean }
 
+/**
+ * Voice input (main/voice.ts). `available`: the speech engine is part of this installation. `download`: the model is being
+ * downloaded or unpacked (bytes so far and in all, 0 when not known). `language`: chosen at the setup, '' before.
+ */
+export interface VoiceStatus {
+  available: boolean;
+  installed: boolean;
+  download: { phase: 'download' | 'unpack'; received: number; total: number } | null;
+  language: string;
+  /** Why voice input cannot work here (engine missing, system too old, engine does not load), with `available` false. */
+  unavailable?: string;
+  /** Why the last download failed, until the next one starts. */
+  error?: string;
+}
+export interface VoiceResult { ok: boolean; error?: string; cancelled?: boolean }
+export interface VoiceText { ok: boolean; text?: string; error?: string }
+
 export interface PartMap {
   id: string; name: string; step_name: string; role: string;
   file?: string; line?: number; end_line?: number; volume?: number;
@@ -269,7 +286,7 @@ export interface LibraryResult {
   library: LibraryState;
 }
 /** Bereich der App-Daten in den Einstellungen (E81). Der Renderer nennt nur die Kennung, den Ordner kennt der Hauptprozess. */
-export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills' | 'logs' | 'somaai';
+export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills' | 'logs' | 'somaai' | 'voice';
 /** Größe eines Bereichs. `other`: alles Übrige in den App-Daten. `models`: Zahl der Arbeitsordner. */
 export interface StorageEntry { id: StorageArea | 'other'; path: string | null; bytes: number; files: number; models?: number }
 export interface StorageStats { dir: string; total: number; areas: StorageEntry[] }
@@ -584,6 +601,24 @@ export interface SomaApi {
     sessions(): Promise<{ ok: boolean; sessions?: AiSession[]; error?: string }>;
     /** Back to one of them (pi continues it). */
     switchSession(id: string): Promise<AiResult>;
+  };
+  /** Voice input for SOMA AI: speech to text on this computer, the model is downloaded on the first use. */
+  voice: {
+    status(): Promise<VoiceStatus>;
+    /** Status after a trial run of the speech engine (once per app run): whether it runs here, before the download. */
+    check(): Promise<VoiceStatus>;
+    /** Download and unpack the speech model for this language. Ends when it is ready, failed or was cancelled. */
+    install(language: string): Promise<VoiceResult>;
+    cancel(): Promise<void>;
+    /** Delete the speech model (the user asked for it in Settings > SOMA AI). */
+    remove(): Promise<VoiceResult>;
+    /** Ask the system for the microphone (macOS asks the user once, Windows tells when it is turned off). */
+    micAccess(): Promise<VoiceResult>;
+    /** Load the model while the user speaks, so the text comes faster. */
+    warm(): void;
+    /** Recorded speech, mono, any sample rate. */
+    transcribe(samples: Float32Array, sampleRate: number): Promise<VoiceText>;
+    onStatus(cb: (s: VoiceStatus) => void): void;
   };
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: {

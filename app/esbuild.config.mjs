@@ -8,7 +8,11 @@ const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const common = { bundle: true, sourcemap: true, logLevel: 'info', target: 'es2022', define: { __SOMA_VERSION__: JSON.stringify(version) } };
 await Promise.all([
   build({ ...common, entryPoints: ['src/main/main.ts'], outfile: 'dist/main/main.js', platform: 'node', format: 'cjs',
-          external: ['electron', 'node-pty', 'dugite'] }),
+          external: ['electron', 'node-pty', 'dugite', 'sherpa-onnx-node'] }),
+  // Speech recognition for voice input (voice.ts) in its own utility process. sherpa-onnx loads its native part from
+  // its package folder, so it stays outside the bundle
+  build({ ...common, entryPoints: ['src/main/voiceworker.ts'], outfile: 'dist/main/voiceworker.js', platform: 'node', format: 'cjs',
+          external: ['electron', 'sherpa-onnx-node'] }),
   build({ ...common, entryPoints: ['src/preload/preload.ts'], outfile: 'dist/preload/preload.js', platform: 'node', format: 'cjs',
           external: ['electron'] }),
   // Unsichtbares Render-Fenster für soma render (E58): eigener Preload und eigene Seite, derselbe Viewer

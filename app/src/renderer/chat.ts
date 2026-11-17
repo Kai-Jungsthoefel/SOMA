@@ -4,6 +4,7 @@ import { keyForm, searchMenu, showModelMenu } from './aiparts';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
 import { el, fmtWhen, menuItem, menus } from './ui';
+import { VoiceButton } from './voice';
 
 /*
  * Chat of SOMA AI, the agent built into SOMA (main/somaai.ts). Made for people who never used a coding agent
@@ -234,6 +235,7 @@ export class SomaChat {
   private nextWord = 0;
   private modelBtn: HTMLButtonElement;
   private sendBtn: HTMLButtonElement;
+  private voice: VoiceButton;
   private menu: HTMLElement;
   private fileInput: HTMLInputElement;
 
@@ -288,8 +290,10 @@ export class SomaChat {
     this.modelBtn.addEventListener('click', () => void this.openModelMenu());
     this.sendBtn = el('button', { className: 'ai-send', title: 'Send (Enter)' });
     this.sendBtn.addEventListener('click', () => (this.running && !this.input.value.trim() && !this.notes.length && !this.images.length ? void this.stop() : void this.send()));
+    // Voice input (voice.ts): the text goes into the input where the cursor is
+    this.voice = new VoiceButton({ api: deps.api, toast: deps.toast, insert: (text) => this.dictate(text) });
     this.composer = el('div', { className: 'ai-composer' }, this.chips, this.input,
-      el('div', { className: 'ai-row' }, attach, this.fileInput, el('span', { className: 'grow' }), this.modelBtn, this.sendBtn));
+      el('div', { className: 'ai-row' }, attach, this.fileInput, this.voice.el, el('span', { className: 'grow' }), this.modelBtn, this.sendBtn));
     this.menu = el('div', { className: 'menu ai-menu' });
     this.menu.hidden = true;
     this.menu.setAttribute('role', 'menu');
@@ -299,6 +303,7 @@ export class SomaChat {
 
     this.input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); void this.send(); }
+      else if (e.key === 'Escape' && this.voice.recording) { e.preventDefault(); this.voice.cancel(); }
       else if (e.key === 'Escape' && this.running) { e.preventDefault(); void this.stop(); }
     });
     this.input.addEventListener('input', () => this.fit());
@@ -370,6 +375,23 @@ export class SomaChat {
   }
 
   focus(): void { if (!this.input.disabled && this.phase === 'chat') this.input.focus(); }
+
+  /** Spoken text (voice.ts) into the input at the cursor, with a space to the text around it. Not sent: the user reads it first. */
+  private dictate(text: string): void {
+    if (this.input.disabled) { this.deps.toast('The chat input is locked right now, the text was not added.', 'info'); return; }
+    const v = this.input.value;
+    const start = this.input.selectionStart ?? v.length;
+    const end = this.input.selectionEnd ?? v.length;
+    const before = v.slice(0, start);
+    const after = v.slice(end);
+    const add = `${before && !/\s$/.test(before) ? ' ' : ''}${text}${after && !/^\s/.test(after) ? ' ' : ''}`;
+    this.input.value = before + add + after;
+    const at = before.length + add.length;
+    this.input.setSelectionRange(at, at);
+    this.fit();
+    this.renderComposer();
+    this.input.focus();
+  }
 
   /** "Send to agent" (part, measurement, markup, file): a chip in the input, sent with the next message. */
   insert(text: string): void {
@@ -550,6 +572,7 @@ export class SomaChat {
       : this.asking ? 'SOMA AI is waiting for your answer above'
         : this.running ? 'Add something, SOMA AI reads it after the current step …' : 'Describe what you want, or add a sketch or photo …';
     this.composer.classList.toggle('locked', locked);
+    this.voice.setLocked(locked);
     this.renderStatus();
     const typed = !!(this.input.value.trim() || this.notes.length || this.images.length);
     const stop = this.running && !typed;
@@ -1252,7 +1275,7 @@ export class SomaChat {
       quiet: [...this.list.querySelectorAll('.ai-quiet')].map((q) => q.textContent),
       user: [...this.list.querySelectorAll('.ai-user')].map((u) => ({ text: u.querySelector('.tx')?.textContent ?? '', pics: u.querySelectorAll('img').length })),
       text: [...this.list.querySelectorAll('.ai-msg')].map((m) => m.textContent?.replace(/^SOMA AI/, '').trim()),
-      chips: this.notes.map((n) => n.label), images: this.images.length, input: this.input.value, locked: this.input.disabled,
+      chips: this.notes.map((n) => n.label), images: this.images.length, input: this.input.value, locked: this.input.disabled, voice: this.voice.state(),
     };
   }
 }

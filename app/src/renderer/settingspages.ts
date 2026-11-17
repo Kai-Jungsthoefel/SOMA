@@ -143,6 +143,7 @@ const AREA: Record<Exclude<StorageEntry['id'], 'appdata'>, { title: string; icon
   thumbnails: { title: 'Start page pictures', icon: 'image', desc: () => 'Pictures of your models on the start page.' },
   skills: { title: 'Your skills', icon: 'book', desc: () => 'Skills you created or edited under “Skills”.' },
   somaai: { title: 'SOMA AI', icon: 'sparkle', desc: () => 'Sign-ins, settings and conversations of SOMA AI, the agent built into SOMA.' },
+  voice: { title: 'Voice input', icon: 'mic', desc: () => 'The speech model for voice input. Remove it in Settings > SOMA AI.' },
   logs: { title: 'Logs', icon: 'file', desc: () => 'What the app did and what went wrong, for bug reports. A few MB at most, older entries are dropped.' },
   other: { title: 'Other', icon: 'file', desc: () => 'Caches of the display, the settings and the state of the app.' },
 };
