@@ -303,7 +303,7 @@ The folder itself is the model: there is no .soma file to save, and your files s
 
 ![Settings](../help/settings.png)
 
-1. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, decimal places of measurements.
+1. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, decimal places of measurements, and the build time limit (10 minutes unless you change it, or no limit).
 2. **Shortcuts**: all keys and mouse actions.
 3. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search), what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
 4. **Skills**: edit the built-in skills or write your own. They are available in every model.

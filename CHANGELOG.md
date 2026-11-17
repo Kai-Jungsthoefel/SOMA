@@ -12,6 +12,7 @@ the version is bumped.
 - Play or pause static FEM deformation in Analysis. Solved colors and values stay fixed during the shape cycle. On narrow canvases, compact controls flow into rows while the close button stays visible. Thanks to Ryan Hailey (fork RyanHailey21/SOMA, issue #12).
 - "As one STEP file" in the Export menu: the whole model in a single STEP file with its groups as sub-assemblies, part names and colors, for other CAD programs. Purchased parts such as screws are included, reference parts too, in a group "Reference". On the command line: `soma export --assembly --format step` (issue #11).
 - Video tutorial on YouTube (9 min, from installing to export): "Watch video" on the start page card and at the top of Help opens it in your browser.
+- Settings > Viewer > Build time limit: how long a build may take before SOMA stops it, from 5 minutes to 2 hours or no limit. The default stays 10 minutes. The message of a stopped build says where to raise it (issue #13).
 - A loading screen while a new model is created ("New model", the tutorial, a CadQuery script): it shows at once, names the step (first build, version history, opening) and stays until the viewer, the files and the agent panel have loaded the model. Before, the old model stayed on screen for several seconds without a sign that anything happened. The tutorial's tour starts once the model is loaded.
 
 ### Fixed
