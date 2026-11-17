@@ -23,6 +23,7 @@ Paths are relative to the installation folder (macOS: `SOMA.app/Contents`, where
 | pdf.js data (fonts, decoders) | `resources/app/dist/renderer/pdfjs/LICENSE`, `.../pdfjs/standard_fonts/LICENSE_*`, `.../pdfjs/wasm/LICENSE_*` |
 | Git (dugite) | `resources/app/node_modules/dugite/git/LICENSE.txt` and the `share/licenses` folders below it |
 | node-pty | `resources/app/node_modules/node-pty/LICENSE`, winpty in `resources/app/dist/licenses/node-pty__winpty/` |
+| sherpa-onnx and ONNX Runtime (voice input) | `resources/app/node_modules/sherpa-onnx-node/` and `resources/app/node_modules/sherpa-onnx-<system>/`; Apache-2.0 and MIT texts at the upstream URLs below |
 | pi (SOMA AI) | `resources/app/resources/somaai/LICENSE-pi.txt`; the packages pi needs: their folders under `resources/app/node_modules/` and `resources/app/dist/licenses/` |
 | Python | `resources/python/LICENSE.txt` (Windows) or `resources/python/lib/python3.12/LICENSE.txt` |
 | Python packages | `resources/python/.../site-packages/<package>.dist-info/` (`LICENSE*`, `licenses/`), some inside the package folder |
@@ -40,8 +41,8 @@ open an issue at https://github.com/Kai-Jungsthoefel/SOMA/issues and the source 
 
 ## Desktop app: Electron and npm packages
 
-The app is bundled with esbuild. The packages are compiled into `resources/app/dist/`, except dugite and node-pty, which
-ship as their package folders.
+The app is bundled with esbuild. The packages are compiled into `resources/app/dist/`, except dugite, node-pty and
+sherpa-onnx, which ship as their package folders.
 
 | Component | Version | License (SPDX) | Upstream | GPL-3.0+ compatible |
 |---|---|---|---|---|
@@ -61,6 +62,8 @@ ship as their package folders.
 | node-pty | 1.1.0 | MIT | https://github.com/microsoft/node-pty | yes |
 | winpty (in node-pty, Windows) | as in node-pty 1.1.0 | MIT | https://github.com/rprichard/winpty | yes |
 | ConPTY / OpenConsole (in node-pty, Windows) | as in node-pty 1.1.0 | MIT | https://github.com/microsoft/terminal | yes |
+| sherpa-onnx-node with its native part (sherpa-onnx-win-x64, -darwin-arm64, -linux-x64), voice input | 2.0.1 | Apache-2.0 | https://github.com/k2-fsa/sherpa-onnx | yes |
+| ONNX Runtime (in sherpa-onnx's native part) | as in sherpa-onnx 2.0.1 | MIT | https://github.com/microsoft/onnxruntime | yes |
 | dugite | 3.2.3 | MIT | https://github.com/desktop/dugite | yes |
 | pi (@earendil-works/pi-coding-agent, with pi-ai, pi-agent-core, pi-tui, pi-codemode, pi-mcp compiled in), the agent of SOMA AI | 1.5.2 | MIT | https://github.com/earendil-works/pi | yes |
 | Packages compiled into the bundle of pi (provider SDKs such as openai, @anthropic-ai/sdk, @google/genai, @aws-sdk/*, and undici, yaml, diff …) | as in pi 1.5.2, see `dist/licenses` | MIT, Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, Unlicense, 0BSD | see `dist/licenses` | yes |
@@ -176,6 +179,12 @@ origin and license. The compatibility code around them (`python/soma/cqruntime.p
 SOMA's own work and also available under the Apache License 2.0.
 
 The SOMA icon and the interface symbols are SOMA's own work.
+
+**Downloaded on request, not part of the package:** the speech model for voice input, Parakeet TDT 0.6B v3 by NVIDIA
+(https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), licensed under CC-BY-4.0, in the int8 ONNX conversion of
+sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models). SOMA downloads it only when the user sets
+up voice input and names model, author and license in that dialog. It lands in the app data under `voice/`, with the
+README of the conversion.
 
 ## Notes
 
