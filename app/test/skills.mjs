@@ -111,7 +111,8 @@ try {
   check('Help in der Leiste: Fenster mit den Abschnitten der Anleitung, Bild geladen, ohne Teile für den Agenten',
     hs.sections[0] === 'The window' && hs.sections.includes('Export') && hs.current === 'The window' && hs.images === 1 && hs.loadedImages === 1
     && hs.text.includes('Model menu') && !hs.text.includes('For the agent') && await ev(() => document.getElementById('topbar').inert), JSON.stringify(hs).slice(0, 200));
-  await ev(() => document.querySelector('#help-nav button[data-help="4"]').click());
+  // By name: new sections of the guide move the others
+  await ev(() => [...document.querySelectorAll('#help-nav button')].find((b) => b.textContent.trim() === 'Tools').click());
   hs = await ev(() => window.__t.help());
   check('Abschnitt wechseln: Tools mit Bild und Liste', hs.current === 'Tools' && hs.text.includes('Section') && hs.images === 1, hs.current);
   await shot('skills-0-hilfe');

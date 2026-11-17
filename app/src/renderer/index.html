@@ -268,12 +268,18 @@
         </div>
         <!-- Darstellung unten im Bild: Größe und Verformung nur bei FEM (E65), × zurück zum Modell -->
         <div id="result-bar" class="float dbar" role="toolbar" aria-label="Analysis" hidden>
-          <span id="result-name" class="dl strong"></span>
-          <div id="result-field" class="seg" role="radiogroup" aria-label="Quantity shown"></div>
-          <span class="vsep" data-fem></span><span id="result-deform-label" class="dl">Deformation</span>
-          <div id="result-deform" class="seg" role="radiogroup" aria-label="Deformation"></div>
-          <span class="vsep" data-fem></span>
-          <button id="btn-result-bcs" class="tgl" aria-pressed="true" title="Show the load case: fixed faces and loads in blue, forces as arrows"><i data-icon="force" data-size="14" data-stroke="2"></i>Load case</button>
+          <div id="result-controls" role="group" aria-label="Analysis controls">
+            <span id="result-name" class="dl strong"></span>
+            <div id="result-field" class="seg" role="radiogroup" aria-label="Quantity shown"></div>
+            <select id="result-field-select" class="rs-select" aria-label="Quantity shown" title="Quantity shown"></select>
+            <div class="rs-deformation">
+              <span id="result-deform-label" class="dl">Deformation</span>
+              <div id="result-deform" class="seg" role="radiogroup" aria-label="Deformation"></div>
+              <select id="result-deform-select" class="rs-select" aria-label="Deformation" title="Deformation scale"></select>
+            </div>
+            <button id="btn-result-play" class="tgl" aria-label="Play deformation" title="Cycle the static displacement shape. Colors and values remain those of the solved load case."><i data-icon="play" data-size="14"></i></button>
+            <button id="btn-result-bcs" class="tgl" aria-label="Show load case" aria-pressed="true" title="Show the load case: fixed faces and loads in blue, forces as arrows"><i data-icon="force" data-size="14" data-stroke="2"></i><span class="rs-button-label">Load case</span></button>
+          </div>
           <span class="vsep" data-fem></span>
           <button id="btn-result-close" class="ibtn s" aria-label="Close the analysis" title="Close the analysis and show the model"><i data-icon="x" data-size="15" data-stroke="2"></i></button>
         </div>
@@ -404,14 +410,14 @@
     </aside>
   </div>
 
-  <!-- Ladeanzeige über dem ganzen Fenster, solange ein CadQuery-Skript als neues Modell hereinkommt (E100) -->
+  <!-- Loading screen over the whole window while a model is created: new, tutorial, from a CadQuery script (loading.ts) -->
   <div id="app-busy" class="vbusy appbusy" hidden>
     <div class="float vb-card" role="status" aria-live="polite">
-      <div class="vb-hd"><span class="spin"><i data-icon="spin" data-size="16" data-stroke="2.4"></i></span><b>Loading CadQuery script</b><span class="grow"></span><span id="app-busy-time" class="c3 small"></span></div>
+      <div class="vb-hd"><span class="spin"><i data-icon="spin" data-size="16" data-stroke="2.4"></i></span><b id="app-busy-title"></b><span class="grow"></span><span id="app-busy-time" class="c3 small"></span></div>
       <div id="app-busy-step" class="vb-sub"></div>
-      <div id="app-busy-file" class="vb-sub c3"></div>
+      <div id="app-busy-file" class="vb-sub c3" hidden></div>
       <div class="vb-bar indet"><div></div></div>
-      <div class="vb-sub c3 small appbusy-note">The first build runs the script once. Large models can take a while.</div>
+      <div id="app-busy-note" class="vb-sub c3 small appbusy-note" hidden></div>
     </div>
   </div>
 
@@ -479,12 +485,16 @@
     <div class="mnote">One part: choose the location. All parts: choose a folder, each part becomes its own file. Reference and purchased parts are not included in “All parts”.</div>
     <div class="msep"></div>
     <div class="mh">WHOLE MODEL</div>
+    <button id="exp-step-asm" class="mi two" role="menuitem"><i data-icon="f-cad" data-size="15"></i><span class="t"><span>As one STEP file …</span><span class="sub">All parts in one file with groups, names and colors, for other CAD programs. Reference parts are in a group “Reference”.</span></span></button>
     <button id="exp-zip" class="mi two" role="menuitem"><i data-icon="f-zip" data-size="15"></i><span class="t"><span>Everything as ZIP …</span><span class="sub">Code, results and history in one ZIP file, for example for someone without SOMA. The .soma file stays as it is.</span></span></button>
     <button id="exp-cq" class="mi two" role="menuitem"><i data-icon="f-py" data-size="15"></i><span class="t"><span>As CadQuery script …</span><span class="sub">Plain CadQuery for CQ-editor, VS Code and others, with parameters and standard parts. “New from CadQuery script” brings it back.</span></span></button>
   </div>
 
   <div id="menu-agents" class="menu" role="menu" hidden>
-    <div class="mh">START AGENT</div>
+    <div class="mh">START</div>
+    <button id="btn-ai-tab" class="mi two" role="menuitem"><i data-icon="sparkle" data-size="15" data-stroke="2"></i><span class="t"><span>SOMA AI</span><span class="sub">Built in. A chat, no terminal needed.</span></span></button>
+    <div class="msep"></div>
+    <div class="mh">IN A TERMINAL</div>
     <div id="agent-list"></div>
     <div class="msep"></div>
     <button id="btn-term-plain" class="mi" role="menuitem"><i data-icon="term" data-size="15" data-stroke="2"></i><span>Empty terminal</span></button>
@@ -618,12 +628,14 @@
         <nav id="st-nav" class="st-nav" aria-label="Settings">
           <button data-sec="viewer" aria-current="page"><i data-icon="cube" data-size="16" data-stroke="1.8"></i><span>Viewer</span></button>
           <button data-sec="keys"><i data-icon="key" data-size="16" data-stroke="1.8"></i><span>Shortcuts</span></button>
+          <button data-sec="ai"><i data-icon="sparkle" data-size="16" data-stroke="1.8"></i><span>SOMA AI</span></button>
           <button data-sec="skills"><i data-icon="book" data-size="16" data-stroke="1.8"></i><span>Skills</span></button>
           <button data-sec="storage"><i data-icon="disk" data-size="16" data-stroke="1.8"></i><span>Storage</span></button>
           <button data-sec="about"><i data-icon="info" data-size="16" data-stroke="1.8"></i><span>About</span></button>
         </nav>
         <section id="st-viewer" class="st-sec st-page" aria-label="Viewer"></section>
         <section id="st-keys" class="st-sec st-page" aria-label="Shortcuts" hidden></section>
+        <section id="st-ai" class="st-sec st-page" aria-label="SOMA AI" hidden></section>
         <section id="st-skills" class="st-sec" aria-label="Skills" hidden>
           <div class="st-col">
             <div class="st-tools">

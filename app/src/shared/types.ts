@@ -1,5 +1,6 @@
 // Von Hauptprozess, Preload und Renderer gemeinsam genutzte Typen (IPC-Vertrag).
 import type { SettingsPatch, SettingsResult, SettingsState } from './settings';
+import type { AiAccount, AiModel, AiSession } from './somaai';
 
 export interface ProjectInfo {
   id: string;
@@ -128,6 +129,20 @@ export interface FileNode { name: string; path: string; dir: boolean; children?:
 
 export interface AgentInfo { id: string; label: string; command: string; found: boolean }
 
+/** SOMA AI (somaai.ts): `available` false when the installation lacks pi or its permission extension. */
+export interface AiStatus { available: boolean; running: boolean; version?: string; error?: string }
+/** Answer of SOMA AI to a command from the chat. `data` is pi's answer as it is. */
+export interface AiResult { ok: boolean; error?: string; data?: unknown }
+/**
+ * A record of pi (session event, or extension_ui_request: a question for the user), passed on unchanged. `gen` numbers
+ * the pi process: after a model switch, records of the old one are ignored.
+ */
+export interface AiEvent { gen: number; record: Record<string, unknown> }
+/** pi has ended. `error` only when it ended on its own with an error, not when SOMA stopped it. */
+export interface AiExit { gen: number; code: number | null; error?: string }
+/** Result of "Sign in with ChatGPT". `cancelled`: the user stopped it. */
+export interface AiSignInResult { ok: boolean; error?: string; cancelled?: boolean }
+
 export interface PartMap {
   id: string; name: string; step_name: string; role: string;
   file?: string; line?: number; end_line?: number; volume?: number;
@@ -254,7 +269,7 @@ export interface LibraryResult {
   library: LibraryState;
 }
 /** Bereich der App-Daten in den Einstellungen (E81). Der Renderer nennt nur die Kennung, den Ordner kennt der Hauptprozess. */
-export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills' | 'logs';
+export type StorageArea = 'appdata' | 'workspaces' | 'backups' | 'previews' | 'thumbnails' | 'skills' | 'logs' | 'somaai';
 /** Größe eines Bereichs. `other`: alles Übrige in den App-Daten. `models`: Zahl der Arbeitsordner. */
 export interface StorageEntry { id: StorageArea | 'other'; path: string | null; bytes: number; files: number; models?: number }
 export interface StorageStats { dir: string; total: number; areas: StorageEntry[] }
@@ -355,7 +370,8 @@ export interface DrawingEntry {
   linked: boolean;
 }
 export interface DrawingFileError { file: string; line: number | null; message: string }
-export interface DrawingList { drawings: DrawingEntry[]; errors: DrawingFileError[]; building: boolean }
+/** `unbuilt`: drawing files (drawings/*.py) without a sheet or error in the index, e.g. a model saved before the index went into the .soma file. */
+export interface DrawingList { drawings: DrawingEntry[]; errors: DrawingFileError[]; building: boolean; unbuilt: string[] }
 export interface DrawingBuildResult extends DrawingList { ok: boolean; error?: string }
 
 /** Ergebnis einer Auswertung (`soma analyze`, E58), Metadaten aus extras.soma_result der GLB. */
@@ -454,7 +470,8 @@ export interface SomaApi {
     /** Neues Modell aus einem CadQuery-Skript (E100): Dateidialog, Import, erster Build. */
     createFromCadQuery(): Promise<CadQueryImportResult>;
     /** Schritte von createFromCadQuery nach dem Dateidialog, für die Ladeanzeige: `step` ist der laufende Schritt. */
-    onCadQueryStep(cb: (s: { step: string; file: string }) => void): void;
+    /** Steps of creating a model (new, from a CadQuery script) for the loading screen. `file`: the imported script. */
+    onStep(cb: (s: { step: string; file?: string }) => void): void;
     /** Das Modell als reines CadQuery-Skript (E100): eine .py, mit parts/ ein Ordner. */
     exportCadQuery(): Promise<ExportResult>;
     onSaveState(cb: (s: SaveState) => void): void;
@@ -493,6 +510,8 @@ export interface SomaApi {
     onStatus(cb: (s: BuildStatus) => void): void;
     /** `part` null = alle Bauteile ohne Referenzen. `mesh` gilt nur für Netzformate, bei anderen ignoriert. */
     export(format: string, part: string | null, mesh?: MeshExportOptions): Promise<ExportResult>;
+    /** The whole model as one STEP file with groups, names and colors, without reference parts (issue #11). */
+    exportAssembly(): Promise<ExportResult>;
   };
   fs: {
     list(): Promise<FileNode[]>;
@@ -536,6 +555,36 @@ export interface SomaApi {
     onExit(cb: (id: number, code: number) => void): void;
   };
   agents: { detect(): Promise<AgentInfo[]> };
+  /** SOMA AI, the built-in agent of the open model (somaai.ts). pi starts on the first command. */
+  ai: {
+    status(): Promise<AiStatus>;
+    start(): Promise<AiResult>;
+    /** A command of pi's RPC protocol (prompt, abort, new_session, set_model …), without `id`. */
+    command(cmd: Record<string, unknown>): Promise<AiResult>;
+    /** Answer to a question of pi (extension_ui_request): `value`, `confirmed` or `cancelled`. */
+    respond(res: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }): void;
+    stop(): Promise<void>;
+    onEvent(cb: (e: AiEvent) => void): void;
+    onExit(cb: (e: AiExit) => void): void;
+    /** Saved sign-ins (shared/somaai.ts), never their secrets. */
+    accounts(): Promise<AiAccount[]>;
+    saveKey(provider: string, key: string): Promise<{ ok: boolean; error?: string }>;
+    /** "Sign in with ChatGPT": opens the sign-in page in the browser, ends when signed in, failed or cancelled. */
+    signIn(): Promise<AiSignInResult>;
+    cancelSignIn(): Promise<void>;
+    signOut(provider: string): Promise<{ ok: boolean; error?: string }>;
+    /** The sign-in page, as soon as it is known (a link in case the browser did not open). */
+    onSignInUrl(cb: (url: string) => void): void;
+    /** Models of the saved sign-ins, without a model open (Settings > SOMA AI). */
+    models(): Promise<{ ok: boolean; models?: AiModel[]; error?: string }>;
+    /** The model pi starts with, null when pi chooses. */
+    defaultModel(): Promise<{ provider: string; id: string } | null>;
+    setDefaultModel(provider: string, id: string): Promise<{ ok: boolean; error?: string }>;
+    /** Conversations of the open model with SOMA AI, newest first. */
+    sessions(): Promise<{ ok: boolean; sessions?: AiSession[]; error?: string }>;
+    /** Back to one of them (pi continues it). */
+    switchSession(id: string): Promise<AiResult>;
+  };
   /** Exakte Messung über den Python-Dienst (E9, E24). */
   measure: {
     query(source: MeasureSource, req: MeasureRequest): Promise<MeasureResponse>;

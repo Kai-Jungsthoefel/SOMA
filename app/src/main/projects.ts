@@ -13,7 +13,7 @@ import { resolveInside } from './files';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, chooseCadQueryScript, chooseEntryScript, chooseExportTarget, chooseFolder, choosePath, documentsDir, trashItem } from './dialogs';
-import { applyFolder, planFolder, refreshFolderSection, topLevelScripts } from './folders';
+import { applyFolder, planFolder, preflightFolder, refreshFolderSection, topLevelScripts } from './folders';
 import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
@@ -25,6 +25,7 @@ import { stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
 import {
   agentsEntries, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
 } from './skills';
+import { SomaAI } from './somaai';
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
 import {
@@ -41,6 +42,8 @@ interface Session {
   folder: boolean;
   builds: BuildManager;
   terminals: TerminalManager;
+  /** SOMA AI, the built-in agent (somaai.ts). Starts on the first request from the chat. */
+  ai: SomaAI;
   git: GitRepo;
   measure: MeasureService;
   /** Animationen bauen (E58), ausgelöst vom Watcher, der Oberfläche oder vor einem Video. */
@@ -126,6 +129,7 @@ export class ProjectController {
     s.drawings.dispose();
     s.builds.dispose();
     s.terminals.killAll();
+    void s.ai.dispose();
     s.measure.stop();
     this.session = null;
   }
@@ -138,9 +142,11 @@ export class ProjectController {
   async leave(): Promise<void> {
     const s = this.session;
     if (!s) return;
+    // SOMA AI first: no request from the chat may start it again in this folder while the model is being left
+    const aiGone = s.ai.dispose();
     const untouched = await isUntouched(s.id);
-    // Die Shells halten den Ordner fest, bis sie wirklich beendet sind
-    const shells = untouched ? s.terminals.killAllAndWait() : null;
+    // Die Shells halten den Ordner fest, bis sie wirklich beendet sind. SOMA AI and the commands it runs as well
+    const shells = untouched ? Promise.all([s.terminals.killAllAndWait(), aiGone]) : null;
     this.close();
     if (shells) await shells;
     if (untouched && !(await discardWorkspace(s.id))) console.error(`[soma] Could not discard the unchanged model ${s.id} (folder in use), it stays.`);
@@ -154,6 +160,7 @@ export class ProjectController {
     if (folder && !fs.existsSync(dir)) throw new Error(`The folder no longer exists: ${dir}. Open it again with “Open folder” at its new place.`);
     const builds = new BuildManager(dir);
     const terminals = new TerminalManager(this.wc, dir);
+    const ai = new SomaAI(this.wc, dir);
     const git = new GitRepo(dir);
     // Ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten. Im Ordner-Modus gehört das Repository
     // dem Nutzer, dort hält .soma/.gitignore die Zwischenergebnisse heraus
@@ -170,7 +177,7 @@ export class ProjectController {
     // Projektumgebung (E67): Meist steht sie schon, sonst legt `soma env` sie in rund 0,5 s an. Die Terminals kennen ihre
     // Pfade vorab, gewartet wird nur vor dem Installieren von Paketen
     const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
-    const session: Session = { id, dir, folder, builds, terminals, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
+    const session: Session = { id, dir, folder, builds, terminals, ai, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
     builds.on('status', (st) => {
@@ -200,12 +207,17 @@ export class ProjectController {
     if (!picked) return { cancelled: true };
     const dir = path.resolve(picked);
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return { cancelled: false, error: `Not a folder: ${dir}` };
-    const inside = (a: string, b: string) => { const r = path.relative(b, a); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)); };
+    // `..name` is a name inside, only `..` itself or `../` leads out
+    const inside = (a: string, b: string) => { const r = path.relative(b, a); return r === '' || (r !== '..' && !r.startsWith(`..${path.sep}`) && !path.isAbsolute(r)); };
     if (inside(dir, userDataDir()) || inside(userDataDir(), dir)) return { cancelled: false, error: 'This folder holds the app data of SOMA. Choose another folder.' };
+    try { preflightFolder(dir); }
+    catch (e) { return { cancelled: false, error: `The folder could not be set up: ${e instanceof Error ? e.message : String(e)}` }; }
+    /** Inside the folder, also after following links (resolveInside). */
+    const within = (rel: string) => { try { resolveInside(dir, rel); return true; } catch { return false; } };
 
     // Schon eingetragen (gleicher Ordner): nur die Einstiegsdatei aus project.json prüfen
     const pj = (() => { try { return JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'project.json'), 'utf8')) as { entry?: unknown }; } catch { return null; } })();
-    let entry = typeof pj?.entry === 'string' && pj.entry && fs.existsSync(path.join(dir, pj.entry)) ? pj.entry : null;
+    let entry = typeof pj?.entry === 'string' && pj.entry && within(pj.entry) && fs.existsSync(path.join(dir, pj.entry)) ? pj.entry : null;
     let createModel = false;
     if (!entry && fs.existsSync(path.join(dir, 'model.py'))) entry = 'model.py';
     if (!entry) {
@@ -225,13 +237,15 @@ export class ProjectController {
           const file = await chooseEntryScript(this.getWin(), dir);
           if (!file) return { cancelled: true };
           const rel = path.relative(dir, file);
-          if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return { cancelled: false, error: 'The script must be inside the folder.' };
+          if (!rel || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel) || !within(rel)) return { cancelled: false, error: 'The script must be inside the folder.' };
           entry = rel.split(path.sep).join('/');
         }
       }
     }
 
-    const plan = planFolder(dir, entry, createModel);
+    let plan: ReturnType<typeof planFolder>;
+    try { plan = planFolder(dir, entry, createModel); }
+    catch (e) { return { cancelled: false, error: `The folder could not be set up: ${e instanceof Error ? e.message : String(e)}` }; }
     if (plan.create.length || plan.change.length) {
       const lines: string[] = [];
       if (plan.create.length) lines.push('Creates:', ...plan.create.map((l) => `  ${l}`));
@@ -260,8 +274,12 @@ export class ProjectController {
     return { cancelled: false, opened: true };
   }
 
+  /** Copying, the first build and the first commit take a few seconds: the window shows the steps on its loading screen. */
   async create(name?: string): Promise<ProjectInfo> {
-    const { id } = await createProject(name);
+    const step = (s: string) => this.send('project:step', { step: s });
+    step('Creating the model');
+    const { id } = await createProject(name, undefined, step);
+    step('Opening the model');
     return this.open(id);
   }
 
@@ -274,7 +292,7 @@ export class ProjectController {
     const file = await chooseCadQueryScript(this.getWin());
     if (!file) return { cancelled: true, warnings: [] };
     // Import, erster Build und Startcommit dauern einige Sekunden: Das Fenster zeigt die Schritte in einer Ladeanzeige
-    const step = (s: string) => this.send('cadquery:step', { step: s, file: path.basename(file) });
+    const step = (s: string) => this.send('project:step', { step: s, file: path.basename(file) });
     step('Reading the script');
     let warnings: string[] = [];
     try {
@@ -283,8 +301,7 @@ export class ProjectController {
         const res = lastJson<{ status?: string; error?: string; warnings?: string[] }>(r.out);
         if (!r.ok || res?.status !== 'ok') throw new Error(res?.error || (r.err || r.out).trim().split(/\r?\n/).pop() || 'unknown error');
         warnings = Array.isArray(res.warnings) ? res.warnings.map(String) : [];
-        step('Building the model for the first time');
-      });
+      }, step);
       step('Opening the model');
       return { info: await this.open(id), warnings };
     } catch (e) {
@@ -368,22 +385,28 @@ export class ProjectController {
    * Export über `soma export` (E34) mit Dateidialog: ein Bauteil in eine gewählte Datei, alle Bauteile (ohne Referenz- und
    * Zukaufteile) als je eine Datei in einen gewählten Ordner. soma schreibt in einen leeren Ordner unter Temp, die App
    * kopiert danach. So landet nichts in exports/ des Projekts, und eine vorhandene Datei wird nie ohne Rückfrage ersetzt.
+   * `assembly`: the whole model as one STEP file (issue #11, `soma export --assembly`), saved like a single part.
    */
-  async exportModel(format: string, part: string | null, mesh?: unknown): Promise<ExportResult> {
+  async exportModel(format: string, part: string | null, mesh?: unknown, assembly = false): Promise<ExportResult> {
     const s = this.need();
     if (!/^[a-z0-9]{2,5}$/.test(format)) return { ok: false, files: [], error: `Unknown format: ${format}` };
+    if (assembly && (format !== 'step' || part)) return { ok: false, files: [], error: 'Only STEP can hold the whole model in one file.' };
     const meshArgs = MESH_EXPORT_FORMATS.includes(format) ? meshExportArgs(mesh) : [];
     const last = getAppState(s.id).exportDir;
     const startDir = last && fs.existsSync(last) ? last : documentsDir();
+    const modelName = safeFileName(readProjectJson(s.id)?.name ?? 'Model');
+    const single = !!part || assembly;
     const target = await chooseExportTarget(this.getWin(), part
       ? { kind: 'file', title: `Export “${part}”`, defaultPath: path.join(startDir, `${safeFileName(part)}.${format}`), ext: format }
-      : { kind: 'dir', title: 'Choose a folder for the export', defaultPath: startDir });
+      : assembly
+        ? { kind: 'file', title: 'Export the model as one STEP file', defaultPath: path.join(startDir, `${modelName}.step`), ext: 'step' }
+        : { kind: 'dir', title: 'Choose a folder for the export', defaultPath: startDir });
     if (!target) return { ok: false, files: [], cancelled: true };
     let tmp: string | null = null;
     try {
       tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-export-'));
       // `--` vor dem Namen: Bauteilnamen dürfen mit einem Minus beginnen, ohne als Option zu gelten
-      const args = ['export', '--format', format, ...meshArgs, '--project', s.dir, '--out', tmp, ...(part ? ['--', part] : ['--all'])];
+      const args = ['export', '--format', format, ...meshArgs, '--project', s.dir, '--out', tmp, ...(part ? ['--', part] : assembly ? ['--assembly'] : ['--all'])];
       const r = await runSoma(args, s.dir, 10 * 60 * 1000);
       if (!r.ok) {
         const msg = (r.err || r.out).trim().split(/\r?\n/).slice(-3).join('\n');
@@ -394,14 +417,14 @@ export class ProjectController {
       const made = fs.readdirSync(dir).filter((n) => fs.statSync(path.join(dir, n)).isFile());
       if (!made.length) return { ok: false, files: [], error: 'soma did not write a file.' };
       const plan: [string, string][] = [];
-      if (part) {
+      if (single) {
         const main = made.find((n) => n.toLowerCase().endsWith(`.${format}`)) ?? made[0];
         const dest = path.extname(target) ? target : `${target}.${format}`;
         plan.push([path.join(dir, main), dest]);
         for (const n of made) if (n !== main) plan.push([path.join(dir, n), path.join(path.dirname(dest), n)]);
       } else for (const n of made) plan.push([path.join(dir, n), path.join(target, n)]);
       // Beim Einzelexport hat der Speichern-Dialog für die Hauptdatei schon gefragt, alles andere fragt die App
-      const exists = plan.filter(([, d], i) => !(part && i === 0) && fs.existsSync(d)).map(([, d]) => path.basename(d));
+      const exists = plan.filter(([, d], i) => !(single && i === 0) && fs.existsSync(d)).map(([, d]) => path.basename(d));
       if (exists.length) {
         const c = await choose(this.getWin(), {
           title: 'Export', message: exists.length === 1 ? 'This file already exists in the folder:' : `These ${exists.length} files already exist in the folder:`,
@@ -413,8 +436,8 @@ export class ProjectController {
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         fs.copyFileSync(src, dest);
       }
-      const dest = part ? plan[0][1] : target;
-      patchAppState(s.id, { exportDir: part ? path.dirname(dest) : target });
+      const dest = single ? plan[0][1] : target;
+      patchAppState(s.id, { exportDir: single ? path.dirname(dest) : target });
       // Hinweise von soma (z. B. ein Netz, das nicht geschlossen ist, mit den betroffenen Flächen) an den Benutzer weitergeben
       const warnings = r.out.split(/\r?\n/).filter((l) => l.startsWith('warning: ')).map((l) => l.slice(9).trim());
       return { ok: true, files: plan.map(([, d]) => d), target: dest, ...(warnings.length ? { warnings } : {}) };

@@ -9,6 +9,7 @@ import { DRAWINGS_KEY, DrawingsView } from './drawings';
 import { DrawingLink } from './drawlink';
 import { AnimTool } from './animtool';
 import { Busy } from './busy';
+import { Loading } from './loading';
 import { DRAG_FILE, FileTree, IMAGE_EXT, TEXT_EXT, VIDEO_EXT } from './filetree';
 import { FileView } from './fileview';
 import { hydrateIcons, icon } from './icons';
@@ -18,7 +19,8 @@ import { MeasureTool } from './measuretool';
 import { SectionTool } from './sectiontool';
 import { ExplodeTool } from './explodetool';
 import { HelpDialog } from './help';
-import { SettingsDialog } from './settings';
+import { AiPage } from './aisettings';
+import { SettingsDialog, type SettingsSection } from './settings';
 import { AboutPage, ShortcutsPage, StoragePage, ViewerPage } from './settingspages';
 import { SkillsPanel } from './skills';
 import { ParamsPanel } from './params';
@@ -26,6 +28,7 @@ import { StructureTree } from './tree';
 import { Tour, tourSteps, type TourContext } from './tutorial';
 import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
+import { SomaChat, type ChatState } from './chat';
 import { TerminalTabs } from './terminals';
 import { $, ask, el, fmtWhen, menuItem, menus, toast } from './ui';
 import { VersionsBar } from './versions';
@@ -263,6 +266,16 @@ const aboutPage = new AboutPage($('st-about'), {
   setUpdateCheck: async (on) => { const r = await changeSettings({ start: { updateCheck: on } }); if (!$('start').hidden) void renderUpdate(); return r; },
 });
 
+// Settings > SOMA AI: sign-ins and model also for the chat (created further down, only called on clicks). The chat
+// shows the change at once only when it is in front with a model open: without a model there is no pi to start
+const aiPage = new AiPage($('st-ai'), {
+  api, toast,
+  accountsChanged: (provider) => chat.accountsChanged(provider, chatOn && !!project),
+  useModel: (provider, id) => chat.useModel(provider, id),
+  showNote: () => chat.showNote(chatOn && !!project),
+  modelOpen: () => !!project,
+});
+
 // Einstellungen (E78, E81): Reiter Viewer, Skills, Speicher und Info, auch von der Startseite aus. Änderungen an den
 // Skills zeigt das Panel „Skills“ sofort
 const settings = new SettingsDialog({
@@ -279,7 +292,7 @@ const settings = new SettingsDialog({
   },
   changed: () => { if (project && skills.isLoaded) void skills.refresh(); },
   modelMode: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id)?.mode ?? 'off' : null),
-  pages: { viewer: viewerPage, keys: shortcutsPage, storage: storagePage, about: aboutPage },
+  pages: { viewer: viewerPage, keys: shortcutsPage, ai: aiPage, storage: storagePage, about: aboutPage },
 });
 // Hilfe (E83): Knopf in der Leiste und auf der Startseite, F1 überall außer in den Einstellungen
 const help = new HelpDialog({ root: $('help'), nav: $('help-nav'), body: $('help-body'), close: $('btn-help-close') as HTMLButtonElement, background: [$('topbar'), $('body'), $('start')] }, {
@@ -602,10 +615,22 @@ function insertToAgent(text: string | null, done?: string): void {
   // Immer auch in die Zwischenablage: Eine Agenten-App außerhalb der App (Claude Desktop, Codex-App) erreicht die Notiz nur so.
   // Ob im Terminal ein Agent läuft, lässt sich nicht für jeden Agenten verlässlich erkennen
   void api.copyText(text);
-  if (!terminals.count) { toast(`${pre}Copied to the clipboard. Paste it into your agent, or start one with +.`, 'info'); return; }
+  const toChat = () => {
+    setAgentCollapsed(false);
+    showChat(true);
+    chat.insert(text);
+    toast(`${pre}Added to the input of SOMA AI. Enter sends it. Also copied to the clipboard.`);
+  };
+  if (chatOn) { toChat(); return; }
+  if (!terminals.count) {
+    if (!chatTab.hidden) { toChat(); return; }
+    toast(`${pre}Copied to the clipboard. Paste it into your agent, or start one with +.`, 'info');
+    return;
+  }
   setAgentCollapsed(false);
   const title = terminals.insert(text);
   if (title) toast(`${pre}Added to the input of ${title}. Enter sends it. Also copied to the clipboard.`);
+  else if (!chatTab.hidden) toChat();
   else toast(`${pre}Copied to the clipboard. All terminals have ended, open a new one with +.`, 'info');
 }
 
@@ -831,7 +856,8 @@ const resultTool = new ResultTool({
   scaleMenu: $('menu-scale'), legendFull: $('result-q-full'), legendFoot: $('result-lg-foot'),
   range: $('result-range'), custom: $('result-custom'), lo: $<HTMLInputElement>('result-lo'), hi: $<HTMLInputElement>('result-hi'),
   bar: $('result-bar'), field: $('result-field'), deform: $('result-deform'), deformLabel: $('result-deform-label'), bcs: $<HTMLButtonElement>('btn-result-bcs'),
-  name: $('result-name'), close: $<HTMLButtonElement>('btn-result-close'), viewerEl: $('viewer'),
+  fieldSelect: $<HTMLSelectElement>('result-field-select'), deformSelect: $<HTMLSelectElement>('result-deform-select'),
+  name: $('result-name'), close: $<HTMLButtonElement>('btn-result-close'), play: $<HTMLButtonElement>('btn-result-play'), viewerEl: $('viewer'),
 }, {
   layer: resultLayer, viewer, list: () => api.results.list(), rerun: (id) => api.results.rerun(id), readBinary: (rel) => api.fs.readBinary(rel),
   beforeOn: () => endOthers('result'), toast,
@@ -1160,8 +1186,14 @@ const fileView = new FileView({
 
 // ---- Projekt ----------------------------------------------------------------------------------------------------
 
+/** Loading screen while a model is created (New model, tutorial, CadQuery script), until the window has loaded it. */
+const loading = new Loading();
+
 async function onProject(p: ProjectInfo): Promise<void> {
   project = p;
+  // Created behind the loading screen: it stays until viewer, files and agent panel have loaded this model (end of function)
+  const screen = loading.active;
+  if (screen) loading.step('Loading the viewer, files and agent');
   // Ein anderes Modell geöffnet (Menü, Startseite): Die Tour gehört zum Tutorial-Modell und endet
   if (tour.active && p.id !== tourProject) tour.stop(false, false);
   loadSeq++; // laufende Ladevorgänge des vorherigen Projekts verwerfen
@@ -1180,6 +1212,7 @@ async function onProject(p: ProjectInfo): Promise<void> {
   fileView.drop();
   tree.setTitle(p.name);
   terminals.closeAll();
+  chat.reset();
   code.reset();
   skills.reset();
   if (panel === 'skills') void skills.refresh();
@@ -1201,14 +1234,22 @@ async function onProject(p: ProjectInfo): Promise<void> {
   renderAuto();
   showProblems(p.problems);
   filesDirty = true;
-  if (panel === 'files') void refreshFiles();
+  const filesReady = refreshFiles(); // only with the Files panel open, otherwise it marks the list for later
   void versions.refresh();
   void refreshSaveState();
-  void terminals.add({ title: 'Terminal' });
+  // SOMA AI is in front unless the user prefers a terminal (tests keep the terminal, their suites type into it)
+  const wantChat = !chatTab.hidden && (store.get('soma.agentTab') ?? (api.testMode ? 'terminal' : 'ai')) === 'ai';
+  // Ready when the agent area shows what it should (the loading screen of "New model" waits for it)
+  const agentReady = terminals.add({ title: 'Terminal' }).then(() => (wantChat ? showChat(true) : undefined));
   void refreshAgents();
   const st = await api.build.status();
   renderBuild(st);
-  if (st.state === 'ok') void loadModel();
+  // A new model was built when it was created, so the screen waits until it is in the viewer. A build still running
+  // (e.g. packages to install first) has its own display in the viewer: the screen does not wait for it.
+  const modelReady = st.state === 'ok' ? loadModel() : Promise.resolve();
+  if (!screen) return;
+  await Promise.race([Promise.allSettled([modelReady, filesReady, agentReady]), new Promise((r) => setTimeout(r, 20000))]);
+  loading.end(screen);
 }
 
 function showProblems(problems: string[]): void {
@@ -1324,25 +1365,33 @@ async function doOpen(): Promise<boolean> {
   return !!r.opened;
 }
 
-const doNew = async () => { if (await leaveEditor('New model')) await api.project.create(); };
-// Ladeanzeige für den Import: erscheint mit dem ersten Schritt nach dem Dateidialog, zählt die Sekunden mit
-let cqBusyTick: ReturnType<typeof setInterval> | undefined;
-api.project.onCadQueryStep(({ step, file }) => {
-  const root = $('app-busy');
-  if (root.hidden) {
-    const t0 = performance.now();
-    $('app-busy-time').textContent = '';
-    clearInterval(cqBusyTick);
-    cqBusyTick = setInterval(() => { $('app-busy-time').textContent = `${Math.round((performance.now() - t0) / 1000)} s`; }, 1000);
-    root.hidden = false;
+/**
+ * Creates a model with `create` behind the loading screen. The screen comes at once (creating takes seconds) and stays
+ * until the window has loaded the new model (onProject). On an error it closes, and the error is a toast.
+ * Returns the result of `create`, or null after an error.
+ */
+async function createBehindLoading<T>(title: string, note: string, create: () => Promise<T>, failed: string): Promise<T | null> {
+  const id = loading.start(title, note);
+  let r: T;
+  try { r = await create(); } catch (e) {
+    loading.end(id);
+    toast(`${failed}: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    return null;
   }
-  $('app-busy-step').textContent = `${step} …`;
-  $('app-busy-file').textContent = file;
-});
-function closeCadQueryBusy(): void {
-  clearInterval(cqBusyTick);
-  $('app-busy').hidden = true;
+  // Safety net: onProject closes the screen when the window has loaded the model, it never stays for good
+  setTimeout(() => loading.end(id), 30000);
+  return r;
 }
+
+const doNew = async () => {
+  if (loading.active || !(await leaveEditor('New model'))) return; // a second Ctrl+N while one is being created
+  await createBehindLoading('Creating a new model', 'Setting up a new model takes a few seconds.', () => api.project.create(), 'The model could not be created');
+};
+// Steps from the main process. The import of a CadQuery script shows its screen with the first step, after the file dialog.
+api.project.onStep(({ step, file }) => {
+  if (!loading.active) loading.start('Loading CadQuery script', 'The first build runs the script once. Large models can take a while.');
+  loading.step(step, file);
+});
 
 /** Neues Modell aus einem CadQuery-Skript (E100). Die Hinweise des Imports (Kompatibilitätsmodus, Werte) zeigt ein Toast. */
 /** „Open folder“ (Ordner-Modus): Fragen und Hinweis stellt der Hauptprozess. */
@@ -1354,9 +1403,12 @@ async function doOpenFolder(): Promise<boolean> {
 }
 
 async function doNewFromCadQuery(): Promise<CadQueryImportResult | null> {
-  if (!(await leaveEditor('New model'))) return null;
+  if (loading.active || !(await leaveEditor('New model'))) return null;
   let r: CadQueryImportResult;
-  try { r = await api.project.createFromCadQuery(); } finally { closeCadQueryBusy(); }
+  // The screen comes with the first step (after the file dialog). Opened, onProject closes it once the model is loaded.
+  try { r = await api.project.createFromCadQuery(); } catch (e) { r = { warnings: [], error: e instanceof Error ? e.message : String(e) }; }
+  if (r.cancelled || r.error) loading.end(loading.active);
+  else setTimeout((id: number) => loading.end(id), 30000, loading.active);
   if (r.cancelled) return r;
   if (r.error) { toast(r.error, 'error'); return r; }
   showStart(false);
@@ -1541,6 +1593,7 @@ renderMeshOpts();
 $('exp-all').addEventListener('click', () => { exportScope = 'all'; renderExportScope(); });
 $('exp-sel').addEventListener('click', () => { exportScope = 'sel'; renderExportScope(); });
 document.querySelectorAll<HTMLButtonElement>('#menu-export [data-fmt]').forEach((b) => b.addEventListener('click', () => void doExport(b.dataset.fmt!, b.textContent!)));
+$('exp-step-asm').addEventListener('click', () => { menus.close(); void doExportAssembly(); });
 $('exp-zip').addEventListener('click', () => { menus.close(); void doExportZip(); });
 $('exp-cq').addEventListener('click', () => { menus.close(); void doExportCadQuery(); });
 
@@ -1553,6 +1606,15 @@ async function doExportCadQuery(): Promise<ExportResult> {
     const notes = [...(r.warnings ?? []), ...(open.length ? [`Not included (not saved in the editor): ${open.join(', ')}`] : [])];
     toast([`Model exported as CadQuery:\n${r.target ?? ''}`, ...notes].join('\n'), open.length ? 'error' : 'ok');
   } else toast(r.error ?? 'Export failed', 'error');
+  return r;
+}
+
+/** The whole model as one STEP file (issue #11), built from the code like any export, references in their own group. */
+async function doExportAssembly(): Promise<ExportResult> {
+  const r = await api.build.exportAssembly();
+  if (r.cancelled) return r;
+  if (r.ok) toast(`Model exported as one STEP file:\n${r.target ?? r.files[0] ?? ''}`, 'ok');
+  else toast(`Export failed: ${r.error}`, 'error');
   return r;
 }
 
@@ -1720,6 +1782,64 @@ function setAgentCollapsed(on: boolean): void {
 }
 $('btn-agent-expand').addEventListener('click', () => setAgentCollapsed(false));
 terminals.onStripClick = () => setAgentCollapsed(false);
+
+// ---- SOMA AI (chat.ts): the built-in agent as the first tab of the agent area -------------------------------------
+
+// The dots first: the chat reports its state from its constructor on
+const chatDot = el('span', { className: 'ai-dot' });
+const chatStripDot = el('span', { className: 'ai-dot' });
+const chat = new SomaChat({
+  api, toast, store,
+  openTerminal: () => { void terminals.add({ title: 'Terminal' }); },
+  onState: (s) => renderChatDot(s),
+});
+$('term-panes').append(chat.el);
+const chatLabel = el('button', { className: 't', title: 'SOMA AI, the agent built into SOMA' }, chatDot, el('span', { textContent: 'SOMA AI' }));
+const chatX = el('button', { className: 'x', title: 'Close SOMA AI' }, icon('x', 12, 2.2));
+chatX.setAttribute('aria-label', 'Close SOMA AI');
+const chatTab = el('div', { className: 'tab ai-tab' }, chatLabel, chatX);
+$('term-tabs').prepend(chatTab);
+const chatStrip = el('button', { title: 'SOMA AI (expand the agent area)' }, chatStripDot, el('span', { className: 'v', textContent: 'SOMA AI' }));
+terminals.stripLead = chatStrip;
+terminals.renderStrip();
+let chatOn = false;
+
+function renderChatDot(s: ChatState): void {
+  for (const d of [chatDot, chatStripDot]) {
+    d.dataset.state = s;
+    d.replaceChildren(...(s === 'work' ? [el('span', { className: 'spin' }, icon('spin', 12, 2.4))] : []));
+  }
+}
+renderChatDot('off');
+
+/** SOMA AI to the front (or away from it, when a terminal comes to the front). */
+function showChat(on: boolean): Promise<void> {
+  chatOn = on;
+  chat.el.hidden = !on;
+  chatTab.classList.toggle('on', on);
+  chatStrip.classList.toggle('on', on);
+  if (!on) return Promise.resolve();
+  chatTab.hidden = chatStrip.hidden = false;
+  terminals.deselect();
+  store.set('soma.agentTab', 'ai');
+  return chat.show().then(() => chat.focus());
+}
+chatLabel.addEventListener('click', () => showChat(true));
+chatStrip.addEventListener('click', () => { showChat(true); setAgentCollapsed(false); });
+terminals.onActivate = () => {
+  if (!chatOn) return;
+  showChat(false);
+  store.set('soma.agentTab', 'terminal');
+};
+// Closing ends SOMA AI of this model. The conversation stays, the + menu brings it back
+chatX.addEventListener('click', () => {
+  showChat(false);
+  chatTab.hidden = chatStrip.hidden = true;
+  store.set('soma.agentTab', 'terminal');
+  void api.ai.stop();
+  if (!terminals.activateLast()) void terminals.add({ title: 'Terminal' });
+});
+$('btn-ai-tab').addEventListener('click', () => { setAgentCollapsed(false); showChat(true); });
 
 function renderAgentMenu(): void {
   $('agent-list').replaceChildren(...(agents.length ? agents : []).map((a) => {
@@ -1945,6 +2065,13 @@ const tourCtx: TourContext = {
   showCode: (on) => showCode(on),
   openCode: (f) => void openCode(f),
   expandAgent: () => setAgentCollapsed(false),
+  showChat: () => { if (!chatOn) void showChat(true); },
+  chatPane: () => (chatOn ? chat.el : null),
+  chatSetUp: () => chat.setUp,
+  openAgentMenu: () => { if (!menus.isOpen($('menu-agents'))) $('btn-term-add').click(); },
+  closeAgentMenu: () => { if (menus.isOpen($('menu-agents'))) menus.close(); },
+  // Only while open: a closed menu has no place on the screen
+  agentMenu: () => (menus.isOpen($('menu-agents')) ? $('menu-agents') : null),
   // Die Liste nennt alle bekannten Agenten mit „found“. Leer heißt: Suche läuft noch
   agentsFound: () => (agents.length ? agents.filter((a) => a.found).map((a) => a.label) : null),
   selected: () => !!selection,
@@ -1994,16 +2121,16 @@ async function startTutorial(): Promise<void> {
     });
     if (c !== 0) return;
   }
-  if (!(await leaveEditor('Start tutorial'))) return;
+  if (loading.active || !(await leaveEditor('Start tutorial'))) return;
   help.close();
   tour.stop(false, false);
   void showStart(false);
-  let info: ProjectInfo;
-  try { info = await api.project.create('tutorial'); } catch (e) {
-    toast(`The example model could not be created: ${e instanceof Error ? e.message : String(e)}`, 'error');
-    return;
-  }
+  const info = await createBehindLoading('Creating the example model', 'The tour starts when the model is loaded.', () => api.project.create('tutorial'), 'The example model could not be created');
+  if (!info) return;
   tourProject = info.id;
+  // The tour points at the viewer, the files and the agent: start it on the loaded window, not under the loading screen
+  await loading.closed();
+  if (project?.id !== info.id) return; // another model was opened meanwhile
   tour.start(tourSteps(tourCtx));
 }
 $('btn-tour-start').addEventListener('click', () => void startTutorial());
@@ -2042,6 +2169,9 @@ if (api.testMode) {
     picked: () => picked.map(partName),
     treeExpandAll: () => tree.expandAll(),
     termText: (id: number) => terminals.text(id),
+    chat: () => chat.state(),
+    showChat: (on: boolean) => showChat(on),
+    toAgent: (text: string) => insertToAgent(text),
     versions: () => versions.state(),
     saveState: () => saveState,
     toast: () => ({ text: $('toast').textContent, hidden: $('toast').hidden, error: $('toast').classList.contains('error') }),
@@ -2066,6 +2196,7 @@ if (api.testMode) {
     resultShow: (id: string) => resultTool.show(id),
     resultField: (f: 'value' | 'stress' | 'disp' | 'press') => resultTool.testField(f),
     resultDeform: (sc: number) => resultTool.testDeform(sc),
+    resultPlaybackAt: (seconds: number) => resultTool.testPlaybackAt(seconds),
     analysis: () => analysisPanel.state(),
     analysisToggle: (key: string) => analysisPanel.testToggle(key),
     animShow: (id: string) => animTool.show(id),
@@ -2103,20 +2234,21 @@ if (api.testMode) {
     settingsSelect: (id: string | null) => settings.select(id),
     settingsType: (text: string) => settings.type(text),
     settingsSave: () => settings.save(),
-    settingsShow: (sec: 'viewer' | 'keys' | 'skills' | 'storage' | 'about') => settings.open(undefined, sec),
-    settingsPages: () => ({ viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state() }),
+    settingsShow: (sec: SettingsSection) => settings.open(undefined, sec),
+    settingsPages: () => ({ viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state(), ai: aiPage.state() }),
     appSettings: () => appSettings,
     storageRefresh: () => storagePage.refresh(),
     axes: () => viewer.axesState(),
     display: () => Object.fromEntries([...document.querySelectorAll<HTMLElement>('[data-display]')].map((b) => [b.dataset.display, b.getAttribute('aria-checked') === 'true'])),
     /** Export wie über das Menü (`sel`: das ausgewählte Bauteil), liefert das Ergebnis. */
     exportAs: (fmt: string, scope: 'all' | 'sel') => { exportScope = scope; return doExport(fmt, fmt.toUpperCase()); },
+    exportAssembly: () => doExportAssembly(),
     /** „Everything as ZIP“ im Export-Menü (E79). */
     exportZip: () => doExportZip(),
     /** „As CadQuery script“ im Export-Menü und „New from CadQuery script“ (E100). */
     exportCadQuery: () => doExportCadQuery(),
     newFromCadQuery: () => doNewFromCadQuery(),
-    cqBusy: () => ({ hidden: $('app-busy').hidden, text: $('app-busy').textContent }),
+    loadingScreen: () => loading.state(),
     showStart: (on: boolean) => showStart(on),
     tour: () => tour.state(),
     tourGo: (n: number) => tour.goTo(n),

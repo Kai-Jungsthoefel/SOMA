@@ -6,7 +6,7 @@ order: 9
 category: Way of working
 default: on-demand
 when: the user asks how to do something in the SOMA app, cannot find a button or panel, or asks what a part of the window does
-topics: The window; Start page; Tutorial; The agent; Viewer; Tools; Mark up; Sidebar; Files and code; Saving and history; Export; Settings; When something goes wrong
+topics: The window; Start page; Tutorial; The agent; SOMA AI; Viewer; Tools; Mark up; Sidebar; Files and code; Saving and history; Export; Settings; When something goes wrong
 ---
 # Using SOMA
 
@@ -18,9 +18,9 @@ topics: The window; Start page; Tutorial; The agent; Viewer; Tools; Mark up; Sid
 > instead of guessing. All keyboard shortcuts are listed in the app under Settings, Shortcuts.
 <!-- /agent -->
 
-SOMA is a 3D modeling app where an AI agent writes the model for you. You describe what you want in the agent's
-terminal, the agent writes CadQuery code, and SOMA builds it and shows it in 3D. You check the result, point at
-things, and ask for changes.
+SOMA is a 3D modeling app where an AI agent writes the model for you. You describe what you want to the agent, either
+SOMA AI, the agent built into SOMA, or an agent of your own in a terminal. The agent writes CadQuery code, and SOMA
+builds it and shows it in 3D. You check the result, point at things, and ask for changes.
 
 ## The window
 
@@ -37,7 +37,7 @@ things, and ask for changes.
 9. **Tools**: measure, section, explode and mark up.
 10. **View cube**: click a side, edge or corner to look from there.
 11. **History**: every saved version. Click a dot to look at it.
-12. **Agent**: the terminal where you talk to the agent.
+12. **Agent**: where you talk to the agent, SOMA AI or an agent in a terminal.
 
 The logo at the top left opens the start page.
 
@@ -45,13 +45,13 @@ The logo at the top left opens the start page.
 
 ![The start page](../help/start.png)
 
-1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts"), and **Open folder**, which uses SOMA in a folder of yours (see "Your own folder").
+1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). A loading screen shows the steps for the few seconds until the new model is loaded. The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts"), and **Open folder**, which uses SOMA in a folder of yours (see "Your own folder").
 2. **Open**: opens a .soma or ZIP file (Ctrl O).
 3. **Tutorial**: **Watch video** opens the video tutorial on YouTube in your browser (9 min, from installing to export). **Start tutorial** is a short guided tour of the app with an example model, no agent needed. The cross hides the card.
 4. **Recent**: models you worked on, the newest first. The field above filters them by name. "Open" marks the model that is open right now, "never saved" one that was never saved as a .soma file. The bin on a card removes the model from this computer, a saved .soma file stays.
-5. **Agents**: the agents SOMA found. Any other agent that runs in a terminal works too. You install them yourself, SOMA does not bring one.
+5. **Agents**: the agents for a terminal that SOMA found. Any other agent that runs in a terminal works too. You install them yourself. SOMA AI comes with SOMA and needs no installation (see "SOMA AI").
 6. **Help**: this guide (F1).
-7. **Settings**: viewer, shortcuts, skills, storage and version.
+7. **Settings**: viewer, shortcuts, SOMA AI, skills, storage and version.
 8. **Back to the model**: returns to the open model, it shows the model's name (Esc).
 
 As long as there is no model on this computer, two large cards for a new and an opened model take the place of Recent.
@@ -60,8 +60,9 @@ When a newer version of SOMA is available on GitHub, a small orange label appear
 left. Clicking it opens the download page in your browser; SOMA downloads and installs nothing by itself. If the check
 fails, a grey label says so. Settings > About > **Check for new versions** turns the check off.
 
-**Start tutorial** opens a new example model called "Tutorial" and walks you through the window in ten steps: starting
-the agent, the code, clicking a part, measuring, marking up, parameters, history, saving and export, and help. An orange
+**Start tutorial** opens a new example model called "Tutorial" and walks you through the window in twelve steps: SOMA AI
+and how it works, your own agent instead, the code (you never have to touch it), clicking a part, measuring, marking up,
+parameters, history, saving and export, and help. An orange
 frame shows where to look, and you can try everything right away. Back, Skip and Next move through the steps, Esc ends
 the tour. To see it again, click **Start tutorial** at the top of Help. **Watch video** next to it opens the
 [video tutorial](https://www.youtube.com/watch?v=FJrgMl8ZGKI) on YouTube. If you leave the example model unchanged, it
@@ -71,18 +72,20 @@ disappears like any new model you did not change.
 
 ![Tabs of the agent area](../help/agent.png)
 
-1. **Tabs**: each tab is an agent or a terminal, running in the model folder.
+1. **Tabs**: SOMA AI first, then each agent or terminal, all working in the model folder.
 2. **New tab**: opens the menu below.
-3. **Start agent**: starts one of the agents found on this computer.
-4. **Empty terminal**: a plain command line, for example for `soma build`.
-5. **Copy path for agent app**: copies the model folder. Open it in an agent app such as Claude Desktop or the Codex
+3. **SOMA AI**: brings back the tab of SOMA AI, the agent built into SOMA (see "SOMA AI").
+4. **Start agent**: starts one of the agents found on this computer in a terminal.
+5. **Empty terminal**: a plain command line, for example for `soma build`.
+6. **Copy path for agent app**: copies the model folder. Open it in an agent app such as Claude Desktop or the Codex
    app, and SOMA shows its changes like those of an agent in a tab.
 
 Type your wishes into the agent and press Enter. Everything with **Send to agent** (a part, a measurement, an error,
-a drawing) puts a short note into the agent's input and copies it to the clipboard. Add your own words, then press Enter. You can also drag a file
-from Files into the terminal to name it.
+a drawing) puts a short note into the input of the agent in front and copies it to the clipboard. Add your own words,
+then press Enter. You can also drag a file from Files into a terminal to name it.
 
-The agent works with your user rights. Permissions and safety settings are part of the agent, not of SOMA.
+An agent in a terminal works with your user rights. Its permissions and safety settings are part of the agent, not
+of SOMA. For SOMA AI, see "What SOMA AI may do".
 
 ### Agent apps
 
@@ -97,6 +100,45 @@ Desktop, works instead of an agent in a tab:
 **Send to agent** also copies its note to the clipboard: paste it into the agent app. A markup note names its picture in `.soma/feedback/`,
 the agent opens it itself. A plain chat without access to files and commands cannot work on the model.
 
+## SOMA AI
+
+SOMA AI is the agent built into SOMA, for everyone who does not use a coding agent yet. You talk to it in a chat, and
+it shows what it does in plain words instead of code.
+
+The first time, its tab asks for a sign-in. **Sign in with ChatGPT** uses your ChatGPT Plus or Pro plan and opens your
+browser. Or paste an **API key** from Anthropic (Claude), OpenAI, Google Gemini, OpenRouter or OpenCode (Zen or Go),
+billed per use by the provider. **How do I get a key?** opens the page of the provider. The sign-in stays on this
+computer. For the best results we recommend Opus 5.5 (Claude, with an API key) or GPT-6 Astra (with ChatGPT). Before
+the first message, a note names the risks, **Got it** starts the chat.
+
+![SOMA AI](../help/chat.png)
+
+1. **Earlier conversations**: the conversations with SOMA AI in this model, the newest first, with a search. Click one to continue it.
+2. **New conversation**: starts from zero. The earlier one stays in the list.
+3. **Sign-in**: sign out, or use another sign-in.
+4. **Steps**: what SOMA AI did, in plain words. Steps of the same kind become one row with a count. **Details** shows the command, **Show changes** the change in a file.
+5. **Questions**: when SOMA AI needs your decision, it asks all its questions at once. Click an answer or write your own, then **Send answers**. A single question with answers to pick goes with one click. **Skip** lets SOMA AI decide.
+6. **Working**: shows that SOMA AI is working and for how long. Esc in the input stops it. At the end of its answer, "Worked for" says how long it took.
+7. **Add a picture**: a photo or a sketch with measurements. Pasting or dropping a picture into the chat works too.
+8. **Model**: the AI model SOMA AI thinks with. The recommended models come first, the field at the top searches.
+9. **Send and stop**: sends your message (Enter). While SOMA AI works and the input is empty, it stops SOMA AI.
+
+While SOMA AI works you can already type: it reads your message after the current step. **Send to agent** puts a
+part, a measurement or a markup into its input. A build that fails while it works is normal, it fixes the code
+itself. A dot on the tab shows its state: grey not set up, green ready, orange working, yellow waiting for you.
+
+### What SOMA AI may do
+
+SOMA AI works in the model's folder with your permissions on this computer. There it reads, writes and runs commands
+without asking, and every step is saved in the History. It asks you first, in plain words, before it works with files
+outside the model, downloads something or installs software: **Allow**, **Allow until I close the model** or
+**Don't allow**. It never goes back in the History and never reads sign-ins or keys. SOMA stops commands that are known
+to be dangerous, but it cannot catch everything: only give it files from sources you trust. What you type and the files
+it reads go to the provider you signed in with.
+
+Settings > SOMA AI shows the sign-ins, the model, what the conversation of the open model used (tokens, and the cost
+with an API key) and the note about the risks again.
+
 ## Viewer
 
 ![The viewer with a selected part](../help/viewer.png)
@@ -110,6 +152,9 @@ the agent opens it itself. A plain chat without access to files and commands can
 
 Mouse (default): left drag rotates, right drag pans, the wheel zooms to the mouse position. A double-click sets the
 pivot. You can switch to the mouse buttons of SolidWorks, Fusion 360, Onshape and others in Settings, Viewer.
+
+When the model rebuilds, the camera stays where you put it. It fits the model again by itself (in the same direction)
+only when the change takes the model out of the picture, or when the model becomes much larger or smaller.
 
 Click selects a part, Ctrl+click adds more. Right-click a part for isolate, hide, transparent, zoom, code and agent.
 Keys: H hides, Shift H shows all, I isolates, T makes transparent, Esc clears the selection.
@@ -150,6 +195,10 @@ Mark up is the quickest way to show the agent what you mean: draw an arrow, writ
 7. **Help**: this guide (F1).
 8. **Settings**: see below.
 
+For FEM, **Static shape** plays or pauses a four-second cycle between the undeformed shape and the selected deformation scale. With deformation Off, playback uses the suggested scale. Colors, probe values and the report always describe the solved load case. This illustrates a static solution; it does not calculate motion over time. Choosing a deformation scale stops playback at that scale.
+
+When the canvas is narrow, the analysis bar uses dropdowns for the result quantity and deformation scale, and icon buttons for playback and the load case. The controls flow into rows as needed. The **Close the analysis** button stays visible at the right end of the bar.
+
 A dot on Analysis, Animation or Drawings means the agent made something new you have not looked at yet.
 
 ## Drawings
@@ -160,6 +209,7 @@ Ask the agent for a technical drawing ("Make a drawing of the bracket with all d
 - Point at a view or a dimension on the sheet to highlight it. Click it to see it on the model: a view turns the camera to its direction, a section sets the section tool to the same plane, a detail zooms in, a dimension shows its points and value. The card below has "Code" and "Send to agent". Escape clears it.
 - The bar of the viewer switches between all pages and single pages, shows page previews on the left and fits the page width or the whole page. Select text and click "Quote to agent" to send it with its page.
 - "Export" at the top saves all sheets as one PDF, or each sheet as PDF, DXF or both into a folder. The export button above a sheet saves just that sheet.
+- A note "has not been built yet" names drawing files without sheets here, for example in a model saved with an older SOMA. "Build" builds them.
 
 ## Files and code
 
@@ -205,8 +255,9 @@ after that Ctrl S saves to the same file. Copy or send the file like any other d
 1. **Scope**: all parts, or only the selected one.
 2. **Mesh settings**: closed by default, click to open. Units, the axis pointing up and the mesh density for STL, 3MF, AMF, OBJ, GLB and GLTF. "Auto" writes GLB and GLTF in meters with Y up, as game engines (Unity, Unreal, Godot) and Blender expect them, and the other formats in millimeters with Z up, as slicers expect them. "Coarse" gives fewer triangles, for example for a game, "Fine" smoother curves. The settings are remembered, and the closed row shows what differs from Auto.
 3. **Formats**: for 3D printing (STL, 3MF), CAD (STEP, IGES), graphics and 2D (DXF, SVG). All parts become one file per part in a folder you choose.
-4. **Everything as ZIP**: the whole model with code, results and history, for someone without SOMA.
-5. **As CadQuery script**: the model as plain CadQuery for CQ-editor, VS Code with ocp_vscode and other tools, without SOMA.
+4. **As one STEP file**: the whole model in a single STEP file, with the groups as sub-assemblies and the names and colors of the parts, for other CAD programs. Purchased parts such as screws are included, reference parts too, in a group "Reference".
+5. **Everything as ZIP**: the whole model with code, results and history, for someone without SOMA.
+6. **As CadQuery script**: the model as plain CadQuery for CQ-editor, VS Code with ocp_vscode and other tools, without SOMA.
 
 If a mesh is not closed, the message after the export says why, for example which faces could not be meshed and where they are.
 
@@ -254,9 +305,10 @@ The folder itself is the model: there is no .soma file to save, and your files s
 
 1. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, decimal places of measurements.
 2. **Shortcuts**: all keys and mouse actions.
-3. **Skills**: edit the built-in skills or write your own. They are available in every model.
-4. **Storage**: how much space SOMA's data takes, and clearing the preview cache.
-5. **About**: versions, components and the agents found, the folders of SOMA including its logs, and whether the start page checks GitHub for new versions.
+3. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search), what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
+4. **Skills**: edit the built-in skills or write your own. They are available in every model.
+5. **Storage**: how much space SOMA's data takes, and clearing the preview cache.
+6. **About**: versions, components and the agents found, the folders of SOMA including its logs, and whether the start page checks GitHub for new versions.
 
 ## When something goes wrong
 
@@ -264,4 +316,6 @@ The folder itself is the model: there is no .soma file to save, and your files s
 - **Warning sign next to the model name**: SOMA found a problem in the model folder (for example a missing file). It only reports, it does not repair anything by itself. Ask the agent or fix it yourself.
 - **Building takes long**: turn off "Auto on" in the build status and build with Ctrl B when you are ready.
 - **The agent does not start**: check under "Agents" on the start page whether it is installed.
+- **SOMA AI says the sign-in does not work any more**: the key was removed at the provider, its credit is used up or the plan ended. **Choose a sign-in** on the message, or Settings > SOMA AI, signs in again. Your conversation stays.
+- **SOMA AI stopped unexpectedly**: **Start SOMA AI again** on the message. The conversation and the model are kept.
 - **Reporting a problem**: "Copy system info" under Settings > About copies the versions and the end of SOMA's log, paste it into the bug report. The full log is in the folder "Logs" there. It stays on your computer, SOMA sends nothing by itself.

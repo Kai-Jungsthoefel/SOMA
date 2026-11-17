@@ -244,12 +244,9 @@ def _assembly(name, items, taken):
     return asm
 
 
-def write_outputs(root, parts, project_name):
-    tol = auto_tolerance([p["shape"] for p in parts])
-    timings = {}
-
-    t = time.perf_counter()
-    # Gruppen werden Unterbaugruppen der STEP-Datei, Referenzen stehen unter "Reference" (E34, vor E73 "Referenz")
+def step_assembly(parts, project_name):
+    """The model as one STEP assembly named after the model, for output/model.step and `soma export --assembly`
+    (issue #11). Groups become sub-assemblies, references go under "Reference" (E34, before E73 "Referenz")."""
     taken = {p["step_name"] for p in parts} | {REFERENCE_GROUP}
     root_name = registry.ascii_name(project_name)
     taken.add(root_name)
@@ -257,6 +254,15 @@ def write_outputs(root, parts, project_name):
     refs = [p for p in parts if p["role"] == "reference"]
     if refs:
         asm.add(_assembly(REFERENCE_GROUP, [(p.get("group", ()), p) for p in refs], taken), name=REFERENCE_GROUP)
+    return asm
+
+
+def write_outputs(root, parts, project_name):
+    tol = auto_tolerance([p["shape"] for p in parts])
+    timings = {}
+
+    t = time.perf_counter()
+    asm = step_assembly(parts, project_name)
     (root / "output").mkdir(exist_ok=True)
     asm.export(str(root / "output" / "model.step"))
     timings["step"] = time.perf_counter() - t

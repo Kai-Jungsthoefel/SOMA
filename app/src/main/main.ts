@@ -20,7 +20,9 @@ import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, renameOldSkillFiles, saveLibrarySkill } from './skilllibrary';
 import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
-import type { FileOpResult, LibraryResult, StorageClear } from '../shared/types';
+import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
+import { piEntry } from './somaai';
+import { aiAccounts, cancelSignIn, defaultModel, listModels, listSessions, saveApiKey, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -111,6 +113,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('build:setAuto', (_e, on: boolean) => ctl.need().builds.setAuto(!!on));
   ipcMain.handle('build:status', () => ctl.need().builds.status);
   ipcMain.handle('build:export', (_e, format: string, part: string | null, mesh: unknown) => ctl.exportModel(String(format), part ? String(part) : null, mesh));
+  ipcMain.handle('build:exportAssembly', () => ctl.exportModel('step', null, undefined, true));
 
   ipcMain.handle('fs:list', () => listFiles(dir()));
   ipcMain.handle('fs:import', (_e, paths: string[]) => importInputs(dir(), Array.isArray(paths) ? paths.map(String) : []));
@@ -193,6 +196,44 @@ function registerIpc(ctl: ProjectController): void {
 
   const agents = () => detectAgents(ctl.session ? terminalEnv(dir()) : process.env);
   ipcMain.handle('agents:detect', () => agents());
+  // SOMA AI (somaai.ts): one pi process per open model, only reachable through the commands SomaAI allows
+  const noModel: AiResult = { ok: false, error: 'No model is open.' };
+  ipcMain.handle('ai:status', (): AiStatus => ctl.session?.ai.status() ?? { available: !!piEntry(), running: false });
+  ipcMain.handle('ai:start', () => ctl.session?.ai.start() ?? noModel);
+  ipcMain.handle('ai:command', (_e, cmd: unknown) => ctl.session?.ai.command(cmd) ?? noModel);
+  ipcMain.on('ai:respond', (_e, res: unknown) => ctl.session?.ai.respond(res));
+  ipcMain.handle('ai:stop', () => ctl.session?.ai.stopAndWait());
+  // Sign-in (somaaiauth.ts) holds for the whole app. A running pi of the open model ends, the next message starts it
+  // again with the new sign-in and model (the conversation continues)
+  const restartAi = <T extends { ok: boolean }>(r: T): T => { if (r.ok) ctl.session?.ai.restart(); return r; };
+  ipcMain.handle('ai:accounts', () => aiAccounts());
+  ipcMain.handle('ai:saveKey', (_e, provider: unknown, key: unknown) => restartAi(saveApiKey(provider, key)));
+  ipcMain.handle('ai:signIn', async (e) => restartAi(await signInChatGPT((url) => {
+    if (!e.sender.isDestroyed()) e.sender.send('ai:signInUrl', url);
+    if (process.env.SOMA_TEST !== '1') void shell.openExternal(url);
+  })));
+  ipcMain.handle('ai:cancelSignIn', () => cancelSignIn());
+  ipcMain.handle('ai:signOut', (_e, provider: unknown) => restartAi(signOut(provider)));
+  // Earlier conversations of the open model: the window gets ids, never files. Switching looks the file up again
+  ipcMain.handle('ai:sessions', async () => {
+    const s = ctl.session;
+    if (!s) return noModel;
+    const r = await listSessions(s.dir);
+    return r.ok ? { ok: true, sessions: (r.sessions ?? []).map(({ id, title, modified, messages }) => ({ id, title, modified, messages })) } : r;
+  });
+  ipcMain.handle('ai:switchSession', async (_e, id: unknown) => {
+    const s = ctl.session;
+    if (!s) return noModel;
+    if (typeof id !== 'string') return { ok: false, error: 'Unknown conversation.' };
+    const r = await listSessions(s.dir);
+    if (ctl.session !== s) return { ok: false, error: 'Another model was opened meanwhile.' };
+    const hit = r.sessions?.find((x) => x.id === id);
+    if (!hit) return { ok: false, error: r.error ?? 'This conversation is no longer there.' };
+    return s.ai.switchSession(hit.path);
+  });
+  ipcMain.handle('ai:models', () => listModels());
+  ipcMain.handle('ai:defaultModel', () => defaultModel());
+  ipcMain.handle('ai:setDefaultModel', (_e, provider: unknown, id: unknown) => setDefaultModel(provider, id));
   ipcMain.handle('measure:query', (_e, source: unknown, req: unknown) => ctl.measure(source, req));
   ipcMain.handle('measure:start', () => ctl.measureStart());
   ipcMain.handle('measure:prepare', (_e, source: unknown, build: unknown) => ctl.measurePrepare(source, build));

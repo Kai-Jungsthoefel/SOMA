@@ -204,6 +204,30 @@ try {
   await ev(() => window.__t.drawingsSelectNone());
   fs.writeFileSync(ip, JSON.stringify(old));
 
+  // 12b) No index (a model saved before the index went into the .soma file): the view names the drawing files that were
+  // not built and offers to build them, instead of "No drawings yet" next to the PDFs in output/. A helper starting
+  // with "_" is no drawing (as in soma).
+  fs.writeFileSync(path.join(proj.dir, 'drawings', '_common.py'), 'HOLE = 8\n');
+  fs.rmSync(ip);
+  const noteNow = () => ev(() => { const n = document.querySelector('.dw-note'); return n && !n.hidden ? n.textContent : null; });
+  await waitFor('Hinweis ungebaut', () => /not been built/.test(document.querySelector('.dw-note:not([hidden])')?.textContent ?? ''), 10000).catch(() => {});
+  const unbuiltNote = await noteNow();
+  const bare = await ev(() => ({ empty: document.querySelector('.dw-empty')?.textContent ?? null, all: !document.querySelector('.dw-bar .btn.ghost:last-child')?.hidden }));
+  check('Without an index: note names the 2 drawing files (not the helper) with "Build", empty page says not built, "Rebuild all" visible',
+    /2 drawing files have not been built yet \(drawings\/plate\.py, drawings\/second\.py\)/.test(unbuiltNote ?? '') && /Build/.test(unbuiltNote ?? '')
+    && /Drawings not built yet/.test(bare.empty ?? '') && bare.all, `${unbuiltNote} | ${JSON.stringify(bare)}`);
+  await ev(() => document.querySelector('.dw-note .btn').click());
+  await waitFor('wieder gebaut', () => (window.__t.drawings()?.sheets.length ?? 0) === 2 && !!document.querySelector('.dw-note')?.hidden, 180000).catch(() => {});
+  const rebuilt = await ev(() => window.__t.drawings());
+  check('"Build" builds all sheets again, the note is gone', rebuilt?.sheets.length === 2 && (await noteNow()) === null && !rebuilt?.errors?.length,
+    `${await noteNow()} | ${JSON.stringify(rebuilt?.heads)}`);
+  // soma itself: one file built without an index builds all, otherwise output/drawings.pdf would hold only that sheet
+  fs.rmSync(ip);
+  const b4 = soma(proj.dir, 'drawing', 'build', 'drawings/second.py');
+  const after = JSON.parse(fs.readFileSync(ip, 'utf8'));
+  check('soma drawing build <file> without an index: builds all sheets', b4.status === 0 && after.drawings.length === 2, (b4.stderr || b4.stdout).slice(-300));
+  fs.rmSync(path.join(proj.dir, 'drawings', '_common.py'));
+
   // 13) Zweiter Klick auf den Knopf schließt die Code-Spalte
   await ev(() => document.getElementById('btn-rail-drawings').click());
   check('Knopf bei vorne stehendem Dokument: Code-Spalte zu', !(await ev(() => window.__t.layout().code)));

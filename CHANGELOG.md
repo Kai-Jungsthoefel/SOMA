@@ -8,7 +8,19 @@ the version is bumped.
 
 ### Added
 
+- SOMA AI: an agent built into SOMA, for everyone without a coding agent of their own. It is a chat instead of a terminal, the first tab of the agent area. Sign in with ChatGPT or with an API key (Anthropic, OpenAI, Google Gemini, OpenRouter, OpenCode Zen or Go), describe the part or add a photo of a sketch, and follow what it does in plain words, with the time it has been working. When it needs to know something, it asks all its questions at once, with answers to click or in your own words. Earlier conversations of a model can be continued. The model menu has a search. Settings > SOMA AI shows the sign-ins, the model, what a conversation used and what SOMA AI may do. The tutorial introduces SOMA AI, shows in the + menu how to use your own agent instead, and says that you never have to touch the code. It stays in the model's folder: looking at or changing files outside it, downloading and installing software ask you first, dangerous commands are stopped. A note before the first message names the risks. "Send to agent" in the viewer puts the part, measurement or markup into its input. For the best results we recommend Opus 5.5 or GPT-6 Astra. Behind it is pi (pi.dev, MIT), which comes with SOMA. Agents in a terminal such as Claude Code work as before.
+- Play or pause static FEM deformation in Analysis. Solved colors and values stay fixed during the shape cycle. On narrow canvases, compact controls flow into rows while the close button stays visible. Thanks to Ryan Hailey (fork RyanHailey21/SOMA, issue #12).
+- "As one STEP file" in the Export menu: the whole model in a single STEP file with its groups as sub-assemblies, part names and colors, for other CAD programs. Purchased parts such as screws are included, reference parts too, in a group "Reference". On the command line: `soma export --assembly --format step` (issue #11).
 - Video tutorial on YouTube (9 min, from installing to export): "Watch video" on the start page card and at the top of Help opens it in your browser.
+- A loading screen while a new model is created ("New model", the tutorial, a CadQuery script): it shows at once, names the step (first build, version history, opening) and stays until the viewer, the files and the agent panel have loaded the model. Before, the old model stayed on screen for several seconds without a sign that anything happened. The tutorial's tour starts once the model is loaded.
+
+### Fixed
+
+- Exporting a single part as STEP or BREP could write only a shell instead of a solid, when the part was a CadQuery compound holding one solid. Thanks to SukbeomH (fork SukbeomH/SOMA) for spotting this.
+- "Open folder" is more careful with the folder: a `model.py` that appears while the confirmation is open is kept instead of replaced, `.soma/project.json` is backed up before it changes (an unreadable one is listed as a change first), and a folder where `.soma` is a file is refused with a message before anything is written. Thanks to vasilipuchko (fork zihotki/SOMA).
+- The viewer fits the model again when a rebuild takes it out of the picture, for example when the agent replaces the starter box with a table. A small change keeps the camera where you put it. "Fit" in a viewer narrower than high no longer cuts off the sides.
+- Drawings were missing after saving and opening a `.soma` file: the "Drawings" view said "No drawings yet", although the PDFs were there. The file now keeps the list of sheets. For files saved before, the view names the drawing files that are not built yet, with a button to build them. Opening a `.soma` file also keeps the files' modification times, so sheets no longer show "older than the code" right after opening.
+- `soma drawing build <file>` without a list of sheets (for example in a cloned folder) builds all drawings, so `output/drawings.pdf` keeps every sheet instead of only that file's.
 
 ## [0.11.0] - 2026-11-03
 

@@ -6,7 +6,7 @@ import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, editBackupsDir, foldersFile, previewsDir, projectStateDir, skillBackupsDir, skillDirs, templateDir, thumbnailsDir, workspacesDir } from './paths';
-import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, type SkillDefaults, type SkillModes } from './skills';
+import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, writeAtomic, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
 export const API_VERSION = 1;
@@ -39,9 +39,9 @@ interface ProjectState extends ProjectJson { app?: AppState }
 const readJson = <T>(file: string): T | null => {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')) as T; } catch { return null; }
 };
+/** Atomic: a crash while writing leaves the old state (list of models, folders, state of a model), not half a file. */
 const writeJson = (file: string, value: unknown) => {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(value, null, 2));
+  writeAtomic(file, JSON.stringify(value, null, 2));
 };
 
 export const isProjectId = (id: string) => UUID.test(id);
@@ -92,7 +92,8 @@ export const readProjectJson = (id: string) => readJson<ProjectJson>(path.join(p
  * CadQuery-Skripts, E100), so beginnt schon der erste Stand mit dem fremden Skript. Wirft `prepare`, wird der halb
  * angelegte Ordner wieder entfernt und der Fehler weitergereicht.
  */
-export async function createProject(name = 'New model', prepare?: (dir: string, id: string) => Promise<void>): Promise<{ id: string; dir: string }> {
+/** `step`: the step that starts now, for the loading screen of the window (building takes a few seconds). */
+export async function createProject(name = 'New model', prepare?: (dir: string, id: string) => Promise<void>, step?: (s: string) => void): Promise<{ id: string; dir: string }> {
   const id = randomUUID();
   const dir = projectDir(id);
   fs.mkdirSync(dir, { recursive: true });
@@ -111,7 +112,9 @@ export async function createProject(name = 'New model', prepare?: (dir: string, 
   writeJson(stateFile(id), { ...pj, app: {} } satisfies ProjectState);
   // Einmal bauen, bevor der Startcommit entsteht: So enthält auch der erste Stand eine output/model.step
   // und lässt sich im Verlauf als Vorschau öffnen. Scheitert der Build, geht das Anlegen trotzdem weiter.
+  step?.('Building the model for the first time');
   await runSoma(['build', '--project', dir], dir, 90000);
+  step?.('Starting the version history');
   try {
     await new GitRepo(dir).init('New model created');
   } catch (e) {

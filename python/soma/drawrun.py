@@ -747,6 +747,9 @@ def build_all(root, only=None, dpi=DPI):
     """Baut alle Zeichnungen (oder die einer Datei). Liefert dict(built=[...], errors=[...], orphans=[...]). errors sind die
     Fehler dieses Laufs, der Index behaelt auch die anderer Dateien, die nicht neu gebaut wurden."""
     root = Path(root).resolve()
+    # Without an index (a model saved before the index went into the .soma file, a cloned folder) nothing says which sheets
+    # the other files have: build all of them, otherwise output/drawings.pdf would silently hold only the one file
+    have_index = (root / CACHE_DIR / "index.json").is_file()
     old = read_index(root)
     try:
         parts = build.run_model(root)
@@ -756,7 +759,7 @@ def build_all(root, only=None, dpi=DPI):
     drawing._PARTS = parts
     files = drawing_files(root)
     # Ein Index aelterer Fassung: alle Blaetter neu bauen, sonst fehlten den uebrigen Eintraegen die neuen Felder
-    if only is not None and (old.get("version", 1) >= INDEX_VERSION or not old.get("drawings")):
+    if only is not None and have_index and (old.get("version", 1) >= INDEX_VERSION or not old.get("drawings")):
         files = [f for f in files if f.resolve() == Path(only).resolve()]
     done_files = {_rel(f, root) for f in files}
     keep = [x for x in old.get("drawings", []) if x.get("file") not in done_files and (root / x.get("file", "")).is_file()]

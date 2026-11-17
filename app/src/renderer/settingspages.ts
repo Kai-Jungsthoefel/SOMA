@@ -14,17 +14,17 @@ type Toast = (text: string, kind?: 'ok' | 'info' | 'error') => void;
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Zeile eines Formulars: links Titel und Erklärung, rechts das Bedienelement. */
-function field(title: string, desc: string | null, control: HTMLElement, extra?: HTMLElement | null): HTMLElement {
+export function field(title: string, desc: string | null, control: HTMLElement, extra?: HTMLElement | null): HTMLElement {
   return el('div', { className: 'st-field' },
     el('div', { className: 'st-fl' }, el('b', { textContent: title }), desc ? el('span', { textContent: desc }) : null, extra ?? null),
     el('div', { className: 'st-fc' }, control));
 }
 
-function group(title: string, ...rows: HTMLElement[]): HTMLElement {
+export function group(title: string, ...rows: HTMLElement[]): HTMLElement {
   return el('section', { className: 'st-group' }, el('div', { className: 'st-gh', textContent: title }), ...rows);
 }
 
-function head(title: string, intro: string): HTMLElement[] {
+export function head(title: string, intro: string): HTMLElement[] {
   return [el('h2', { className: 'st-h2', textContent: title }), el('p', { className: 'st-lead', textContent: intro })];
 }
 
@@ -131,6 +131,7 @@ const AREA: Record<Exclude<StorageEntry['id'], 'appdata'>, { title: string; icon
   previews: { title: 'Preview cache', icon: 'layers', desc: () => 'Older versions from the history, prepared for viewing. Created again when needed.' },
   thumbnails: { title: 'Start page pictures', icon: 'image', desc: () => 'Pictures of your models on the start page.' },
   skills: { title: 'Your skills', icon: 'book', desc: () => 'Skills you created or edited under “Skills”.' },
+  somaai: { title: 'SOMA AI', icon: 'sparkle', desc: () => 'Sign-ins, settings and conversations of SOMA AI, the agent built into SOMA.' },
   logs: { title: 'Logs', icon: 'file', desc: () => 'What the app did and what went wrong, for bug reports. A few MB at most, older entries are dropped.' },
   other: { title: 'Other', icon: 'file', desc: () => 'Caches of the display, the settings and the state of the app.' },
 };

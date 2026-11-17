@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { StorageArea, StorageEntry, StorageStats } from '../shared/types';
 import { backupsDir, logsDir, previewsDir, thumbnailsDir, userDataDir, userSkillsDir, workspacesDir } from './paths';
+import { aiDir } from './somaai';
 
 /**
  * Speicherplatz in den App-Daten (E81): Größe je Bereich für die Einstellungen. Was dort liegt, legt die App selbst an.
@@ -19,9 +20,10 @@ export function areaDir(area: StorageArea): string {
     case 'thumbnails': return thumbnailsDir();
     case 'skills': return userSkillsDir();
     case 'logs': return logsDir();
+    case 'somaai': return aiDir();
   }
 }
-export const isStorageArea = (a: unknown): a is StorageArea => ['appdata', 'workspaces', 'backups', 'previews', 'thumbnails', 'skills', 'logs'].includes(a as string);
+export const isStorageArea = (a: unknown): a is StorageArea => ['appdata', 'workspaces', 'backups', 'previews', 'thumbnails', 'skills', 'logs', 'somaai'].includes(a as string);
 
 /**
  * Größe eines Ordners mit allem darin. Verknüpfungen zählen nicht (sie könnten aus den App-Daten hinaus oder im Kreis
@@ -49,7 +51,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** Größe der App-Daten je Bereich. „other“: alles Übrige (Caches von Chromium, state.json, settings.json …). */
 export async function storageStats(): Promise<StorageStats> {
   const dir = userDataDir();
-  const ids: StorageArea[] = ['workspaces', 'backups', 'previews', 'thumbnails', 'skills', 'logs'];
+  const ids: StorageArea[] = ['workspaces', 'backups', 'previews', 'thumbnails', 'skills', 'somaai', 'logs'];
   const [total, ...sizes] = await Promise.all([folderSize(dir), ...ids.map((a) => folderSize(areaDir(a)))]);
   let models = 0;
   try { models = fs.readdirSync(workspacesDir()).filter((n) => UUID.test(n)).length; } catch { /* noch keins */ }

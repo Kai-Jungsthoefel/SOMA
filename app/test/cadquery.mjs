@@ -225,20 +225,20 @@ add_part("Model", cq.Workplane().box(3, 3, 3))
   await ev(() => window.__t.showStart(true));
   await app.answers([path.join(work, 'res', 'model.py')]);
   await app.domClick('start-new-cq');
-  await waitFor('Ladeanzeige', () => !window.__t.cqBusy().hidden, 30000).catch(() => {});
-  const busy = await ev(() => window.__t.cqBusy());
-  if (process.env.SMOKE_SHOTS && !busy.hidden) {
+  await waitFor('Ladeanzeige', () => window.__t.loadingScreen().shown, 30000).catch(() => {});
+  const busy = await ev(() => window.__t.loadingScreen());
+  if (process.env.SMOKE_SHOTS && busy.shown) {
     fs.mkdirSync(path.join(APP, 'test', 'shots'), { recursive: true });
     await sleep(300);
     await app.screenshot(path.join(APP, 'test', 'shots', 'cadquery-busy.png')).catch((e) => console.log('Screenshot:', e.message));
   }
-  check('Ladeanzeige über der Startseite: Titel, Schritt und Dateiname', !busy.hidden && busy.text.includes('Loading CadQuery script')
-    && busy.text.includes('model.py') && /Reading the script|Building the model|Opening the model/.test(busy.text), JSON.stringify(busy));
+  check('Ladeanzeige über der Startseite: Titel, Schritt und Dateiname', busy.shown && busy.title === 'Loading CadQuery script'
+    && busy.file === 'model.py' && /Reading the script|Building the model|Starting the version history|Opening the model|Loading/.test(busy.step), JSON.stringify(busy));
   await waitFor('Modell von der Startseite', (old) => window.__t.project().id !== old && window.__t.status().state === 'ok'
-    && document.getElementById('start').hidden, 120000, p3.id).catch(() => {});
+    && document.getElementById('start').hidden && !window.__t.loadingScreen().shown, 120000, p3.id).catch(() => {});
   check('Startseite: „New from CadQuery script“ legt das Modell an und schließt die Startseite',
     (await ev(() => window.__t.project())).id !== p3.id && JSON.stringify(await ev(() => window.__t.treeNames())) === '["result"]'
-    && await ev(() => document.getElementById('start').hidden) && (await ev(() => window.__t.cqBusy())).hidden, JSON.stringify(await ev(() => window.__t.treeNames())));
+    && await ev(() => document.getElementById('start').hidden) && !(await ev(() => window.__t.loadingScreen())).shown, JSON.stringify(await ev(() => window.__t.treeNames())));
 } catch (e) {
   check('Unerwarteter Fehler', false, e instanceof Error ? e.stack : String(e));
 } finally {

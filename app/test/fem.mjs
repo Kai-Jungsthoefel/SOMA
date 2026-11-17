@@ -191,6 +191,87 @@ try {
   check('An Agent geben: Sicherheit, Spannung und Verschiebung', /^\[Result: "Balken unter Last" \(\.soma\/results\/balken\.glb, limit 2\.00\), part "Balken": safety factor (over 99|\d+\.\d\d) \(\d+\.\d MPa, displacement 0\.2\d\d mm\) at \(/.test(rs.note), rs.note);
   await ev(() => window.__t.viewer.setView('iso'));
   await shot('fem-1');
+  const playbackBefore = await ev(() => window.__t.result());
+  await domClick('btn-result-play');
+  const samples = await ev(() => [0, 1, 2, 4].map((seconds) => {
+    window.__t.resultPlaybackAt(seconds);
+    return window.__t.result();
+  }));
+  check('Static playback reaches solved, half, undeformed and solved shapes',
+    samples.every((s) => s.fem.playing) && near(samples[0].fem.scale, 10, 1e-6)
+    && near(samples[1].fem.scale, 5, 1e-6) && near(samples[2].fem.scale, 0, 1e-6)
+    && near(samples[3].fem.scale, 10, 1e-6), JSON.stringify(samples.map((s) => s.fem)));
+  check('Playback preserves solved values and identifies the static visualization',
+    samples.every((s) => JSON.stringify(s.meta) === JSON.stringify(playbackBefore.meta)
+      && JSON.stringify(s.scale.range) === JSON.stringify(playbackBefore.scale.range)
+      && s.note === playbackBefore.note && s.scale.legend.includes('Static deformation playback')));
+  await shot('fem-playback');
+  // Panel splits constrain the canvas independently of the window size.
+  const viewerStyle = await ev(() => document.getElementById('viewer').getAttribute('style'));
+  for (const [width, height] of [[900, 600], [600, 400], [360, 240], [220, 160], [120, 120]]) {
+    await ev(([w, h]) => {
+      const viewer = document.getElementById('viewer');
+      viewer.style.width = `${w}px`; viewer.style.maxWidth = '100%';
+      viewer.style.height = `${h}px`; viewer.style.flex = 'none';
+    }, [width, height]);
+    await sleep(100);
+    const layout = await ev(() => {
+      const viewer = document.getElementById('viewer').getBoundingClientRect();
+      const close = document.getElementById('btn-result-close');
+      const rect = close.getBoundingClientRect();
+      const controls = document.getElementById('result-controls');
+      const area = controls.getBoundingClientRect();
+      const visibleControls = [...controls.querySelectorAll('button, select')].filter((c) => c.getClientRects().length);
+      return {
+        visible: rect.left >= viewer.left && rect.right <= viewer.right && rect.top >= viewer.top && rect.bottom <= viewer.bottom,
+        x: rect.x + rect.width / 2, y: rect.y + rect.height / 2,
+        reachable: close.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)),
+        fits: visibleControls.every((c) => {
+          const r = c.getBoundingClientRect();
+          return r.left >= area.left - 1 && r.right <= area.right + 1 && r.top >= viewer.top && r.bottom <= viewer.bottom;
+        }),
+        noScroll: controls.scrollWidth <= controls.clientWidth + 1 && controls.scrollHeight <= controls.clientHeight + 1,
+      };
+    });
+    check(`Analysis close stays visible and clickable at ${width}×${height}`, layout.visible && layout.reachable, JSON.stringify(layout));
+    check(`Analysis controls fit without scrolling at ${width}×${height}`, layout.fits && layout.noScroll, JSON.stringify(layout));
+    if (width === 360) {
+      await ev(() => {
+        const quantity = document.getElementById('result-field-select');
+        quantity.value = 'stress'; quantity.dispatchEvent(new Event('change'));
+      });
+      check('Compact quantity dropdown changes the result field', await ev(() => window.__t.result().scale.field === 'stress'));
+      await ev(() => {
+        const quantity = document.getElementById('result-field-select');
+        quantity.value = 'value'; quantity.dispatchEvent(new Event('change'));
+        const scale = document.getElementById('result-deform-select');
+        scale.value = '1'; scale.dispatchEvent(new Event('change'));
+      });
+      check('Compact deformation dropdown selects scale and stops playback', await ev(() => window.__t.result().fem.scale === 1 && !window.__t.result().fem.playing));
+      await ev(() => window.__t.resultDeform(10));
+      await domClick('btn-result-play');
+    }
+    if (width === 600 || width === 360 || width === 220) await shot(`fem-toolbar-${width}`);
+    await app.page.click(layout.x, layout.y);
+    check(`Close exits playback at ${width}×${height}`, await ev(() => !window.__t.result().active && !window.__t.result().fem?.playing));
+    await ev(() => window.__t.resultShow('balken'));
+    await waitFor('FEM reopened after narrow close', () => !!window.__t.result().fem);
+    await domClick('btn-result-play');
+  }
+  await ev((style) => {
+    const viewer = document.getElementById('viewer');
+    if (style === null) viewer.removeAttribute('style'); else viewer.setAttribute('style', style);
+  }, viewerStyle);
+  await domClick('btn-result-play');
+  const pausedScale = (await ev(() => window.__t.result())).fem.scale;
+  await sleep(150);
+  check('Pausing freezes the displayed deformation', await ev((scale) => !window.__t.result().fem.playing
+    && window.__t.result().fem.scale === scale, pausedScale));
+  await domClick('btn-result-play');
+  await ev(() => window.__t.resultDeform(1));
+  check('Choosing a deformation scale stops playback at that scale', await ev(() => !window.__t.result().fem.playing
+    && window.__t.result().fem.scale === 1));
+  await ev(() => window.__t.resultDeform(10));
   await ev(() => window.__t.resultDeform(0));
   await domClick('btn-result-bcs');
   rs = await ev(() => window.__t.result());
@@ -208,7 +289,10 @@ try {
     && rs.scale.legend.includes('Red: above allowable'), JSON.stringify(rs.scale));
   await ev(() => window.__t.viewer.setView('front'));
   await sleep(300);
-  const pin2 = await ev((p) => window.__t.resultPin(p.x, p.y), at);
+  // The narrow layouts above resized the canvas; a hidden window may not have passed that on to the camera (ResizeObserver).
+  // So find the end of the beam (undeformed now) again instead of reusing the first screen point
+  const at2 = await ev(() => window.__t.viewer.screenAt([97, -5, 0]));
+  const pin2 = await ev((p) => window.__t.resultPin(p.x, p.y), at2);
   await ev(() => window.__t.viewer.setView('iso'));
   rs = await ev(() => window.__t.result());
   check('Stelle bei Spannung: MPa zuerst, Sicherheit danach', pin2?.stress != null && /: Balken, \d+(\.\d)? MPa · Safety /.test(rs.probe), rs.probe);
@@ -266,7 +350,9 @@ try {
   an = await ev(() => window.__t.analysis());
   check('Neu berechnen: Lagerkraft jetzt 100 N, Verschiebung doppelt', !an.stale && an.details.some((x) => x.includes('Reaction100 N upward'))
     && an.table.some((row) => row[0] === 'Balken' && /^0\.5[67]\d$/.test(row[3])), JSON.stringify(an));
+  await domClick('btn-result-play');
   await domClick('btn-result-close');
+  check('Closing a result cancels deformation playback', await ev(() => !window.__t.result().active && document.getElementById('btn-result-play').getAttribute('aria-pressed') === 'false'));
   check('× in der Leiste: Analyse aus, Modell wieder sichtbar, Baum mit allen Teilen, Bericht wird zur Liste', !(await ev(() => window.__t.viewer.animViewState())).modelHidden
     && (await ev(() => window.__t.tree())).names.length === 9 && (await ev(() => window.__t.analysis())).mode === 'list');
 
@@ -274,6 +360,12 @@ try {
   // steht. Sonst füllt der Deckel des Schnitts auch Stellen, an denen der Blick durch diese Fläche geht
   await ev(() => window.__t.resultShow('winkel'));
   await waitFor('Ergebnis Winkel geladen', () => window.__t.result().id === 'winkel', 20000);
+  await domClick('btn-result-play');
+  await ev(() => window.__t.resultShow('balken'));
+  await waitFor('Beam result replaces playing result', () => window.__t.result().id === 'balken', 20000);
+  check('Replacing a playing result stops playback', !(await ev(() => window.__t.result())).fem.playing);
+  await ev(() => window.__t.resultShow('winkel'));
+  await waitFor('Angle result restored', () => window.__t.result().id === 'winkel', 20000);
   const scaleW = (await ev(() => window.__t.result())).fem.scale;
   // Waagerecht durch die Wand bei z = 40, behalten wird darunter: Die Kontur folgt der Überhöhung (die Wand kippt nach −X)
   await ev(() => window.__t.viewer.setSection({ normal: [0, 0, -1], constant: 40 }));

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SkillCheck, SkillInfo, SkillMode, SkillSource, SkillValue, SkillVar } from '../shared/types';
@@ -483,12 +484,16 @@ export function applyDefaultSkills(root: string, dirs: SkillDirs, backupDir: str
 /** Text atomar schreiben: erst eine Nebendatei, dann umbenennen. */
 export function writeAtomic(file: string, text: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.soma-tmp`;
+  // Own name per write ('wx' never opens an existing file): two writes at once do not share a side file, and an error
+  // only removes our own (from the fork zihotki/SOMA)
+  const tmp = `${file}.soma-tmp-${randomUUID()}`;
+  let created = false;
   try {
-    fs.writeFileSync(tmp, text, 'utf8');
+    fs.writeFileSync(tmp, text, { encoding: 'utf8', flag: 'wx' });
+    created = true;
     fs.renameSync(tmp, file);
   } catch (e) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* bleibt liegen, stört nicht */ }
+    if (created) try { fs.rmSync(tmp, { force: true }); } catch { /* bleibt liegen, stört nicht */ }
     throw e;
   }
 }

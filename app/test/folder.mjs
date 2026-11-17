@@ -4,6 +4,7 @@
 // Ruhe (kein Commit, keine Konfiguration), baut das Skript. Kein Speichern als .soma, kein Wiederherstellen, Verlauf ohne
 // Probleme. Erneutes Öffnen fragt nichts. Verlassen und Entfernen lassen den Ordner stehen. Ein leerer Ordner bekommt
 // model.py aus der Vorlage, ein kopierter Ordner eine neue Kennung, ein fehlender Ordner wird gemeldet.
+// A folder where .soma is a file is refused before anything is written, an unreadable project.json is backed up.
 // Aufruf: node test/run-all.mjs folder (nach npm run build).
 import { exec } from 'dugite';
 import fs from 'node:fs';
@@ -121,6 +122,27 @@ try {
   const pc = await ev(() => window.__t.project());
   check('Kopie: eigene Kennung, Original bleibt eingetragen', r7.opened === true && pc.id !== pe.id && JSON.parse(read(copy, '.soma/project.json')).id === pc.id
     && (await ev(() => window.soma.project.list())).some((e) => e.id === pe.id), `${pc.id} / ${pe.id}`);
+
+  // ---- 7b) A folder that does not fit (.soma is a file): message before anything is written ----
+  const odd = path.join(work, 'Odd');
+  fs.mkdirSync(odd);
+  fs.writeFileSync(path.join(odd, '.soma'), 'not a folder');
+  await app.answers([odd]);
+  const r7b = await ev(() => window.soma.project.openFolder());
+  check('.soma as a file: message, nothing created', !r7b.opened && !!r7b.error?.includes('.soma exists but is not a folder')
+    && !fs.existsSync(path.join(odd, 'model.py')) && !fs.existsSync(path.join(odd, 'AGENTS.md')), JSON.stringify(r7b));
+
+  // ---- 7c) Unreadable .soma/project.json: listed as a change, replaced after the confirmation, the old one backed up ----
+  const broken = path.join(work, 'Broken');
+  fs.mkdirSync(path.join(broken, '.soma'), { recursive: true });
+  fs.copyFileSync(path.join(empty, 'model.py'), path.join(broken, 'model.py'));
+  fs.writeFileSync(path.join(broken, '.soma', 'project.json'), '{broken');
+  await app.answers([broken, 0]);
+  const r7c = await ev(() => window.soma.project.openFolder());
+  const pk = await ev(() => window.__t.project());
+  const kb = fs.readdirSync(path.join(app.ud, 'workspace-backups')).filter((b) => b.startsWith(`${pk.id}-folder-`));
+  check('Unreadable project.json: replaced after the confirmation, the old file in the backups', r7c.opened === true
+    && JSON.parse(read(broken, '.soma/project.json')).id === pk.id && kb.some((b) => read(path.join(app.ud, 'workspace-backups', b), 'project.json') === '{broken'), JSON.stringify(r7c));
 
   // ---- 8) Fehlender Ordner ----
   await ev(() => window.soma.project.create());
