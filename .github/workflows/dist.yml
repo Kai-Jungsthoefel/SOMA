@@ -109,6 +109,18 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a --server-args='-screen 0 1920x1080x24' node test/smoke.mjs; else node test/smoke.mjs; fi
 
+      # Voice input of the packaged app: the speech engine loads on this system (trial run), the system's tar unpacks a
+      # stand-in model from a local server, removing it, a failed download, an engine that does not load. Recognition with
+      # the real model is skipped here (487 MB download). macOS like the smoke test: does not stop the run.
+      - name: Voice input of the packaged app
+        working-directory: app
+        continue-on-error: ${{ runner.os == 'macOS' }}
+        env:
+          SOMA_TEST_EXE: ${{ github.workspace }}/app/${{ matrix.exe }}
+          SOMA_TEST_SOFTWARE_GL: ${{ runner.os == 'Linux' && '1' || '' }}
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a --server-args='-screen 0 1920x1080x24' node test/voice.mjs; else node test/voice.mjs; fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: SOMA-${{ runner.os }}
