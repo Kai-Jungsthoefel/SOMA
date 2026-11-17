@@ -561,6 +561,10 @@ try {
   check('Änderung abgelehnt: ungültiger Wert, unbekannter Schlüssel, kein Objekt', /decimals/.test(S.applyPatch(S.DEFAULT_SETTINGS, { viewer: { decimals: 1.5 } }).error ?? '')
     && /viewer\.speed/.test(S.applyPatch(S.DEFAULT_SETTINGS, { viewer: { speed: 2 } }).error ?? '') && /theme/.test(S.applyPatch(S.DEFAULT_SETTINGS, { theme: 'light' }).error ?? '')
     && !!S.applyPatch(S.DEFAULT_SETTINGS, null).error);
+  check('Build time limit: default 10 min, 0 means no limit, negative or fractional values are rejected',
+    S.DEFAULT_SETTINGS.build.timeLimit === 10 && S.applyPatch(S.DEFAULT_SETTINGS, { build: { timeLimit: 0 } }).settings?.build.timeLimit === 0
+    && /timeLimit/.test(S.applyPatch(S.DEFAULT_SETTINGS, { build: { timeLimit: -5 } }).error ?? '') && /timeLimit/.test(S.applyPatch(S.DEFAULT_SETTINGS, { build: { timeLimit: 2.5 } }).error ?? '')
+    && S.cleanSettings({ build: { timeLimit: 45 } }).settings.build.timeLimit === 45 && S.cleanSettings({ build: { timeLimit: 'x' } }).ignored.join() === 'build.timeLimit');
   check('Belegungen: SOMA tauscht mit Umschalt/Strg wie OrbitControls, SolidWorks lässt links frei, Rhino zoomt mit Strg + rechts',
     S.navAction('soma', 'left', '') === 'rotate' && S.navAction('soma', 'left', 'ctrl') === 'pan' && S.navAction('soma', 'right', 'shift') === 'rotate'
     && S.navAction('solidworks', 'left', '') === null && S.navAction('solidworks', 'middle', 'ctrl') === 'pan' && S.navAction('rhino', 'right', 'ctrl') === 'zoom'

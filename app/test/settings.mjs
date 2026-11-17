@@ -206,6 +206,12 @@ try {
   check('Eine Nachkommastelle: 40.0 × 30.0 × 5.0 mm', mt.includes('40.0 × 30.0 × 5.0 mm'), mt.replace(/\s+/g, ' ').slice(0, 60));
   const bad = await ev(() => window.soma.settings.set({ viewer: { decimals: 9 } }));
   check('Ungültiger Wert (9 Nachkommastellen) wird abgelehnt, nichts geschrieben', !bad.ok && /decimals/.test(bad.error ?? '') && fileSettings()?.viewer?.decimals === 1, bad.error);
+  // Build time limit (issue #13): the select writes settings.json, the viewer settings stay
+  const limitOpts = await ev(() => [...document.querySelectorAll('#st-build-limit option')].map((o) => o.textContent));
+  await setSelect('st-build-limit', '30');
+  await waitFor('Build time limit saved', () => window.__t.appSettings().settings.build.timeLimit === 30, 10000).catch(() => {});
+  check('Build time limit: choices from 5 min to no limit, 30 min is in settings.json',
+    limitOpts.join() === '5 min,10 min,20 min,30 min,1 h,2 h,No limit' && fileSettings()?.build?.timeLimit === 30 && fileSettings()?.viewer?.decimals === 1, limitOpts.join());
   await ev(() => window.__t.closeSettings());
   await domClick('btn-measure');
 

@@ -6,10 +6,15 @@ import { affectsBuild } from '../shared/editable';
 import type { BuildResult, BuildStatus, ParamInfo } from '../shared/types';
 import { log } from './log';
 import { pythonEnv, pythonExe, warmDir } from './paths';
+import { readSettings } from './settings';
 import { IGNORED_TOP } from './watcher';
 
 const DEBOUNCE_MS = 700;
-const TIMEOUT_MS = 10 * 60 * 1000;
+/** Time limit of a build from the settings (issue #13), read at every start so a change applies to the next build. 0: none. */
+function buildLimitMinutes(): number {
+  try { return readSettings().settings.build.timeLimit; } catch { return 10; }
+}
+const fmtLimit = (min: number) => (min % 60 === 0 && min >= 60 ? `${min / 60} h` : `${min} min`);
 /**
  * Fassung von model.glb, model.map.json und geometry/, gleich OUTPUT_FORMAT in python/soma/build.py. Nur ein Build mit
  * dieser Nummer wird beim Öffnen ohne Neubau gezeigt (currentBuild).
@@ -117,12 +122,13 @@ export class BuildManager extends EventEmitter {
     this.proc = child;
     let done = false;
     let killedByTimeout = false;
-    const timeout = setTimeout(() => { killedByTimeout = true; child.kill(); }, TIMEOUT_MS);
+    const limit = buildLimitMinutes();
+    const timeout = limit > 0 ? setTimeout(() => { killedByTimeout = true; child.kill(); }, limit * 60 * 1000) : null;
 
     const finish = (result: BuildResult) => {
       if (done) return;
       done = true;
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       this.proc = null;
       if (this.disposed) return;
       logBuild(result, (Date.now() - startedAt) / 1000, reason);
@@ -140,7 +146,7 @@ export class BuildManager extends EventEmitter {
     for (const l of w.lines) w.onLine(l);
     w.onError = (e) => finish(errorResult('PythonStart', `Could not start Python (${pythonExe()}): ${e.message}`));
     w.onClose = (code) => {
-      if (killedByTimeout) return finish(errorResult('Timeout', `The build was stopped after ${TIMEOUT_MS / 1000} s (time limit).`));
+      if (killedByTimeout) return finish(errorResult('Timeout', `The build was stopped after ${fmtLimit(limit)} (time limit). You can raise the limit in Settings, Viewer, Build time limit.`));
       finish(errorResult('NoResult', `The build returned no result (exit code ${code}).\n${(w.err || w.out).slice(-2000)}`));
     };
   }

@@ -26,17 +26,22 @@ export interface ViewerPrefs {
 }
 /** Startseite (E94): Karte „New to SOMA?“ mit dem Tutorial. „Got it“ blendet sie aus. `updateCheck`: auf GitHub nach einer neuen Version fragen. */
 export interface StartPrefs { tutorialCard: boolean; updateCheck: boolean }
-export interface AppSettings { viewer: ViewerPrefs; start: StartPrefs }
+/** Building (issue #13): `timeLimit` in minutes after which a build is stopped, 0 means no limit (the user can still stop it). */
+export interface BuildPrefs { timeLimit: number }
+export interface AppSettings { viewer: ViewerPrefs; start: StartPrefs; build: BuildPrefs }
 /** Änderung aus dem Renderer: nur die Werte, die sich ändern sollen. */
-export interface SettingsPatch { viewer?: Partial<ViewerPrefs>; start?: Partial<StartPrefs> }
+export interface SettingsPatch { viewer?: Partial<ViewerPrefs>; start?: Partial<StartPrefs>; build?: Partial<BuildPrefs> }
 /** `problem`: settings.json war nicht lesbar oder enthielt Unbekanntes, es gelten (teils) die Vorgaben. */
 export interface SettingsState { settings: AppSettings; problem?: string }
 export interface SettingsResult extends SettingsState { ok: boolean; error?: string; backup?: string | null }
 
 export const DECIMALS = { min: 0, max: 4 };
+/** Choices for the build time limit in minutes, 0: no limit. Large models with many fillets or booleans can take a while. */
+export const BUILD_TIME_LIMITS = [5, 10, 20, 30, 60, 120, 0];
 export const DEFAULT_SETTINGS: AppSettings = {
   viewer: { navigation: 'soma', invertZoom: false, projection: 'perspective', edges: true, wireframe: false, transparent: false, axes: false, decimals: 2 },
   start: { tutorialCard: true, updateCheck: true },
+  build: { timeLimit: 10 },
 };
 
 const NAV = (spec: string): NavBinding[] => spec.split(',').map((s) => {
@@ -94,8 +99,11 @@ const VIEWER_CHECKS: { [K in keyof ViewerPrefs]: (v: unknown) => boolean } = {
   navigation: isNav, invertZoom: isBool, projection: isProjection, edges: isBool, wireframe: isBool, transparent: isBool, axes: isBool, decimals: isDecimals,
 };
 const START_CHECKS: { [K in keyof StartPrefs]: (v: unknown) => boolean } = { tutorialCard: isBool, updateCheck: isBool };
+// Any whole number of minutes up to a day is accepted (settings.json may be edited by hand), the interface offers BUILD_TIME_LIMITS
+const isTimeLimit = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 24 * 60;
+const BUILD_CHECKS: { [K in keyof BuildPrefs]: (v: unknown) => boolean } = { timeLimit: isTimeLimit };
 /** Bereiche der Einstellungen mit der Prüfung je Wert. */
-const SECTIONS: Record<keyof AppSettings, Record<string, (v: unknown) => boolean>> = { viewer: VIEWER_CHECKS, start: START_CHECKS };
+const SECTIONS: Record<keyof AppSettings, Record<string, (v: unknown) => boolean>> = { viewer: VIEWER_CHECKS, start: START_CHECKS, build: BUILD_CHECKS };
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /**

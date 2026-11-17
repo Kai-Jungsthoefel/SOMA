@@ -1,4 +1,4 @@
-import { DECIMALS, NAV_PRESETS, navLegend, type NavPreset, type Projection, type SettingsPatch, type SettingsResult, type SettingsState, type ViewerPrefs } from '../shared/settings';
+import { BUILD_TIME_LIMITS, DECIMALS, NAV_PRESETS, navLegend, type NavPreset, type Projection, type SettingsPatch, type SettingsResult, type SettingsState, type ViewerPrefs } from '../shared/settings';
 import type { AboutInfo, ComponentInfo, SomaApi, StorageArea, StorageEntry, StorageStats } from '../shared/types';
 import { icon } from './icons';
 import type { SettingsPage } from './settings';
@@ -74,9 +74,11 @@ export class ViewerPage implements SettingsPage {
 
   show(): void { this.render(); }
 
-  private async change(patch: Partial<ViewerPrefs>): Promise<void> {
+  private async change(patch: Partial<ViewerPrefs>): Promise<void> { return this.patch({ viewer: patch }); }
+
+  private async patch(patch: SettingsPatch): Promise<void> {
     let r: SettingsResult;
-    try { r = await this.deps.set({ viewer: patch }); } catch (e) { r = { ok: false, error: errText(e), ...this.deps.current() }; }
+    try { r = await this.deps.set(patch); } catch (e) { r = { ok: false, error: errText(e), ...this.deps.current() }; }
     if (!r.ok) this.deps.toast(`The setting was not changed: ${r.error ?? 'unknown error'}`, 'error');
     else if (r.backup) this.deps.toast(`Saved. The previous settings.json is in the backup: ${r.backup}`, 'info');
     this.render();
@@ -95,9 +97,16 @@ export class ViewerPage implements SettingsPage {
     digits.value = String(v.decimals);
     digits.addEventListener('change', () => void this.change({ decimals: Number(digits.value) }));
     const sample = (12.3456).toLocaleString('en-US', { minimumFractionDigits: v.decimals, maximumFractionDigits: v.decimals });
+    // A value set by hand in settings.json that is not among the choices still shows as selected
+    const cur = settings.build.timeLimit;
+    const limits = BUILD_TIME_LIMITS.includes(cur) ? BUILD_TIME_LIMITS : [...BUILD_TIME_LIMITS.filter((m) => m !== 0), cur].sort((a, b) => a - b).concat(cur ? [0] : []);
+    const limit = el('select', { id: 'st-build-limit', className: 'sk-select st-select narrow' },
+      ...limits.map((m) => el('option', { value: String(m), textContent: m === 0 ? 'No limit' : m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min` })));
+    limit.value = String(cur);
+    limit.addEventListener('change', () => void this.patch({ build: { timeLimit: Number(limit.value) } }));
 
     this.root.replaceChildren(el('div', { className: 'st-pg' },
-      ...head('Viewer', 'How the 3D view responds to the mouse and what it shows when a model opens. Changes apply right away.'),
+      ...head('Viewer', 'How the 3D view responds to the mouse, what it shows when a model opens and how long a build may take. Changes apply right away.'),
       problem ? el('div', { className: 'st-problem' }, icon('alert', 14, 2), el('span', { textContent: problem })) : null,
       group('Navigation',
         field('Mouse buttons', 'Rotate, pan and zoom like in the program you know. A left click always selects, a double click sets the pivot.', nav, legend),
@@ -115,6 +124,8 @@ export class ViewerPage implements SettingsPage {
           toggle('st-axes', v.axes, 'Origin and axes', (on) => void this.change({ axes: on })))),
       group('Measurements',
         field('Decimal places', `In the measurement card and at the measuring line, for example ${sample} mm. Text sent to the agent always has three decimals.`, digits)),
+      group('Building',
+        field('Build time limit', 'A build that takes longer is stopped, so a stuck model does not keep the computer busy. Raise it for large models. Applies from the next build, you can always stop a build yourself.', limit)),
     ));
   }
 
