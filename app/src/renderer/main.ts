@@ -1788,10 +1788,12 @@ terminals.onStripClick = () => setAgentCollapsed(false);
 // The dots first: the chat reports its state from its constructor on
 const chatDot = el('span', { className: 'ai-dot' });
 const chatStripDot = el('span', { className: 'ai-dot' });
+/** For revealChat, declared before the chat: it reports its state from its constructor on. */
+let lastChatState: ChatState = 'off';
 const chat = new SomaChat({
   api, toast, store,
   openTerminal: () => { void terminals.add({ title: 'Terminal' }); },
-  onState: (s) => renderChatDot(s),
+  onState: (s) => { renderChatDot(s); revealChat(s); },
 });
 $('term-panes').append(chat.el);
 const chatLabel = el('button', { className: 't', title: 'SOMA AI, the agent built into SOMA' }, chatDot, el('span', { textContent: 'SOMA AI' }));
@@ -1811,6 +1813,19 @@ function renderChatDot(s: ChatState): void {
   }
 }
 renderChatDot('off');
+
+/**
+ * SOMA AI starts working or asks something: the agent area opens (it follows the remembered layout and may have been
+ * collapsed, then SOMA AI worked unseen). Only at the change, so it can be collapsed again while SOMA AI works. A
+ * question also brings the chat to the front, it waits for an answer there.
+ */
+function revealChat(s: ChatState): void {
+  const was = lastChatState;
+  lastChatState = s;
+  if (s === was || (s !== 'work' && s !== 'wait')) return;
+  if ($('terminals').classList.contains('collapsed')) setAgentCollapsed(false);
+  if (s === 'wait' && !chatOn) void showChat(true);
+}
 
 /** SOMA AI to the front (or away from it, when a terminal comes to the front). */
 function showChat(on: boolean): Promise<void> {

@@ -266,12 +266,26 @@ export class SomaChat {
   private starting: Promise<boolean> | null = null;
   /** Open question cards by request id: closed when the run ends without an answer (pi drops its dialogs then). */
   private closers = new Map<string, () => void>();
+  /**
+   * The history follows new steps and answers while it is scrolled to the end. Scrolled up by the person, it stays
+   * where they read. Text streams into existing rows, so it is not enough to scroll when a row is added.
+   */
+  private follow = true;
 
   constructor(private readonly deps: ChatDeps) {
     this.top = el('div', { className: 'ai-top' });
     this.list = el('div', { className: 'ai-list' });
     this.panel = el('div', { className: 'ai-panel' });
     this.body = el('div', { className: 'ai-body' }, this.panel, this.list);
+    this.body.addEventListener('scroll', () => {
+      // Hidden (a terminal in front, the agent area collapsed) it has no height and says nothing about the person
+      if (!this.body.clientHeight) return;
+      this.follow = this.body.scrollHeight - this.body.scrollTop - this.body.clientHeight < 60;
+    });
+    // Growing rows, a taller input, the chat shown again: to the end while following
+    const keep = new ResizeObserver(() => { if (this.follow) this.toEnd(); });
+    keep.observe(this.list);
+    keep.observe(this.body);
     this.chips = el('div', { className: 'ai-chips' });
     this.input = el('textarea', { className: 'ai-input', rows: 2, placeholder: 'Describe what you want, or add a sketch or photo …' });
     this.input.setAttribute('aria-label', 'Message to SOMA AI');
@@ -704,6 +718,8 @@ export class SomaChat {
     const message = [...this.notes.map((n) => n.text), typed].filter(Boolean).join('\n');
     if (!message && !this.images.length) return;
     if (!(await this.ensureStarted())) return;
+    // Who sends wants to see the answer, also after scrolling up to read
+    this.follow = true;
     const cmd: Json = { type: 'prompt', message: message || 'Here is a picture.' };
     if (this.images.length) cmd.images = this.images.map((m) => ({ type: 'image', data: m.data, mimeType: m.mimeType }));
     if (this.running) cmd.streamingBehavior = 'steer';
@@ -796,7 +812,19 @@ export class SomaChat {
     if (!(await this.ensureStarted())) return;
     const r = await this.deps.api.ai.command({ type: 'get_available_models' });
     const models = arr(obj(r.data).models).map(obj).map((m) => ({ provider: str(m.provider), id: str(m.id), name: str(m.name) || str(m.id) }));
-    showModelMenu(this.menu, this.modelBtn, models, this.model, (m) => void this.useModel(m.provider, m.id));
+    showModelMenu(this.menu, this.modelBtn, models, this.model, (m) => void this.pickModel(m.provider, m.id));
+  }
+
+  /**
+   * Chosen in the chat: for this conversation and, like in Settings > SOMA AI, for new ones. Before, set_model only
+   * changed the running pi, and Settings still showed the old model.
+   */
+  private async pickModel(provider: string, modelId: string): Promise<void> {
+    await this.useModel(provider, modelId);
+    // pi refused it (useModel said so): nothing to save
+    if (this.model?.provider !== provider || this.model.id !== modelId) return;
+    const r =await this.deps.api.ai.setDefaultModel(provider, modelId).catch((e) => ({ ok: false, error: String(e) }));
+    if (!r.ok) this.deps.toast(`The model is used in this conversation, but not saved for new ones: ${r.error ?? 'unknown error'}`, 'error');
   }
 
   // ---- Records of pi ---------------------------------------------------------------------------------------------
@@ -874,9 +902,12 @@ export class SomaChat {
 
   private append(node: HTMLElement): void {
     this.list.querySelector('.ai-welcome')?.remove();
-    const stick = this.body.scrollHeight - this.body.scrollTop - this.body.clientHeight < 60;
     this.list.append(node);
-    if (stick) this.body.scrollTop = this.body.scrollHeight;
+    if (this.follow) this.toEnd();
+  }
+
+  private toEnd(): void {
+    this.body.scrollTop = this.body.scrollHeight;
   }
 
   private messageStart(m: Json): void {
@@ -1065,7 +1096,8 @@ export class SomaChat {
         if (m.stopReason === 'error') this.problem(str(m.errorMessage), false);
       } else if (m.role === 'compactionSummary') this.quiet('info', 'The older part of this conversation was summarized.');
     }
-    this.body.scrollTop = this.body.scrollHeight;
+    this.follow = true;
+    this.toEnd();
   }
 
   // ---- Questions and messages -------------------------------------------------------------------------------------
