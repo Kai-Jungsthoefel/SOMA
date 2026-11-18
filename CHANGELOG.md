@@ -16,6 +16,8 @@ the version is bumped.
 - Settings > Viewer > Build time limit: how long a build may take before SOMA stops it, from 5 minutes to 2 hours or no limit. The default stays 10 minutes. The message of a stopped build says where to raise it (issue #13).
 - A loading screen while a new model is created ("New model", the tutorial, a CadQuery script): it shows at once, names the step (first build, version history, opening) and stays until the viewer, the files and the agent panel have loaded the model. Before, the old model stayed on screen for several seconds without a sign that anything happened. The tutorial's tour starts once the model is loaded.
 
+- SOMA AI: an effort setting, how long SOMA AI thinks before it acts (Low to Max, the levels the model offers). The button next to the model below the chat input and Settings > SOMA AI change it, for the open conversation and new ones. More effort gives better models, so the recommendation now says High effort or more.
+
 ### Fixed
 
 - Exporting a single part as STEP or BREP could write only a shell instead of a solid, when the part was a CadQuery compound holding one solid. Thanks to SukbeomH (fork SukbeomH/SOMA) for spotting this.

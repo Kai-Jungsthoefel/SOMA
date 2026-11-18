@@ -108,7 +108,8 @@ it shows what it does in plain words instead of code.
 The first time, its tab asks for a sign-in. **Sign in with ChatGPT** uses your ChatGPT Plus or Pro plan and opens your
 browser. Or paste an **API key** from Anthropic (Claude), OpenAI, Google Gemini, OpenRouter or OpenCode (Zen or Go),
 billed per use by the provider. **How do I get a key?** opens the page of the provider. The sign-in stays on this
-computer. For the best results we recommend Opus 5.5 (Claude, with an API key) or GPT-6 Astra (with ChatGPT). Before
+computer. For the best results we recommend Opus 5.5 (Claude, with an API key) or GPT-6 Astra (with ChatGPT), with
+High effort or more. Before
 the first message, a note names the risks, **Got it** starts the chat.
 
 ![SOMA AI](../help/chat.png)
@@ -121,7 +122,8 @@ the first message, a note names the risks, **Got it** starts the chat.
 6. **Working**: shows that SOMA AI is working and for how long. Esc in the input stops it. At the end of its answer, "Worked for" says how long it took.
 7. **Add a picture**: a photo or a sketch with measurements. Pasting or dropping a picture into the chat works too. The **microphone** next to it is voice input (see "Voice input").
 8. **Model**: the AI model SOMA AI thinks with. The recommended models come first, the field at the top searches. The choice also applies to new conversations, like in Settings > SOMA AI.
-9. **Send and stop**: sends your message (Enter). While SOMA AI works and the input is empty, it stops SOMA AI.
+9. **Effort**: how long SOMA AI thinks before it acts, from Low to Max (the levels the model offers). More effort gives better models but is slower and uses more of your plan or credit. We recommend High or more. The choice also applies to new conversations, like in Settings > SOMA AI. A model that does not think has no effort button.
+10. **Send and stop**: sends your message (Enter). While SOMA AI works and the input is empty, it stops SOMA AI.
 
 While SOMA AI works you can already type: it reads your message after the current step. **Send to agent** puts a
 part, a measurement or a markup into its input. A build that fails while it works is normal, it fixes the code
@@ -149,8 +151,8 @@ outside the model, downloads something or installs software: **Allow**, **Allow 
 to be dangerous, but it cannot catch everything: only give it files from sources you trust. What you type and the files
 it reads go to the provider you signed in with.
 
-Settings > SOMA AI shows the sign-ins, the model, voice input, what the conversation of the open model used (tokens,
-and the cost with an API key) and the note about the risks again.
+Settings > SOMA AI shows the sign-ins, the model and its effort, voice input, what the conversation of the open model
+used (tokens, and the cost with an API key) and the note about the risks again.
 
 ## Viewer
 
@@ -318,7 +320,7 @@ The folder itself is the model: there is no .soma file to save, and your files s
 
 1. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, decimal places of measurements, and the build time limit (10 minutes unless you change it, or no limit).
 2. **Shortcuts**: all keys and mouse actions.
-3. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search), what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
+3. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search) and its effort, what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
 4. **Skills**: edit the built-in skills or write your own. They are available in every model.
 5. **Storage**: how much space SOMA's data takes, and clearing the preview cache.
 6. **About**: versions, components and the agents found, the folders of SOMA including its logs, and whether the start page checks GitHub for new versions.
