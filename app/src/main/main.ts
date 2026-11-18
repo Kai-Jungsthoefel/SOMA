@@ -23,7 +23,7 @@ import { fileOpBlockReason } from '../shared/editable';
 import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
 import { piEntry } from './somaai';
 import { allowMicrophone, fakeMicrophone, micAccess, Voice } from './voice';
-import { aiAccounts, cancelSignIn, defaultModel, listModels, listSessions, saveApiKey, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
+import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, saveApiKey, setDefaultEffort, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -238,6 +238,8 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('ai:models', () => listModels());
   ipcMain.handle('ai:defaultModel', () => defaultModel());
   ipcMain.handle('ai:setDefaultModel', (_e, provider: unknown, id: unknown) => setDefaultModel(provider, id));
+  ipcMain.handle('ai:defaultEffort', () => defaultEffort());
+  ipcMain.handle('ai:setDefaultEffort', (_e, level: unknown) => setDefaultEffort(level));
   ipcMain.handle('voice:status', () => voice.status());
   ipcMain.handle('voice:check', () => voice.check());
   ipcMain.handle('voice:install', (_e, language: unknown) => voice.install(language));

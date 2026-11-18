@@ -22,7 +22,7 @@ const GUARD_PACKAGE = ['node_modules', '@gotgenes', 'pi-permission-system'];
 /** Commands the chat may send to pi. Everything else (bash, export_html, switch_session …) stays out of reach. */
 const COMMANDS = new Set([
   'prompt', 'steer', 'follow_up', 'abort', 'new_session', 'get_state', 'get_messages', 'get_available_models', 'set_model',
-  'set_thinking_level', 'get_session_stats', 'get_last_assistant_text', 'compact', 'get_commands',
+  'set_thinking_level', 'get_available_thinking_levels', 'get_session_stats', 'get_last_assistant_text', 'compact', 'get_commands',
 ]);
 /** Images of a prompt travel as base64 in the command. Larger than this is a mistake, not a sketch photo. */
 const MAX_COMMAND = 40_000_000;

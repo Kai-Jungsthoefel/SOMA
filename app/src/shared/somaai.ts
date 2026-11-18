@@ -33,6 +33,21 @@ export const RECOMMENDED_MODEL: Record<string, string> = {
 /** The models the recommendation names, under every provider that offers them. */
 export const isRecommendedModel = (id: string) => /^(claude-opus-5-5|gpt-6-astra|anthropic\/claude-opus-5\.5|openai\/gpt-6-astra)$/.test(id);
 
+/**
+ * Effort: pi's thinking levels, how long the model thinks before it answers. pi keeps the one for new conversations
+ * in settings.json (defaultThinkingLevel, its own default "medium") and clamps it to what the model supports.
+ */
+export const EFFORT_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Effort = (typeof EFFORT_LEVELS)[number];
+export const EFFORT_LABEL: Record<Effort, string> = {
+  off: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max',
+};
+/** pi's level when nothing is saved. */
+export const PI_DEFAULT_EFFORT: Effort = 'medium';
+/** Wish of the user (2026-11-18): the recommendation says that more effort gives better results. */
+export const RECOMMENDED_EFFORT: Effort = 'high';
+export const isEffort = (v: unknown): v is Effort => typeof v === 'string' && (EFFORT_LEVELS as readonly string[]).includes(v);
+
 /** A model SOMA AI can use (pi's provider and model id, the name people see). */
 export interface AiModel { provider: string; id: string; name: string }
 

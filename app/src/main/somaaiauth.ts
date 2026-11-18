@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AI_KEY_PROVIDERS, CHATGPT_PROVIDER, RECOMMENDED_MODEL, type AiAccount, type AiModel, type AiSession } from '../shared/somaai';
+import { AI_KEY_PROVIDERS, CHATGPT_PROVIDER, isEffort, RECOMMENDED_MODEL, type AiAccount, type Effort, type AiModel, type AiSession } from '../shared/somaai';
 import type { AiSignInResult } from '../shared/types';
 import { aiDir, piIndex, piProcessEnv, readJson, writeJson } from './somaai';
 
@@ -227,6 +227,25 @@ export async function setDefaultModel(provider: unknown, id: unknown): Promise<{
     writeJson(settingsFile(), s);
   } catch (e) { return { ok: false, error: `The model could not be saved: ${e instanceof Error ? e.message : String(e)}` }; }
   console.log(`[somaai] model for new conversations: ${provider}/${id}`);
+  return { ok: true };
+}
+
+/** The effort pi starts new conversations with (settings.json), null when pi's own default applies. */
+export function defaultEffort(): Effort | null {
+  let s: Record<string, unknown>;
+  try { s = readJson(settingsFile()); } catch { return null; }
+  return isEffort(s.defaultThinkingLevel) ? s.defaultThinkingLevel : null;
+}
+
+/** Settings > SOMA AI and the chat: the effort for new conversations. pi clamps it to what the model supports. */
+export function setDefaultEffort(level: unknown): { ok: boolean; error?: string } {
+  if (!isEffort(level)) return { ok: false, error: 'Unknown effort.' };
+  try {
+    const s = readJson(settingsFile());
+    s.defaultThinkingLevel = level;
+    writeJson(settingsFile(), s);
+  } catch (e) { return { ok: false, error: `The effort could not be saved: ${e instanceof Error ? e.message : String(e)}` }; }
+  console.log(`[somaai] effort for new conversations: ${level}`);
   return { ok: true };
 }
 

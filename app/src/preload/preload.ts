@@ -89,6 +89,8 @@ const api: SomaApi = {
     models: () => ipcRenderer.invoke('ai:models'),
     defaultModel: () => ipcRenderer.invoke('ai:defaultModel'),
     setDefaultModel: (provider, id) => ipcRenderer.invoke('ai:setDefaultModel', provider, id),
+    defaultEffort: () => ipcRenderer.invoke('ai:defaultEffort'),
+    setDefaultEffort: (level) => ipcRenderer.invoke('ai:setDefaultEffort', level),
     sessions: () => ipcRenderer.invoke('ai:sessions'),
     switchSession: (id) => ipcRenderer.invoke('ai:switchSession', id),
   },

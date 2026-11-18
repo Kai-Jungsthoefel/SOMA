@@ -46,17 +46,20 @@ export async function startMockLlm(steps) {
   return { port, requests, close: () => new Promise((r) => srv.close(r)) };
 }
 
-/** Points pi in SOMA's app data (`ud`) at the fake model: a provider "mock" in models.json, chosen in settings.json. */
-export function useMockModel(ud, port, name = 'Mock CAD') {
+/**
+ * Points pi in SOMA's app data (`ud`) at the fake model: a provider "mock" in models.json, chosen in settings.json.
+ * `effort`: the fake model thinks (reasoning) and starts with this level, so the chat shows its effort button.
+ */
+export function useMockModel(ud, port, name = 'Mock CAD', effort = null) {
   const dir = path.join(ud, 'somaai');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'models.json'), JSON.stringify({
     providers: {
       mock: {
         name: 'Mock', baseUrl: `http://127.0.0.1:${port}/v1`, api: 'openai-completions', apiKey: 'mock-key',
-        models: [{ id: 'mock-cad', name, input: ['text', 'image'], contextWindow: 200000, maxTokens: 8000, cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } }],
+        models: [{ id: 'mock-cad', name, ...(effort ? { reasoning: true } : {}), input: ['text', 'image'], contextWindow: 200000, maxTokens: 8000, cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } }],
       },
     },
   }, null, 2));
-  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-cad', defaultThinkingLevel: 'off' }, null, 2));
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ defaultProvider: 'mock', defaultModel: 'mock-cad', defaultThinkingLevel: effort ?? 'off' }, null, 2));
 }

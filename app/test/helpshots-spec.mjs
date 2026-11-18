@@ -63,6 +63,7 @@ export const SHOTS = [
       { label: 'Working', sel: '.ai-status', at: 'tr', box: true },
       { label: 'Add a picture', sel: '.ai-composer [aria-label="Add a picture"]', at: 't' },
       { label: 'Model', sel: '.ai-model', at: 't' },
+      { label: 'Effort', sel: '.ai-effort', at: 't' },
       { label: 'Send and stop', sel: '.ai-send', at: 't' },
     ],
   },

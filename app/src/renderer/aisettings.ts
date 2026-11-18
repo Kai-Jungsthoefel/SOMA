@@ -1,7 +1,7 @@
-import { accountLabel, CHATGPT_PROVIDER, type AiAccount, type AiModel } from '../shared/somaai';
+import { accountLabel, CHATGPT_PROVIDER, EFFORT_LABEL, EFFORT_LEVELS, PI_DEFAULT_EFFORT, RECOMMENDED_EFFORT, type AiAccount, type AiModel, type Effort } from '../shared/somaai';
 import type { AiStatus, SomaApi, VoiceStatus } from '../shared/types';
 import { VOICE_LANGUAGES, VOICE_MODEL } from '../shared/voice';
-import { keyForm, showModelMenu } from './aiparts';
+import { effortText, keyForm, showEffortMenu, showModelMenu } from './aiparts';
 import { icon } from './icons';
 import type { SettingsPage } from './settings';
 import { field, group, head } from './settingspages';
@@ -26,6 +26,8 @@ interface AiPageDeps {
   accountsChanged(provider?: string): void | Promise<void>;
   /** Another model: the conversation of the open model takes it too (chat.ts useModel). */
   useModel(provider: string, id: string): void | Promise<void>;
+  /** Another effort: the conversation of the open model takes it too (chat.ts useEffort). */
+  useEffort(level: Effort): void | Promise<unknown>;
   /** The note before the first message once more (chat.ts). */
   showNote(): void;
   /** A model is open (its conversation has a usage). */
@@ -45,6 +47,8 @@ export class AiPage implements SettingsPage {
   private models: AiModel[] | null = null;
   private modelsError = '';
   private current: { provider: string; id: string } | null = null;
+  /** Effort for new conversations, null: pi's default. */
+  private effort: Effort | null = null;
   private usage: { stats: Json; provider: string } | null = null;
   private signing = false;
   private signInUrl = '';
@@ -76,15 +80,16 @@ export class AiPage implements SettingsPage {
     const seq = ++this.seq;
     this.render();
     const api = this.deps.api.ai;
-    const [status, accounts, current, voice] = await Promise.all([
+    const [status, accounts, current, effort, voice] = await Promise.all([
       api.status().catch(() => null), api.accounts().catch(() => [] as AiAccount[]), api.defaultModel().catch(() => null),
-      this.deps.api.voice.status().catch(() => null),
+      api.defaultEffort().catch(() => null), this.deps.api.voice.status().catch(() => null),
     ]);
     if (seq !== this.seq) return;
     this.voice = voice;
     this.status = status;
     this.accounts = accounts;
     this.current = current;
+    this.effort = effort;
     this.render();
     // Slower: the list of models (pi's SDK, about a second) and what the conversation used
     const [models, usage] = await Promise.all([
@@ -139,6 +144,15 @@ export class AiPage implements SettingsPage {
     this.render();
   }
 
+  private async pickEffort(level: Effort): Promise<void> {
+    const r = await this.deps.api.ai.setDefaultEffort(level).catch((e) => ({ ok: false, error: String(e) }));
+    if (!r.ok) { this.deps.toast(r.error ?? 'The effort could not be changed.', 'error'); return; }
+    this.effort = level;
+    if (this.deps.modelOpen()) await this.deps.useEffort(level);
+    this.deps.toast(`SOMA AI uses ${effortText(level).toLowerCase()} from the next message on.`);
+    this.render();
+  }
+
   private accountRow(a: AiAccount): HTMLElement {
     const out = el('button', { className: 'btn sm', textContent: 'Sign out' });
     out.dataset.act = 'signout';
@@ -189,9 +203,21 @@ export class AiPage implements SettingsPage {
       if (this.models) showModelMenu(this.menu, btn, this.models, this.current, (m) => void this.pickModel(m), 'right');
     });
     const rec = el('div', { className: 'st-ai-rec' }, icon('sparkle', 13, 2),
-      el('span', {}, 'For the best results we recommend ', el('b', { textContent: 'Opus 5.5' }), ' (Claude, with an API key) or ', el('b', { textContent: 'GPT-6 Astra' }), ' (with ChatGPT).'));
+      el('span', {}, 'For the best results we recommend ', el('b', { textContent: 'Opus 5.5' }), ' (Claude, with an API key) or ', el('b', { textContent: 'GPT-6 Astra' }), ' (with ChatGPT), with ', el('b', { textContent: `${EFFORT_LABEL[RECOMMENDED_EFFORT]} effort` }), ' or more.'));
     return field('Model', 'The AI model SOMA AI thinks with, for new conversations and the one of the open model. The model button below the chat input changes it too.',
       btn, el('div', {}, rec, this.modelsError ? el('div', { className: 'ai-err', textContent: this.modelsError }) : null));
+  }
+
+  private effortRow(): HTMLElement {
+    const level = this.effort ?? PI_DEFAULT_EFFORT;
+    const btn = el('button', { className: 'btn sm st-ai-model', disabled: !this.accounts.length }, el('span', { textContent: EFFORT_LABEL[level] }), icon('down', 12, 2));
+    btn.dataset.act = 'effort';
+    // No model runs here: all of pi's levels, it takes the nearest one a model supports
+    btn.addEventListener('click', () => showEffortMenu(this.menu, btn, [...EFFORT_LEVELS], level, (e) => void this.pickEffort(e), 'right'));
+    const rec = el('div', { className: 'st-ai-rec' }, icon('sparkle', 13, 2),
+      el('span', {}, 'More effort gives better models. We recommend ', el('b', { textContent: EFFORT_LABEL[RECOMMENDED_EFFORT] }), ' or more.'));
+    return field('Effort', 'How long SOMA AI thinks before it acts. More effort is slower and uses more of your plan or credit. A model that cannot think that hard uses its highest level. The effort button below the chat input changes it too.',
+      btn, el('div', {}, rec));
   }
 
   private usageRows(): HTMLElement[] {
@@ -289,7 +315,7 @@ export class AiPage implements SettingsPage {
       group('Sign-ins',
         ...(this.accounts.length ? this.accounts.map((a) => this.accountRow(a)) : [el('p', { className: 'st-lead', textContent: 'Not signed in yet. SOMA AI needs one of these to work.' })]),
         ...this.signInRows()),
-      group('Model', this.modelRow()),
+      group('Model', this.modelRow(), this.effortRow()),
       group('Voice input', this.voiceRow()),
       group('Usage', ...this.usageRows()),
       group('Safety', ...this.safety()),
@@ -300,7 +326,7 @@ export class AiPage implements SettingsPage {
 
   state() {
     return {
-      text: this.root.innerText, accounts: this.accounts, models: this.models?.length ?? null, current: this.current, signing: this.signing,
+      text: this.root.innerText, accounts: this.accounts, models: this.models?.length ?? null, current: this.current, effort: this.effort, signing: this.signing,
       usage: !!this.usage, modelsError: this.modelsError, voice: this.voice,
     };
   }

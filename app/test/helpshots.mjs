@@ -23,7 +23,7 @@ const mock = await startMockLlm([
   ] } },
   { text: 'Done.' },
 ]);
-useMockModel(ud, mock.port, 'Claude Opus 5.5');
+useMockModel(ud, mock.port, 'Claude Opus 5.5', 'high');
 fs.writeFileSync(path.join(ud, 'somaai', 'auth.json'), JSON.stringify({ anthropic: { type: 'api_key', key: 'sk-ant-guide' } }));
 
 const OUT = path.join(APP, 'resources', 'help');

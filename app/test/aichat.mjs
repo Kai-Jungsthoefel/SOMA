@@ -95,6 +95,21 @@ try {
   st = await chat();
   const welcome = await ev(() => document.querySelector('.ai-welcome')?.textContent ?? '');
   check('After "Got it": welcome with suggestions, the recommended model of the new sign-in on the chip', welcome.includes('What do you want to make?') && st.model?.name === 'Claude Opus 5.5' && !st.locked, `${st.model?.name}`);
+  // Effort: Opus 5.5 thinks, so the button shows. The menu lists its levels with the recommended one marked
+  await app.waitFor('effort button', () => window.__t.chat().effortShown, 20000);
+  await ev(() => document.querySelector('.ai-effort').click());
+  await app.waitFor('effort menu', () => !document.querySelector('.ai-menu').hidden && !!document.querySelector('.ai-menu [data-effort]'), 20000);
+  const eff = await ev(() => ({
+    levels: [...document.querySelectorAll('.ai-menu [data-effort]')].map((b) => b.dataset.effort),
+    rec: document.querySelector('.ai-menu [data-effort="high"]')?.textContent, note: document.querySelector('.ai-menu .mnote')?.textContent,
+  }));
+  await shot('effort-menu');
+  check('Effort menu: the levels of the model, High marked as recommended, a word on what more effort does',
+    eff.levels.includes('high') && eff.levels.length > 2 && eff.rec === 'HighRecommended' && eff.note.includes('We recommend High or more'), JSON.stringify(eff));
+  await ev(() => document.querySelector('.ai-menu [data-effort="high"]').click());
+  await app.waitFor('effort taken', () => window.__t.chat().effort === 'high', 20000);
+  check('… choosing High: the conversation takes it, saved for new ones, the button says so',
+    readJson('settings.json').defaultThinkingLevel === 'high' && (await ev(() => document.querySelector('.ai-effort').textContent)) === 'High effort', JSON.stringify(readJson('settings.json')));
   // The fake model instead of Anthropic for the rest of the test, chosen in the model menu like a user would
   await ev(() => document.querySelector('.ai-model').click());
   await app.waitFor('model menu', () => !document.querySelector('.ai-menu').hidden && document.querySelector('.ai-menu').textContent.includes('Mock CAD'), 20000);
@@ -115,6 +130,8 @@ try {
     JSON.stringify({ nothing, found }));
   await ev(() => document.querySelector('.ai-menu .ai-msearch').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
   await app.waitFor('fake model chosen', () => window.__t.chat().model?.id === 'mock-cad', 20000);
+  st = await chat();
+  check('A model that does not think: no effort button (pi clamps the level to off)', !st.effortShown && st.effort === 'off', JSON.stringify({ effort: st.effort, efforts: st.efforts }));
   check('Dot on the tab: green (ready)', (await dot()) === 'idle', await dot());
   await shot('welcome');
 
@@ -244,6 +261,7 @@ try {
   await app.waitFor('chat after the new sign-in', () => { const c = window.__t.chat(); return c.phase === 'chat' && c.piUp && !c.starting; }, 60000);
   st = await chat();
   lo = await leftover();
+  check('After a model that does not think and a new sign-in: the chosen effort again, not the clamped one', st.effort === 'high' && st.effortShown, JSON.stringify({ model: st.model?.id, effort: st.effort, efforts: st.efforts }));
   check('After a new sign-in: back in the conversation, the chip shows its recommended model', st.user.length === 2 && !lo.panel && !lo.setupInList
     && st.model?.provider === 'openrouter' && st.model?.id === 'anthropic/claude-opus-5.5', `${st.model?.provider} ${st.model?.id} ${JSON.stringify(lo)}`);
 
@@ -265,6 +283,13 @@ try {
   settings = readJson('settings.json');
   check('… choosing a model there: saved for new conversations, the open conversation takes it too', settings.defaultProvider === 'mock' && settings.defaultModel === 'mock-cad',
     JSON.stringify({ provider: settings.defaultProvider, model: settings.defaultModel }));
+  // The effort: the same menu with all of pi's levels, saved for new conversations
+  check('… the effort row with the recommendation', /Effort\s/.test(ap.text) && ap.text.includes('More effort gives better models. We recommend High or more.') && ap.effort === 'high', JSON.stringify({ effort: ap.effort }));
+  await ev(() => document.querySelector('#st-ai [data-act="effort"]').click());
+  await app.waitFor('effort menu in Settings', () => !document.querySelector('.st-ai-menu').hidden && !!document.querySelector('.st-ai-menu [data-effort="xhigh"]'), 10000);
+  await ev(() => document.querySelector('.st-ai-menu [data-effort="xhigh"]').click());
+  await app.waitFor('effort saved', () => window.__t.settingsPages().ai.effort === 'xhigh', 10000);
+  check('… choosing an effort there: saved for new conversations', readJson('settings.json').defaultThinkingLevel === 'xhigh', JSON.stringify(readJson('settings.json')));
   // A key added and removed there, the chat knows about it
   await ev(() => { const s = document.querySelector('#st-ai .ai-keyrow select'); s.value = 'google'; s.dispatchEvent(new Event('change')); document.querySelector('#st-ai .ai-keyrow input').value = 'AIza-test-789'; });
   await ev(() => [...document.querySelectorAll('#st-ai button')].find((b) => b.textContent === 'Save key').click());

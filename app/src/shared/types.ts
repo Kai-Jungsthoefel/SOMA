@@ -1,6 +1,6 @@
 // Von Hauptprozess, Preload und Renderer gemeinsam genutzte Typen (IPC-Vertrag).
 import type { SettingsPatch, SettingsResult, SettingsState } from './settings';
-import type { AiAccount, AiModel, AiSession } from './somaai';
+import type { AiAccount, AiModel, AiSession, Effort } from './somaai';
 
 export interface ProjectInfo {
   id: string;
@@ -597,6 +597,9 @@ export interface SomaApi {
     /** The model pi starts with, null when pi chooses. */
     defaultModel(): Promise<{ provider: string; id: string } | null>;
     setDefaultModel(provider: string, id: string): Promise<{ ok: boolean; error?: string }>;
+    /** The effort (pi's thinking level) for new conversations, null when pi's default applies. */
+    defaultEffort(): Promise<Effort | null>;
+    setDefaultEffort(level: Effort): Promise<{ ok: boolean; error?: string }>;
     /** Conversations of the open model with SOMA AI, newest first. */
     sessions(): Promise<{ ok: boolean; sessions?: AiSession[]; error?: string }>;
     /** Back to one of them (pi continues it). */

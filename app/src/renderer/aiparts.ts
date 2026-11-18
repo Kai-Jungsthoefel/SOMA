@@ -1,4 +1,4 @@
-import { AI_KEY_PROVIDERS, isRecommendedModel, type AiModel } from '../shared/somaai';
+import { AI_KEY_PROVIDERS, EFFORT_LABEL, isRecommendedModel, RECOMMENDED_EFFORT, type AiModel, type Effort } from '../shared/somaai';
 import type { SomaApi } from '../shared/types';
 import { icon } from './icons';
 import { el, menuItem, menus } from './ui';
@@ -65,6 +65,30 @@ export function showModelMenu(menu: HTMLElement, anchor: HTMLElement, models: Ai
     ...(rec.length ? [{ title: 'RECOMMENDED FOR THE BEST RESULTS', entries: rec }] : []),
     { title: rec.length ? 'OTHER MODELS' : 'MODELS', entries: rest, scroll: true },
   ], { placeholder: 'Search models …', empty: 'No models: sign in first.', align });
+}
+
+/** What the effort button shows: "High effort", "Effort off". */
+export const effortText = (e: Effort) => (e === 'off' ? 'Effort off' : `${EFFORT_LABEL[e]} effort`);
+
+/**
+ * The effort menu: the levels the model supports (all of pi's in Settings, where no model runs), the recommended one
+ * marked (wish of the user: more effort gives better models).
+ */
+export function showEffortMenu(menu: HTMLElement, anchor: HTMLElement, levels: Effort[], current: Effort | null, pick: (e: Effort) => void,
+  align: 'left' | 'right' = 'right'): void {
+  const items: HTMLElement[] = [el('div', { className: 'mh', textContent: 'EFFORT' })];
+  for (const e of levels) {
+    const b = menuItem(EFFORT_LABEL[e], { icon: e === current ? 'check' : undefined, sub: e === RECOMMENDED_EFFORT ? 'Recommended' : undefined, onClick: () => pick(e) });
+    b.dataset.effort = e;
+    items.push(b);
+  }
+  const only = levels.length <= 1;
+  items.push(el('div', { className: 'mnote', textContent: only
+    ? 'This model has no effort setting.'
+    : `More effort: SOMA AI thinks longer and builds better models, but answers more slowly and uses more of your plan or credit. We recommend ${EFFORT_LABEL[RECOMMENDED_EFFORT]} or more.` }));
+  menu.onkeydown = null;
+  menu.replaceChildren(...items);
+  menus.toggle(menu, anchor, align);
 }
 
 /** A menu with a search at the top. Enter takes the first match, the arrows walk through the list. */

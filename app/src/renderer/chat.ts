@@ -1,6 +1,6 @@
-import { accountLabel, CHATGPT_PROVIDER, RECOMMENDED_MODEL, type AiAccount } from '../shared/somaai';
+import { accountLabel, CHATGPT_PROVIDER, EFFORT_LABEL, isEffort, RECOMMENDED_EFFORT, RECOMMENDED_MODEL, type AiAccount, type Effort } from '../shared/somaai';
 import type { AiEvent, AiExit, SomaApi } from '../shared/types';
-import { keyForm, searchMenu, showModelMenu } from './aiparts';
+import { effortText, keyForm, searchMenu, showEffortMenu, showModelMenu } from './aiparts';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
 import { el, fmtWhen, menuItem, menus } from './ui';
@@ -234,6 +234,7 @@ export class SomaChat {
   private ticker: ReturnType<typeof setInterval> | undefined;
   private nextWord = 0;
   private modelBtn: HTMLButtonElement;
+  private effortBtn: HTMLButtonElement;
   private sendBtn: HTMLButtonElement;
   private voice: VoiceButton;
   private menu: HTMLElement;
@@ -249,6 +250,10 @@ export class SomaChat {
   private running = false;
   private asking: string | null = null;
   private model: { provider: string; id: string; name: string } | null = null;
+  /** pi's thinking level in the current conversation. */
+  private effort: Effort | null = null;
+  /** The levels the model supports: only "off" for a model that does not think, the button is hidden then. */
+  private efforts: Effort[] = [];
   private steps = new Map<string, StepRef>();
   private texts = new Map<number, HTMLElement>();
   /** Rows of the current turn by kind of step, for grouping (group()). A new message of the person starts a new turn. */
@@ -263,6 +268,8 @@ export class SomaChat {
    * the new default in pi's settings alone would not change it.
    */
   private wantModel: { provider: string; modelId: string } | null = null;
+  /** Effort chosen while pi was not running (Settings > SOMA AI): set at its next start, like wantModel. */
+  private wantEffort: Effort | null = null;
   private starting: Promise<boolean> | null = null;
   /** Open question cards by request id: closed when the run ends without an answer (pi drops its dialogs then). */
   private closers = new Map<string, () => void>();
@@ -302,12 +309,14 @@ export class SomaChat {
     attach.addEventListener('click', () => this.fileInput.click());
     this.modelBtn = el('button', { className: 'ai-model', title: 'Model. Recommended for the best results: Opus 5.5 or GPT-6 Astra' });
     this.modelBtn.addEventListener('click', () => void this.openModelMenu());
+    this.effortBtn = el('button', { className: 'ai-model ai-effort', title: `Effort: how long SOMA AI thinks. Recommended for the best results: ${EFFORT_LABEL[RECOMMENDED_EFFORT]} or more` });
+    this.effortBtn.addEventListener('click', () => void this.openEffortMenu());
     this.sendBtn = el('button', { className: 'ai-send', title: 'Send (Enter)' });
     this.sendBtn.addEventListener('click', () => (this.running && !this.input.value.trim() && !this.notes.length && !this.images.length ? void this.stop() : void this.send()));
     // Voice input (voice.ts): the text goes into the input where the cursor is
     this.voice = new VoiceButton({ api: deps.api, toast: deps.toast, insert: (text) => this.dictate(text) });
     this.composer = el('div', { className: 'ai-composer' }, this.chips, this.input,
-      el('div', { className: 'ai-row' }, attach, this.fileInput, this.voice.el, el('span', { className: 'grow' }), this.modelBtn, this.sendBtn));
+      el('div', { className: 'ai-row' }, attach, this.fileInput, this.voice.el, el('span', { className: 'grow' }), this.modelBtn, this.effortBtn, this.sendBtn));
     this.menu = el('div', { className: 'menu ai-menu' });
     this.menu.hidden = true;
     this.menu.setAttribute('role', 'menu');
@@ -354,6 +363,8 @@ export class SomaChat {
     this.asking = null;
     this.closers.clear();
     this.model = null;
+    this.effort = null;
+    this.efforts = [];
     this.steps.clear();
     this.turnRows.clear();
     this.texts.clear();
@@ -455,7 +466,7 @@ export class SomaChat {
       el('span', { className: 'ai-mark' }, icon('sparkle', 26, 1.8)),
       el('h3', { textContent: back ? 'Another sign-in' : 'Set up SOMA AI' }),
       el('p', { className: 'lead', textContent: 'SOMA AI builds the model for you from what you describe. It thinks with an AI service you choose, so it needs an account there. You only do this once.' }),
-      el('div', { className: 'ai-rec' }, icon('sparkle', 13, 2), el('span', {}, 'For the best results we recommend ', el('b', { textContent: 'Opus 5.5' }), ' (Claude, with an API key) or ', el('b', { textContent: 'GPT-6 Astra' }), ' (with ChatGPT).')),
+      el('div', { className: 'ai-rec' }, icon('sparkle', 13, 2), el('span', {}, 'For the best results we recommend ', el('b', { textContent: 'Opus 5.5' }), ' (Claude, with an API key) or ', el('b', { textContent: 'GPT-6 Astra' }), ' (with ChatGPT), with ', el('b', { textContent: `${EFFORT_LABEL[RECOMMENDED_EFFORT]} effort` }), ' or more.')),
       el('div', { className: 'ai-opt rec' },
         el('h4', {}, icon('chat', 16), 'Sign in with ChatGPT', el('span', { className: 'badge', textContent: 'Recommended' })),
         el('p', { textContent: 'Uses your ChatGPT Plus or Pro plan. No extra cost, your plan’s limits apply.' }),
@@ -597,6 +608,8 @@ export class SomaChat {
     this.sendBtn.disabled = locked || (!stop && !typed);
     this.modelBtn.replaceChildren(el('span', { textContent: this.model?.name ?? 'Model' }), icon('down', 12, 2));
     this.modelBtn.hidden = !this.model;
+    this.effortBtn.replaceChildren(el('span', { textContent: this.effort ? effortText(this.effort) : 'Effort' }), icon('down', 12, 2));
+    this.effortBtn.hidden = !this.model || !this.effort || this.efforts.length <= 1;
     this.emitState();
   }
 
@@ -662,6 +675,11 @@ export class SomaChat {
       const s = await this.deps.api.ai.command({ type: 'set_model', provider: want.provider, modelId: want.modelId });
       if (s.ok) model = obj(s.data);
     }
+    const wantEffort = this.wantEffort ?? (want ? await this.savedEffort() : null);
+    this.wantEffort = null;
+    if (wantEffort) await this.deps.api.ai.command({ type: 'set_thinking_level', level: wantEffort });
+    // pi clamps the level to what the (maybe new) model supports: ask what it is now
+    await this.readEffort();
     // Once, at the end: the chip never shows the model of the old sign-in for a moment
     this.setModel(model);
     this.piUp = true;
@@ -691,8 +709,41 @@ export class SomaChat {
   async useModel(provider: string, modelId: string): Promise<void> {
     if (!this.piUp) { this.wantModel = { provider, modelId }; return; }
     const s = await this.deps.api.ai.command({ type: 'set_model', provider, modelId });
-    if (s.ok) this.setModel(obj(s.data));
-    else this.deps.toast(s.error ?? 'The model could not be changed.', 'error');
+    if (!s.ok) { this.deps.toast(s.error ?? 'The model could not be changed.', 'error'); return; }
+    // pi clamps the level to what the new model supports and keeps the clamped one (off after a model that does not
+    // think): the saved effort again, clamped anew
+    const saved = await this.savedEffort();
+    if (saved) await this.deps.api.ai.command({ type: 'set_thinking_level', level: saved });
+    await this.readEffort();
+    this.setModel(obj(s.data));
+  }
+
+  /**
+   * Another effort, from the effort menu or Settings > SOMA AI: at once when pi runs, otherwise at its next start. False
+   * when pi refused it.
+   */
+  async useEffort(level: Effort): Promise<boolean> {
+    if (!this.piUp) { this.wantEffort = level; return true; }
+    const s = await this.deps.api.ai.command({ type: 'set_thinking_level', level });
+    if (!s.ok) { this.deps.toast(s.error ?? 'The effort could not be changed.', 'error'); return false; }
+    await this.readEffort();
+    this.renderComposer();
+    return true;
+  }
+
+  /** The effort chosen for new conversations (chat or Settings), null when pi's default applies. */
+  private savedEffort(): Promise<Effort | null> {
+    return this.deps.api.ai.defaultEffort().catch(() => null);
+  }
+
+  /** The effort of the conversation and what the model offers (pi clamps the level when the model changes). */
+  private async readEffort(): Promise<void> {
+    const [st, av] = await Promise.all([
+      this.deps.api.ai.command({ type: 'get_state' }), this.deps.api.ai.command({ type: 'get_available_thinking_levels' }),
+    ]);
+    const level = obj(st.data).thinkingLevel;
+    this.effort = st.ok && isEffort(level) ? level : null;
+    this.efforts = av.ok ? arr(obj(av.data).levels).filter(isEffort) : [];
   }
 
   /**
@@ -783,7 +834,10 @@ export class SomaChat {
     if (m.ok) this.renderHistory(arr(obj(m.data).messages));
     if (!this.list.childElementCount) this.renderWelcome();
     const s = await this.deps.api.ai.command({ type: 'get_state' });
-    if (s.ok) this.setModel(obj(obj(s.data).model));
+    if (s.ok) {
+      await this.readEffort();
+      this.setModel(obj(obj(s.data).model));
+    }
     this.focus();
   }
 
@@ -825,6 +879,20 @@ export class SomaChat {
     if (this.model?.provider !== provider || this.model.id !== modelId) return;
     const r =await this.deps.api.ai.setDefaultModel(provider, modelId).catch((e) => ({ ok: false, error: String(e) }));
     if (!r.ok) this.deps.toast(`The model is used in this conversation, but not saved for new ones: ${r.error ?? 'unknown error'}`, 'error');
+  }
+
+  private async openEffortMenu(): Promise<void> {
+    if (menus.isOpen(this.menu)) { menus.close(); return; }
+    if (!(await this.ensureStarted())) return;
+    await this.readEffort();
+    showEffortMenu(this.menu, this.effortBtn, this.efforts.length ? this.efforts : ['off'], this.effort, (e) => void this.pickEffort(e));
+  }
+
+  /** Chosen in the chat: for this conversation and, like in Settings > SOMA AI, for new ones. */
+  private async pickEffort(level: Effort): Promise<void> {
+    if (!(await this.useEffort(level))) return;
+    const r = await this.deps.api.ai.setDefaultEffort(level).catch((e) => ({ ok: false, error: String(e) }));
+    if (!r.ok) this.deps.toast(`The effort is used in this conversation, but not saved for new ones: ${r.error ?? 'unknown error'}`, 'error');
   }
 
   // ---- Records of pi ---------------------------------------------------------------------------------------------
@@ -1297,7 +1365,8 @@ export class SomaChat {
   /** For tests: what the chat shows. */
   state(): Json {
     return {
-      phase: this.phase, running: this.running, asking: this.asking, model: this.model, piUp: this.piUp, starting: !!this.starting,
+      phase: this.phase, running: this.running, asking: this.asking, model: this.model, effort: this.effort, efforts: this.efforts,
+      effortShown: !this.effortBtn.hidden, piUp: this.piUp, starting: !!this.starting,
       steps: [...this.steps.values()].map((s) => ({ state: s.state, label: s.label.textContent })),
       rows: [...this.list.querySelectorAll<HTMLElement>('.ai-step')].map((r) => ({ state: r.dataset.state, label: r.querySelector('b')?.textContent, count: Number(r.dataset.count ?? '1') })),
       status: this.status.hidden ? null : this.status.textContent,

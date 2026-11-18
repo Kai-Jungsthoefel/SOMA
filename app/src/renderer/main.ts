@@ -272,6 +272,7 @@ const aiPage = new AiPage($('st-ai'), {
   api, toast,
   accountsChanged: (provider) => chat.accountsChanged(provider, chatOn && !!project),
   useModel: (provider, id) => chat.useModel(provider, id),
+  useEffort: (level) => chat.useEffort(level),
   showNote: () => chat.showNote(chatOn && !!project),
   modelOpen: () => !!project,
 });
