@@ -262,6 +262,10 @@ Lines mark sharp edges and open borders. Section and Explode work, Measure does 
 2. **Back to now**: leaves the preview.
 3. **Restore**: makes the version you are looking at the current one. It is added as a new version, nothing is lost.
 
+The first look at an older version of a large model can take a few minutes: SOMA reads the STEP file of that version.
+The viewer shows that it is loading, **Cancel** or Esc stops it. Versions the agent built and committed in this session
+open at once.
+
 A model is a single `.soma` file with code, results and the whole history. The first Save asks where to put it,
 after that Ctrl S saves to the same file. Copy or send the file like any other document.
 
@@ -310,7 +314,8 @@ The folder itself is the model: there is no .soma file to save, and your files s
   first. Packages the model needs go into `.soma/requirements.txt`, a `requirements.txt` of yours stays as it is.
 - **Git:** SOMA creates no repository and commits nothing here. If the folder is a repository, the history shows its
   commits. A version shows in the viewer if its commit contains `output/model.step`. **Restore** is not available:
-  commit yourself or ask the agent.
+  commit yourself or ask the agent. Without a repository of its own (no Git, or the folder sits inside a larger
+  repository) the history stays empty and says why.
 - **Saving:** Ctrl S writes the editor's changes into the folder. **Export › Everything as ZIP** makes a copy as a file,
   without the Git history.
 - **Start page:** the card says "Folder". The bin only removes it from the list, the folder stays. If you move or rename

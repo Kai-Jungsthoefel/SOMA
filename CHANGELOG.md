@@ -26,6 +26,7 @@ the version is bumped.
 
 ### Fixed
 
+- History: clicking an older version of a large model seemed to do nothing. Its preview stopped after 2 minutes, while reading the STEP file of a large model takes longer. Now it has no time limit, the viewer shows that it is loading, and Cancel or Esc stops it. Versions the agent commits keep their build as a ready preview even when it goes on working right away, so they open at once. In a folder opened with "Open folder" that has no Git repository of its own, the empty history now says why (issue #17).
 - Exporting a single part as STEP or BREP could write only a shell instead of a solid, when the part was a CadQuery compound holding one solid. Thanks to SukbeomH (fork SukbeomH/SOMA) for spotting this.
 - "Open folder" is more careful with the folder: a `model.py` that appears while the confirmation is open is kept instead of replaced, `.soma/project.json` is backed up before it changes (an unreadable one is listed as a change first), and a folder where `.soma` is a file is refused with a message before anything is written. Thanks to vasilipuchko (fork zihotki/SOMA).
 - The viewer fits the model again when a rebuild takes it out of the picture, for example when the agent replaces the starter box with a table. A small change keeps the camera where you put it. "Fit" in a viewer narrower than high no longer cuts off the sides.
