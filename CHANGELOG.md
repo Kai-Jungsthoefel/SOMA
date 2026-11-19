@@ -19,6 +19,11 @@ the version is bumped.
 - A layout for narrow windows such as phones: below a width of about 760 pixels SOMA shows one view at a time, chosen in a tab bar at the bottom (Model, Agent, Parameters, More), instead of the columns side by side. "More" holds the files, the code, analyses, animations, drawings, skills, help and settings. The start page, Settings and Help fit the width too. Widening the window brings back the columns as they were. Mainly for the web version (issue #14).
 - SOMA AI: an effort setting, how long SOMA AI thinks before it acts (Low to Max, the levels the model offers). The button next to the model below the chat input and Settings > SOMA AI change it, for the open conversation and new ones. More effort gives better models, so the recommendation now says High effort or more.
 
+### Changed
+
+- Large models build much faster. The meshes for the viewer are made on several processor cores while the STEP file is written, parts larger than about half a meter are meshed relative to their own size (a 19 m mast took 96 seconds alone before, now under one), and faces with freeform surfaces get their area for the viewer from the mesh (the measuring tool still measures exactly). On the sailboat from issue #13 (1024 parts) the time after the model's own code went from about 3 minutes to under 1, and the viewer file is a third smaller. Small models look and build as before. `SOMA_BUILD_WORKERS=0` turns the worker processes off (issue #16).
+- The CadQuery skill has a new section "Fast builds" for the agent: cut and join many bodies in one call, place copies of identical parts instead of rebuilding them, keep chain links and planks as separate bodies instead of fusing them, check each part only once. On the sailboat from issue #13 fusing two chains alone took 30 seconds, as separate links a fraction of a second.
+
 ### Fixed
 
 - Exporting a single part as STEP or BREP could write only a shell instead of a solid, when the part was a CadQuery compound holding one solid. Thanks to SukbeomH (fork SukbeomH/SOMA) for spotting this.
