@@ -6,7 +6,7 @@ order: 2
 category: Way of working
 default: always
 when: you write or restructure CadQuery code
-topics: Parameters and structure; Order of operations; Selectors; Typical errors; Check every part
+topics: Parameters and structure; Order of operations; Selectors; Typical errors; Check every part; Fast builds
 ---
 # Skill: Clean CadQuery modeling
 
@@ -41,7 +41,6 @@ topics: Parameters and structure; Order of operations; Selectors; Typical errors
   or fewer edges at once.
 - Cutting tools that end exactly on a face leave skins or fail: let them run through by at least 0.1 mm. Bodies that
   are joined overlap a little instead of touching.
-- Many single cuts in a loop are slow: one tool with `pushPoints`, or union the tools first.
 - No helical threads: model the hole (clearance hole or tap drill) and name the thread in a comment.
 
 ## Check every part
@@ -53,3 +52,22 @@ bb = s.BoundingBox()  # compare bb.xlen, bb.ylen, bb.zlen with the intended size
 ```
 
 Several solids where you expect one: the pieces do not overlap where they should be joined.
+
+Check each part once, where it is registered, not again in helper functions: on large freeform parts `isValid()`
+can cost as much as building them.
+
+## Fast builds
+
+`soma build` prints how long the build took, `timings.model` in `.soma/build.json` the time of your code alone. When
+a build takes longer than a minute:
+
+- Cut or join many bodies in one call: `pushPoints(...).hole(d)`, or collect the tools as shapes and cut them at
+  once, `body.cut(cq.Compound.makeCompound(tools))` on a Workplane, `shape.cut(*tools)` and `first.fuse(*rest)` on
+  shapes. A loop of single cuts or unions is 20 to 40 times slower.
+- Build identical parts once and place copies with `.moved(cq.Location((x, y, z)))` instead of rebuilding each.
+- Do not fuse what are separate pieces in reality (chain links, planks, a row of bolts): register them as one part
+  from `cq.Compound.makeCompound([...])` or as single parts in a group. Fusing bodies that only touch is slow and
+  fragile.
+- Fillet all edges of a part in one call. For a pattern of pockets, fillet the tool once before cutting.
+- Clip or intersect with a large freeform body only the parts that stick out: compare bounding boxes first.
+- Cache helpers that build the same geometry several times in one run with `functools.lru_cache`.
