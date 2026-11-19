@@ -30,6 +30,7 @@ const api: SomaApi = {
   versions: {
     log: () => ipcRenderer.invoke('versions:log'),
     preview: (hash) => ipcRenderer.invoke('versions:preview', hash),
+    cancelPreview: () => ipcRenderer.invoke('versions:cancelPreview'),
     restore: (hash) => ipcRenderer.invoke('versions:restore', hash),
     onChanged: (cb) => { ipcRenderer.on('versions:changed', () => cb()); },
   },

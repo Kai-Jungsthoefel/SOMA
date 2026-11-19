@@ -249,6 +249,37 @@ try {
   check('Speichern nach dem Öffnen einer ZIP: neue .soma, ZIP unverändert', fs.existsSync(somaFromZip) && (await listZip(somaFromZip)).includes('model.py')
     && zipBytes.equals(fs.readFileSync(exported)) && (await saveState()).zipPath === somaFromZip, JSON.stringify(await saveState()).slice(0, 160));
 
+  // ---- 7b) Preview of older versions (issue #17) ----
+  // The agent commits and goes on editing right away: the commit still gets the build as its preview (until 0.11 the
+  // whole folder had to be clean, so large models had to convert the STEP file later, which took minutes)
+  fs.writeFileSync(modelPy, fs.readFileSync(modelPy, 'utf8').replace(/LENGTH = param\(\d+\.0/, 'LENGTH = param(70.0'));
+  await waitFor('Build mit Länge 70', () => window.__t.status().state === 'ok' && Math.round((window.__t.partSize('Body') || [0])[0]) === 70, 60000);
+  await g('add', '-A');
+  await g('commit', '-q', '-m', 'Laenge auf 70');
+  fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nweiter gearbeitet\n');
+  const head70 = await g('rev-parse', 'HEAD');
+  check('Commit, danach gleich weitergearbeitet: Build liegt trotzdem als Vorschau bereit', await until(() => fs.existsSync(path.join(cached(head70), 'model.glb')), 20000));
+  // Cancel right after the request: the conversion stops, nothing half is left behind
+  const first7 = await g('rev-list', '--max-parents=0', 'HEAD');
+  fs.rmSync(cached(first7), { recursive: true, force: true });
+  const cancelled = await ev(async (h) => {
+    const p = window.soma.versions.preview(h);
+    await window.soma.versions.cancelPreview();
+    const r = await p;
+    return { cancelled: !!r.cancelled, error: r.error ?? null };
+  }, first7);
+  const leftovers = fs.readdirSync(path.join(ud, 'previews', proj.id)).filter((n) => n.includes('.tmp-'));
+  check('Vorschau abgebrochen: als abgebrochen gemeldet, ohne Fehler, keine halbe Vorschau', cancelled.cancelled && !cancelled.error
+    && !fs.existsSync(cached(first7)) && leftovers.length === 0, `${JSON.stringify(cancelled)} ${leftovers.join(', ')}`);
+  // From the timeline: loads with the indicator over the viewer, which closes when the preview is there
+  const loadingNow = await ev(() => { document.querySelectorAll('#vdots .vdot')[0].click(); return window.__t.busy(); });
+  check('Klick auf einen alten Stand: Ladeanzeige über dem Viewer mit Titel und Hinweis', /^Loading version 1 of \d+$/.test(loadingNow?.title ?? '')
+    && (loadingNow?.detail ?? '').includes('few minutes'), JSON.stringify(loadingNow));
+  await waitFor('Vorschau des ersten Standes', () => !!window.__t.versions().previewing && window.__t.partCount() === 2 && (window.__t.partSize('Body') || [0])[0] === 60, 60000);
+  check('Vorschau ohne Cache über die Zeitleiste geladen, Ladeanzeige wieder zu', fs.existsSync(path.join(cached(first7), 'model.glb')) && (await ev(() => window.__t.busy())) === null);
+  await ev(() => document.getElementById('btn-live').click());
+  await waitFor('zurück zum Arbeitsstand', () => !window.__t.versions().previewing && window.__t.partCount() === 2 && Math.round((window.__t.partSize('Body') || [0])[0]) === 70, 30000);
+
   // ---- 8) Absturz-Wiederherstellung: ungespeicherte Änderung überlebt ----
   fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nungespeichert vor dem Absturz\n');
   await waitFor('ungespeichert', () => window.__t.saveState().unsaved, 20000);

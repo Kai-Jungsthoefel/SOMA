@@ -1,16 +1,17 @@
 import { shell, type BrowserWindow, type WebContents } from 'electron';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type {
-  AnimBuildResult, AnimList, CadQueryImportResult, DrawingBuildResult, DrawingList, ExportResult, FileViewResult, MeshExportOptions, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
+  AnimBuildResult, AnimList, CadQueryImportResult, CommitInfo, DrawingBuildResult, DrawingList, ExportResult, FileViewResult, MeshExportOptions, GitLog, MeasureEntity, MeasurePrepared, MeasureRequest, MeasureResponse, ModelMap, OpenResult, PreviewResult,
   ParamResult, ParamState, ParamValue, ProjectInfo, RemoveResult, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
 import { AnimBuilder, listResults, readAnimList, rerunResult, samePath } from './animations';
 import { DrawingBuilder, isDrawingFile, readDrawingList } from './drawings';
 import { resolveInside } from './files';
-import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma } from './build';
+import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma, validBuild } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, chooseCadQueryScript, chooseEntryScript, chooseExportTarget, chooseFolder, choosePath, documentsDir, trashItem } from './dialogs';
 import { applyFolder, planFolder, preflightFolder, refreshFolderSection, topLevelScripts } from './folders';
@@ -21,7 +22,7 @@ import { checkParamValue, isParamValue, readUserParams, writeUserParams } from '
 import { backupsDir, helpDir, previewsDir, skillBackupsDir, skillDirs, userDataDir } from './paths';
 import { syncHelpImages } from './help';
 import { HELP_SKILL } from '../shared/help';
-import { stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
+import { previewComplete as previewReady, stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
 import {
   agentsEntries, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
 } from './skills';
@@ -56,6 +57,8 @@ interface Session {
   signature: string;
   /** Legt gerade den Build als Vorschau des letzten Commits ab (cachePreview). */
   caching?: boolean;
+  /** Preview of an older version being converted (preview): the user can cancel it, a newer request replaces it. */
+  previewJob?: { kill: () => void; cancelled: boolean };
   /** Projektumgebung bereit (E67): Fehlertext oder null. */
   env: Promise<string | null>;
   /** STEP-Dateien im Viewer: schon gehashte Dateien und laufende Umwandlungen (ein Doppelklick wandelt nicht zweimal um). */
@@ -124,6 +127,7 @@ export class ProjectController {
     if (!s) return;
     clearInterval(s.poll);
     clearTimeout(s.animTimer);
+    this.cancelPreview(s);
     s.stopWatch();
     s.anims.dispose();
     s.drawings.dispose();
@@ -337,21 +341,25 @@ export class ProjectController {
   }
 
   /**
-   * Vorschau-Cache für die Zeitleiste: Ist der Arbeitsordner sauber (alles wie im letzten Commit) und gilt der letzte Build,
-   * zeigt das aktuelle Modell genau diesen Commit. Dann wird es als dessen Vorschau abgelegt, und ein Sprung zurück muss die
-   * STEP-Datei nicht wieder einlesen und vernetzen (bei großen Modellen rund 10 s). Ausgelöst von neuen Commits (auch des
-   * Agenten) und fertigen Builds. Was nicht passt, bleibt einfach ohne Cache.
+   * Vorschau-Cache für die Zeitleiste: Liegt auf der Platte genau die output/model.step des letzten Commits und daneben der
+   * vollständige Build, der sie geschrieben hat, zeigt dieser Build genau diesen Commit. Dann wird er als dessen Vorschau
+   * abgelegt, und ein Sprung zurück muss die STEP-Datei nicht wieder einlesen und vernetzen (bei großen Modellen Minuten).
+   * Until 0.11 the whole working folder had to be clean: when the agent went on editing right after its commit, the commit
+   * stayed without a cache (issue #17). Ausgelöst von neuen Commits (auch des Agenten) und fertigen Builds. Was nicht passt,
+   * bleibt einfach ohne Cache.
    */
   private async cachePreview(s: Session, known?: GitStatus): Promise<void> {
     if (this.session !== s || s.caching || s.builds.busy) return;
     s.caching = true;
     try {
       const st = known ?? (fs.existsSync(path.join(s.dir, '.git')) ? await s.git.status() : null);
-      if (!st || st.dirty || !st.head || this.session !== s || s.builds.busy) return;
+      if (!st || !st.head || this.session !== s || s.builds.busy) return;
       const target = path.join(previewsDir(), s.id, st.head);
       if (fs.existsSync(path.join(target, 'model.glb')) && fs.existsSync(path.join(target, 'geometry'))) return;
-      const last = currentBuild(s.dir);
-      if (!last) return;
+      // The build on disk wrote the STEP file on disk (builds lock each other out, storeBuildAsPreview checks that no other
+      // build finished meanwhile). If that file is the committed one, the build shows the commit, whatever else changed
+      const last = validBuild(s.dir);
+      if (!last || !(await s.git.sameAsCommitted(st.head, 'output/model.step'))) return;
       await storeBuildAsPreview(s.dir, target, last, () => this.session === s && !s.builds.busy);
     } catch { /* ohne Cache: Die Vorschau entsteht beim Ansehen aus der STEP-Datei */ } finally { s.caching = false; }
   }
@@ -704,6 +712,8 @@ export class ProjectController {
     // Im Ordner-Modus ist das Repository Sache des Nutzers: anderer Branch oder gar keins ist kein Problem
     const problems = s.folder ? [] : await s.git.problems();
     const hasRepo = await s.git.isRepo();
+    // Folder mode: Git is the user's business, but an empty timeline without a word looked like a lost history (issue #17)
+    if (s.folder && !hasRepo) problems.push(await s.git.folderHint());
     const commits = hasRepo ? await s.git.log() : [];
     const st = hasRepo ? await s.git.status() : { changed: 0, head: null };
     return { commits, problems, head: st.head, dirtyFiles: st.changed };
@@ -714,25 +724,54 @@ export class ProjectController {
     const s = this.need();
     const empty = { commit: null, glb: new ArrayBuffer(0), map: { version: 0, parts: [] } as ModelMap };
     if (!/^[0-9a-f]{7,40}$/.test(hash)) return { ...empty, error: 'Invalid version' };
-    const commit = (await s.git.log()).find((c) => c.hash === hash) ?? null;
+    // One preview at a time: a newer request (another dot, "Now") replaces the one still converting. The job exists from
+    // the start, so a cancel right after the request counts too
+    this.cancelPreview(s);
+    const job = { kill: () => {}, cancelled: false };
+    s.previewJob = job;
     const dir = path.join(previewsDir(), s.id, hash);
+    // Converted into a folder of its own and renamed when complete: a cancelled conversion never leaves half a preview,
+    // and never removes the one a newer request for the same version is writing
+    const tmp = `${dir}.tmp-${randomUUID()}`;
+    let commit: CommitInfo | null = null;
     try {
+      commit = (await s.git.log()).find((c) => c.hash === hash) ?? null;
       // Ältere Vorschauen haben noch keine Geometrie zum Messen: dann neu erzeugen
-      if (!fs.existsSync(path.join(dir, 'model.glb')) || !fs.existsSync(path.join(dir, 'geometry'))) {
-        const step = path.join(dir, 'model.step');
+      if (!previewReady(dir)) {
+        if (job.cancelled) throw new Error('cancelled');
+        const step = path.join(tmp, 'model.step');
         await s.git.exportFile(hash, 'output/model.step', step);
-        const r = await runSoma(['glb', step, '--out', dir], s.dir);
+        if (job.cancelled) throw new Error('cancelled');
+        // No time limit: large models take minutes (issue #17), the user sees it loading and can cancel
+        const r = await runSoma(['glb', step, '--out', tmp], s.dir, 0, (kill) => { job.kill = kill; });
+        if (job.cancelled) throw new Error('cancelled');
         if (!r.ok) throw new Error((r.err || r.out).trim().split('\n').pop() || 'Conversion failed');
+        fs.rmSync(step, { force: true });
+        fs.rmSync(dir, { recursive: true, force: true }); // an incomplete older preview
+        try { fs.renameSync(tmp, dir); } catch (e) { if (!previewReady(dir)) throw e; } // else a parallel request was faster
       }
       const glb = fs.readFileSync(path.join(dir, 'model.glb'));
       const map = JSON.parse(fs.readFileSync(path.join(dir, 'model.map.json'), 'utf8')) as ModelMap;
       return { commit, glb: glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength) as ArrayBuffer, map };
     } catch (e) {
+      if (job.cancelled) return { ...empty, commit, cancelled: true };
       fs.rmSync(dir, { recursive: true, force: true });
       const msg = e instanceof Error ? e.message : String(e);
       return { ...empty, commit, error: /exists on disk, but not in|does not exist|Path .* does not exist|invalid object/i.test(msg)
         ? 'This version contains no output/model.step (not built yet).' : `Preview not possible: ${msg}` };
+    } finally {
+      if (s.previewJob === job) s.previewJob = undefined;
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
+  }
+
+  /** Stops the conversion of an older version that is still running (the user cancelled or chose another version). */
+  cancelPreview(s = this.session): void {
+    const job = s?.previewJob;
+    if (!s || !job) return;
+    job.cancelled = true;
+    job.kill();
+    s.previewJob = undefined;
   }
 
   /**

@@ -40,6 +40,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export class GitRepo {
   private chain: Promise<unknown> = Promise.resolve();
+  private lastLogError: string | null = null;
   constructor(readonly dir: string) {}
 
   private serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -160,7 +161,14 @@ export class GitRepo {
   async log(limit = 500): Promise<Commit[]> {
     const fmt = '--format=%H%x1f%h%x1f%an%x1f%aI%x1f%s%x1f%(trailers:key=Created-by,key=Erstellt-von,valueonly,separator=%x2c)%x1e';
     const r = await this.run(['log', `-n${limit}`, fmt, 'HEAD']);
-    if (!r.ok) return [];
+    if (!r.ok) {
+      // The timeline then shows only "Now". Say why in the log, once per message (issue #17: no trace of the cause)
+      const why = (r.err || `exit code ${r.code}`).trim().split('\n')[0];
+      if (why !== this.lastLogError) console.warn(`[git] log failed in ${this.dir}: ${why}`);
+      this.lastLogError = why;
+      return [];
+    }
+    this.lastLogError = null;
     return r.out.split('\x1e').map((e) => e.trim()).filter(Boolean).map((e) => {
       const [hash, short, author, date, subject, by = ''] = e.split('\x1f');
       return { hash, short, author, date, subject, byApp: by.includes('SOMA') || APP_SUBJECT.test(subject) };
@@ -226,6 +234,30 @@ export class GitRepo {
     if (!branch.ok) out.push('Git is on a detached HEAD. New commits belong on the branch main.');
     else if (branch.out.trim() !== 'main') out.push(`Git is on the branch “${branch.out.trim()}” instead of main.`);
     return out;
+  }
+
+  /**
+   * For a folder of the user without its own repository (folder mode): why the timeline is empty. The folder may sit inside
+   * a larger repository (the .git one level up), whose history SOMA does not show, or have no Git at all.
+   */
+  async folderHint(): Promise<string> {
+    if (fs.existsSync(path.join(this.dir, '.git'))) {
+      // There is a .git, but Git refuses it (for example "dubious ownership" or a .git file of a worktree)
+      const r = await this.run(['rev-parse', '--git-dir']);
+      const why = (r.err.trim().split('\n')[0] || '').replace(/^fatal:\s*/, '');
+      return `No history: Git cannot read the repository in this folder${why ? ` (${why})` : ''}.`;
+    }
+    const top = await this.run(['rev-parse', '--show-toplevel']);
+    return top.ok && top.out.trim()
+      ? `No history: this folder belongs to the Git repository in ${top.out.trim()}. The timeline shows versions only for a folder with its own .git.`
+      : 'No history: this folder is not a Git repository. To get a timeline of versions, run git init in it and commit (your agent can do that).';
+  }
+
+  /** The file in the working folder is byte for byte the one in commit `hash` (same blob). False if it is missing in either. */
+  async sameAsCommitted(hash: string, rel: string): Promise<boolean> {
+    if (!HASH.test(hash)) return false;
+    const [committed, onDisk] = await Promise.all([this.run(['rev-parse', '-q', '--verify', `${hash}:${rel}`]), this.run(['hash-object', '--', rel])]);
+    return committed.ok && onDisk.ok && committed.out.trim() !== '' && committed.out.trim() === onDisk.out.trim();
   }
 
   async isAncestor(ancestor: string, of: string): Promise<boolean> {

@@ -340,7 +340,8 @@ export interface OpenResult { cancelled: boolean; opened?: boolean; error?: stri
 /** `byApp`: Stand hat die App angelegt (Start, Snapshot, Wiederherstellen), sonst der Agent oder der Nutzer. */
 export interface CommitInfo { hash: string; short: string; author: string; date: string; subject: string; byApp: boolean }
 export interface GitLog { commits: CommitInfo[]; problems: string[]; head: string | null; dirtyFiles: number }
-export interface PreviewResult { commit: CommitInfo | null; glb: ArrayBuffer; map: ModelMap; error?: string }
+/** `cancelled`: the user stopped the conversion or chose another version (no error to show). */
+export interface PreviewResult { commit: CommitInfo | null; glb: ArrayBuffer; map: ModelMap; error?: string; cancelled?: boolean }
 /** STEP-Datei aus dem Projekt im Viewer (`project.viewFile`). `key`: SHA-1 des Inhalts, unter dem die Umwandlung im Cache liegt. */
 export interface FileViewResult { rel: string; key: string; glb: ArrayBuffer; map: ModelMap; error?: string }
 export interface RestoreResult { cancelled: boolean; commit?: string | null; safety?: string | null; error?: string }
@@ -510,6 +511,8 @@ export interface SomaApi {
   versions: {
     log(): Promise<GitLog>;
     preview(hash: string): Promise<PreviewResult>;
+    /** Stops a preview that is still being converted. */
+    cancelPreview(): Promise<void>;
     restore(hash: string): Promise<RestoreResult>;
     onChanged(cb: () => void): void;
   };

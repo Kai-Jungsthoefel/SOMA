@@ -110,6 +110,7 @@ function registerIpc(ctl: ProjectController): void {
 
   ipcMain.handle('versions:log', () => ctl.gitLog());
   ipcMain.handle('versions:preview', (_e, hash: string) => ctl.preview(hash));
+  ipcMain.handle('versions:cancelPreview', () => ctl.cancelPreview());
   ipcMain.handle('versions:restore', (_e, hash: string) => ctl.restore(hash));
 
   ipcMain.handle('build:run', () => ctl.need().builds.start('manual'));

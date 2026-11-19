@@ -1172,6 +1172,7 @@ const versions = new VersionsBar({
   },
   toast,
   beforeRestore: () => leaveEditor('Restore version'), // Wiederherstellen ersetzt Dateien
+  busy: (title, cancel) => busy.show(title, cancel),
 });
 
 /**

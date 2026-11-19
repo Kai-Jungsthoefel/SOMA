@@ -113,6 +113,19 @@ try {
   const pe = await ev(() => window.__t.project());
   check('Leerer Ordner: model.py, AGENTS.md mit Abschnitt, CLAUDE.md, Build ok', r6.opened === true && pe.entry === 'model.py' && fs.existsSync(path.join(empty, 'model.py'))
     && read(empty, 'AGENTS.md')?.startsWith('<!-- soma:folder -->') && read(empty, 'CLAUDE.md') === '@AGENTS.md\n' && !fs.existsSync(path.join(empty, '.git')), JSON.stringify(r6));
+  // No history in a folder without Git: the timeline says so instead of showing only "Now" (issue #17)
+  const noGit = await ev(() => window.soma.versions.log());
+  check('Ordner ohne Git: Verlauf leer, mit Hinweis statt stumm', noGit.commits.length === 0 && noGit.problems.length === 1
+    && noGit.problems[0].includes('not a Git repository'), JSON.stringify(noGit.problems));
+  // A folder inside a larger repository: its history is the parent's, which SOMA does not show. The hint names it
+  const inner = path.join(repo, 'Inner');
+  fs.mkdirSync(inner);
+  await app.answers([inner, 0]);
+  const r6b = await ev(() => window.soma.project.openFolder());
+  await waitFor('Unterordner offen', (d) => window.__t.project()?.folder && window.__t.project().dir.toLowerCase().endsWith('inner') && window.__t.status().state === 'ok', 120000).catch(() => {});
+  const innerLog = await ev(() => window.soma.versions.log());
+  check('Ordner in einem größeren Repository: Hinweis nennt das Repository', r6b.opened === true && innerLog.commits.length === 0
+    && innerLog.problems.length === 1 && innerLog.problems[0].includes('belongs to the Git repository in') && innerLog.problems[0].includes('Repo'), JSON.stringify(innerLog.problems));
 
   // ---- 7) Kopierter Ordner: neue Kennung ----
   const copy = path.join(work, 'Kopie');

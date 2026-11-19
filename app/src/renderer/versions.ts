@@ -1,4 +1,5 @@
 import type { CommitInfo, GitLog, PreviewResult } from '../shared/types';
+import type { BusyHandle } from './busy';
 import { el, fmtWhen } from './ui';
 
 interface Ui {
@@ -23,6 +24,8 @@ interface Hooks {
   toast(text: string, kind: 'ok' | 'info' | 'error'): void;
   /** Vor dem Wiederherstellen: ungespeicherte Eingaben im Editor klären. false = abbrechen. */
   beforeRestore(): Promise<boolean>;
+  /** Loading indicator over the viewer with "Cancel" (busy.ts). */
+  busy(title: string, cancel: () => void): BusyHandle;
 }
 
 const who = (c: CommitInfo) => (c.byApp ? 'SOMA' : c.author);
@@ -41,6 +44,8 @@ export class VersionsBar {
   private readOnly = false;
   private seq = 0;
   private logSeq = 0;
+  /** A preview that is still being loaded (its indicator over the viewer). */
+  private loading: BusyHandle | null = null;
 
   constructor(private ui: Ui, private hooks: Hooks) {
     ui.live.addEventListener('click', () => void this.select(this.log.commits.length));
@@ -66,6 +71,7 @@ export class VersionsBar {
   /** Beim Projektwechsel: alles zurücksetzen. */
   reset(): void {
     this.seq++;
+    this.stopLoading();
     this.previewHash = null;
     this.savedHead = null;
     this.log = { commits: [], problems: [], head: null, dirtyFiles: 0 };
@@ -88,6 +94,7 @@ export class VersionsBar {
   /** Vorschau beenden, ohne den Arbeitsstand zu laden: Etwas anderes (eine STEP-Datei) übernimmt den Viewer. */
   endPreview(): void {
     this.seq++;
+    this.stopLoading();
     if (!this.previewHash) return;
     this.previewHash = null;
     this.render();
@@ -101,9 +108,18 @@ export class VersionsBar {
     return this.log.commits.findIndex((c) => c.hash === this.previewHash);
   }
 
+  /** Ends a preview that is still loading: the main process stops converting, its result no longer counts. */
+  private stopLoading(): void {
+    if (!this.loading) return;
+    this.loading.close();
+    this.loading = null;
+    void window.soma.versions.cancelPreview().catch(() => {});
+  }
+
   private async select(i: number): Promise<void> {
     const seq = ++this.seq;
     const n = this.log.commits.length;
+    this.stopLoading(); // another version or "Now": the one still loading is no longer wanted
     if (i >= n || i < 0) { // Arbeitsstand
       this.previewHash = null;
       this.render();
@@ -112,8 +128,20 @@ export class VersionsBar {
     }
     const commit = this.log.commits[i];
     this.ui.info.textContent = 'Loading preview …';
-    const res = await window.soma.versions.preview(commit.hash);
-    if (seq !== this.seq) return; // inzwischen etwas anderes gewählt
+    // Visible over the viewer, with Cancel: the first look at an older version of a large model converts its STEP file,
+    // which takes minutes. Before, only the small text here changed, and a click seemed to do nothing (issue #17).
+    // The indicator only appears after 200 ms, so cached versions do not flash it
+    const loading = this.hooks.busy(`Loading version ${i + 1} of ${n + 1}`, () => {
+      if (this.loading !== loading) return;
+      this.stopLoading();
+      this.seq++;
+      this.render();
+    });
+    loading.detail('Reading its STEP file for the first time. Large models can take a few minutes, later it opens at once.');
+    this.loading = loading;
+    let res: PreviewResult;
+    try { res = await window.soma.versions.preview(commit.hash); } finally { if (this.loading === loading) { loading.close(); this.loading = null; } }
+    if (seq !== this.seq || res.cancelled) return; // inzwischen etwas anderes gewählt oder abgebrochen
     if (res.error) {
       this.hooks.toast(res.error, 'error');
       this.render();

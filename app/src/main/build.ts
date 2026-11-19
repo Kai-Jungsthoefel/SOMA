@@ -370,10 +370,15 @@ function errorResult(kind: string, message: string): BuildResult {
 }
 
 /** Führt `python -m soma <args>` aus (z. B. glb für Vorschauen). Kein Wurf: das Ergebnis trägt den Fehler. */
-export function runSoma(args: string[], cwd: string, timeoutMs = 120000): Promise<{ ok: boolean; out: string; err: string }> {
+/**
+ * `timeoutMs` 0: no time limit (for jobs the user started and can cancel, such as the preview of an older version).
+ * `onStart` gets a function that ends the job.
+ */
+export function runSoma(args: string[], cwd: string, timeoutMs = 120000, onStart?: (kill: () => void) => void): Promise<{ ok: boolean; out: string; err: string }> {
   return new Promise((resolve) => {
     const w = startJob(cwd, args);
-    const timer = setTimeout(() => w.child.kill(), timeoutMs);
+    onStart?.(() => w.child.kill());
+    const timer = timeoutMs > 0 ? setTimeout(() => w.child.kill(), timeoutMs) : undefined;
     w.onError = (e) => { clearTimeout(timer); resolve({ ok: false, out: w.out, err: e.message }); };
     w.onClose = (code) => { clearTimeout(timer); resolve({ ok: code === 0, out: w.out, err: w.err }); };
   });
