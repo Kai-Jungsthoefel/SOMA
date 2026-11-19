@@ -15,7 +15,7 @@ from pathlib import Path
 
 import cadquery as cq
 
-from . import cqcompat, measure, mesher, params, registry
+from . import cqcompat, measure, mesher, parmesh, params, registry
 
 DEFAULT_ENTRY = "model.py"
 # Fassung von model.glb, model.map.json und geometry/. Die App zeigt beim Oeffnen den letzten Build ohne neu zu bauen, aber
@@ -223,6 +223,34 @@ def auto_tolerance(shapes):
     return max(0.01, min(0.2, diag * 0.0004))
 
 
+TOL_PER_MM = 0.0004  # mesh deflection per mm of size, see auto_tolerance and mesh_tolerances
+
+
+def _edge_diag(shape):
+    """Diagonal of the bounding box of the edges. For choosing a mesh tolerance this is close enough (within 0.1 % on
+    the boat from issue #13) and fast: the exact box (BoundingBox()) costs up to a second per freeform part."""
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+    from OCP.TopAbs import TopAbs_EDGE
+    from OCP.TopExp import TopExp_Explorer
+    box = Bnd_Box()
+    ex = TopExp_Explorer(shape.wrapped, TopAbs_EDGE)
+    while ex.More():
+        BRepBndLib.Add_s(ex.Current(), box, False)
+        ex.Next()
+    return 0.0 if box.IsVoid() else box.SquareExtent() ** 0.5
+
+
+def mesh_tolerances(shapes):
+    """Mesh tolerance of the model and of each part for the viewer. The model value is the one of auto_tolerance (at
+    most 0.2 mm). A part larger than that gets its own, relative to its size: a 19 m mast at 0.2 mm took 96 s and
+    390,000 triangles for one face, at 8 mm 0.3 s, and still looks round (the angle limit of 0.3 rad applies as well).
+    Parts below 500 mm keep the model value, so small models are meshed exactly as before."""
+    diags = [_edge_diag(s) for s in shapes]
+    model = max(0.01, min(0.2, max(diags, default=0.0) * TOL_PER_MM))
+    return model, [max(model, d * TOL_PER_MM) for d in diags]
+
+
 def _assembly(name, items, taken):
     """Baugruppe aus Teilen mit Gruppenpfad, von unten nach oben gebaut (cq.Assembly kopiert beim Hinzufuegen).
     Gruppennamen werden ASCII und eindeutig, wie die Teilnamen (der STEP-Export verlangt beides)."""
@@ -258,44 +286,54 @@ def step_assembly(parts, project_name):
 
 
 def write_outputs(root, parts, project_name):
-    tol = auto_tolerance([p["shape"] for p in parts])
+    tol, tols = mesh_tolerances([p["shape"] for p in parts])
     timings = {}
 
+    # Large models are meshed in worker processes (issue #16). They start first and mesh while this process writes the
+    # STEP file and the geometry for measuring. Without workers the meshing happens below, after the STEP export as before
     t = time.perf_counter()
-    asm = step_assembly(parts, project_name)
-    (root / "output").mkdir(exist_ok=True)
-    asm.export(str(root / "output" / "model.step"))
-    timings["step"] = time.perf_counter() - t
+    meshing = parmesh.MeshJob([p["shape"] for p in parts], tols, 0.3).start()
+    t_start = time.perf_counter() - t
 
-    t = time.perf_counter()
-    (root / ".soma").mkdir(exist_ok=True)
-    # Kennung dieses Builds: verbindet model.glb, model.map.json und die exakte Geometrie fuer das Messen (E9)
-    build_id = uuid.uuid4().hex
-    measure.write_geometry(root / ".soma", [p["shape"] for p in parts], build_id)
+    try:
+        t = time.perf_counter()
+        asm = step_assembly(parts, project_name)
+        (root / "output").mkdir(exist_ok=True)
+        asm.export(str(root / "output" / "model.step"))
+        timings["step"] = time.perf_counter() - t
+
+        t = time.perf_counter()
+        (root / ".soma").mkdir(exist_ok=True)
+        # Kennung dieses Builds: verbindet model.glb, model.map.json und die exakte Geometrie fuer das Messen (E9)
+        build_id = uuid.uuid4().hex
+        measure.write_geometry(root / ".soma", [p["shape"] for p in parts], build_id)
+        done = meshing.result()
+    finally:
+        meshing.close()  # workers do not outlive a failed STEP export
     glb_parts, map_parts = [], []
     for i, p in enumerate(parts):
         pid = f"{i}:{p['step_name']}"
-        bb = p["shape"].BoundingBox()
+        bb = done[i]["bbox"]
         group = "/".join(p.get("group", ())) or None
         map_parts.append(dict(
             id=pid, name=p["name"], step_name=p["step_name"], role=p["role"], group=group,
             file=_rel(p["file"], root), line=p["line"], end_line=p["end_line"],
-            bbox=[[round(bb.xmin, 3), round(bb.ymin, 3), round(bb.zmin, 3)],
-                  [round(bb.xmax, 3), round(bb.ymax, 3), round(bb.zmax, 3)]],
-            volume=round(p["shape"].Volume(), 3)))
+            bbox=[[round(v, 3) for v in bb[0]], [round(v, 3) for v in bb[1]]],
+            volume=round(done[i]["volume"], 3)))
         # solid: geschlossener Koerper. Nur dann fuellt der Viewer die Schnittflaeche (bei offenen Flaechen waere das falsch)
         meta = dict(partId=pid, name=p["name"], role=p["role"], group=group, solid=bool(p["shape"].Solids()))
         # axis: Normteile werden in der Explosionsansicht entlang ihrer Achse herausgezogen
         if p.get("axis"):
             meta["axis"] = list(p["axis"])
-        glb_parts.append(dict(meta=meta, mesh=mesher.mesh_shape(p["shape"], tol, 0.3), color=p["color"]))
+        glb_parts.append(dict(meta=meta, mesh=done[i]["mesh"], color=p["color"]))
     soma, geo = root / ".soma", root / ".soma" / "geometry"
     glb_size = write_atomic(soma / "model.glb", lambda p: mesher.write_glb(p, glb_parts), geo)
     text = json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False)
     write_atomic(soma / "model.map.json", lambda p: p.write_text(text, encoding="utf-8"), geo)
     measure.remove_old_geometry(soma, build_id)  # erst jetzt: model.map.json zeigt auf den neuen Stand
-    timings["glb"] = time.perf_counter() - t
-    return dict(glb_bytes=glb_size, tolerance=round(tol, 4), timings=timings, map_parts=map_parts)
+    timings["glb"] = time.perf_counter() - t + t_start
+    return dict(glb_bytes=glb_size, tolerance=round(tol, 4), timings=timings, map_parts=map_parts,
+                mesh_workers=meshing.n, notes=meshing.notes)
 
 
 def run_build(project_dir):
@@ -322,7 +360,8 @@ def _run_build(root):
         out = write_outputs(root, parts, pj.get("name") or root.name)
         timings.update(out["timings"])
         result.update(parts=[dict(name=p["name"], role=p["role"], file=p["file"], line=p["line"]) for p in out["map_parts"]],
-                      glb_bytes=out["glb_bytes"], tolerance=out["tolerance"])
+                      glb_bytes=out["glb_bytes"], tolerance=out["tolerance"], mesh_workers=out["mesh_workers"])
+        result["warnings"].extend(out["notes"])
         if COMPAT_WARNING:
             result["warnings"].append(COMPAT_WARNING)
         result["warnings"].extend(params.unused_warnings())

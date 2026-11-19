@@ -8,7 +8,7 @@ from pathlib import Path
 
 import cadquery as cq
 
-from . import build, measure, mesher
+from . import build, measure, mesher, parmesh
 
 
 def _flatten(assy, loc=None, groups=None):
@@ -38,20 +38,24 @@ def step_to_glb(step_path, out_dir, name=None):
         groups.append("/".join(grp) or None)
     if not items:
         raise ValueError("The STEP file contains no geometry")
-    tol = build.auto_tolerance([s for _, s, _ in items])
-    build_id = uuid.uuid4().hex
-    measure.write_geometry(out, [s for _, s, _ in items], build_id)  # damit sich auch alte Staende vermessen lassen
+    _, tols = build.mesh_tolerances([s for _, s, _ in items])  # as in the build, so an old version looks the same
+    meshing = parmesh.MeshJob([s for _, s, _ in items], tols, 0.3).start()
+    try:
+        build_id = uuid.uuid4().hex
+        measure.write_geometry(out, [s for _, s, _ in items], build_id)  # damit sich auch alte Staende vermessen lassen
+        done = meshing.result()
+    finally:
+        meshing.close()
     glb_parts, map_parts = [], []
     for i, (name, shape, rgba) in enumerate(items):
         name = name or f"Part {i + 1}"
         pid = f"{i}:{name}"
-        bb = shape.BoundingBox()
+        bb = done[i]["bbox"]
         map_parts.append(dict(id=pid, name=name, role="basic", group=groups[i],
-                              bbox=[[round(bb.xmin, 3), round(bb.ymin, 3), round(bb.zmin, 3)],
-                                    [round(bb.xmax, 3), round(bb.ymax, 3), round(bb.zmax, 3)]],
-                              volume=round(shape.Volume(), 3)))
+                              bbox=[[round(v, 3) for v in bb[0]], [round(v, 3) for v in bb[1]]],
+                              volume=round(done[i]["volume"], 3)))
         glb_parts.append(dict(meta=dict(partId=pid, name=name, role="basic", group=groups[i], solid=bool(shape.Solids())),
-                              mesh=mesher.mesh_shape(shape, tol, 0.3), color=rgba))
+                              mesh=done[i]["mesh"], color=rgba))
     mesher.write_glb(out / "model.glb", glb_parts)
     (out / "model.map.json").write_text(json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
     measure.remove_old_geometry(out, build_id)

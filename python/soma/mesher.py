@@ -17,6 +17,10 @@ from OCP.TopAbs import TopAbs_REVERSED
 from OCP.TopLoc import TopLoc_Location
 
 
+# Surface types whose area and center in the viewer come from the mesh instead of the exact integral (see mesh_shape)
+MESH_MEASURED = frozenset(("BSPLINE", "BEZIER", "OFFSET", "REVOLUTION", "OTHER"))
+
+
 def srgb_to_linear(c):
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
@@ -41,9 +45,10 @@ def _direction_of(face):
         return {}
 
 
-def mesh_shape(shape, tol=0.05, ang=0.3):
-    """Tesselliert ein cq.Shape. Liefert Dict mit numpy-Arrays und Flaechen-/Kanten-Tabellen."""
-    BRepMesh_IncrementalMesh(shape.wrapped, tol, False, ang, True)
+def mesh_shape(shape, tol=0.05, ang=0.3, parallel=True):
+    """Tesselliert ein cq.Shape. Liefert Dict mit numpy-Arrays und Flaechen-/Kanten-Tabellen.
+    parallel: OCCT meshes the faces in its own threads (off in the worker processes of parmesh.py)."""
+    BRepMesh_IncrementalMesh(shape.wrapped, tol, False, ang, parallel)
 
     pos, idx, nrm = [], [], []
     faces = []
@@ -74,10 +79,22 @@ def mesh_shape(shape, tol=0.05, ang=0.3):
         ln = np.linalg.norm(vn, axis=1, keepdims=True)
         vn = np.where(ln > 1e-12, vn / np.maximum(ln, 1e-12), 0).astype(np.float32)
 
-        c = face.Center()
+        kind = face.geomType()
+        if kind in MESH_MEASURED and t.shape[0]:
+            # Freeform faces: area and centroid from the triangles. The exact integral costs about 5 ms per B-spline
+            # face, most of the meshing time in large organic models (issue #16). The viewer only shows the value,
+            # the measuring tool asks the measuring service for the exact one
+            tri_area = np.linalg.norm(fn.astype(np.float64), axis=1) / 2
+            area = float(tri_area.sum())
+            c = (p[t].astype(np.float64).mean(axis=1) * tri_area[:, None]).sum(axis=0) / max(area, 1e-12)
+            cx, cy, cz = (float(v) for v in c)
+        else:
+            area = face.Area()
+            cc = face.Center()
+            cx, cy, cz = cc.x, cc.y, cc.z
         entry = dict(
-            id=fi, surface=face.geomType(), area=round(face.Area(), 4),
-            center=[round(c.x, 4), round(c.y, 4), round(c.z, 4)],
+            id=fi, surface=kind, area=round(area, 4),
+            center=[round(cx, 4), round(cy, 4), round(cz, 4)],
             triStart=tri_total, triCount=int(t.shape[0]),
         )
         entry.update(_direction_of(face))
