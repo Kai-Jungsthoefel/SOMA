@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Phones (web version): lay out at the real width, otherwise the browser pretends ~980px and the narrow mode never starts -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:">
 <title>SOMA</title>
 <link rel="stylesheet" href="xterm.css">
@@ -43,6 +45,8 @@
     <nav id="rail" aria-label="Sidebars">
       <button data-panel="params" aria-pressed="false" title="Parameters: values of the model you can change, such as sizes, counts or angles"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Parameters</span></button>
       <button data-panel="files" aria-pressed="false" title="Files of the model. Click a file to open it in the code next to it."><i data-icon="folder" data-size="20" data-stroke="1.7"></i><span>Files</span></button>
+      <!-- Only in narrow windows (compact.ts): there the code has no column of its own and no switch in the header -->
+      <button id="btn-rail-code" class="compact-only" aria-pressed="false" title="Code of the model"><i data-icon="code" data-size="20" data-stroke="1.7"></i><span>Code</span></button>
       <span class="rail-sep"></span>
       <button data-panel="analysis" aria-pressed="false" title="Analyses of the agent: strength (FEM), wall thickness, overhang, clearance. Shows the result in the viewer."><i data-icon="gauge" data-size="20" data-stroke="1.7"></i><span>Analysis</span><i id="nd-analysis" class="nd" hidden></i></button>
       <button data-panel="anim" aria-pressed="false" title="Animations and videos of the agent. Plays the animation in the viewer."><i data-icon="anim" data-size="20" data-stroke="1.7"></i><span>Animation</span><i id="nd-anim" class="nd" hidden></i></button>
@@ -409,6 +413,14 @@
       </div>
     </aside>
   </div>
+
+  <!-- Narrow windows (phones): one view at a time instead of the columns, chosen here (compact.ts) -->
+  <nav id="mtabs" class="mtabs" aria-label="Views" hidden>
+    <button data-tab="model" aria-pressed="true"><i data-icon="cube" data-size="20" data-stroke="1.7"></i><span>Model</span></button>
+    <button data-tab="agent" aria-pressed="false"><i data-icon="chat" data-size="20" data-stroke="1.7"></i><span>Agent</span></button>
+    <button data-tab="params" aria-pressed="false"><i data-icon="sliders" data-size="20" data-stroke="1.7"></i><span>Parameters</span></button>
+    <button data-tab="more" aria-pressed="false"><i data-icon="more" data-size="20" data-stroke="1.7"></i><span>More</span></button>
+  </nav>
 
   <!-- Loading screen over the whole window while a model is created: new, tutorial, from a CadQuery script (loading.ts) -->
   <div id="app-busy" class="vbusy appbusy" hidden>

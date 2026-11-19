@@ -30,6 +30,7 @@ import { ResultTool } from './resulttool';
 import { ResultLayer } from './resultview';
 import { SomaChat, type ChatState } from './chat';
 import { TerminalTabs } from './terminals';
+import { CompactLayout, type CompactView } from './compact';
 import { $, ask, el, fmtWhen, menuItem, menus, toast } from './ui';
 import { VersionsBar } from './versions';
 import { VideoView } from './videoview';
@@ -69,6 +70,14 @@ function createViewer(): Viewer {
 const viewer = createViewer();
 viewer.attachCube($('cube-view'));
 const terminals = new TerminalTabs($('term-tabs'), $('term-panes'), $('btn-term-add'), $('strip-tabs'));
+/** Narrow windows (compact.ts). Set up once the agent area exists, before that the columns behave as on the desktop. */
+let compact: CompactLayout | null = null;
+/** In a narrow window: bring this view to the front (or leave it, `false`). Wide windows ignore it. */
+function compactView(view: CompactView, on = true): void {
+  if (!compact?.on) return;
+  if (on) compact.show(view);
+  else compact.closed(view);
+}
 
 let project: ProjectInfo | null = null;
 let saveState: SaveState | null = null;
@@ -109,6 +118,8 @@ const PANELS: PanelName[] = ['params', 'files', 'analysis', 'anim', 'skills'];
 let panel: PanelName | null = null;
 /** Zuletzt gezeigte Ansicht der Seitenleiste: Der Schalter oben bringt sie wieder. */
 let lastPanel: PanelName = 'files';
+/** The same for the tab "More" of narrow windows, which leaves the parameters to their own tab. */
+let lastMorePanel: PanelName = 'files';
 let filesDirty = true;
 let codeOpen = false;
 /** Der Dateibaum entsteht nach dem Code-Panel, das ihm schon beim Aufbau die offene Datei meldet. */
@@ -117,6 +128,7 @@ let fileTree: FileTree | null = null;
 function showPanel(p: PanelName | null): void {
   panel = p;
   if (p) lastPanel = p;
+  if (p && p !== 'params') lastMorePanel = p;
   $('side').hidden = !p;
   $('split-side').hidden = !p;
   $('panel-params').hidden = p !== 'params';
@@ -137,6 +149,7 @@ function showPanel(p: PanelName | null): void {
   if (p !== 'analysis' && p !== 'anim') store.set('soma.side', p ?? '');
   renderLayout();
   renderResults();
+  compactView('side', !!p);
 }
 
 /** Code als eigene Spalte neben der Seitenleiste, damit Dateien und Code gleichzeitig offen sein können. */
@@ -152,6 +165,13 @@ function showCode(on: boolean): void {
   }
   renderLayout();
   renderDrawingsRail();
+  compactView('code', on);
+}
+
+/** Opens the code column for a file the caller loads into it, in a narrow window in front of the rest. */
+function revealCode(): void {
+  if (!codeOpen) { codeOpen = true; $('editor').hidden = false; $('split-code').hidden = false; renderLayout(); }
+  compactView('code');
 }
 
 /** Spalten-Schalter oben rechts: zeigen, welche Spalten offen sind. */
@@ -201,7 +221,7 @@ function openLink(href: string): void {
 }
 
 async function openCode(file: string, mark?: Mark): Promise<void> {
-  if (!codeOpen) { codeOpen = true; $('editor').hidden = false; $('split-code').hidden = false; renderLayout(); }
+  revealCode();
   await code.open(file, mark);
 }
 
@@ -676,10 +696,15 @@ const drawingsShown = () => codeOpen && code.activeFile === DRAWINGS_KEY;
 
 /** Klick auf „Drawings“ an der Leiste: das Dokument zeigen, ist es schon vorne, die Code-Spalte schließen. */
 function toggleDrawings(): void {
-  if (drawingsShown()) { showCode(false); return; }
+  if (drawingsShown()) {
+    // Narrow window: the drawings are open but behind another view, the click brings them back instead of closing them
+    if (compact?.on && compact.view !== 'code') compactView('code');
+    else showCode(false);
+    return;
+  }
   // Blätter brauchen die Breite: Eine offene Seitenleiste geht zu, wie beim Wechsel zwischen ihren Reitern
   if (panel) showPanel(null);
-  if (!codeOpen) { codeOpen = true; $('editor').hidden = false; $('split-code').hidden = false; renderLayout(); }
+  revealCode();
   code.openPane(DRAWINGS_KEY, 'Drawings', () => new DrawingsView({
     list: () => api.drawings.list(), build: (f) => api.drawings.build(f), readBinary: (rel) => api.fs.readBinary(rel),
     pdf: {
@@ -1762,7 +1787,8 @@ $('btn-err-fold').addEventListener('click', () => {
 
 document.querySelectorAll<HTMLButtonElement>('#rail [data-panel]').forEach((b) => b.addEventListener('click', () => {
   const p = b.dataset.panel as PanelName;
-  showPanel(panel === p ? null : p);
+  // Narrow window: the rail sits above the panel and switches it, the tab bar leaves it
+  showPanel(panel === p && !compact?.on ? null : p);
 }));
 document.querySelectorAll<HTMLButtonElement>('.side-close').forEach((b) => b.addEventListener('click', () => showPanel(null)));
 const toggleSide = () => showPanel(panel ? null : lastPanel);
@@ -1770,15 +1796,22 @@ $('btn-lay-side').addEventListener('click', toggleSide);
 $('btn-lay-code').addEventListener('click', () => showCode(!codeOpen));
 $('btn-lay-agent').addEventListener('click', () => setAgentCollapsed(!$('terminals').classList.contains('collapsed')));
 $('btn-code-close').addEventListener('click', () => showCode(false));
+// Narrow windows only (the button is hidden otherwise): the code in front, opened with model.py if it was closed
+$('btn-rail-code').addEventListener('click', () => { if (codeOpen) compactView('code'); else showCode(true); });
 
 // ---- Agent-Bereich ----------------------------------------------------------------------------------------------
 
-function setAgentCollapsed(on: boolean): void {
+/**
+ * `remember`: false for the narrow mode's own changes, which must not change the layout of the wide window. In a narrow
+ * window the agent area never collapses into the strip: it fills the window or another view does.
+ */
+function setAgentCollapsed(on: boolean, remember = true): void {
+  if (remember && compact?.on) { compactView('agent', !on); return; }
   $('terminals').classList.toggle('collapsed', on);
   $('agent-strip').hidden = !on;
   $('split-right').hidden = on;
   if (!on) terminals.refit();
-  store.set('soma.agentCollapsed', on ? '1' : '0');
+  if (remember) store.set('soma.agentCollapsed', on ? '1' : '0');
   renderLayout();
 }
 $('btn-agent-expand').addEventListener('click', () => setAgentCollapsed(false));
@@ -1812,7 +1845,10 @@ function renderChatDot(s: ChatState): void {
     d.dataset.state = s;
     d.replaceChildren(...(s === 'work' ? [el('span', { className: 'spin' }, icon('spin', 12, 2.4))] : []));
   }
+  // Narrow window: the tab "Agent" says when SOMA AI works or asks, the agent area may be behind another view
+  compact?.mark('agent', agentMark(s));
 }
+function agentMark(s: ChatState): string { return s === 'work' || s === 'wait' ? s : ''; }
 renderChatDot('off');
 
 /**
@@ -2164,6 +2200,29 @@ if (store.get('soma.agentCollapsed') === '1') setAgentCollapsed(true);
   const side = store.get('soma.side');
   showPanel(side && PANELS.includes(side as PanelName) ? side as PanelName : null);
 }
+// Narrow windows: after the layout above, so a narrow start shows the model and keeps the wide layout for later
+{
+  /** The agent area was collapsed in the wide window: collapsed again when the window gets wide. */
+  let agentWasCollapsed = false;
+  compact = new CompactLayout($('body'), $('mtabs'), {
+    open: (tab) => {
+      if (tab === 'params') { showPanel('params'); return 'side'; }
+      // More: the panel last used there, not the parameters (they have their own tab)
+      if (tab === 'more') { if (!panel || panel === 'params') showPanel(lastMorePanel); return 'side'; }
+      return tab;
+    },
+    tab: (v) => (v === 'side' ? (panel === 'params' ? 'params' : 'more') : v === 'code' ? 'more' : v),
+    changed: (on) => {
+      const collapsed = $('terminals').classList.contains('collapsed');
+      if (on) { agentWasCollapsed = collapsed; if (collapsed) setAgentCollapsed(false, false); }
+      else if (agentWasCollapsed) setAgentCollapsed(true, false);
+      // The viewer changes its shape a lot (a column becomes the whole phone): fit the model again, once it has the new size
+      requestAnimationFrame(() => requestAnimationFrame(() => viewer.setView('fit')));
+    },
+    shown: (v) => { if (v === 'agent') terminals.refit(); },
+  });
+  compact.mark('agent', agentMark(lastChatState as ChatState));
+}
 // Die App beginnt auf der Startseite (E69), der Hauptprozess öffnet kein Modell. Nur im Testmodus öffnet er gleich eins.
 if (api.startsHome) void showStart(true);
 // Erst jetzt steht, was der Nutzer sehen soll, die Startseite liegt schon über der Oberfläche
@@ -2173,6 +2232,7 @@ requestAnimationFrame(() => hideBoot());
 if (api.testMode) {
   (window as unknown as Record<string, unknown>).__t = {
     viewer, terminals,
+    compact: () => ({ on: !!compact?.on, view: compact?.view ?? 'model' }),
     project: () => project,
     parts: () => viewer.partList(),
     partCount: () => viewer.partList().length,

@@ -190,6 +190,7 @@ const api: SomaApi = {
     ? {
       answers: (a) => ipcRenderer.invoke('test:answers', a), screenshot: (f, rect) => ipcRenderer.invoke('test:screenshot', f, rect), bridge: () => ipcRenderer.invoke('test:bridge'),
       close: () => ipcRenderer.invoke('test:close'), clipboard: () => ipcRenderer.invoke('test:clipboard'),
+      size: (w, h) => ipcRenderer.invoke('test:size', w, h),
     }
     : undefined,
 };

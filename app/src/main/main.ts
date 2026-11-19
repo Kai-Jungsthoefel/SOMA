@@ -379,6 +379,8 @@ function registerIpc(ctl: ProjectController): void {
     ipcMain.handle('test:clipboard', () => testClipboard);
     // Fenster schließen wie mit dem Kreuz (mit Rückfrage und Verlassen des Modells). window.close() der Seite umgeht das
     ipcMain.handle('test:close', (e) => { BrowserWindow.fromWebContents(e.sender)?.close(); });
+    // Size of the page, for the layout of narrow windows (phones, test/compact.mjs)
+    ipcMain.handle('test:size', (e, w: number, h: number) => { BrowserWindow.fromWebContents(e.sender)?.setContentSize(Math.round(w), Math.round(h)); });
     // Screenshot auch aus unsichtbaren Fenstern (CDP liefert dort kein Bild)
     // `rect` (in CSS-Pixeln): nur dieser Ausschnitt, etwa für die Bilder der Hilfe (test/helpshots.mjs)
     // capturePage(rect) liefert bei Fenstern außerhalb des Bildschirms das ganze Bild, deshalb danach zuschneiden

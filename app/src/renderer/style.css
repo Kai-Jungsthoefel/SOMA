@@ -1532,3 +1532,95 @@ select.ai-field { width:170px; flex-shrink:0; }
 :is(.ai-menu, .st-ai-menu) .mi > span:not(.sub):not(.noico) { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 :is(.ai-menu, .st-ai-menu) .mi .sub { flex-shrink:0; margin-left:auto; }
 .ai-menu-scroll { max-height:320px; overflow-y:auto; }
+
+/* ---- Narrow windows (compact.ts): one view at a time, chosen in the tab bar at the bottom ------------------------ */
+/* The inset for the phone's own navigation bar comes on top of the 56px, inside them it squeezes the buttons upwards */
+.mtabs { position:relative; z-index:6; flex-shrink:0; display:flex; height:calc(56px + env(safe-area-inset-bottom, 0px)); padding-bottom:env(safe-area-inset-bottom, 0px); background:var(--s1); border-top:1px solid var(--line); }
+.mtabs[hidden] { display:none; }
+.mtabs button { position:relative; flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; color:var(--tx2); font-size:11px; }
+.mtabs button[aria-pressed=true] { color:var(--acc-tx); }
+.mtabs button[aria-pressed=true]::before { content:''; position:absolute; top:-1px; left:28%; right:28%; height:2px; border-radius:1px; background:var(--acc); }
+/* SOMA AI works or asks while another view is in front (colors as at its tab) */
+.mtabs button[data-mark=work]::after, .mtabs button[data-mark=wait]::after { content:''; position:absolute; top:9px; left:calc(50% + 8px); width:7px; height:7px; border-radius:50%; background:var(--acc); box-shadow:0 0 0 2px var(--s1); }
+.mtabs button[data-mark=wait]::after { background:var(--warn); }
+
+/* On its side the phone is low: a flat bar, icon and label side by side */
+@media (orientation: landscape) {
+  .mtabs { height:calc(40px + env(safe-area-inset-bottom, 0px)); }
+  .mtabs button { flex-direction:row; gap:8px; font-size:12px; }
+  .mtabs button[data-mark=work]::after, .mtabs button[data-mark=wait]::after { top:8px; left:calc(50% - 30px); }
+}
+body.compact .splitter { display:none; }
+body.compact #body > :is(#rail, #side, #editor, #center, #terminals) { display:none; }
+body.compact #body[data-view=model] > #center,
+body.compact #body[data-view=code] > #editor:not([hidden]),
+body.compact #body[data-view=agent] > #terminals,
+body.compact #body[data-view=side] > #side:not([hidden]) { display:flex; flex:1; width:auto; min-width:0; border:0; }
+/* The terminal can be a row taller than its area until it fits again, it must not reach over the tab bar */
+body.compact #terminals { overflow:hidden; }
+/* Parameters and More: the rail as a row above the panel, it switches between the panels, opens the code and holds Help and Settings */
+body.compact #body[data-view=side] { flex-direction:column; }
+body.compact #body[data-view=side] > #rail { display:flex; flex-direction:row; width:auto; height:60px; padding:4px 8px; overflow-x:auto; scrollbar-width:none; border-right:0; border-bottom:1px solid var(--line); }
+#rail .compact-only { display:none; }
+body.compact #rail .compact-only { display:flex; }
+body.compact #rail button { flex-shrink:0; width:60px; }
+body.compact #rail .rail-sep { width:1px; height:32px; margin:0 6px; align-self:center; }
+body.compact #rail .grow { flex:1 0 8px; }
+body.compact .side-close { display:none; }
+/* Phone upright: the tools go below the view buttons at the right edge, one column with the cube, the model keeps the
+   middle (the narrow desktop layout puts them left of the cube, which on a phone is right over the model). On its side the
+   viewer is wide enough for the row at the top. 282px: below the cube (12 + 116 + 8) and its buttons (134) */
+@container viewer (max-width: 560px) {
+  body.compact .vtop { left:auto; right:14px; top:282px; }
+  body.compact .cube { align-items:flex-end; }
+}
+/* On its side the viewer is too low for the view buttons under the cube as a column: a row */
+@media (orientation: landscape) {
+  body.compact .cube { align-items:flex-end; }
+  body.compact .vbtns { flex-direction:row; }
+}
+
+/* Header: what fits on a phone. Import goes (no files to drag there anyway), Export keeps only its icon */
+body.compact .top { gap:6px; padding-right:8px; }
+body.compact .top > .logo { width:44px; }
+body.compact .docname b { max-width:none; }
+body.compact .top :is(#layout, #btn-import, .savestate, .btn.primary .kbd, #status-detail, #auto-label) { display:none; }
+body.compact .top > .grow:first-of-type { display:none; }
+body.compact .pill .main { padding:0 10px; }
+body.compact .pill .auto { padding:0 10px 0 8px; }
+body.compact #btn-export { font-size:0; gap:0; padding:0 8px; }
+body.compact #btn-export svg + svg { display:none; }
+
+/* Start page in a narrow window: one column, the agents below the models */
+body.compact .start-body { overflow-x:hidden; }
+body.compact .start-grid { width:calc(100% - 32px); padding:20px 0 40px; grid-template-columns:minmax(0,1fr); gap:24px; }
+body.compact .start-head { flex-wrap:wrap; }
+body.compact .start-head h1 { flex-basis:100%; }
+body.compact .start-head .kbd, body.compact .bigcard .kbd { display:none; }
+body.compact .start-empty { grid-template-columns:minmax(0,1fr); }
+body.compact .tour-intro { flex-wrap:wrap; }
+body.compact .tour-intro .ti-text { flex-basis:calc(100% - 80px); }
+body.compact .start-filter { width:auto; flex:1; min-width:0; }
+body.compact .recent-grid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); }
+body.compact #btn-start-close { max-width:160px; }
+/* Phones have no hover: removing a recent model stays reachable */
+body.compact .recent-rm { opacity:1; }
+
+/* Settings and help fill the window, their navigation is a row on top, columns stack */
+body.compact .st-scrim { padding:0; }
+body.compact .st-dlg { width:100%; height:100%; border:0; border-radius:0; }
+body.compact .st-body { flex-direction:column; }
+body.compact .st-nav { width:auto; flex-direction:row; flex-shrink:0; overflow-x:auto; scrollbar-width:none; border-right:0; border-bottom:1px solid var(--line); }
+body.compact .st-nav button { flex-shrink:0; }
+body.compact .st-sec { flex-direction:column; min-height:0; }
+body.compact .st-col { width:auto; max-height:40%; border-right:0; border-bottom:1px solid var(--line); }
+body.compact .st-pg { padding:16px 16px 32px; }
+body.compact .st-field { flex-direction:column; gap:8px; }
+body.compact .st-kv { grid-template-columns:minmax(0,1fr); gap:2px; }
+body.compact .st-kv .v { margin-bottom:6px; }
+body.compact .help-doc { padding:16px 16px 40px; }
+body.compact .help-doc .md-img { max-width:100%; height:auto; }
+body.compact .st-hd > .c3.small { display:none; }
+body.compact .st-hd { gap:8px; }
+body.compact #btn-help-video { font-size:0; gap:0; }
+body.compact .help-nav button { white-space:nowrap; }

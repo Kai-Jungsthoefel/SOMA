@@ -518,6 +518,8 @@ export interface SomaApi {
     answers(a: unknown[]): Promise<void>; screenshot(file: string, rect?: { x: number; y: number; width: number; height: number }): Promise<{ width: number; height: number }>; bridge(): Promise<Record<string, string>>; close(): Promise<void>;
     /** Was die App in die Zwischenablage legen wollte (im Test bleibt die echte unberührt). */
     clipboard(): Promise<string>;
+    /** Sets the size of the page in CSS pixels (the window around it follows). */
+    size(width: number, height: number): Promise<void>;
   };
   build: {
     run(): Promise<void>;
