@@ -16,6 +16,7 @@ the version is bumped.
 - Settings > Viewer > Build time limit: how long a build may take before SOMA stops it, from 5 minutes to 2 hours or no limit. The default stays 10 minutes. The message of a stopped build says where to raise it (issue #13).
 - A loading screen while a new model is created ("New model", the tutorial, a CadQuery script): it shows at once, names the step (first build, version history, opening) and stays until the viewer, the files and the agent panel have loaded the model. Before, the old model stayed on screen for several seconds without a sign that anything happened. The tutorial's tour starts once the model is loaded.
 
+- A layout for narrow windows such as phones: below a width of about 760 pixels SOMA shows one view at a time, chosen in a tab bar at the bottom (Model, Agent, Parameters, More), instead of the columns side by side. "More" holds the files, the code, analyses, animations, drawings, skills, help and settings. The start page, Settings and Help fit the width too. Widening the window brings back the columns as they were. Mainly for the web version (issue #14).
 - SOMA AI: an effort setting, how long SOMA AI thinks before it acts (Low to Max, the levels the model offers). The button next to the model below the chat input and Settings > SOMA AI change it, for the open conversation and new ones. More effort gives better models, so the recommendation now says High effort or more.
 
 ### Fixed

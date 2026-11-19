@@ -41,6 +41,8 @@ builds it and shows it in 3D. You check the result, point at things, and ask for
 
 The logo at the top left opens the start page.
 
+In a narrow window, such as a phone, SOMA shows one view at a time instead of the columns. The tab bar at the bottom switches between **Model** (the viewer), **Agent**, **Parameters** and **More** (files, code, analyses, animations, drawings, skills, Help and Settings in a row at the top). Opening a file shows the code, "Send to agent" shows the agent. A dot on **Agent** means SOMA AI is working or waits for an answer. The column buttons and Import are hidden there. Widening the window brings back the columns as they were.
+
 ## Start page
 
 ![The start page](../help/start.png)
