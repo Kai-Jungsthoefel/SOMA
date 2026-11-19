@@ -27,6 +27,7 @@ the version is bumped.
 - SOMA AI: a model chosen below the chat input is now also the one Settings > SOMA AI shows and new conversations start with.
 - SOMA AI: the chat follows new steps and answers while you are at its end, also while an answer is still being written. Scrolled up, it stays where you read.
 - SOMA AI no longer works unseen: when it starts working or asks something, the agent area opens if it was collapsed, and a question brings its chat to the front.
+- SOMA AI: when the ChatGPT sign-in has expired, the chat says so and offers "Sign in again", instead of "Something went wrong at the AI service. Try again", which could never help.
 - SOMA AI asks fewer rounds of questions: at most once before a task and only what really matters, otherwise it picks sensible defaults and names them.
 - `soma drawing build <file>` without a list of sheets (for example in a cloned folder) builds all drawings, so `output/drawings.pdf` keeps every sheet instead of only that file's.
 
