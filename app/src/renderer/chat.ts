@@ -189,8 +189,13 @@ export function plainQuestion(facts: Record<string, string>): { icon: string; ti
 
 // ---- Problems in plain words ----------------------------------------------------------------------------------------
 
-interface Problem { kind: 'warn' | 'info' | 'err'; icon: string; title: string; text: string; action?: 'setup' | 'retry' }
+interface Problem { kind: 'warn' | 'info' | 'err'; icon: string; title: string; text: string; action?: 'setup' | 'retry'; button?: string }
 export function plainProblem(msg: string): Problem {
+  // An expired sign-in (ChatGPT's refresh token is dead: "OAuth refresh failed … (400): invalid_grant"). Checked first:
+  // the 400 would otherwise end at "Try again", which can never help, only signing in again does
+  if (/invalid_grant|refresh(ing)? (the )?(access )?(token )?failed|oauth.{0,40}(refresh|expired)|(token|session|sign.?in|login) (has )?expired|(sign|log) ?in again|re-?authenticat/i.test(msg)) {
+    return { kind: 'warn', icon: 'user', title: 'Your sign-in has expired', text: 'Sign in again to keep going. Your model and the conversation are kept.', action: 'setup', button: 'Sign in again' };
+  }
   if (/\b429\b|rate.?limit|quota|usage limit|too many requests|insufficient/i.test(msg)) {
     return { kind: 'warn', icon: 'clock', title: 'You have reached the limit of your plan or account', text: 'Wait a while, or use another sign-in. Your model and the conversation are kept.', action: 'setup' };
   }
@@ -1346,7 +1351,7 @@ export class SomaChat {
       b.addEventListener('click', async () => { b.disabled = true; this.loaded = false; this.piUp = false; await this.renderChat(); });
       acts.append(b);
     } else if (p.action === 'setup') {
-      const b = el('button', { className: 'btn sm acc', textContent: 'Choose a sign-in' });
+      const b = el('button', { className: 'btn sm acc', textContent: p.button ?? 'Choose a sign-in' });
       b.addEventListener('click', () => this.renderSetup(true));
       acts.append(b);
     } else {

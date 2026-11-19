@@ -208,6 +208,17 @@ try {
   const prob = await ev(() => [...document.querySelectorAll('.ai-prob')].at(-1)?.textContent ?? '');
   check('A refused key becomes a problem with one way out', st.problems.at(-1) === 'The sign-in does not work any more' && prob.includes('Choose a sign-in'), st.problems.join(' | '));
 
+  // An expired sign-in (ChatGPT: "OAuth refresh failed … (400): invalid_grant") is not "Try again": that never helps
+  steps[steps.length - 1] = { status: 400, message: 'OAuth refresh failed: invalid_grant' };
+  const nProblems = st.problems.length;
+  await ev(() => { const i = document.querySelector('.ai-input'); i.value = 'And add vents, please.'; i.dispatchEvent(new Event('input')); });
+  await ev(() => document.querySelector('.ai-send').click());
+  await app.waitFor('second problem', (n) => window.__t.chat().problems.length > n, 60000, nProblems);
+  st = await chat();
+  const expired = await ev(() => [...document.querySelectorAll('.ai-prob')].at(-1)?.textContent ?? '');
+  check('An expired sign-in says so and offers to sign in again', st.problems.at(-1) === 'Your sign-in has expired' && expired.includes('Sign in again'), st.problems.join(' | '));
+  steps[steps.length - 1] = { status: 401, message: 'invalid x-api-key' };
+
   // ---- Another model and back: the conversation is there again --------------------------------------------------
   // A change, otherwise the model counts as untouched and disappears when it is left (E69): the fake model only built it
   fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nThe lid should be thicker.\n');
@@ -216,7 +227,7 @@ try {
   await app.waitFor('empty chat of the new model', () => window.__t.chat().phase === 'chat' && window.__t.chat().user.length === 0, 60000);
   await ev((id) => window.soma.project.open(id), modelId);
   await app.waitFor('old model', (id) => window.__t.project()?.id === id, 60000, modelId);
-  await app.waitFor('history', () => window.__t.chat().user.length === 2, 60000);
+  await app.waitFor('history', () => window.__t.chat().user.length === 3, 60000);
   st = await chat();
   check('After a model switch the conversation of the model is back, steps grouped as before', JSON.stringify(st.rows.map((r) => [r.state, r.count])) === '[["ok",2],["ok",1],["denied",1],["stopped",1]]',
     JSON.stringify(st.rows.map((r) => [r.state, r.count])));
@@ -234,9 +245,9 @@ try {
     JSON.stringify(convs));
   await shot('conversations');
   await ev(() => document.querySelector('.ai-menu .mi').click());
-  await app.waitFor('earlier conversation back', () => window.__t.chat().user.length === 2, 30000);
+  await app.waitFor('earlier conversation back', () => window.__t.chat().user.length === 3, 30000);
   st = await chat();
-  check('… a click brings it back: messages, steps and its model', st.user.length === 2 && st.rows.length === 4 && st.model?.id === 'mock-cad', JSON.stringify({ user: st.user.length, rows: st.rows.length, model: st.model?.id }));
+  check('… a click brings it back: messages, steps and its model', st.user.length === 3 && st.rows.length === 4 && st.model?.id === 'mock-cad', JSON.stringify({ user: st.user.length, rows: st.rows.length, model: st.model?.id }));
 
   // ---- Another sign-in: the conversation stays (the set-up has its own place) ----------------------------------
   const menu = async (item) => {
@@ -251,7 +262,7 @@ try {
   await app.waitFor('chat again', () => window.__t.chat().phase === 'chat', 10000);
   st = await chat();
   let lo = await leftover();
-  check('"Use another sign-in" and back: the conversation is there, no set-up left over', st.user.length === 2 && !lo.panel && !lo.setupInList, JSON.stringify(lo));
+  check('"Use another sign-in" and back: the conversation is there, no set-up left over', st.user.length === 3 && !lo.panel && !lo.setupInList, JSON.stringify(lo));
   await menu('Use another sign-in …');
   await app.waitFor('set-up', () => window.__t.chat().phase === 'setup', 10000);
   await ev(() => { const s = document.querySelector('.ai-pane select'); s.value = 'openrouter'; s.dispatchEvent(new Event('change')); });
@@ -262,7 +273,7 @@ try {
   st = await chat();
   lo = await leftover();
   check('After a model that does not think and a new sign-in: the chosen effort again, not the clamped one', st.effort === 'high' && st.effortShown, JSON.stringify({ model: st.model?.id, effort: st.effort, efforts: st.efforts }));
-  check('After a new sign-in: back in the conversation, the chip shows its recommended model', st.user.length === 2 && !lo.panel && !lo.setupInList
+  check('After a new sign-in: back in the conversation, the chip shows its recommended model', st.user.length === 3 && !lo.panel && !lo.setupInList
     && st.model?.provider === 'openrouter' && st.model?.id === 'anthropic/claude-opus-5.5', `${st.model?.provider} ${st.model?.id} ${JSON.stringify(lo)}`);
 
   // ---- Settings > SOMA AI ---------------------------------------------------------------------------------------
@@ -273,7 +284,7 @@ try {
   check('Settings > SOMA AI: both sign-ins, ChatGPT to add, the models of the sign-ins, the recommendation',
     JSON.stringify(ap.accounts.map((a) => a.provider).sort()) === '["anthropic","openrouter"]' && ap.text.includes('Sign in with ChatGPT') && ap.models > 5
     && ap.text.includes('we recommend') && ap.current?.provider === 'openrouter', JSON.stringify({ accounts: ap.accounts, models: ap.models, current: ap.current, err: ap.modelsError }));
-  check('… what the conversation of the open model used', /Messages\s+2 from you/.test(ap.text) && /Tokens\s+[\d.]+ k read/.test(ap.text), ap.text.slice(ap.text.indexOf('USAGE'), ap.text.indexOf('USAGE') + 200));
+  check('… what the conversation of the open model used', /Messages\s+3 from you/.test(ap.text) && /Tokens\s+[\d.]+ k read/.test(ap.text), ap.text.slice(ap.text.indexOf('USAGE'), ap.text.indexOf('USAGE') + 200));
   await shot('settings-ai');
   // The model: chosen in the same menu with search, the open conversation takes it at once
   await ev(() => document.querySelector('#st-ai [data-act="model"]').click());
