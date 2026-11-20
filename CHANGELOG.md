@@ -21,6 +21,7 @@ the version is bumped.
 
 ### Changed
 
+- Electron 44.11.5 (security fixes in Chromium and Node.js), and the patched versions of the libraries undici and fast-uri.
 - Large models build much faster. The meshes for the viewer are made on several processor cores while the STEP file is written, parts larger than about half a meter are meshed relative to their own size (a 19 m mast took 96 seconds alone before, now under one), and faces with freeform surfaces get their area for the viewer from the mesh (the measuring tool still measures exactly). On the sailboat from issue #13 (1024 parts) the time after the model's own code went from about 3 minutes to under 1, and the viewer file is a third smaller. Small models look and build as before. `SOMA_BUILD_WORKERS=0` turns the worker processes off (issue #16).
 - The CadQuery skill has a new section "Fast builds" for the agent: cut and join many bodies in one call, place copies of identical parts instead of rebuilding them, keep chain links and planks as separate bodies instead of fusing them, check each part only once. On the sailboat from issue #13 fusing two chains alone took 30 seconds, as separate links a fraction of a second.
 

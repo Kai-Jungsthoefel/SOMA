@@ -46,7 +46,7 @@ sherpa-onnx, which ship as their package folders.
 
 | Component | Version | License (SPDX) | Upstream | GPL-3.0+ compatible |
 |---|---|---|---|---|
-| Electron (incl. Chromium, Node.js, V8, FFmpeg) | 44.4.5 | MIT; Chromium: BSD-3-Clause and many others, see `LICENSES.chromium.html` | https://github.com/electron/electron | yes |
+| Electron (incl. Chromium, Node.js, V8, FFmpeg) | 44.11.5 | MIT; Chromium: BSD-3-Clause and many others, see `LICENSES.chromium.html` | https://github.com/electron/electron | yes |
 | @codemirror/autocomplete, commands, lang-css, lang-html, lang-javascript, lang-markdown, lang-python, language, lint, search, state, view | 6.x (see `dist/licenses`) | MIT | https://github.com/codemirror | yes |
 | @lezer/common, css, highlight, html, javascript, lr, markdown, python | 1.x | MIT | https://github.com/lezer-parser | yes |
 | @marijn/find-cluster-break, crelt, style-mod, w3c-keyname | 1.0.4, 1.0.7, 4.1.4, 2.2.8 | MIT | https://github.com/marijnh | yes |
