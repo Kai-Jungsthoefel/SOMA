@@ -33,7 +33,11 @@ export interface ProjectJson {
 
 /** Zweite Kopie des Projektzustands in den App-Daten (E27) plus Angaben, die nur die App braucht. */
 /** `exportDir`: Ordner des letzten Exports, dort beginnt der nächste Dateidialog. */
-export interface AppState { zipPath?: string; savedHead?: string | null; savedAt?: number; exportDir?: string }
+export interface AppState {
+  zipPath?: string; savedHead?: string | null; savedAt?: number; exportDir?: string;
+  /** SOMA AI starts a new conversation (after "Load file"), until the person writes or picks one. */
+  aiFresh?: boolean;
+}
 interface ProjectState extends ProjectJson { app?: AppState }
 
 const readJson = <T>(file: string): T | null => {

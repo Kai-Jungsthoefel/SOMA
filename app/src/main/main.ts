@@ -206,6 +206,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('ai:status', (): AiStatus => ctl.session?.ai.status() ?? { available: !!piEntry(), running: false });
   ipcMain.handle('ai:start', () => ctl.session?.ai.start() ?? noModel);
   ipcMain.handle('ai:command', (_e, cmd: unknown) => ctl.session?.ai.command(cmd) ?? noModel);
+  ipcMain.handle('ai:runTimes', () => ctl.session?.ai.runTimes() ?? noModel);
   ipcMain.on('ai:respond', (_e, res: unknown) => ctl.session?.ai.respond(res));
   ipcMain.handle('ai:stop', () => ctl.session?.ai.stopAndWait());
   // Sign-in (somaaiauth.ts) holds for the whole app. A running pi of the open model ends, the next message starts it

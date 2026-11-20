@@ -77,6 +77,7 @@ const api: SomaApi = {
     status: () => ipcRenderer.invoke('ai:status'),
     start: () => ipcRenderer.invoke('ai:start'),
     command: (cmd) => ipcRenderer.invoke('ai:command', cmd),
+    runTimes: () => ipcRenderer.invoke('ai:runTimes'),
     respond: (res) => ipcRenderer.send('ai:respond', res),
     stop: () => ipcRenderer.invoke('ai:stop'),
     onEvent: (cb) => { ipcRenderer.on('ai:event', (_e, ev) => cb(ev)); },

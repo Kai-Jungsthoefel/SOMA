@@ -99,6 +99,23 @@ try {
   const msgs = again.ok ? await ev(() => window.soma.ai.command({ type: 'get_messages' })) : again;
   const count = msgs.data?.messages?.length ?? 0;
   check('Starting again continues the conversation of the model', again.ok && count >= 2, `${count} messages`);
+  const times = await ev(() => window.soma.ai.runTimes());
+  const took = Object.values(times.data ?? {});
+  check('How long the finished task took, for "Worked for" in the history', times.ok && took.length === 1 && took[0] > 0, JSON.stringify(times));
+
+  // After "Load file" (marked in the model's state) a new conversation: the last one is about a later state of the model
+  const id = await ev(() => window.__t.project().id);
+  const stateFile = path.join(ud, 'projects', `${id}.json`);
+  const state = () => JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+  fs.writeFileSync(stateFile, JSON.stringify({ ...state(), app: { ...state().app, aiFresh: true } }));
+  await ev((i) => window.soma.project.open(i), id);
+  await app.waitFor('model open again', (i) => window.__t.project()?.id === i, 60000, id);
+  const fresh = await ev(() => window.soma.ai.command({ type: 'get_messages' }));
+  const sessions = await ev(() => window.soma.ai.sessions());
+  check('Marked after "Load file": a new conversation, the earlier one stays in the list', fresh.ok && fresh.data.messages.length === 0
+    && sessions.ok && sessions.sessions.some((x) => x.messages >= 2) && state().app.aiFresh === true, JSON.stringify({ n: fresh.data?.messages?.length, s: sessions.sessions?.length, app: state().app }));
+  const back = await ev((sid) => window.soma.ai.switchSession(sid), sessions.sessions.find((x) => x.messages >= 2).id);
+  check('… picking the earlier one ends the mark: from then on it continues', back.ok && state().app.aiFresh === false, JSON.stringify({ back, app: state().app }));
 
   const oldGen = (await ev(() => window.__ai.events.at(-1)?.gen)) ?? 0;
   await ev(() => window.soma.project.create());

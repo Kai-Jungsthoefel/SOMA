@@ -234,6 +234,32 @@ try {
   check('… and the questions with their answers', st.quiet.some((x) => x.includes('SOMA AI asked: Which material? You answered: Wood, actually'))
     && st.quiet.some((x) => x.includes('SOMA AI asked: What should the lid have? You answered: Hinge, Label recess'))
     && st.quiet.some((x) => x.includes('SOMA AI asked: Which colour? You answered: Red')), st.quiet.join(' | ').slice(0, 400));
+  const worked = st.quiet.filter((x) => /^Worked for (\d+ min )?\d+ s$/.test(x));
+  check('… and how long each task took', worked.length >= 1, st.quiet.join(' | ').slice(-300));
+  // Following the end: Chromium sends the scroll event of a jump to the end one frame later. A row added in between (the
+  // next step, an answer) put the end further away without anyone scrolling, and the chat stopped following (it stayed
+  // up to 185 px above the end). Only meaningful in a window that paints (SMOKE_VISIBLE=offscreen)
+  // Invisible windows (SOMA_HIDDEN) do not paint, the jump to the end does not settle there: checked only offscreen
+  const gap = process.env.SMOKE_VISIBLE !== 'offscreen' ? null : await ev(async () => {
+    const body = document.querySelector('.ai-body');
+    const list = document.querySelector('.ai-list');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const pad = Object.assign(document.createElement('div'), { style: 'height:3000px' });
+    list.append(pad);
+    await wait(100);
+    // A step comes in: the chat jumps to the end. Then, before the scroll event of that jump, the next row
+    const step = Object.assign(document.createElement('div'), { style: 'height:120px' });
+    list.append(step);
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    const row = Object.assign(document.createElement('div'), { style: 'height:185px' });
+    list.append(row);
+    await wait(300);
+    const g = body.scrollHeight - body.scrollTop - body.clientHeight;
+    pad.remove(); step.remove(); row.remove();
+    return g;
+  });
+  if (gap === null) console.log('SKIP   The chat stays at the end when rows come in quickly (needs SMOKE_VISIBLE=offscreen)');
+  else check('The chat stays at the end when rows come in quickly', gap < 5, `${gap} px above the end`);
 
   // ---- Earlier conversations: a new one, then back to the first ---------------------------------------------------
   await ev(() => document.querySelector('.ai-top [aria-label="New conversation"]').click());

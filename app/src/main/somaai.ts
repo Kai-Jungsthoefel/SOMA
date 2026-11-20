@@ -185,6 +185,44 @@ function prepareAiDir(): void {
   writeJson(path.join(dir, 'extensions', 'pi-permission-system', 'config.json'), guardPolicy(dir));
 }
 
+/**
+ * Duration of each task on the active branch of a conversation, by the timestamp of the assistant message that ended
+ * it. A task starts with a message of the person after the previous task ended (a message sent while it works steers
+ * it) and ends with the last answer that calls no tool (an error and pi's retry after it are one task).
+ */
+export function runDurations(entries: unknown[], leafId: unknown): Record<string, number> {
+  type Entry = { id?: unknown; parentId?: unknown; type?: unknown; timestamp?: unknown; message?: Record<string, unknown> };
+  const byId = new Map<string, Entry>();
+  for (const e of entries) if (e && typeof e === 'object' && typeof (e as Entry).id === 'string') byId.set((e as Entry).id as string, e as Entry);
+  const branch: Entry[] = [];
+  const seen = new Set<string>();
+  for (let id = leafId; typeof id === 'string' && byId.has(id) && !seen.has(id);) {
+    seen.add(id);
+    const e = byId.get(id)!;
+    branch.push(e);
+    id = e.parentId;
+  }
+  branch.reverse();
+  const out: Record<string, number> = {};
+  let start = 0;
+  let key: string | null = null;
+  let ended = true;
+  for (const e of branch) {
+    const m = e.message;
+    if (e.type !== 'message' || !m) continue;
+    const at = typeof e.timestamp === 'string' ? Date.parse(e.timestamp) : NaN;
+    if (m.role === 'user') {
+      if (ended) { start = typeof m.timestamp === 'number' ? m.timestamp : at; key = null; ended = false; }
+    } else if (m.role === 'assistant' && start && m.stopReason !== 'toolUse' && typeof m.timestamp === 'number' && Number.isFinite(at)) {
+      if (key) delete out[key];
+      key = String(m.timestamp);
+      if (at > start) out[key] = at - start;
+      ended = true;
+    }
+  }
+  return out;
+}
+
 /** Process numbers across all models: late records of a process from before a model switch never reach the new chat. */
 let nextGen = 1;
 
@@ -207,7 +245,18 @@ export class SomaAI {
   /** The model is being left or closed: this SomaAI never starts pi again (a late request would land in its folder). */
   private disposed = false;
 
-  constructor(private readonly wc: WebContents, private readonly dir: string) {}
+  /**
+   * `fresh`: pi starts a new conversation instead of continuing the last one, until the person writes or picks one.
+   * After "Load file" the last conversation is about a later state of the model than the folder now has.
+   */
+  constructor(private readonly wc: WebContents, private readonly dir: string, private fresh = false, private readonly onFresh: () => void = () => {}) {}
+
+  /** The person wrote or picked a conversation: from now on pi continues it, also after a restart of SOMA. */
+  private settleFresh(): void {
+    if (!this.fresh) return;
+    this.fresh = false;
+    this.onFresh();
+  }
 
   status(): AiStatus {
     return { available: !!piEntry() && !!guardDir(), running: !!this.child, version: piVersion() ?? undefined, error: this.lastError ?? undefined };
@@ -228,7 +277,7 @@ export class SomaAI {
     if (!entry || !guard) return this.failed('SOMA AI is missing from this installation. Please reinstall SOMA.');
     if (!fs.existsSync(this.dir)) return this.failed('The folder of this model no longer exists.');
     try { prepareAiDir(); } catch (e) { return this.failed(`SOMA AI could not write its settings: ${e instanceof Error ? e.message : String(e)}`); }
-    const args = [entry, '--continue', '--no-approve', '--offline', '--no-mcp', '-ne', '-ns', '-np', '--no-themes', '-e', guard];
+    const args = [entry, ...(this.fresh ? [] : ['--continue']), '--no-approve', '--offline', '--no-mcp', '-ne', '-ns', '-np', '--no-themes', '-e', guard];
     const own = path.join(aiResources(), 'soma.ts');
     if (fs.existsSync(own)) args.push('-e', own);
     const prompt = path.join(aiResources(), 'system.md');
@@ -341,7 +390,21 @@ export class SomaAI {
     if (JSON.stringify(c).length > MAX_COMMAND) return { ok: false, error: 'The message is too large (images included).' };
     const started = await this.start();
     if (!started.ok) return started;
+    if (c.type === 'prompt' || c.type === 'new_session') this.settleFresh();
     return this.request(c);
+  }
+
+  /**
+   * How long each finished task of the open conversation took ("Worked for" in a reopened conversation). pi keeps only
+   * the start of a message in it, the end is the time its session entry was written.
+   */
+  async runTimes(): Promise<AiResult> {
+    const started = await this.start();
+    if (!started.ok) return started;
+    const r = await this.request({ type: 'get_entries' });
+    if (!r.ok) return r;
+    const d = (r.data ?? {}) as Record<string, unknown>;
+    return { ok: true, data: runDurations(Array.isArray(d.entries) ? d.entries : [], d.leafId) };
   }
 
   /**
@@ -351,6 +414,7 @@ export class SomaAI {
   async switchSession(sessionPath: string): Promise<AiResult> {
     const started = await this.start();
     if (!started.ok) return started;
+    this.settleFresh();
     return this.request({ type: 'switch_session', sessionPath });
   }
 

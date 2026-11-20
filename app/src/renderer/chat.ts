@@ -283,6 +283,8 @@ export class SomaChat {
    * where they read. Text streams into existing rows, so it is not enough to scroll when a row is added.
    */
   private follow = true;
+  /** Scroll position after the last scroll event or jump to the end: only moving up from it stops following. */
+  private lastTop = 0;
 
   constructor(private readonly deps: ChatDeps) {
     this.top = el('div', { className: 'ai-top' });
@@ -292,7 +294,13 @@ export class SomaChat {
     this.body.addEventListener('scroll', () => {
       // Hidden (a terminal in front, the agent area collapsed) it has no height and says nothing about the person
       if (!this.body.clientHeight) return;
-      this.follow = this.body.scrollHeight - this.body.scrollTop - this.body.clientHeight < 60;
+      // Not the distance to the end alone: a scroll event comes a frame after the jump to the end, and rows added in
+      // between (a step, the next answer) put the end further away without the person scrolling. Only scrolling up
+      // stops following (the chat stayed up to 185 px above the end)
+      const top = this.body.scrollTop;
+      if (this.body.scrollHeight - top - this.body.clientHeight < 60) this.follow = true;
+      else if (top < this.lastTop - 1) this.follow = false;
+      this.lastTop = top;
     });
     // Growing rows, a taller input, the chat shown again: to the end while following
     const keep = new ResizeObserver(() => { if (this.follow) this.toEnd(); });
@@ -550,7 +558,7 @@ export class SomaChat {
       const started = await this.ensureStarted();
       if (started) {
         const r = await this.deps.api.ai.command({ type: 'get_messages' });
-        if (r.ok) this.renderHistory(arr(obj(r.data).messages));
+        if (r.ok) this.renderHistory(arr(obj(r.data).messages), await this.runTimes());
       }
     } else if (!this.piUp) {
       // Back after a new sign-in: pi starts with it, the chip shows its model
@@ -836,7 +844,7 @@ export class SomaChat {
     this.piUp = true;
     this.closeQuestions();
     const m = await this.deps.api.ai.command({ type: 'get_messages' });
-    if (m.ok) this.renderHistory(arr(obj(m.data).messages));
+    if (m.ok) this.renderHistory(arr(obj(m.data).messages), await this.runTimes());
     if (!this.list.childElementCount) this.renderWelcome();
     const s = await this.deps.api.ai.command({ type: 'get_state' });
     if (s.ok) {
@@ -981,6 +989,7 @@ export class SomaChat {
 
   private toEnd(): void {
     this.body.scrollTop = this.body.scrollHeight;
+    this.lastTop = this.body.scrollTop;
   }
 
   private messageStart(m: Json): void {
@@ -1147,7 +1156,13 @@ export class SomaChat {
     return box;
   }
 
-  private renderHistory(messages: unknown[]): void {
+  /** How long the earlier tasks took, for "Worked for" in the history. Without it the history shows them without. */
+  private async runTimes(): Promise<Json> {
+    const r = await this.deps.api.ai.runTimes().catch(() => ({ ok: false, data: undefined }));
+    return r.ok ? obj(r.data) : {};
+  }
+
+  private renderHistory(messages: unknown[], times: Json = {}): void {
     this.list.replaceChildren();
     this.steps.clear();
     this.turnRows.clear();
@@ -1167,6 +1182,8 @@ export class SomaChat {
           }
         }
         if (m.stopReason === 'error') this.problem(str(m.errorMessage), false);
+        const took = Number(times[String(m.timestamp)]);
+        if (took > 0) this.quiet('clock', `Worked for ${duration(took)}`);
       } else if (m.role === 'compactionSummary') this.quiet('info', 'The older part of this conversation was summarized.');
     }
     this.follow = true;

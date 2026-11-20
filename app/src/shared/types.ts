@@ -583,6 +583,8 @@ export interface SomaApi {
     start(): Promise<AiResult>;
     /** A command of pi's RPC protocol (prompt, abort, new_session, set_model …), without `id`. */
     command(cmd: Record<string, unknown>): Promise<AiResult>;
+    /** Durations of the finished tasks of the open conversation: `data` maps the timestamp of each task's last answer to milliseconds. */
+    runTimes(): Promise<AiResult>;
     /** Answer to a question of pi (extension_ui_request): `value`, `confirmed` or `cancelled`. */
     respond(res: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }): void;
     stop(): Promise<void>;

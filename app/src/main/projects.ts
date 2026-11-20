@@ -164,7 +164,7 @@ export class ProjectController {
     if (folder && !fs.existsSync(dir)) throw new Error(`The folder no longer exists: ${dir}. Open it again with “Open folder” at its new place.`);
     const builds = new BuildManager(dir);
     const terminals = new TerminalManager(this.wc, dir);
-    const ai = new SomaAI(this.wc, dir);
+    const ai = new SomaAI(this.wc, dir, !!getAppState(id).aiFresh, () => patchAppState(id, { aiFresh: false }));
     const git = new GitRepo(dir);
     // Ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten. Im Ordner-Modus gehört das Repository
     // dem Nutzer, dort hält .soma/.gitignore die Zwischenergebnisse heraus
@@ -701,6 +701,9 @@ export class ProjectController {
       await extractProject(zipPath, id);
     } catch (e) { return { cancelled: false, error: `Loading the file failed: ${e instanceof Error ? e.message : String(e)}` }; }
     remember();
+    // The last conversation of SOMA AI is about the state that was just backed up: a new one fits the loaded file.
+    // The earlier ones stay under "Earlier conversations"
+    patchAppState(id, { aiFresh: true });
     await this.open(id);
     return { cancelled: false, opened: true };
   }
