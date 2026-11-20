@@ -8,6 +8,7 @@ Ergebnis je Auswertung: .soma/results/<name>.glb. Jedes Bauteil ist ein Netz mit
 Dreieck, an seinen drei Ecken), die Kanten als Linien. Die Metadaten (Groesse, Einheit, Grenzwert, Zusammenfassung)
 stehen in extras.soma_result. Der Viewer faerbt danach, `soma render --result <name>` zeigt es dem Agenten als Bild.
 """
+import json
 import math
 import time
 from pathlib import Path
@@ -470,6 +471,22 @@ def list_results(root):
             out.append(meta)
         except (OSError, ValueError, KeyError):
             continue
+    return out
+
+
+def listed_only(root):
+    """Analyses the model file keeps without their result (the app writes .soma/results/index.json when saving, a result
+    is too large to go along): known with their values, computed again with their command."""
+    try:
+        data = json.loads((Path(root) / OUT_DIR / "index.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    have = {m["id"] for m in list_results(root)}
+    out = []
+    for m in data.get("results") or [] if isinstance(data, dict) else []:
+        if isinstance(m, dict) and isinstance(m.get("id"), str) and m["id"] not in have and isinstance(m.get("command"), list):
+            have.add(m["id"])
+            out.append({**m, "missing": True})
     return out
 
 

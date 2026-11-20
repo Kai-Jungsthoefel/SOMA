@@ -435,12 +435,16 @@ def cmd_analyze(args):
     root = Path(args.project).resolve()
     if args.kind == "list":
         res = analysis.list_results(root)
+        listed = analysis.listed_only(root)
         if args.json:
-            print(json.dumps(res, ensure_ascii=False))
+            print(json.dumps(res + listed, ensure_ascii=False))
             return 0
         for m in res:
             print(f"{m['id']}: {m['title']} ({m['file']})")
-        if not res:
+        for m in listed:
+            cmd = " ".join(str(c) for c in m["command"])
+            print(f"{m['id']}: {m['title']} (not computed on this computer, from the model file: soma {cmd})")
+        if not res and not listed:
             print("No results yet (soma analyze overhang | thickness | clearance | fem <study.py>).")
         return 0
     try:
