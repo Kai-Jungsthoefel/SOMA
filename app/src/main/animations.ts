@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { AnimBuildResult, AnimEntry, AnimFileError, AnimList, ResultEntry, ResultMeta } from '../shared/types';
 import { newestSourceMtime, runSoma } from './build';
 import { resolveInside } from './files';
+import { writeAtomic } from './skills';
 
 // Animationen und Ergebnisse im Projekt (E58). Gebaut und ausgewertet wird in Python (`soma anim build`, `soma analyze`),
 // die App liest nur deren Dateien: .soma/anim/index.json und die JSON-Teile der GLB-Dateien.
@@ -122,7 +123,39 @@ export function listResults(dir: string): ResultEntry[] {
     if (typeof study === 'string' && STUDY.test(study)) try { newest = Math.max(newest, mtime(resolveInside(dir, study))); } catch { /* außerhalb: zählt nicht */ }
     out.push({ ...meta, file: `.soma/results/${f}`, stale: newest > (Number(meta.created) || 0) * 1000 });
   }
+  // Saved in the model file without their result (too large): listed with their values, computed again on request
+  const have = new Set(out.map((r) => r.id));
+  for (const meta of readResultsIndex(dir)) {
+    if (have.has(meta.id)) continue;
+    have.add(meta.id);
+    out.push({ ...meta, file: '', stale: false, missing: true });
+  }
   return out;
+}
+
+/**
+ * The analyses of a model without their results: what the model file keeps of .soma/results/ (a result has up to
+ * 70 MB). After opening the file on another computer the Analysis tab lists them with their values and can compute
+ * them again from `command`.
+ */
+export const RESULTS_INDEX = '.soma/results/index.json';
+
+function readResultsIndex(dir: string): ResultMeta[] {
+  let raw: unknown;
+  try { raw = JSON.parse(fs.readFileSync(path.join(dir, RESULTS_INDEX), 'utf8')); } catch { return []; }
+  const list = (raw as { results?: unknown })?.results;
+  if (!Array.isArray(list)) return [];
+  // From the model file, so not trusted: only entries the panel can show (rerunResult checks the command itself)
+  return list.filter((m): m is ResultMeta => !!m && typeof m === 'object' && typeof m.id === 'string' && m.id.length <= 200 && typeof m.title === 'string'
+    && typeof m.kind === 'string' && Array.isArray(m.range) && Array.isArray(m.parts) && Array.isArray(m.command) && typeof m.threshold === 'number');
+}
+
+/** Before saving the model file: the index of all analyses, including the ones only listed so far. */
+export function writeResultsIndex(dir: string): void {
+  const list = listResults(dir);
+  const file = path.join(dir, RESULTS_INDEX);
+  if (!list.length) { fs.rmSync(file, { force: true }); return; }
+  writeAtomic(file, JSON.stringify({ version: 1, results: list.map(({ file: _f, stale: _s, missing: _m, ...meta }) => meta) }));
 }
 
 /**

@@ -8,7 +8,7 @@ import type {
   ParamResult, ParamState, ParamValue, ProjectInfo, RemoveResult, RenderResult, RestoreResult, ResultEntry, SaveResult, SaveState, SkillInfo, SkillResult,
 } from '../shared/types';
 import { affectsAnimation } from '../shared/editable';
-import { AnimBuilder, listResults, readAnimList, rerunResult, samePath } from './animations';
+import { AnimBuilder, listResults, readAnimList, rerunResult, samePath, unbuiltAnimFiles, writeResultsIndex } from './animations';
 import { DrawingBuilder, isDrawingFile, readDrawingList } from './drawings';
 import { resolveInside } from './files';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma, validBuild } from './build';
@@ -184,9 +184,18 @@ export class ProjectController {
     const session: Session = { id, dir, folder, builds, terminals, ai, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
     void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
+    // Built animations are not in the model file (.soma/anim/, zip.ts): the ones missing after opening it are built again,
+    // once the model builds (packages from requirements.txt may still be installing)
+    let animsMissing = unbuiltAnimFiles(dir, readAnimList(dir)).length > 0;
+    const buildAnims = () => {
+      if (!animsMissing || this.session !== session) return;
+      animsMissing = false;
+      console.log('[project] building the animations missing after opening');
+      void anims.request(null);
+    };
     builds.on('status', (st) => {
       this.send('build:status', st);
-      if (st.state === 'ok' && !st.stale) void this.cachePreview(session);
+      if (st.state === 'ok' && !st.stale) { void this.cachePreview(session); buildAnims(); }
     });
     setLastProject(id);
     console.log(`[project] opened ${id}`);
@@ -194,7 +203,9 @@ export class ProjectController {
     // erster Build direkt beim Öffnen, damit der Viewer nicht leer ist (der Nutzer kann Auto-Build danach abschalten).
     const last = currentBuild(dir);
     // Fehlen Pakete aus requirements.txt (Modell von einem anderen Rechner), erst installieren, dann bauen
-    if (!this.installPackages(session, !last) && !last) builds.start('project opened');
+    const installing = this.installPackages(session, !last);
+    if (!installing && !last) builds.start('project opened');
+    else if (!installing) void env.then(buildAnims);
     const info = this.info();
     this.send('project:changed', info);
     // Erst nach project:changed: Das Fenster räumt beim Projektwechsel den Viewer leer und lädt danach das Modell
@@ -547,6 +558,8 @@ export class ProjectController {
         dirty = (await s.git.status()).dirty;
       }
       const info: ZipInfo = { savedAt: new Date().toISOString(), head: s.folder ? null : await s.git.head(), id: s.id, name: pj?.name ?? s.id, ...(dirty ? { dirty } : {}) };
+      // The analyses go along as a list with their values (their results are too large, zip.ts)
+      try { writeResultsIndex(s.dir); } catch (e) { console.warn('[soma] Could not write the list of analyses:', e); }
       await saveProjectZip(s.dir, dest, info, !s.folder);
       patchAppState(s.id, { exportDir: path.dirname(dest) });
       return { ok: true, files: [dest], target: dest, ...(warnings.length ? { warnings } : {}) };
@@ -611,6 +624,8 @@ export class ProjectController {
       const head = await s.git.head();
       const pj = readProjectJson(s.id);
       const info: ZipInfo = { savedAt: new Date().toISOString(), head, id: s.id, name: pj?.name ?? s.id };
+      // The analyses go along as a list with their values (their results are too large, zip.ts)
+      try { writeResultsIndex(s.dir); } catch (e) { console.warn('[soma] Could not write the list of analyses:', e); }
       const r = await saveProjectZip(s.dir, zipPath, info);
       patchAppState(s.id, { zipPath, savedHead: head, savedAt: Date.now() });
       this.send('save:state', await this.saveState());

@@ -758,6 +758,8 @@ code { font-family:var(--mono); font-size:.95em; }
 .al-sh .r { margin-left:auto; letter-spacing:0; font:11px var(--mono); }
 .al-row { display:grid; grid-template-columns:8px 1fr auto; align-items:start; gap:0 12px; width:calc(100% - 12px); margin:0 6px; padding:9px 10px 9px 12px; border-radius:7px; text-align:left; }
 .al-row:hover { background:var(--s3); }
+.al-row.missing:hover { background:none; }
+.al-row.missing .btn { margin-top:6px; }
 .al-row .dot { width:7px; height:7px; margin-top:6px; }
 .al-row .ic { color:var(--tx3); margin-top:2px; margin-left:-4px; display:flex; }
 .al-row .t { font-size:13px; line-height:1.35; color:var(--tx); overflow-wrap:anywhere; }

@@ -488,6 +488,45 @@ try {
   e = (await list()).animations.find((a) => a.id === 'deckel-oeffnen');
   check('Geänderte Animationsdatei: neu gebaut, jetzt 9 s', near(e.duration, 9) && !e.stale, JSON.stringify(e));
 
+  // 11b) Saved as .soma and opened where the working folder is missing (another computer): built animations and analysis
+  // results are not in the file. The animations are built again, the analyses are listed with their values
+  const zipPath = path.join(os.tmpdir(), `soma-anim-${Date.now()}.soma`);
+  await app.answers([zipPath]);
+  await domClick('btn-save');
+  await waitFor('saved as .soma', () => !!window.__t.saveState()?.zipPath && !window.__t.saveState().unsaved, 90000);
+  const zipped = new Set(spawnSync(PY, ['-c', 'import sys, zipfile; print(" ".join(zipfile.ZipFile(sys.argv[1]).namelist()))', zipPath], { encoding: 'utf8' }).stdout.trim().split(' '));
+  check('The .soma has the list of analyses, not their results, not the built animations', zipped.has('.soma/results/index.json')
+    && ![...zipped].some((n) => n.endsWith('.glb') && (n.startsWith('.soma/results/') || n.startsWith('.soma/anim/'))), [...zipped].filter((n) => n.startsWith('.soma/')).join(','));
+  await domClick('btn-new');
+  await waitFor('another model', (id) => window.__t.project()?.id !== id && window.__t.status().state === 'ok', 90000, proj.id);
+  for (let i = 0; i < 20 && fs.existsSync(dir); i++) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { await sleep(300); } }
+  await app.answers([zipPath]);
+  await domClick('btn-open');
+  await waitFor('opened from the .soma', (id) => window.__t.project()?.id === id && window.__t.status().state === 'ok', 120000, proj.id);
+  await waitFor('animations built again', () => window.soma.anim.list().then((x) => !x.building && x.animations.length > 0), 120000).catch(() => {});
+  l = await list();
+  check('After opening: the animations are built again without anyone asking', l.animations.some((a) => a.id === 'deckel-oeffnen' && near(a.duration, 9)) && !l.errors.length,
+    JSON.stringify(l).slice(0, 300));
+  const listed = await ev(() => window.soma.results.list());
+  check('… the analyses are listed with their values, not computed', listed.length === 3 && listed.every((x) => x.missing && x.parts.length > 0)
+    && listed.find((x) => x.id === 'thickness')?.parts.some((x) => x.name === 'Lasche'), JSON.stringify(listed.map((x) => [x.id, x.missing])));
+  r = soma(['analyze', 'list']);
+  check('… soma analyze list names them for the agent, with their command', r.status === 0 && /overhang: [^\n]*not computed on this computer[^\n]*soma analyze overhang/.test(r.stdout), r.stdout + r.stderr);
+  await ev(() => window.__t.showPanel('analysis'));
+  await ev(() => window.__t.refreshViewLists());
+  await waitFor('rows listed', () => document.querySelectorAll('#an-rows .al-row.missing').length === 3, 10000).catch(() => {});
+  const rowText = await ev(() => document.querySelector('#an-rows .al-row.missing[data-id="overhang"]')?.textContent ?? '');
+  check('… the Analysis tab shows them with "not computed on this computer" and "Compute"', rowText.includes('not computed on this computer') && rowText.includes('Compute'), rowText);
+  await shot('analyse-listed');
+  await ev(() => [...document.querySelectorAll('#an-rows .al-row.missing[data-id="overhang"] button')].find((b) => b.textContent === 'Compute').click());
+  await waitFor('computed', () => window.soma.results.list().then((x) => x.some((y) => y.id === 'overhang' && !y.missing)), 120000).catch(() => {});
+  await waitFor('shown', () => window.__t.result().id === 'overhang' && !window.__t.result().busy, 20000).catch(() => {});
+  rs = await ev(() => window.__t.result());
+  check('… "Compute" calculates it again and shows it, the others stay listed', rs.id === 'overhang'
+    && (await ev(() => window.soma.results.list())).filter((x) => x.missing).length === 2, JSON.stringify({ id: rs.id, busy: rs.busy }));
+  await domClick('btn-result-close');
+  fs.rmSync(zipPath, { force: true });
+
   // 12) Das Beispiel im Skill läuft so, wie es dasteht (Modell mit HINGE_Y, HINGE_Z und einer Schublade)
   const skill = fs.readFileSync(path.join(APP, 'resources', 'skills', 'animation.md'), 'utf8');
   const block = /```python\r?\n([\s\S]*?)\r?\n```/.exec(skill)?.[1] ?? '';

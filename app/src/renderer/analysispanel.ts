@@ -73,6 +73,7 @@ export class AnalysisPanel {
     const list = [...this.d.tool.list].sort((a, b) => b.created - a.created);
     const cur = this.d.tool.currentId;
     const rows: HTMLElement[] = list.map((r) => {
+      if (r.missing) return this.missingRow(r);
       const w = worstOf(r);
       const bad = r.parts.some((p) => p.critical > 0);
       const d = el('span', { className: 'dot' });
@@ -93,6 +94,30 @@ export class AnalysisPanel {
     this.ui.rows.replaceChildren(...rows, el('div', { className: 'al-note' },
       'The agent creates analyses with ', el('code', { textContent: 'soma analyze' }), ' (skill “Analysis”): strength with FEM, wall thickness, overhang, clearance. They are kept in ',
       el('code', { textContent: '.soma/results/' }), '.'));
+  }
+
+  /**
+   * An analysis from the model file without its result (too large to go along): its values as it was saved, and a
+   * button to compute it again. FEM can take a while, so not on its own.
+   */
+  private missingRow(r: ResultEntry): HTMLElement {
+    const w = worstOf(r);
+    const tool = this.d.tool;
+    const mine = tool.busyId === r.id;
+    const d = el('span', { className: 'dot' });
+    d.style.background = 'var(--tx3)';
+    const meta = el('div', { className: 'm' }, `${r.fem ? 'FEM' : 'Analysis'} · ${fmtWhen(r.created * 1000, true)} · `,
+      el('span', { className: 'w', textContent: mine ? 'computing …' : 'not computed on this computer' }));
+    const go = el('button', { className: 'btn sm', textContent: 'Compute', title: 'Compute it again for the model as it is now' + (r.fem ? '. FEM can take several minutes.' : '') });
+    go.disabled = tool.busy;
+    go.addEventListener('click', () => { void tool.rerun(r.id); this.render(); });
+    const value = w ? (r.fem ? safety(w.value) : withUnit(w.value, r.unit)) : '–';
+    const row = el('div', { className: 'al-row missing', title: `${r.title}
+Saved in the model file without its result. The value is from ${fmtWhen(r.created * 1000, true)}.` },
+      d, el('div', {}, el('div', { className: 't', textContent: r.title }), meta, go),
+      el('div', { className: 'v' }, value, el('span', { textContent: r.fem ? `required ${loc(r.threshold, 1)}` : `limit ${withUnit(r.threshold, r.unit)}` })));
+    row.dataset.id = r.id;
+    return row;
   }
 
   // ---- Bericht --------------------------------------------------------------------------------------------------

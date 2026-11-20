@@ -92,6 +92,7 @@ export class ResultTool {
   private spot: string | null = null;
   private loading = 0;
   private rerunning = false;
+  private rerunId: string | null = null;
   /** Beim nächsten Laden dieses Ergebnis zeigen. */
   private want: string | null = null;
   /** Zuletzt gezeigtes Ergebnis: Der Reiter Analysis bringt es wieder. */
@@ -179,6 +180,8 @@ export class ResultTool {
   /** Alle Ergebnisse, wie zuletzt gelesen. */
   get list(): ResultEntry[] { return this.entries; }
   get busy(): boolean { return this.rerunning; }
+  /** The analysis being computed again (null: none). */
+  get busyId(): string | null { return this.rerunId; }
   get picked(): ResultProbe | null { return this.pinned; }
 
   /** Ein bestimmtes Ergebnis zeigen, null: das zuletzt gezeigte, beim ersten Mal das neueste. */
@@ -187,7 +190,8 @@ export class ResultTool {
     if (!this.active) { this.setActive(true); return; }
     const e = this.want ? this.entries.find((r) => r.id === this.want) : undefined;
     this.want = null;
-    if (e && e.id !== this.current?.id) void this.load(e);
+    // Only listed (from the model file): nothing to show until it is computed again
+    if (e && !e.missing && e.id !== this.current?.id) void this.load(e);
   }
 
   setActive(on: boolean): void {
@@ -215,8 +219,9 @@ export class ResultTool {
     if (seq !== this.loading) return;
     this.entries = list;
     if (!this.active) { this.d.changed(); return; }
-    const newest = [...list].sort((a, b) => b.created - a.created)[0];
-    const want = list.find((r) => r.id === (this.want ?? this.current?.id)) ?? newest;
+    const shown = list.filter((r) => !r.missing);
+    const newest = [...shown].sort((a, b) => b.created - a.created)[0];
+    const want = shown.find((r) => r.id === (this.want ?? this.current?.id)) ?? newest;
     this.want = null;
     if (want) await this.load(want, seq);
     else { this.d.layer.hide(); this.current = null; this.renderAll(); this.d.changed(); }
@@ -543,18 +548,25 @@ export class ResultTool {
     return `Picked: ${p.name}, ${what} at (${p.point.map((v) => (v + 0).toLocaleString('en-US')).join(', ')})`;
   }
 
-  async rerun(): Promise<void> {
-    const r = this.current;
+  /** The shown analysis again, or `id`: one only listed from the model file, shown once it is computed. */
+  async rerun(id?: string): Promise<void> {
+    const r = id ? this.entries.find((x) => x.id === id) : this.current;
     if (!r || this.rerunning) return;
     this.rerunning = true;
+    this.rerunId = r.id;
     this.d.changed();
+    let ok = false;
     try {
       const res = await this.d.rerun(r.id);
-      if (!res.ok) this.d.toast(`Could not recalculate: ${res.error ?? 'unknown error'}`, 'error');
+      ok = res.ok;
+      if (!res.ok) this.d.toast(`Could not ${r.missing ? 'compute' : 'recalculate'}: ${res.error ?? 'unknown error'}`, 'error');
     } finally {
       this.rerunning = false;
-      await this.refresh();
+      this.rerunId = null;
     }
+    // Computed from the list: shown in the viewer right away (switching it on reads the list itself)
+    if (ok && id) { this.want = id; if (!this.active) { this.setActive(true); return; } }
+    await this.refresh();
   }
 
   agentNote(): string | null {

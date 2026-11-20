@@ -450,7 +450,11 @@ export interface ResultMeta {
   notes?: string[];
   fem?: FemInfo | null;
 }
-export interface ResultEntry extends ResultMeta { file: string; stale: boolean }
+export interface ResultEntry extends ResultMeta {
+  file: string; stale: boolean;
+  /** Only listed (the model file keeps the analyses without their results): the values are known, the picture is not. */
+  missing?: boolean;
+}
 
 /** Auftrag an das unsichtbare Render-Fenster (E58). Die Dateien kommen als Inhalt mit, das Fenster liest selbst nichts. */
 export interface RenderJob {
