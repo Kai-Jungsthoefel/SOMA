@@ -182,7 +182,7 @@ Keys: H hides, Shift H shows all, I isolates, T makes transparent, Esc clears th
 
 1. **Measure**: click a face or edge for its size, a second one for distance and angle. The values are exact.
 2. **Section**: cuts the model open along X, Y, Z or parallel to a face. Move the plane with the slider or type a value.
-3. **Explode**: pulls the parts apart. Plays the disassembly step by step and can send the order to the agent.
+3. **Explode**: pulls the parts apart. Plays the disassembly step by step and can send the order to the agent. Reference parts stay in place: they are the surroundings the parts come out of.
 4. **Mark up**: draw on a picture of the view for the agent (see below).
 5. **Tool card**: settings of the active tool. The × closes the tool. None of the tools change the model.
 
