@@ -205,7 +205,7 @@ Mark up is the quickest way to show the agent what you mean: draw an arrow, writ
 
 1. **Parameters**: values of the model you can change yourself, such as sizes, counts or angles. The model rebuilds right away. The agent decides which values appear here. The arrow next to a changed value brings back the agent's value.
 2. **Files**: all files of the model. Click one to open it next to it.
-3. **Analysis**: results the agent calculated, such as strength (FEM), wall thickness, overhang or clearance. Click one to see it in color on the model, with its report.
+3. **Analysis**: results the agent calculated, such as strength (FEM), wall thickness, overhang or clearance. Click one to see it in color on the model, with its report. A `.soma` file keeps the analyses without their colored results (they are large): after opening one on another computer, the list shows them with their values as saved, and "Compute" calculates one again for the model as it is now.
 4. **Animation**: motion the agent made, for example an assembly sequence. Click one to play it in the viewer, "Make video" writes an MP4. Below are the videos of the model, sorted by folder; click a folder to collapse it (SOMA remembers this per model). Right-click a video to play, rename or delete it, show it in the file tree or in Explorer.
 5. **Drawings**: all technical drawings of the model in one view, next to the viewer (no sidebar). See "Drawings" below.
 6. **Skills**: rule sets for the agent, such as 3D printing, CNC or tolerances. Off, On demand (the agent reads them when the topic comes up) or Always.

@@ -12,6 +12,8 @@ topics: Analyses; Workflow; Limits; Feedback
 
 `soma analyze` computes a value at every spot of the surface, prints a summary per part and writes
 `.soma/results/<name>.glb`. The user sees it in colour in the app (Analysis), you see it with `soma render --result`.
+A `.soma` file keeps the analyses without their results: after opening one, `soma analyze list` names them as "not
+computed on this computer" with their command. Run it again when you need the result.
 
 | Command | Value | Critical by default |
 |---|---|---|
