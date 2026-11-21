@@ -25,8 +25,12 @@ try {
   let W = 0, H = 0;
   const size = async (w, h, compact) => {
     await ev(([a, b]) => window.soma.test.size(a, b), [w, h]);
+    // Wait until the page has the new size: a fixed pause was sometimes too short, and correcting from the old size
+    // shrank the window to its minimum (2 * 390 - 1400 < 0)
+    const near = ([a, b]) => Math.abs(innerWidth - a) <= 20 && Math.abs(innerHeight - b) <= 20;
+    await waitFor(`window near ${w} x ${h}`, near, 10000, [w, h]);
+    await sleep(300);
     // With display scaling the page comes out a few pixels off the content size (rounding of the frame): correct once
-    await sleep(500);
     const [iw, ih] = await ev(() => [innerWidth, innerHeight]);
     if (iw !== w || ih !== h) await ev(([a, b]) => window.soma.test.size(a, b), [2 * w - iw, 2 * h - ih]);
     await waitFor(`window ${w} x ${h}`, ([a, c]) => Math.abs(innerWidth - a) <= 2 && window.__t.compact().on === c, 10000, [w, compact]);
