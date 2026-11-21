@@ -53,14 +53,14 @@ In a narrow window, such as a phone, SOMA shows one view at a time instead of th
 4. **Recent**: models you worked on, the newest first. The field above filters them by name. "Open" marks the model that is open right now, "never saved" one that was never saved as a .soma file. The bin on a card removes the model from this computer, a saved .soma file stays.
 5. **Agents**: the agents for a terminal that SOMA found. Any other agent that runs in a terminal works too. You install them yourself. SOMA AI comes with SOMA and needs no installation (see "SOMA AI").
 6. **Help**: this guide (F1).
-7. **Settings**: viewer, shortcuts, SOMA AI, skills, storage and version.
+7. **Settings**: general, viewer, SOMA AI, skills, shortcuts, storage and version.
 8. **Back to the model**: returns to the open model, it shows the model's name (Esc).
 
 As long as there is no model on this computer, two large cards for a new and an opened model take the place of Recent.
 
 When a newer version of SOMA is available on GitHub, a small orange label appears next to the version number at the top
 left. Clicking it opens the download page in your browser; SOMA downloads and installs nothing by itself. If the check
-fails, a grey label says so. Settings > About > **Check for new versions** turns the check off.
+fails, a grey label says so. Settings > General > **Check for new versions** turns the check off.
 
 **Start tutorial** opens a new example model called "Tutorial" and walks you through the window in twelve steps: SOMA AI
 and how it works, your own agent instead, the code (you never have to touch it), clicking a part, measuring, marking up,
@@ -74,7 +74,7 @@ disappears like any new model you did not change.
 
 ![Tabs of the agent area](../help/agent.png)
 
-1. **Tabs**: SOMA AI first, then each agent or terminal, all working in the model folder.
+1. **Tabs**: SOMA AI and each agent or terminal, all working in the model folder. Which tabs open with a model is set in Settings > General (see "Settings").
 2. **New tab**: opens the menu below.
 3. **SOMA AI**: brings back the tab of SOMA AI, the agent built into SOMA (see "SOMA AI").
 4. **Start agent**: starts one of the agents found on this computer in a terminal.
@@ -325,12 +325,20 @@ The folder itself is the model: there is no .soma file to save, and your files s
 
 ![Settings](../help/settings.png)
 
-1. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, decimal places of measurements, and the build time limit (10 minutes unless you change it, or no limit).
-2. **Shortcuts**: all keys and mouse actions.
-3. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search) and its effort, what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
-4. **Skills**: edit the built-in skills or write your own. They are available in every model.
-5. **Storage**: how much space SOMA's data takes, and clearing the preview cache.
-6. **About**: versions, components and the agents found, the folders of SOMA including its logs, and whether the start page checks GitHub for new versions.
+1. **General**: the tabs of the agent area when a model opens, the start page (checking GitHub for new versions, the tutorial card) and the build time limit (10 minutes unless you change it, or no limit).
+2. **Tabs when a model opens**: up to three, the first one is in front. Each is SOMA AI, an empty terminal, one of the agents (Claude Code, OpenCode, Codex, Gemini CLI) or your own command, to start other agent harnesses or command line tools automatically. By default only SOMA AI opens.
+3. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, and decimal places of measurements.
+4. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search) and its effort, what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
+5. **Skills**: edit the built-in skills or write your own. They are available in every model.
+6. **Shortcuts**: all keys and mouse actions.
+7. **Storage**: how much space SOMA's data takes, and clearing the preview cache.
+8. **About**: versions, components and the agents found, and the folders of SOMA including its logs.
+
+Your own command is typed into a terminal in the model folder each time a model opens, like an agent started with +.
+It runs with the model's Python, so `python my_tool.py` finds the model's packages. When the command ends, the terminal
+stays open with its output, and the arrow up key brings the command back. The command is stored only in the settings on
+this computer, never in a model, so a model file from someone else cannot start anything. An agent that is not installed
+still gets its tab, the terminal then says that the command was not found.
 
 ## When something goes wrong
 
