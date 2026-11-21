@@ -31,6 +31,7 @@ the version is bumped.
 - SOMA AI: the chat sometimes stopped following new steps and answers and stayed a little above the end, although nobody had scrolled. Now only scrolling up stops it.
 - SOMA AI: after "Load file" for an older `.soma` file, the chat continued the later conversation, which talks about a state the folder no longer has. Now a new conversation starts, the earlier one is still under "Earlier conversations".
 - SOMA AI: a reopened conversation shows "Worked for …" for its earlier tasks again.
+- SOMA AI: the field for your own answer to its questions was a single line, so a longer answer ran out of sight. It now wraps and grows with the text. Enter still goes on or sends, Shift+Enter starts a new line.
 - Animations were missing after opening a `.soma` file on another computer (the file holds their code, not the built animations): they are built again after opening.
 - Analyses were gone after opening a `.soma` file on another computer, because their results are too large to go along. Now the file keeps a list of them: the Analysis tab shows each with its values as saved and "Compute" to calculate it again, and `soma analyze list` names them for the agent.
 - Exporting a single part as STEP or BREP could write only a shell instead of a solid, when the part was a CadQuery compound holding one solid. Thanks to SukbeomH (fork SukbeomH/SOMA) for spotting this.
