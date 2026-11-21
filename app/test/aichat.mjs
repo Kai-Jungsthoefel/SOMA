@@ -152,7 +152,7 @@ try {
   const card = await ev(() => {
     const c = document.querySelector('.ai-q:not(.done)');
     return {
-      title: c.querySelector('h4').textContent, blocks: c.querySelectorAll('.ai-qblock').length, owns: c.querySelectorAll('.ai-own input').length,
+      title: c.querySelector('h4').textContent, blocks: c.querySelectorAll('.ai-qblock').length, owns: c.querySelectorAll('.ai-own textarea').length,
       answers: [...c.querySelectorAll('.ai-ans')].map((b) => b.textContent), send: c.querySelector('.ai-qacts .btn').disabled,
     };
   });
@@ -160,7 +160,17 @@ try {
     card.title === 'SOMA AI has 2 questions' && card.blocks === 2 && card.owns === 2 && card.answers[0] === 'PLAEasy to print' && card.answers.length === 5, JSON.stringify(card));
   check('While it waits: input locked, the indicator says so, with the time; nothing answered, nothing to send',
     st.locked && /^Waiting for your answer\s*· \d+ s/.test(st.status.trim()) && card.send, st.status);
-  await ev(() => { const i = document.querySelector('.ai-q:not(.done) .ai-own input'); i.value = 'Wood, actually'; i.dispatchEvent(new Event('input')); });
+  // A longer own answer: the field wraps and grows, so the whole text stays in sight (it was a one-line input)
+  const grow = await ev(() => {
+    const i = document.querySelector('.ai-q:not(.done) .ai-own textarea');
+    const h0 = i.offsetHeight;
+    i.value = 'Wood, actually, because the box should match the shelf next to it, and a little longer so it needs several lines';
+    i.dispatchEvent(new Event('input'));
+    return { h0, h1: i.offsetHeight, hidden: i.scrollHeight - i.clientHeight };
+  });
+  check('Own answer: one line when empty, grows with a longer text so none of it is out of sight',
+    grow.h0 <= 34 && grow.h1 > grow.h0 + 10 && grow.hidden <= 1, JSON.stringify(grow));
+  await ev(() => { const i = document.querySelector('.ai-q:not(.done) .ai-own textarea'); i.value = 'Wood, actually'; i.dispatchEvent(new Event('input')); });
   await click('Hinge', '.ai-q:not(.done)');
   await click('Label recess', '.ai-q:not(.done)');
   const on = await ev(() => [...document.querySelectorAll('.ai-q:not(.done) .ai-ans.on')].map((b) => b.querySelector('b').textContent));

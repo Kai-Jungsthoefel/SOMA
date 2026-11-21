@@ -1259,7 +1259,7 @@ export class SomaChat {
     const card = el('div', { className: 'ai-ask ai-q' });
     const one = qs.length === 1;
     const picks = qs.map(() => new Set<string>());
-    const owns: HTMLInputElement[] = [];
+    const owns: HTMLTextAreaElement[] = [];
     const paints: (() => void)[] = [];
     const answered = (i: number) => picks[i].size > 0 || !!owns[i].value.trim();
     const send = el('button', { className: 'btn sm acc', textContent: one ? 'Send' : 'Send answers' });
@@ -1290,18 +1290,20 @@ export class SomaChat {
         const b = el('button', { className: 'ai-ans' }, el('b', { textContent: o.label }), o.description ? el('span', { textContent: o.description }) : null);
         b.addEventListener('click', () => {
           if (one && !q.multi) { picks[i] = new Set([o.label]); owns[i].value = ''; done(true); return; }
-          if (q.multi) { if (!picks[i].delete(o.label)) picks[i].add(o.label); } else { picks[i] = new Set([o.label]); owns[i].value = ''; }
+          if (q.multi) { if (!picks[i].delete(o.label)) picks[i].add(o.label); } else { picks[i] = new Set([o.label]); owns[i].value = ''; owns[i].style.height = ''; }
           refresh();
         });
         return [o.label, b] as const;
       });
       paints.push(() => { for (const [label, b] of btns) { b.classList.toggle('on', picks[i].has(label)); b.setAttribute('aria-pressed', String(picks[i].has(label))); } });
-      const own = el('input', { className: 'ai-field grow', placeholder: q.multi ? 'Something else, in your own words …' : 'Or in your own words …' });
+      // A textarea that grows with the text: a one-line input scrolled longer answers out of sight
+      const own = el('textarea', { className: 'ai-field ai-ownfield grow', rows: 1, placeholder: q.multi ? 'Something else, in your own words …' : 'Or in your own words …' });
       own.setAttribute('aria-label', `Your own answer: ${q.question}`);
-      own.addEventListener('input', () => { if (!q.multi && own.value.trim()) picks[i].clear(); refresh(); });
-      // Enter: on to the next question without an answer, after the last one send
+      const fit = () => { own.style.height = 'auto'; own.style.height = `${Math.min(own.scrollHeight + 2, 160)}px`; };
+      own.addEventListener('input', () => { fit(); if (!q.multi && own.value.trim()) picks[i].clear(); refresh(); });
+      // Enter: on to the next question without an answer, after the last one send. Shift+Enter: a new line
       own.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
+        if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
         e.preventDefault();
         const next = owns.find((_, j) => j > i && !answered(j));
         if (next) next.focus(); else if (!send.disabled) done(true);

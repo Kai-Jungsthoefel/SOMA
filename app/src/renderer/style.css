@@ -1471,7 +1471,9 @@ select.ai-field { width:170px; flex-shrink:0; }
 .ai-ans:hover { border-color:var(--acc-line); background:var(--s3); }
 .ai-ans b { font-weight:500; color:var(--tx); }
 .ai-ans span { font-size:12px; color:var(--tx2); }
-.ai-own { display:flex; gap:8px; align-items:center; }
+.ai-own { display:flex; gap:8px; align-items:flex-end; }
+/* Own answer: wraps and grows with the text (chat.ts), the buttons stay next to its last line */
+.ai-ownfield { height:32px; padding:6px 10px; line-height:18px; resize:none; overflow-y:auto; display:block; }
 .ai-q .answer { display:flex; gap:8px; align-items:center; color:var(--tx2); }
 .ai-q .answer svg { color:var(--ok); flex-shrink:0; }
 .ai-q .answer.skipped svg { color:var(--tx3); }
