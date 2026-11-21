@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SETTINGS, applyPatch, cleanSettings, type SettingsResult, type SettingsState } from '../shared/settings';
+import { DEFAULT_SETTINGS as BASE_DEFAULTS, TEST_OPEN, applyPatch, cleanSettings, type AppSettings, type SettingsResult, type SettingsState } from '../shared/settings';
 import { backupsDir, settingsFile } from './paths';
 import { writeAtomic } from './skills';
 
@@ -9,7 +9,12 @@ import { writeAtomic } from './skills';
  * von einer neueren App geschrieben): Was nicht passt, gilt mit der Vorgabe und wird in den Einstellungen gemeldet. Bevor
  * eine solche Datei beim nächsten Ändern ersetzt wird, kommt sie in die Sicherung (nichts still überschreiben).
  */
+/** The defaults. In test mode the agent area opens as before (shared/settings.ts, TEST_OPEN). */
+const testMode = () => process.env.SOMA_TEST === '1';
+const defaults = (): AppSettings => (testMode() ? { ...BASE_DEFAULTS, open: TEST_OPEN } : BASE_DEFAULTS);
+
 export function readSettings(): SettingsState {
+  const DEFAULT_SETTINGS = defaults();
   let text: string;
   try { text = fs.readFileSync(settingsFile(), 'utf8'); } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { settings: DEFAULT_SETTINGS };
@@ -20,6 +25,7 @@ export function readSettings(): SettingsState {
     return { settings: DEFAULT_SETTINGS, problem: 'settings.json is not valid JSON. The defaults apply. Changing a setting writes a new file, the old one goes into the backup.' };
   }
   const { settings, ignored } = cleanSettings(raw);
+  if (testMode() && !(raw && typeof raw === 'object' && 'open' in raw)) settings.open = TEST_OPEN;
   return ignored.length
     ? { settings, problem: `settings.json contains values this app does not know (${ignored.join(', ')}). The defaults apply for them. Changing a setting writes a new file, the old one goes into the backup.` }
     : { settings };

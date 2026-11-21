@@ -157,10 +157,12 @@ export const SHOTS = [
     clip: ['.st-dlg'],
     clipHeight: 420,
     marks: [
+      { label: 'General', sel: '#st-nav [data-sec=general]', at: 'r' },
+      { label: 'Tabs when a model opens', sel: '#st-open-tabs', at: 'r' },
       { label: 'Viewer', sel: '#st-nav [data-sec=viewer]', at: 'r' },
-      { label: 'Shortcuts', sel: '#st-nav [data-sec=keys]', at: 'r' },
       { label: 'SOMA AI', sel: '#st-nav [data-sec=ai]', at: 'r' },
       { label: 'Skills', sel: '#st-nav [data-sec=skills]', at: 'r' },
+      { label: 'Shortcuts', sel: '#st-nav [data-sec=keys]', at: 'r' },
       { label: 'Storage', sel: '#st-nav [data-sec=storage]', at: 'r' },
       { label: 'About', sel: '#st-nav [data-sec=about]', at: 'r' },
     ],

@@ -13,8 +13,8 @@ import { CATEGORY_ICON } from './skills';
 import { el, menus } from './ui';
 
 /** Reiter der Einstellungen (E78, E81). */
-export type SettingsSection = 'viewer' | 'keys' | 'ai' | 'skills' | 'storage' | 'about';
-export const SECTIONS: SettingsSection[] = ['viewer', 'keys', 'ai', 'skills', 'storage', 'about'];
+export type SettingsSection = 'general' | 'viewer' | 'ai' | 'skills' | 'keys' | 'storage' | 'about';
+export const SECTIONS: SettingsSection[] = ['general', 'viewer', 'ai', 'skills', 'keys', 'storage', 'about'];
 /** Ein Reiter außer „Skills“: wird beim Zeigen aufgefrischt. */
 export interface SettingsPage { show(): void }
 
@@ -55,7 +55,7 @@ const SOURCE_BADGE: Record<SkillSource, string> = { builtin: '', edited: 'Edited
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
- * Einstellungen (E78, E81) mit Reitern: Viewer, Skills, Speicher, Info. Dieser Teil ist das Fenster selbst und der Reiter
+ * Einstellungen (E78, E81) mit Reitern: General, Viewer, SOMA AI, Skills, Shortcuts, Storage, About. Dieser Teil ist das Fenster selbst und der Reiter
  * „Skills“, die übrigen stehen in settingspages.ts. Skills: links die Liste (mitgelieferte, bearbeitete, eigene), rechts der
  * Text im Editor mit Vorschau und Prüfung beim Tippen. Gespeichert wird nur auf Wunsch (Speichern, Strg+S). Die Modelle
  * merken davon erst etwas, wenn ein Skill dort neu kopiert wird: Ihre Kopien bleiben, wie sie sind.
@@ -71,7 +71,7 @@ export class SettingsDialog {
   private error = '';
   private lastFocus: HTMLElement | null = null;
   /** Gezeigter Reiter. Beim nächsten Öffnen ohne Ziel kommt derselbe wieder. */
-  private section: SettingsSection = 'viewer';
+  private section: SettingsSection = 'general';
   private view: EditorView;
   private builtinView: EditorView | null = null;
   private els: { empty: HTMLElement; ed: HTMLElement; hd: HTMLElement; notes: HTMLElement; bar: HTMLElement; cm: HTMLElement; md: HTMLElement; bi: HTMLElement; check: HTMLElement };

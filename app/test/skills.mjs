@@ -397,8 +397,8 @@ try {
   await ev(() => window.__t.showPanel('skills'));
   check('Knopf „Settings“ in der Leiste ist aktiv', await ev(() => !document.getElementById('btn-settings').disabled && document.getElementById('btn-settings').textContent === 'Settings'));
   await domClick('btn-settings');
-  // Beim ersten Öffnen steht das Fenster im Reiter Viewer (E81), die Skills sind ein Reiter daneben
-  await waitFor('Einstellungen offen', () => window.__t.settings().open && window.__t.settings().section === 'viewer', 10000);
+  // The first time the window opens at General, Skills is another tab
+  await waitFor('Einstellungen offen', () => window.__t.settings().open && window.__t.settings().section === 'general', 10000);
   await ev(() => document.querySelector('#st-nav [data-sec="skills"]').click());
   await waitFor('Reiter Skills', () => window.__t.settings().section === 'skills' && window.__t.settings().skills.length >= 19, 10000);
   let us = await ust();

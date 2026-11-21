@@ -142,7 +142,13 @@ try {
       await waitFor('Vorschau', () => !document.getElementById('preview-banner').hidden, 30000);
     },
     'export.png': async () => { await domClick('btn-export'); await sleep(300); },
-    'settings.png': async () => { await ev(() => window.__t.settingsShow('viewer')); await sleep(600); },
+    'settings.png': async () => {
+      // An example of the tabs when a model opens: SOMA AI and a tool of one's own (the test default has a terminal)
+      await ev(() => window.__t.changeSettings({ open: { tabs: [{ kind: 'ai' }, { kind: 'command', command: 'python my_tool.py --window', title: 'My tool' }], front: 0 } }));
+      await ev(() => window.__t.closeSettings());
+      await ev(() => window.__t.settingsShow('general'));
+      await sleep(600);
+    },
   };
   const reset = {
     'start.png': () => ev(() => window.__t.showStart(false)),

@@ -86,8 +86,10 @@ try {
   await waitFor('Einstellungen offen', () => window.__t.settings().open, 5000);
   const nav = await ev(() => [...document.querySelectorAll('#st-nav button')].map((b) => `${b.dataset.sec}:${b.textContent.trim()}`));
   const st0 = await ev(() => window.__t.settings());
-  check('Settings: tabs Viewer, Shortcuts, SOMA AI, Skills, Storage, About, without a target open in Viewer', JSON.stringify(nav) === '["viewer:Viewer","keys:Shortcuts","ai:SOMA AI","skills:Skills","storage:Storage","about:About"]'
-    && st0.section === 'viewer' && await ev(() => !document.getElementById('st-viewer').hidden && document.getElementById('st-skills').hidden), nav.join(','));
+  check('Settings: tabs General, Viewer, SOMA AI, Skills, Shortcuts, Storage, About, without a target open in General',
+    JSON.stringify(nav) === '["general:General","viewer:Viewer","ai:SOMA AI","skills:Skills","keys:Shortcuts","storage:Storage","about:About"]'
+    && st0.section === 'general' && await ev(() => !document.getElementById('st-general').hidden && document.getElementById('st-viewer').hidden && document.getElementById('st-skills').hidden), nav.join(','));
+  await ev(() => window.__t.settingsShow('viewer'));
   let pv = (await pages()).viewer.text;
   let cam = await vs();
   check('Vorgaben: Belegung SOMA (links drehen, rechts verschieben), perspektivisch, keine settings.json', cam.navigation === 'soma' && cam.projection === 'perspective' && cam.zoomSpeed === 1
@@ -206,12 +208,45 @@ try {
   check('Eine Nachkommastelle: 40.0 × 30.0 × 5.0 mm', mt.includes('40.0 × 30.0 × 5.0 mm'), mt.replace(/\s+/g, ' ').slice(0, 60));
   const bad = await ev(() => window.soma.settings.set({ viewer: { decimals: 9 } }));
   check('Ungültiger Wert (9 Nachkommastellen) wird abgelehnt, nichts geschrieben', !bad.ok && /decimals/.test(bad.error ?? '') && fileSettings()?.viewer?.decimals === 1, bad.error);
-  // Build time limit (issue #13): the select writes settings.json, the viewer settings stay
+  // Build time limit (issue #13), under General: the select writes settings.json, the viewer settings stay
+  await ev(() => window.__t.settingsShow('general'));
   const limitOpts = await ev(() => [...document.querySelectorAll('#st-build-limit option')].map((o) => o.textContent));
   await setSelect('st-build-limit', '30');
   await waitFor('Build time limit saved', () => window.__t.appSettings().settings.build.timeLimit === 30, 10000).catch(() => {});
   check('Build time limit: choices from 5 min to no limit, 30 min is in settings.json',
     limitOpts.join() === '5 min,10 min,20 min,30 min,1 h,2 h,No limit' && fileSettings()?.build?.timeLimit === 30 && fileSettings()?.viewer?.decimals === 1, limitOpts.join());
+
+  // ---- Tabs when a model opens (issue #18): General, up to three, a command of one's own ----------------------------------
+  const gen = () => ev(() => window.__t.settingsPages().general);
+  const openPrefs = () => ev(() => window.__t.appSettings().settings.open);
+  const tabRows = () => ev(() => [...document.querySelectorAll('#st-open-tabs .st-tab')].map((r) => ({ v: r.querySelector('select').value, n: r.querySelectorAll('input').length })));
+  let g = await gen();
+  check('General: in test mode SOMA AI and a terminal, the terminal in front (as before the setting)',
+    JSON.stringify(await tabRows()) === '[{"v":"ai","n":0},{"v":"terminal","n":0}]' && g.text.includes('Tabs in the agent area') && (await openPrefs()).front === 1, JSON.stringify(await tabRows()));
+  await setSelect('st-tab-2', 'command');
+  await waitFor('command row', () => document.querySelectorAll('#st-open-tabs .st-tab input').length === 2, 5000);
+  g = await gen();
+  check('Own command without a command: not saved yet, the page says so and warns what a command does',
+    g.text.includes('Enter the command') && g.text.includes('saved only on this computer') && fileSettings()?.open?.tabs?.[1]?.kind !== 'command', g.text.replace(/\s+/g, ' ').slice(0, 120));
+  const typeIn = (i, v) => ev(([n, val]) => { const f = document.querySelectorAll('#st-open-tabs .st-tab:nth-child(2) input')[n]; f.value = val; f.dispatchEvent(new Event('input')); f.dispatchEvent(new Event('change')); }, [i, v]);
+  await typeIn(0, 'echo SOMA-START-OK');
+  await waitFor('command saved', () => window.__t.appSettings().settings.open.tabs[1]?.kind === 'command', 10000);
+  await typeIn(1, 'Tool');
+  await waitFor('name saved', () => window.__t.appSettings().settings.open.tabs[1]?.title === 'Tool', 10000);
+  await ev(() => document.querySelector('[aria-label="Move tab 2 up"]').click());
+  await waitFor('moved up', () => window.__t.appSettings().settings.open.tabs[0]?.kind === 'command', 10000);
+  check('Command and name saved, moved up it is the first tab and in front',
+    JSON.stringify(fileSettings()?.open) === '{"tabs":[{"kind":"command","command":"echo SOMA-START-OK","title":"Tool"},{"kind":"ai"}],"front":0}', JSON.stringify(fileSettings()?.open));
+  await domClick('st-tab-add');
+  await waitFor('third tab', () => window.__t.appSettings().settings.open.tabs.length === 3, 10000);
+  const three = await ev(() => ({ add: document.getElementById('st-tab-add').disabled, aiOff: document.querySelector('#st-tab-3 option[value="ai"]').disabled, agents: [...document.querySelectorAll('#st-tab-3 option')].map((o) => o.textContent) }));
+  check('At most three tabs, SOMA AI only once, the known agents to choose', three.add && three.aiOff && three.agents.includes('Empty terminal') && three.agents.some((a) => a.startsWith('Claude Code'))
+    && three.agents.at(-1) === 'Your own command …', JSON.stringify(three));
+  const tooMany = await ev(() => window.soma.settings.set({ open: { tabs: [{ kind: 'ai' }, { kind: 'terminal' }, { kind: 'terminal' }, { kind: 'terminal' }] } }));
+  check('Four tabs are refused, nothing written', !tooMany.ok && fileSettings()?.open?.tabs?.length === 3, tooMany.error);
+  await ev(() => document.querySelector('[aria-label="Remove tab 3"]').click());
+  await waitFor('third tab removed', () => window.__t.appSettings().settings.open.tabs.length === 2, 10000);
+  await shot('settings-general');
   await ev(() => window.__t.closeSettings());
   await domClick('btn-measure');
 
@@ -362,6 +397,11 @@ try {
   const disp = await ev(() => window.__t.display());
   check('Nach dem Neustart: SolidWorks, umgekehrter Zoom, orthografisch, ohne Kanten und transparent', cam.navigation === 'solidworks' && cam.zoomSpeed === -1
     && cam.projection === 'orthographic' && disp.edges === false && disp.ghost === true, `${cam.navigation} ${cam.projection} ${JSON.stringify(disp)}`);
+  const ranCmd = () => ev(() => { const id = window.__t.activeTerminal(); return id != null && window.__t.termText(id).includes('SOMA-START-OK'); });
+  for (const t0 = Date.now(); Date.now() - t0 < 30000 && !(await ranCmd());) await sleep(300);
+  const at = await ev(() => window.__t.agentTabs());
+  check('Model opened: the tabs as set, own command first and in front, it ran in the terminal, no other terminal',
+    JSON.stringify(at.filter((x) => !x.hidden).map((x) => [x.title, x.on])) === '[["Tool",true],["SOMA AI",false]]' && await ranCmd(), JSON.stringify(at));
   await app.stop();
 
   // ---- 10) Kaputte und fremde Werte in settings.json -------------------------------------------------------------------------

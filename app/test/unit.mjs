@@ -555,6 +555,18 @@ try {
     && c1.ignored.join() === 'viewer.edges,viewer.decimals' && !('extra' in c1.settings), c1.ignored.join());
   check('Ohne Datei oder mit Unsinn: Vorgaben', JSON.stringify(S.cleanSettings(null).settings) === JSON.stringify(S.DEFAULT_SETTINGS)
     && S.cleanSettings({ viewer: [1] }).ignored.join() === 'viewer' && S.cleanSettings('x').ignored.length === 0);
+  // Tabs when a model opens (issue #18): 1 to 3, SOMA AI once, known agents, a command on one line
+  const tabsOk = (tabs) => 'settings' in S.applyPatch(S.DEFAULT_SETTINGS, { open: { tabs } });
+  check('Tabs when a model opens: by default only SOMA AI; valid lists pass, wrong ones are refused',
+    JSON.stringify(S.DEFAULT_SETTINGS.open) === '{"tabs":[{"kind":"ai"}],"front":0}'
+    && tabsOk([{ kind: 'command', command: 'python tool.py --window', title: '' }, { kind: 'ai' }, { kind: 'agent', agent: 'claude' }])
+    && !tabsOk([]) && !tabsOk([{ kind: 'ai' }, { kind: 'ai' }]) && !tabsOk(Array(4).fill({ kind: 'terminal' }))
+    && !tabsOk([{ kind: 'agent', agent: 'rm' }]) && !tabsOk([{ kind: 'command', command: '  ', title: '' }])
+    && !tabsOk([{ kind: 'command', command: 'a\nb', title: '' }]) && !tabsOk([{ kind: 'terminal', command: 'x' }])
+    && S.cleanSettings({ open: { tabs: [{ kind: 'ai' }, { kind: 'ai' }] } }).ignored.join() === 'open.tabs');
+  check('Tab names: agent label, own name, else the command without its path',
+    S.openTabTitle({ kind: 'agent', agent: 'codex' }) === 'Codex' && S.openTabTitle({ kind: 'command', command: 'x', title: ' Bambu ' }) === 'Bambu'
+    && S.openTabTitle({ kind: 'command', command: 'C:\\tools\\bambu.exe --window', title: '' }) === 'bambu.exe');
   const p1 = S.applyPatch(S.DEFAULT_SETTINGS, { viewer: { projection: 'orthographic', decimals: 4 } });
   check('Änderung: nur die genannten Werte, die Vorgaben bleiben unverändert', p1.settings?.viewer.projection === 'orthographic' && p1.settings.viewer.decimals === 4
     && p1.settings.viewer.navigation === 'soma' && S.DEFAULT_SETTINGS.viewer.projection === 'perspective');

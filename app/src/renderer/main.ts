@@ -1,5 +1,5 @@
 import { affectsBuild } from '../shared/editable';
-import { DEFAULT_SETTINGS, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
+import { DEFAULT_SETTINGS, KNOWN_AGENTS, openTabTitle, type OpenPrefs, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
 import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, MeshExportOptions, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
@@ -21,7 +21,7 @@ import { ExplodeTool } from './explodetool';
 import { HelpDialog } from './help';
 import { AiPage } from './aisettings';
 import { SettingsDialog, type SettingsSection } from './settings';
-import { AboutPage, ShortcutsPage, StoragePage, ViewerPage } from './settingspages';
+import { AboutPage, GeneralPage, ShortcutsPage, StoragePage, ViewerPage } from './settingspages';
 import { SkillsPanel } from './skills';
 import { ParamsPanel } from './params';
 import { StructureTree } from './tree';
@@ -275,6 +275,11 @@ async function changeSettings(patch: SettingsPatch): Promise<SettingsResult> {
   return r;
 }
 
+const generalPage = new GeneralPage($('st-general'), {
+  current: () => appSettings, set: (patch) => changeSettings(patch), toast,
+  agents: () => api.agents.detect(),
+  startChanged: () => { renderTourCard(); if (!$('start').hidden) void renderUpdate(); },
+});
 const viewerPage = new ViewerPage($('st-viewer'), { current: () => appSettings, set: (patch) => changeSettings(patch), toast });
 const storagePage = new StoragePage($('st-storage'), { api: api.storage, toast });
 const shortcutsPage = new ShortcutsPage($('st-keys'), { current: () => appSettings });
@@ -282,8 +287,6 @@ const aboutPage = new AboutPage($('st-about'), {
   api: api.about, toast,
   openUrl: (url) => void api.openUrl(url).then((r) => { if (!r.ok) toast(r.error ?? `${url} could not be opened.`, 'error'); }),
   openFolder: (area) => void api.storage.open(area).then((r) => { if (!r.ok) toast(`The folder could not be opened: ${r.error ?? 'unknown error'}`, 'error'); }),
-  updateCheck: () => appSettings.settings.start.updateCheck,
-  setUpdateCheck: async (on) => { const r = await changeSettings({ start: { updateCheck: on } }); if (!$('start').hidden) void renderUpdate(); return r; },
 });
 
 // Settings > SOMA AI: sign-ins and model also for the chat (created further down, only called on clicks). The chat
@@ -297,7 +300,7 @@ const aiPage = new AiPage($('st-ai'), {
   modelOpen: () => !!project,
 });
 
-// Einstellungen (E78, E81): Reiter Viewer, Skills, Speicher und Info, auch von der Startseite aus. Änderungen an den
+// Einstellungen (E78, E81): Reiter General, Viewer, SOMA AI, Skills, Shortcuts, Speicher und Info, auch von der Startseite aus. Änderungen an den
 // Skills zeigt das Panel „Skills“ sofort
 const settings = new SettingsDialog({
   root: $('settings'), nav: $('st-nav'), list: $('st-list'), editor: $('st-editor'), popover: $('menu-skill-name'), newBtn: $('btn-st-new'), importBtn: $('btn-st-import'),
@@ -313,7 +316,7 @@ const settings = new SettingsDialog({
   },
   changed: () => { if (project && skills.isLoaded) void skills.refresh(); },
   modelMode: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id)?.mode ?? 'off' : null),
-  pages: { viewer: viewerPage, keys: shortcutsPage, ai: aiPage, storage: storagePage, about: aboutPage },
+  pages: { general: generalPage, viewer: viewerPage, keys: shortcutsPage, ai: aiPage, storage: storagePage, about: aboutPage },
 });
 // Hilfe (E83): Knopf in der Leiste und auf der Startseite, F1 überall außer in den Einstellungen
 const help = new HelpDialog({ root: $('help'), nav: $('help-nav'), body: $('help-body'), close: $('btn-help-close') as HTMLButtonElement, background: [$('topbar'), $('body'), $('start')] }, {
@@ -1264,10 +1267,9 @@ async function onProject(p: ProjectInfo): Promise<void> {
   const filesReady = refreshFiles(); // only with the Files panel open, otherwise it marks the list for later
   void versions.refresh();
   void refreshSaveState();
-  // SOMA AI is in front unless the user prefers a terminal (tests keep the terminal, their suites type into it)
-  const wantChat = !chatTab.hidden && (store.get('soma.agentTab') ?? (api.testMode ? 'terminal' : 'ai')) === 'ai';
-  // Ready when the agent area shows what it should (the loading screen of "New model" waits for it)
-  const agentReady = terminals.add({ title: 'Terminal' }).then(() => (wantChat ? showChat(true) : undefined));
+  // The tabs of Settings > General (issue #18). Ready when the agent area shows what it should (the loading screen of
+  // "New model" waits for it)
+  const agentReady = openTabs(appSettings.settings.open);
   void refreshAgents();
   const st = await api.build.status();
   renderBuild(st);
@@ -1865,6 +1867,27 @@ function revealChat(s: ChatState): void {
   if (s === 'wait' && !chatOn) void showChat(true);
 }
 
+/**
+ * The tabs of Settings > General for a model that opens, in their order, then the chosen one to the front. A command is
+ * typed into a terminal in the model folder like an agent from the + menu: when it ends, the shell stays.
+ */
+async function openTabs(o: OpenPrefs): Promise<void> {
+  const tabs = o.tabs.length ? o.tabs : DEFAULT_SETTINGS.open.tabs;
+  const hasAi = tabs.some((t) => t.kind === 'ai');
+  void showChat(false);
+  chatTab.hidden = chatStrip.hidden = !hasAi;
+  const ids: (number | 'ai' | null)[] = [];
+  for (const t of tabs) {
+    // The terminals are added before the + button: SOMA AI's tab moves there too, so the order is the one set
+    if (t.kind === 'ai') { $('term-tabs').insertBefore(chatTab, $('btn-term-add')); ids.push('ai'); continue; }
+    const command = t.kind === 'agent' ? KNOWN_AGENTS.find((a) => a.id === t.agent)?.command : t.kind === 'command' ? t.command.trim() : undefined;
+    ids.push(await terminals.add({ command, title: openTabTitle(t) }));
+  }
+  const front = ids[Math.min(o.front, ids.length - 1)];
+  if (front === 'ai' || (front == null && hasAi)) await showChat(true);
+  else if (front != null) terminals.activate(front);
+}
+
 /** SOMA AI to the front (or away from it, when a terminal comes to the front). */
 function showChat(on: boolean): Promise<void> {
   chatOn = on;
@@ -1874,7 +1897,6 @@ function showChat(on: boolean): Promise<void> {
   if (!on) return Promise.resolve();
   chatTab.hidden = chatStrip.hidden = false;
   terminals.deselect();
-  store.set('soma.agentTab', 'ai');
   return chat.show().then(() => chat.focus());
 }
 chatLabel.addEventListener('click', () => showChat(true));
@@ -1882,13 +1904,11 @@ chatStrip.addEventListener('click', () => { showChat(true); setAgentCollapsed(fa
 terminals.onActivate = () => {
   if (!chatOn) return;
   showChat(false);
-  store.set('soma.agentTab', 'terminal');
 };
 // Closing ends SOMA AI of this model. The conversation stays, the + menu brings it back
 chatX.addEventListener('click', () => {
   showChat(false);
   chatTab.hidden = chatStrip.hidden = true;
-  store.set('soma.agentTab', 'terminal');
   void api.ai.stop();
   if (!terminals.activateLast()) void terminals.add({ title: 'Terminal' });
 });
@@ -2246,6 +2266,11 @@ if (api.testMode) {
     picked: () => picked.map(partName),
     treeExpandAll: () => tree.expandAll(),
     termText: (id: number) => terminals.text(id),
+    /** The tabs of the agent area in their order: name, in front, hidden (SOMA AI closed), and the id of a terminal. */
+    agentTabs: () => [...document.querySelectorAll<HTMLElement>('#term-tabs .tab')].map((t) => ({
+      title: t.querySelector('.t')?.textContent?.trim() ?? '', on: t.classList.contains('on'), hidden: t.hidden, ai: t.classList.contains('ai-tab'),
+    })),
+    activeTerminal: () => terminals.activeId,
     chat: () => chat.state(),
     showChat: (on: boolean) => showChat(on),
     toAgent: (text: string) => insertToAgent(text),
@@ -2312,8 +2337,10 @@ if (api.testMode) {
     settingsType: (text: string) => settings.type(text),
     settingsSave: () => settings.save(),
     settingsShow: (sec: SettingsSection) => settings.open(undefined, sec),
-    settingsPages: () => ({ viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state(), ai: aiPage.state() }),
+    settingsPages: () => ({ general: generalPage.state(), viewer: viewerPage.state(), storage: storagePage.state(), about: aboutPage.state(), ai: aiPage.state() }),
     appSettings: () => appSettings,
+    /** Changes settings like a settings page does (written and applied). */
+    changeSettings: (patch: SettingsPatch) => changeSettings(patch),
     storageRefresh: () => storagePage.refresh(),
     axes: () => viewer.axesState(),
     display: () => Object.fromEntries([...document.querySelectorAll<HTMLElement>('[data-display]')].map((b) => [b.dataset.display, b.getAttribute('aria-checked') === 'true'])),

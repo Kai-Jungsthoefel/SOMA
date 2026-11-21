@@ -234,9 +234,12 @@ try {
   fs.appendFileSync(path.join(dir, 'NOTES.md'), '\nThe lid should be thicker.\n');
   await ev(() => window.soma.project.create());
   await app.waitFor('new model', (id) => window.__t.project()?.id !== id, 60000, modelId);
+  // In test mode the terminal is in front when a model opens (settings TEST_OPEN): SOMA AI to the front
+  await ev(() => window.__t.showChat(true));
   await app.waitFor('empty chat of the new model', () => window.__t.chat().phase === 'chat' && window.__t.chat().user.length === 0, 60000);
   await ev((id) => window.soma.project.open(id), modelId);
   await app.waitFor('old model', (id) => window.__t.project()?.id === id, 60000, modelId);
+  await ev(() => window.__t.showChat(true));
   await app.waitFor('history', () => window.__t.chat().user.length === 3, 60000);
   st = await chat();
   check('After a model switch the conversation of the model is back, steps grouped as before', JSON.stringify(st.rows.map((r) => [r.state, r.count])) === '[["ok",2],["ok",1],["denied",1],["stopped",1]]',

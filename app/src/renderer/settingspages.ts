@@ -1,5 +1,5 @@
-import { BUILD_TIME_LIMITS, DECIMALS, NAV_PRESETS, navLegend, type NavPreset, type Projection, type SettingsPatch, type SettingsResult, type SettingsState, type ViewerPrefs } from '../shared/settings';
-import type { AboutInfo, ComponentInfo, SomaApi, StorageArea, StorageEntry, StorageStats } from '../shared/types';
+import { BUILD_TIME_LIMITS, DECIMALS, KNOWN_AGENTS, MAX_OPEN_TABS, NAV_PRESETS, OPEN_LIMITS, navLegend, type AgentId, type NavPreset, type OpenTab, type Projection, type SettingsPatch, type SettingsResult, type SettingsState, type ViewerPrefs } from '../shared/settings';
+import type { AboutInfo, AgentInfo, ComponentInfo, SomaApi, StorageArea, StorageEntry, StorageStats } from '../shared/types';
 import { icon } from './icons';
 import type { SettingsPage } from './settings';
 import { shortcutGroups } from './shortcuts';
@@ -60,6 +60,154 @@ export function fmtBytes(n: number): string {
   return `${v.toLocaleString('en-US', { maximumFractionDigits: v < 10 ? 1 : 0 })} ${units[i]}`;
 }
 
+// ---- General --------------------------------------------------------------------------------------------------------
+
+interface GeneralDeps {
+  current(): SettingsState;
+  /** Writes and applies (main.ts). */
+  set(patch: SettingsPatch): Promise<SettingsResult>;
+  toast: Toast;
+  /** The command line agents found on this computer, for "not installed" in the choice of a tab. */
+  agents(): Promise<AgentInfo[]>;
+  /** The start page shows the update label and the tutorial card after a change at once. */
+  startChanged(): void;
+}
+
+/** Value of a tab in its select: `ai`, `terminal`, `agent:<id>` or `command`. */
+const tabValue = (t: OpenTab) => (t.kind === 'agent' ? `agent:${t.agent}` : t.kind);
+const sameTabs = (a: OpenTab[], b: OpenTab[]) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Tab "General": what happens when a model opens (the tabs of the agent area, issue #18), the start page and building.
+ * The tabs are edited as a draft: a command tab without a command is not saved yet, the saved tabs apply until then.
+ */
+export class GeneralPage implements SettingsPage {
+  private draft: OpenTab[] | null = null;
+  private agents: AgentInfo[] = [];
+
+  constructor(private root: HTMLElement, private deps: GeneralDeps) {}
+
+  show(): void {
+    this.draft = null;
+    this.render();
+    void this.deps.agents().then((a) => { this.agents = a; if (!this.root.hidden) this.render(); }).catch(() => {});
+  }
+
+  private async patch(patch: SettingsPatch): Promise<boolean> {
+    let r: SettingsResult;
+    try { r = await this.deps.set(patch); } catch (e) { r = { ok: false, error: errText(e), ...this.deps.current() }; }
+    if (!r.ok) this.deps.toast(`The setting was not changed: ${r.error ?? 'unknown error'}`, 'error');
+    else if (r.backup) this.deps.toast(`Saved. The previous settings.json is in the backup: ${r.backup}`, 'info');
+    return r.ok;
+  }
+
+  private get saved(): OpenTab[] { return this.deps.current().settings.open.tabs; }
+  private get tabs(): OpenTab[] { return this.draft ?? this.saved; }
+
+  /** Saves the draft when every tab is complete. The first tab is the one in front. */
+  private async saveTabs(): Promise<void> {
+    const d = this.draft;
+    if (!d || d.some((t) => t.kind === 'command' && !t.command.trim())) { this.render(); return; }
+    const tabs = d.map((t): OpenTab => (t.kind === 'command' ? { kind: 'command', command: t.command.trim(), title: t.title.trim() } : t));
+    if (!sameTabs(tabs, this.saved) || this.deps.current().settings.open.front !== 0) {
+      if (await this.patch({ open: { tabs, front: 0 } })) this.draft = null;
+    } else this.draft = null;
+    this.render();
+  }
+
+  private edit(change: (tabs: OpenTab[]) => void): void {
+    const next = this.tabs.map((t) => ({ ...t }));
+    change(next);
+    this.draft = next;
+    void this.saveTabs();
+  }
+
+  private tabRow(t: OpenTab, i: number, all: OpenTab[]): HTMLElement {
+    const sel = el('select', { className: 'sk-select st-select', id: `st-tab-${i + 1}` });
+    sel.setAttribute('aria-label', `Tab ${i + 1}`);
+    const aiElsewhere = all.some((x, j) => j !== i && x.kind === 'ai');
+    const opt = (value: string, label: string, disabled = false) => el('option', { value, textContent: label, disabled });
+    sel.append(
+      opt('ai', aiElsewhere ? 'SOMA AI (already in another tab)' : 'SOMA AI', aiElsewhere),
+      opt('terminal', 'Empty terminal'),
+      ...KNOWN_AGENTS.map((a) => {
+        const found = this.agents.find((x) => x.id === a.id)?.found;
+        return opt(`agent:${a.id}`, found === false ? `${a.label} (not installed)` : a.label);
+      }),
+      opt('command', 'Your own command …'),
+    );
+    sel.value = tabValue(t);
+    sel.addEventListener('change', () => this.edit((tabs) => {
+      const v = sel.value;
+      tabs[i] = v === 'ai' || v === 'terminal' ? { kind: v } : v === 'command' ? { kind: 'command', command: '', title: '' } : { kind: 'agent', agent: v.slice(6) as AgentId };
+    }));
+    const up = el('button', { className: 'ibtn s', title: 'Move up', disabled: i === 0 }, icon('up', 14, 2));
+    up.setAttribute('aria-label', `Move tab ${i + 1} up`);
+    up.addEventListener('click', () => this.edit((tabs) => { [tabs[i - 1], tabs[i]] = [tabs[i], tabs[i - 1]]; }));
+    const rm = el('button', { className: 'ibtn s', title: 'Remove', disabled: all.length <= 1 }, icon('x', 14, 2));
+    rm.setAttribute('aria-label', `Remove tab ${i + 1}`);
+    rm.addEventListener('click', () => this.edit((tabs) => { tabs.splice(i, 1); }));
+    const row = el('div', { className: 'st-tab' },
+      el('div', { className: 'st-tab-hd' }, el('span', { className: 'st-tab-n', textContent: i === 0 ? '1 · in front' : String(i + 1) }), sel, up, rm));
+    if (t.kind === 'command') {
+      const cmd = el('input', { className: 'st-input grow', value: t.command, maxLength: OPEN_LIMITS.command, placeholder: 'Command, for example python my_tool.py', spellcheck: false });
+      cmd.setAttribute('aria-label', `Command of tab ${i + 1}`);
+      const name = el('input', { className: 'st-input', value: t.title, maxLength: OPEN_LIMITS.title, placeholder: 'Tab name' });
+      name.setAttribute('aria-label', `Name of tab ${i + 1}`);
+      // Typing changes only the draft, leaving the field (or Enter) saves it
+      cmd.addEventListener('input', () => { this.draft = this.tabs.map((x, j) => (j === i ? { ...x, command: cmd.value } as OpenTab : x)); });
+      name.addEventListener('input', () => { this.draft = this.tabs.map((x, j) => (j === i ? { ...x, title: name.value } as OpenTab : x)); });
+      for (const f of [cmd, name]) {
+        f.addEventListener('change', () => void this.saveTabs());
+        f.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); f.blur(); } });
+      }
+      row.append(el('div', { className: 'st-tab-cmd' }, cmd, name));
+      if (!t.command.trim()) row.append(el('div', { className: 'st-tab-note', textContent: 'Enter the command. Until then the tabs saved before apply.' }));
+    }
+    return row;
+  }
+
+  state() { return { text: this.root.innerText, draft: this.draft }; }
+
+  render(): void {
+    const { settings, problem } = this.deps.current();
+    const tabs = this.tabs;
+    const add = el('button', { className: 'btn sm', id: 'st-tab-add', disabled: tabs.length >= MAX_OPEN_TABS }, icon('plus', 14, 2), 'Add tab');
+    add.addEventListener('click', () => this.edit((t) => { t.push({ kind: 'terminal' }); }));
+    const hasCommand = tabs.some((t) => t.kind === 'command');
+
+    // A value set by hand in settings.json that is not among the choices still shows as selected
+    const cur = settings.build.timeLimit;
+    const limits = BUILD_TIME_LIMITS.includes(cur) ? BUILD_TIME_LIMITS : [...BUILD_TIME_LIMITS.filter((m) => m !== 0), cur].sort((a, b) => a - b).concat(cur ? [0] : []);
+    const limit = el('select', { id: 'st-build-limit', className: 'sk-select st-select narrow' },
+      ...limits.map((m) => el('option', { value: String(m), textContent: m === 0 ? 'No limit' : m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min` })));
+    limit.value = String(cur);
+    limit.addEventListener('change', () => void this.patch({ build: { timeLimit: Number(limit.value) } }).then(() => this.render()));
+    const start = (key: 'updateCheck' | 'tutorialCard', on: boolean) => void this.patch({ start: { [key]: on } }).then(() => { this.deps.startChanged(); this.render(); });
+
+    this.root.replaceChildren(el('div', { className: 'st-pg' },
+      ...head('General', 'What opens with a model, the start page and building. Changes apply right away.'),
+      problem ? el('div', { className: 'st-problem' }, icon('alert', 14, 2), el('span', { textContent: problem })) : null,
+      group('When a model opens',
+        el('div', { className: 'st-field col' },
+          el('div', { className: 'st-fl' }, el('b', { textContent: 'Tabs in the agent area' }),
+            el('span', { textContent: `Up to ${MAX_OPEN_TABS} tabs open with every model, the first one in front. With your own command you can start other agent harnesses or command line tools automatically. The + above the agent area opens more at any time.` })),
+          el('div', { className: 'st-tabs', id: 'st-open-tabs' }, ...tabs.map((t, i) => this.tabRow(t, i, tabs)), el('div', { className: 'st-tab-add' }, add)),
+          hasCommand ? el('div', { className: 'st-tab-warn' }, icon('alert', 14, 2), el('span', {
+            textContent: 'Each time you open a model, SOMA types your command into a terminal in the model’s folder. This includes models from other people. The command uses the model’s Python, and the terminal stays open after it finishes. Your command is saved only on this computer, never in the model file.',
+          })) : null)),
+      group('Start page',
+        field('Check for new versions', 'The start page asks GitHub once per session whether a newer release exists. SOMA downloads and installs nothing by itself.',
+          toggle('st-update', settings.start.updateCheck, 'Check for new versions', (on) => start('updateCheck', on))),
+        field('Tutorial card', 'The card “New to SOMA?” with the guided tour. Help (F1) can always start the tour.',
+          toggle('st-tour', settings.start.tutorialCard, 'Tutorial card', (on) => start('tutorialCard', on)))),
+      group('Building',
+        field('Build time limit', 'A build that takes longer is stopped, so a stuck model does not keep the computer busy. Raise it for large models. Applies from the next build, you can always stop a build yourself.', limit)),
+    ));
+  }
+}
+
+
 // ---- Viewer ---------------------------------------------------------------------------------------------------------
 
 interface ViewerDeps {
@@ -97,16 +245,9 @@ export class ViewerPage implements SettingsPage {
     digits.value = String(v.decimals);
     digits.addEventListener('change', () => void this.change({ decimals: Number(digits.value) }));
     const sample = (12.3456).toLocaleString('en-US', { minimumFractionDigits: v.decimals, maximumFractionDigits: v.decimals });
-    // A value set by hand in settings.json that is not among the choices still shows as selected
-    const cur = settings.build.timeLimit;
-    const limits = BUILD_TIME_LIMITS.includes(cur) ? BUILD_TIME_LIMITS : [...BUILD_TIME_LIMITS.filter((m) => m !== 0), cur].sort((a, b) => a - b).concat(cur ? [0] : []);
-    const limit = el('select', { id: 'st-build-limit', className: 'sk-select st-select narrow' },
-      ...limits.map((m) => el('option', { value: String(m), textContent: m === 0 ? 'No limit' : m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min` })));
-    limit.value = String(cur);
-    limit.addEventListener('change', () => void this.patch({ build: { timeLimit: Number(limit.value) } }));
 
     this.root.replaceChildren(el('div', { className: 'st-pg' },
-      ...head('Viewer', 'How the 3D view responds to the mouse, what it shows when a model opens and how long a build may take. Changes apply right away.'),
+      ...head('Viewer', 'How the 3D view responds to the mouse and what it shows when a model opens. Changes apply right away.'),
       problem ? el('div', { className: 'st-problem' }, icon('alert', 14, 2), el('span', { textContent: problem })) : null,
       group('Navigation',
         field('Mouse buttons', 'Rotate, pan and zoom like in the program you know. A left click always selects, a double click sets the pivot.', nav, legend),
@@ -124,8 +265,6 @@ export class ViewerPage implements SettingsPage {
           toggle('st-axes', v.axes, 'Origin and axes', (on) => void this.change({ axes: on })))),
       group('Measurements',
         field('Decimal places', `In the measurement card and at the measuring line, for example ${sample} mm. Text sent to the agent always has three decimals.`, digits)),
-      group('Building',
-        field('Build time limit', 'A build that takes longer is stopped, so a stuck model does not keep the computer busy. Raise it for large models. Applies from the next build, you can always stop a build yourself.', limit)),
     ));
   }
 
@@ -248,8 +387,6 @@ export class StoragePage implements SettingsPage {
 
 interface AboutDeps {
   api: SomaApi['about']; openUrl(url: string): void; openFolder(area: StorageArea): void; toast: Toast;
-  /** Einstellung „Check for new versions“ (Karte auf der Startseite). */
-  updateCheck(): boolean; setUpdateCheck(on: boolean): Promise<SettingsResult>;
 }
 
 const REPO = 'https://github.com/Kai-Jungsthoefel/SOMA';
@@ -274,12 +411,6 @@ export class AboutPage implements SettingsPage {
   private async copy(): Promise<void> {
     const r = await this.deps.api.copy().catch((e) => ({ ok: false, error: errText(e) }));
     this.deps.toast(r.ok ? 'System info copied. Paste it into a bug report or a message.' : `Could not copy: ${r.error ?? 'unknown error'}`, r.ok ? 'ok' : 'error');
-  }
-
-  private async setUpdateCheck(on: boolean): Promise<void> {
-    const r = await this.deps.setUpdateCheck(on).catch((e) => ({ ok: false, error: errText(e) }));
-    if (!r.ok) this.deps.toast(r.error ?? 'The setting could not be saved.', 'error');
-    this.render();
   }
 
   private link(label: string, url: string, title: string): HTMLElement {
@@ -313,8 +444,6 @@ export class AboutPage implements SettingsPage {
         'SOMA is free software under the GNU GPL, version 3 or later. The SOMA Model Exception makes sure that what you design belongs to you: your models, their files and everything SOMA creates from them.'),
       el('div', { className: 'st-actions' }, this.link('License', `${REPO}/blob/main/LICENSE`, 'GNU General Public License, version 3'), this.link('Model Exception', `${REPO}/blob/main/MODEL-EXCEPTION.md`, 'Additional permission for your models')),
     ];
-    kids.push(group('Updates', field('Check for new versions', 'The start page asks GitHub once per session whether a newer release exists. SOMA downloads and installs nothing by itself.',
-      toggle('st-update', this.deps.updateCheck(), 'Check for new versions', (on) => void this.setUpdateCheck(on)))));
     if (this.error) kids.push(el('div', { className: 'st-problem' }, icon('alert', 14, 2), el('span', { textContent: `The information could not be collected: ${this.error}` })));
     if (!a) {
       kids.push(el('div', { className: 'st-wait', textContent: this.loading ? 'Collecting versions …' : '' }));

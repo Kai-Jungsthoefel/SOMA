@@ -1192,6 +1192,20 @@ code { font-family:var(--mono); font-size:.95em; }
 .st-fc { flex-shrink:0; display:flex; align-items:center; min-height:28px; }
 .sk-select.st-select { max-width:none; min-width:190px; height:28px; padding:0 6px; }
 .sk-select.st-select.narrow { min-width:64px; }
+/* General > tabs when a model opens (issue #18): one row per tab, a command tab with its fields below */
+.st-field.col { flex-direction:column; gap:10px; }
+.st-tabs { display:flex; flex-direction:column; gap:8px; width:100%; }
+.st-tab { display:flex; flex-direction:column; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--s2); }
+.st-tab-hd { display:flex; align-items:center; gap:8px; }
+.st-tab-hd .sk-select { flex:1; min-width:0; }
+.st-tab-n { width:76px; flex-shrink:0; font-size:12px; color:var(--tx3); }
+.st-tab-cmd { display:flex; gap:8px; padding-left:84px; }
+.st-input { height:28px; border:1px solid var(--line2); border-radius:6px; background:var(--bg); color:var(--tx); padding:0 8px; font:inherit; font-size:12.5px; min-width:0; width:140px; }
+.st-input.grow { flex:1; width:auto; font-family:var(--mono); font-size:12px; }
+.st-input:focus { outline:none; border-color:var(--acc-line); }
+.st-tab-note { padding-left:84px; font-size:12px; color:var(--warn); }
+.st-tab-warn { display:flex; gap:8px; align-items:flex-start; font-size:12px; line-height:1.5; color:var(--tx2); }
+.st-tab-warn svg { color:var(--warn); flex-shrink:0; margin-top:2px; }
 .st-seg { margin:0; }
 .st-seg button { width:auto; height:24px; padding:0 12px; }
 .st-legend { display:grid; grid-template-columns:auto 1fr; gap:4px 16px; margin-top:8px; padding:8px 12px; border:1px solid var(--line); border-radius:7px; background:var(--s2); font-size:12px; }
@@ -1620,6 +1634,7 @@ body.compact .st-sec { flex-direction:column; min-height:0; }
 body.compact .st-col { width:auto; max-height:40%; border-right:0; border-bottom:1px solid var(--line); }
 body.compact .st-pg { padding:16px 16px 32px; }
 body.compact .st-field { flex-direction:column; gap:8px; }
+body.compact .st-tab-cmd, body.compact .st-tab-note { padding-left:0; flex-wrap:wrap; }
 body.compact .st-kv { grid-template-columns:minmax(0,1fr); gap:2px; }
 body.compact .st-kv .v { margin-bottom:6px; }
 body.compact .help-doc { padding:16px 16px 40px; }

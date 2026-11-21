@@ -61,10 +61,10 @@ try {
   await sleep(500);
   check('Einmal je Sitzung: erneutes Öffnen der Startseite fragt nicht noch einmal', requests === before && requests === 1, `${requests} Anfragen`);
 
-  // Ausschalten unter Settings › About: Karte weg, settings.json, keine weitere Anfrage
-  await app.ev(() => window.__t.settingsShow('about'));
+  // Switched off under Settings > General: label gone, settings.json, no further request
+  await app.ev(() => window.__t.settingsShow('general'));
   await app.waitFor('Schalter', () => !!document.getElementById('st-update'), 20000);
-  check('Schalter unter About ist an', await app.ev(() => document.getElementById('st-update').checked));
+  check('Switch under General is on', await app.ev(() => document.getElementById('st-update').checked));
   await app.ev(() => { const s = document.getElementById('st-update'); s.checked = false; s.dispatchEvent(new Event('change')); });
   await app.waitFor('Einstellung aus', () => window.__t.appSettings().settings.start.updateCheck === false, 10000);
   await app.ev(() => window.__t.closeSettings());

@@ -1,13 +1,9 @@
 import { execFile } from 'node:child_process';
+import { KNOWN_AGENTS } from '../shared/settings';
 import type { AgentInfo } from '../shared/types';
 
-/** Bekannte Kommandozeilen-Agenten. Die App installiert nichts, sie erkennt nur (E4). Weitere Agenten laufen im freien Terminal. */
-const KNOWN = [
-  { id: 'claude', label: 'Claude Code', command: 'claude' },
-  { id: 'opencode', label: 'OpenCode', command: 'opencode' },
-  { id: 'codex', label: 'Codex', command: 'codex' },
-  { id: 'gemini', label: 'Gemini CLI', command: 'gemini' },
-];
+/** Known command line agents (shared with the settings, E4). Others run in a plain terminal. */
+const KNOWN = KNOWN_AGENTS;
 
 const finder = process.platform === 'win32' ? 'where' : 'which';
 

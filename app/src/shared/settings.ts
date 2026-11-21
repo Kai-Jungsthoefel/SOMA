@@ -28,9 +28,27 @@ export interface ViewerPrefs {
 export interface StartPrefs { tutorialCard: boolean; updateCheck: boolean }
 /** Building (issue #13): `timeLimit` in minutes after which a build is stopped, 0 means no limit (the user can still stop it). */
 export interface BuildPrefs { timeLimit: number }
-export interface AppSettings { viewer: ViewerPrefs; start: StartPrefs; build: BuildPrefs }
+/** Known command line agents. The app installs nothing, it only detects them (E4). Others run in a plain terminal. */
+export const KNOWN_AGENTS = [
+  { id: 'claude', label: 'Claude Code', command: 'claude' },
+  { id: 'opencode', label: 'OpenCode', command: 'opencode' },
+  { id: 'codex', label: 'Codex', command: 'codex' },
+  { id: 'gemini', label: 'Gemini CLI', command: 'gemini' },
+] as const;
+export type AgentId = (typeof KNOWN_AGENTS)[number]['id'];
+/**
+ * A tab of the agent area that opens with every model (issue #18): SOMA AI, an empty terminal, a known agent, or a command
+ * of the user, typed into a terminal in the model folder. Only in the settings of this computer, never in a model: a model
+ * file from someone else must not start commands.
+ */
+export type OpenTab = { kind: 'ai' } | { kind: 'terminal' } | { kind: 'agent'; agent: AgentId } | { kind: 'command'; command: string; title: string };
+/** `tabs`: 1 to MAX_OPEN_TABS, in their order. `front`: the tab in front (the settings page always writes 0, the first). */
+export interface OpenPrefs { tabs: OpenTab[]; front: number }
+export const MAX_OPEN_TABS = 3;
+export const OPEN_LIMITS = { command: 500, title: 40 };
+export interface AppSettings { viewer: ViewerPrefs; start: StartPrefs; build: BuildPrefs; open: OpenPrefs }
 /** Änderung aus dem Renderer: nur die Werte, die sich ändern sollen. */
-export interface SettingsPatch { viewer?: Partial<ViewerPrefs>; start?: Partial<StartPrefs>; build?: Partial<BuildPrefs> }
+export interface SettingsPatch { viewer?: Partial<ViewerPrefs>; start?: Partial<StartPrefs>; build?: Partial<BuildPrefs>; open?: Partial<OpenPrefs> }
 /** `problem`: settings.json war nicht lesbar oder enthielt Unbekanntes, es gelten (teils) die Vorgaben. */
 export interface SettingsState { settings: AppSettings; problem?: string }
 export interface SettingsResult extends SettingsState { ok: boolean; error?: string; backup?: string | null }
@@ -42,7 +60,21 @@ export const DEFAULT_SETTINGS: AppSettings = {
   viewer: { navigation: 'soma', invertZoom: false, projection: 'perspective', edges: true, wireframe: false, transparent: false, axes: false, decimals: 2 },
   start: { tutorialCard: true, updateCheck: true },
   build: { timeLimit: 10 },
+  open: { tabs: [{ kind: 'ai' }], front: 0 },
 };
+/**
+ * The tabs in test mode without an `open` section in settings.json: as before this setting, SOMA AI and a terminal with
+ * the terminal in front. The suites type into it.
+ */
+export const TEST_OPEN: OpenPrefs = { tabs: [{ kind: 'ai' }, { kind: 'terminal' }], front: 1 };
+
+/** Name of a tab as the agent area shows it. */
+export function openTabTitle(t: OpenTab): string {
+  if (t.kind === 'ai') return 'SOMA AI';
+  if (t.kind === 'terminal') return 'Terminal';
+  if (t.kind === 'agent') return KNOWN_AGENTS.find((a) => a.id === t.agent)?.label ?? t.agent;
+  return t.title.trim() || t.command.trim().split(/\s+/)[0].replace(/^.*[\\/]/, '') || 'Command';
+}
 
 const NAV = (spec: string): NavBinding[] => spec.split(',').map((s) => {
   const [mod, button, action] = s.trim().split(' ');
@@ -102,8 +134,22 @@ const START_CHECKS: { [K in keyof StartPrefs]: (v: unknown) => boolean } = { tut
 // Any whole number of minutes up to a day is accepted (settings.json may be edited by hand), the interface offers BUILD_TIME_LIMITS
 const isTimeLimit = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 24 * 60;
 const BUILD_CHECKS: { [K in keyof BuildPrefs]: (v: unknown) => boolean } = { timeLimit: isTimeLimit };
+const isText = (v: unknown, max: number, empty: boolean) => typeof v === 'string' && v.length <= max && !/[\r\n\0]/.test(v) && (empty || !!v.trim());
+const isOpenTab = (v: unknown): v is OpenTab => {
+  if (!isObj(v)) return false;
+  const keys = Object.keys(v).sort().join(',');
+  if (v.kind === 'ai' || v.kind === 'terminal') return keys === 'kind';
+  if (v.kind === 'agent') return keys === 'agent,kind' && KNOWN_AGENTS.some((a) => a.id === v.agent);
+  if (v.kind === 'command') return keys === 'command,kind,title' && isText(v.command, OPEN_LIMITS.command, false) && isText(v.title, OPEN_LIMITS.title, true);
+  return false;
+};
+// SOMA AI is one chat per model: at most once in the list
+const isTabs = (v: unknown): v is OpenTab[] => Array.isArray(v) && v.length >= 1 && v.length <= MAX_OPEN_TABS && v.every(isOpenTab)
+  && v.filter((t) => t.kind === 'ai').length <= 1;
+const isFront = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < MAX_OPEN_TABS;
+const OPEN_CHECKS: { [K in keyof OpenPrefs]: (v: unknown) => boolean } = { tabs: isTabs, front: isFront };
 /** Bereiche der Einstellungen mit der Prüfung je Wert. */
-const SECTIONS: Record<keyof AppSettings, Record<string, (v: unknown) => boolean>> = { viewer: VIEWER_CHECKS, start: START_CHECKS, build: BUILD_CHECKS };
+const SECTIONS: Record<keyof AppSettings, Record<string, (v: unknown) => boolean>> = { viewer: VIEWER_CHECKS, start: START_CHECKS, build: BUILD_CHECKS, open: OPEN_CHECKS };
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /**
