@@ -381,11 +381,12 @@ function untar(archive: string, dest: string, signal: AbortSignal): Promise<void
   });
 }
 
-/** Test switch: Chromium's fake microphone plays a WAV file (Settings and chat can then be tried without speaking). */
+/** Test switch: Chromium's fake microphone plays a WAV file (Settings and chat can then be tried without speaking).
+ *  `SOMA_TEST_MIC=tone` gives it Chromium's test tone instead, for machines without a microphone such as CI runners. */
 export function fakeMicrophone(): void {
   const wav = process.env.SOMA_TEST_MIC;
   if (!wav) return;
   app.commandLine.appendSwitch('use-fake-device-for-media-stream');
   app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
-  app.commandLine.appendSwitch('use-file-for-fake-audio-capture', wav);
+  if (wav !== 'tone') app.commandLine.appendSwitch('use-file-for-fake-audio-capture', wav);
 }

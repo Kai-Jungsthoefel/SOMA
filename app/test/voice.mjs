@@ -66,7 +66,7 @@ const shot = async (app, name) => {
 // ---- Part 1: set up, download, remove -----------------------------------------------------------------------------
 const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-voice-ud-'));
 prepareUserData(ud);
-let app = await startApp({ name: 'voice', userData: ud, env: { SOMA_VOICE_URL: url, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' } });
+let app = await startApp({ name: 'voice', userData: ud, env: { SOMA_VOICE_URL: url, SOMA_TEST_MIC: 'tone', NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' } });
 try {
   const { ev } = app;
   await openChat(app);
@@ -104,7 +104,7 @@ try {
   check('The language is kept', cfg.language === 'de', JSON.stringify(cfg));
   const toast = await ev(() => window.__t.toast());
   check('A toast says how to use it', /Voice input is ready/.test(toast.text), toast.text);
-  // After the setup the recording starts right away (fake microphone): Escape drops it
+  // After the setup the recording starts right away (fake microphone with a test tone, CI runners have no microphone): Escape drops it
   await app.waitFor('recording or idle', () => ['recording', 'idle'].includes(window.__t.chat().voice.phase), 10000);
   await ev(() => document.querySelector('.ai-input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   await app.waitFor('idle', () => window.__t.chat().voice.phase === 'idle', 5000);
