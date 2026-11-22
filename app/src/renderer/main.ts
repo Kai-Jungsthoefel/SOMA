@@ -2210,7 +2210,7 @@ $('btn-tour-start').addEventListener('click', () => void startTutorial());
 $('btn-tour-dismiss').addEventListener('click', () => void hideTourCard());
 $('btn-help-tour').addEventListener('click', () => void startTutorial());
 // Video-Tutorial auf YouTube: nur ein Link, der im Browser öffnet (kein eingebettetes Video: Netz und Datenschutz)
-const TUTORIAL_VIDEO = 'https://www.youtube.com/watch?v=FJrgMl8ZGKI';
+const TUTORIAL_VIDEO = 'https://www.youtube.com/watch?v=9NlayaSF0Gc';
 const openVideo = (): void => { void api.openUrl(TUTORIAL_VIDEO).then((r) => { if (!r.ok) toast(r.error ?? `${TUTORIAL_VIDEO} could not be opened.`, 'error'); }); };
 $('btn-tour-video').addEventListener('click', openVideo);
 $('btn-help-video').addEventListener('click', openVideo);

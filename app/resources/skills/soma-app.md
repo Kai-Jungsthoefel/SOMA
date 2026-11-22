@@ -49,7 +49,7 @@ In a narrow window, such as a phone, SOMA shows one view at a time instead of th
 
 1. **New model**: starts from a small example (a box with a lid) and opens a terminal in the model folder (Ctrl N). A loading screen shows the steps for the few seconds until the new model is loaded. The arrow next to it also offers **From CadQuery script**, which starts from an existing CadQuery script instead (see "CadQuery scripts"), and **Open folder**, which uses SOMA in a folder of yours (see "Your own folder").
 2. **Open**: opens a .soma or ZIP file (Ctrl O).
-3. **Tutorial**: **Watch video** opens the video tutorial on YouTube in your browser (9 min, from installing to export). **Start tutorial** is a short guided tour of the app with an example model, no agent needed. The cross hides the card.
+3. **Tutorial**: **Watch video** opens the video tutorial on YouTube in your browser (7 min, from installing to export). **Start tutorial** is a short guided tour of the app with an example model, no agent needed. The cross hides the card.
 4. **Recent**: models you worked on, the newest first. The field above filters them by name. "Open" marks the model that is open right now, "never saved" one that was never saved as a .soma file. The bin on a card removes the model from this computer, a saved .soma file stays.
 5. **Agents**: the agents for a terminal that SOMA found. Any other agent that runs in a terminal works too. You install them yourself. SOMA AI comes with SOMA and needs no installation (see "SOMA AI").
 6. **Help**: this guide (F1).
@@ -67,7 +67,7 @@ and how it works, your own agent instead, the code (you never have to touch it),
 parameters, history, saving and export, and help. An orange
 frame shows where to look, and you can try everything right away. Back, Skip and Next move through the steps, Esc ends
 the tour. To see it again, click **Start tutorial** at the top of Help. **Watch video** next to it opens the
-[video tutorial](https://www.youtube.com/watch?v=FJrgMl8ZGKI) on YouTube. If you leave the example model unchanged, it
+[video tutorial](https://www.youtube.com/watch?v=9NlayaSF0Gc) on YouTube. If you leave the example model unchanged, it
 disappears like any new model you did not change.
 
 ## The agent
