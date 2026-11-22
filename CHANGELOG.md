@@ -6,13 +6,17 @@ the version is bumped.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-22
+
+SOMA 1.0. It brings its own agent, SOMA AI, so you no longer need a coding agent to design with SOMA. Models made with 1.0 keep working in later versions, changes that break them only come with a new major version.
+
 ### Added
 
 - Voice input for SOMA AI: the microphone next to the chat input turns what you say into text, on this computer. Nothing you say leaves it. The first click asks for your language and downloads the speech model once (Parakeet TDT 0.6B v3 by NVIDIA, 487 MB, 25 European languages, license CC BY 4.0). Click to speak, click again for the text: it lands in the input where the cursor is and is not sent, so you can read it first. Esc drops a recording. Settings > SOMA AI shows the model and removes it. Before the download SOMA checks that the speech engine runs on the computer (on macOS it needs macOS 14 or newer). Behind it is sherpa-onnx (Apache 2.0), which comes with SOMA.
 - SOMA AI: an agent built into SOMA, for everyone without a coding agent of their own. It is a chat instead of a terminal, the first tab of the agent area. Sign in with ChatGPT or with an API key (Anthropic, OpenAI, Google Gemini, OpenRouter, OpenCode Zen or Go), describe the part or add a photo of a sketch, and follow what it does in plain words, with the time it has been working. When it needs to know something, it asks all its questions at once, with answers to click or in your own words. Earlier conversations of a model can be continued. The model menu has a search. Settings > SOMA AI shows the sign-ins, the model, what a conversation used and what SOMA AI may do. The tutorial introduces SOMA AI, shows in the + menu how to use your own agent instead, and says that you never have to touch the code. It stays in the model's folder: looking at or changing files outside it, downloading and installing software ask you first, dangerous commands are stopped. A note before the first message names the risks. "Send to agent" in the viewer puts the part, measurement or markup into its input. For the best results we recommend Opus 5.5 or GPT-6.2 Astra. The model list also brings models that came out after your version of SOMA, such as GPT-6.2 Sol: it loads the newest list from pi.dev for your sign-ins. Behind it is pi (pi.dev, MIT), which comes with SOMA. Agents in a terminal such as Claude Code work as before.
 - Play or pause static FEM deformation in Analysis. Solved colors and values stay fixed during the shape cycle. On narrow canvases, compact controls flow into rows while the close button stays visible. Thanks to Ryan Hailey (fork RyanHailey21/SOMA, issue #12).
 - "As one STEP file" in the Export menu: the whole model in a single STEP file with its groups as sub-assemblies, part names and colors, for other CAD programs. Purchased parts such as screws are included, reference parts too, in a group "Reference". On the command line: `soma export --assembly --format step` (issue #11).
-- Video tutorial on YouTube (9 min, from installing to export): "Watch video" on the start page card and at the top of Help opens it in your browser.
+- Video tutorial on YouTube (7 min, from installing to export): "Watch video" on the start page card and at the top of Help opens it in your browser.
 - Settings > General > Build time limit: how long a build may take before SOMA stops it, from 5 minutes to 2 hours or no limit. The default stays 10 minutes. The message of a stopped build says where to raise it (issue #13).
 - A loading screen while a new model is created ("New model", the tutorial, a CadQuery script): it shows at once, names the step (first build, version history, opening) and stays until the viewer, the files and the agent panel have loaded the model. Before, the old model stayed on screen for several seconds without a sign that anything happened. The tutorial's tour starts once the model is loaded.
 
@@ -359,7 +363,8 @@ First numbered version. It sums up the state of the prototype.
 - Extra packages: `pip install` in the terminal goes into a small environment per model, `requirements.txt` travels with the model, on another computer the app reinstalls the packages.
 - Version number on the start page, on the logo and in `project.json`.
 
-[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.11.0...v1.0.0
 [0.11.0]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/Kai-Jungsthoefel/SOMA/compare/v0.10.0...v0.10.1
