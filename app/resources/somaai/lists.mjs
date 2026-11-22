@@ -1,19 +1,35 @@
-// Lists from pi's SDK for SOMA AI (app/src/main/somaaiauth.ts), without pi running: offline, pi's folder from
+// Lists from pi's SDK for SOMA AI (app/src/main/somaaiauth.ts), without pi running, pi's folder from
 // PI_CODING_AGENT_DIR. Arguments: pi's bundle (index.js), then
-//   models          the models of the saved sign-ins (pi's catalog plus models.json), for Settings > SOMA AI
-//   sessions <dir>  the conversations of a model folder, newest first, for "Earlier conversations" in the chat
-// One JSON line on stdout: {models: [{provider, id, name}]}, {sessions: [{id, path, title, modified, messages}]} or {error}.
+//   models [online]  the models of the saved sign-ins (pi's catalog plus models.json), for Settings > SOMA AI
+//   sessions <dir>   the conversations of a model folder, newest first, for "Earlier conversations" in the chat
+// One JSON line on stdout: {models: [{provider, id, name}], refreshed}, {sessions: [{id, path, title, modified, messages}]}
+// or {error}.
 import { pathToFileURL } from 'node:url';
 
 const [, , piIndex, what, dir] = process.argv;
 const say = (o) => process.stdout.write(`${JSON.stringify(o)}\n`);
+/** How long the catalog from pi.dev may take before the list shows what is known without it. */
+const CATALOG_TIMEOUT_MS = 6000;
 
 try {
   const pi = await import(pathToFileURL(piIndex).href);
   if (what === 'models') {
-    const runtime = await pi.ModelRuntime.create({ refreshOnCreate: false });
-    const list = await runtime.getAvailable();
-    say({ models: list.map((m) => ({ provider: m.provider, id: m.id, name: m.name || m.id })) });
+    // First without network: pi's built-in catalog plus the one from pi.dev saved earlier (models-store.json).
+    const runtime = await pi.ModelRuntime.create({ allowModelNetwork: false });
+    let list = await runtime.getAvailable();
+    // "online": the newest catalog from pi.dev, only for the providers signed in. Models that came out after this pi
+    // (a tester missed GPT-6.2 Sol) show up without a new SOMA. pi saves the catalog in its folder, the chat's pi reads
+    // it from there even with --offline. Offline, slow or failing: the list stays as it was.
+    let refreshed = false;
+    const providers = [...new Set(list.map((m) => m.provider))];
+    if (dir === 'online' && providers.length) {
+      try {
+        const r = await runtime.refresh({ allowNetwork: true, providers, signal: AbortSignal.timeout(CATALOG_TIMEOUT_MS) });
+        refreshed = !r.aborted && r.errors.size === 0;
+        list = await runtime.getAvailable();
+      } catch { /* the list without it */ }
+    }
+    say({ models: list.map((m) => ({ provider: m.provider, id: m.id, name: m.name || m.id })), refreshed });
   } else if (what === 'sessions' && dir) {
     const list = await pi.SessionManager.list(dir);
     say({

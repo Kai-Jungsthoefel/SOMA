@@ -88,7 +88,8 @@ function windowsShell(): { shell: string; bin: string } | null {
 
 /**
  * Environment of pi: the one of the terminals (Python, soma, Git, the bridge for soma render), plus pi's own folder and
- * no telemetry, no version check and no model catalog downloads (SOMA only goes online where the user chose it).
+ * no telemetry, no version check and no model catalog downloads (SOMA only goes online where the user chose it). The
+ * catalog from pi.dev comes through the model list (somaaiauth.ts listModels), pi reads it from its folder.
  * ELECTRON_RUN_AS_NODE starts the Electron of the app as plain Node, so no Node has to be installed. SOMA's extension
  * removes it again for the commands pi runs (resources/somaai/soma.ts).
  */
@@ -227,6 +228,15 @@ export function runDurations(entries: unknown[], leafId: unknown): Record<string
 let nextGen = 1;
 
 /**
+ * Refreshes pi's model catalog from pi.dev in the background (main.ts sets it to somaaiauth.ts listModels). The chat's
+ * pi runs with --offline and reads the saved catalog only when it starts: so each start refreshes it for the next one,
+ * and new models reach the chat's model menu even when Settings > SOMA AI is never opened. pi asks pi.dev at most
+ * every 4 hours.
+ */
+let refreshCatalog: () => Promise<unknown> = () => Promise.resolve();
+export function setCatalogRefresh(fn: () => Promise<unknown>): void { refreshCatalog = fn; }
+
+/**
  * SOMA AI for one open model. pi starts on the first request from the chat and runs until the model is left. Each
  * conversation continues the last one of the model (pi keeps them per folder in aiDir()/sessions).
  */
@@ -297,6 +307,7 @@ export class SomaAI {
     // release() can also end the wait (a process Windows does not let go of)
     this.exited = new Promise((resolve) => { this.endWait = resolve; child.once('exit', () => resolve()); });
     console.log(`[somaai] pi ${piVersion() ?? '?'} started (process ${child.pid})`);
+    void refreshCatalog().catch(() => { /* the list logs its own failure */ });
 
     // Strict JSON lines: split only at \n. readline would also split at U+2028/U+2029, which are valid inside JSON strings
     let buf = '';

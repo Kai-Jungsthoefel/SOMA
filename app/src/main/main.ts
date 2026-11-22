@@ -21,7 +21,7 @@ import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState
 import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
 import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
-import { piEntry } from './somaai';
+import { piEntry, setCatalogRefresh } from './somaai';
 import { allowMicrophone, fakeMicrophone, micAccess, Voice } from './voice';
 import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, saveApiKey, setDefaultEffort, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
@@ -238,6 +238,7 @@ function registerIpc(ctl: ProjectController): void {
     return s.ai.switchSession(hit.path);
   });
   ipcMain.handle('ai:models', () => listModels());
+  setCatalogRefresh(listModels);
   ipcMain.handle('ai:defaultModel', () => defaultModel());
   ipcMain.handle('ai:setDefaultModel', (_e, provider: unknown, id: unknown) => setDefaultModel(provider, id));
   ipcMain.handle('ai:defaultEffort', () => defaultEffort());

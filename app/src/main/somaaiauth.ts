@@ -146,8 +146,8 @@ export function signInChatGPT(onUrl: (url: string) => void): Promise<AiSignInRes
 }
 
 /**
- * A list from pi's SDK through resources/somaai/lists.mjs (offline, see there): there without a model open and
- * without pi running. The JSON line it printed, or an error.
+ * A list from pi's SDK through resources/somaai/lists.mjs (see there): there without a model open and without pi
+ * running. The JSON line it printed, or an error.
  */
 function piList(args: string[], what: string): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
   const index = piIndex();
@@ -182,9 +182,13 @@ function piList(args: string[], what: string): Promise<{ ok: true; data: Record<
   });
 }
 
-/** The models of the saved sign-ins, for Settings > SOMA AI. */
+/**
+ * The models of the saved sign-ins, for Settings > SOMA AI and the chat's model menu. With the newest catalog from pi.dev
+ * for the signed-in providers (wish of the user 2026-11-22, a tester missed GPT-6.2 Sol): new models show up without a
+ * new SOMA, the chat's pi reads the saved catalog even offline. Without network the list is pi's own catalog.
+ */
 export async function listModels(): Promise<{ ok: boolean; models?: AiModel[]; error?: string }> {
-  const r = await piList(['models'], 'models');
+  const r = await piList(['models', 'online'], 'models');
   if (!r.ok) return r;
   // Only what can be shown and chosen: the list comes from another process
   const models = (Array.isArray(r.data.models) ? r.data.models : []).flatMap((x) => {
