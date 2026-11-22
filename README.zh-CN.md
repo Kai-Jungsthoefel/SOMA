@@ -6,9 +6,9 @@
 >
 > 本页由 AI 从[英文 README](README.md) 翻译而来，维护者不懂中文，未经人工校对，可能存在错误。如有出入，以英文版为准。软件界面目前只有英文。
 
-**Solid Object Modeling with Agents（用智能体进行实体建模）。** 一款桌面应用，让你与编程智能体（coding agent）一起设计参数化 3D 模型。
+**Solid Object Modeling with Agents（用智能体进行实体建模）。** 一款桌面应用，让你与 AI 智能体一起设计参数化 3D 模型。
 
-**[somacad.app](https://somacad.app)** · [下载](https://somacad.app/download/) · [视频教程（英文）](https://www.youtube.com/watch?v=FJrgMl8ZGKI) · [更新日志（英文）](CHANGELOG.md)
+**[somacad.app](https://somacad.app)** · [下载](https://somacad.app/download/) · [视频教程（英文）](https://www.youtube.com/watch?v=9NlayaSF0Gc) · [更新日志（英文）](CHANGELOG.md)
 
 https://github.com/user-attachments/assets/3294d1e4-1f06-477d-9770-c91f3470330d
 
@@ -17,17 +17,19 @@ https://github.com/user-attachments/assets/3294d1e4-1f06-477d-9770-c91f3470330d
 
 ## SOMA 是什么？
 
-一款由 AI 来做 CAD、你来当设计师的 CAD 程序。SOMA 把所需的三部分整合在一起：带终端的代码工作区（供智能体使用）、编辑器以及记录每个版本的 Git；每次修改都会重新构建模型的 3D 查看器；以及给智能体的说明，包括规则、技能（skills）和一个命令行工具。
+一款由 AI 来做 CAD、你来当设计师的 CAD 程序。SOMA 把所需的三部分整合在一起：供智能体使用的工作区（聊天或终端）、编辑器以及记录每个版本的 Git；每次修改都会重新构建模型的 3D 查看器；以及给智能体的说明，包括规则、技能（skills）和一个命令行工具。
 
 这就是 CAD 版的 vibe coding。它面向创客和爱好者：你的项目需要一个外壳、一个支架或一个安装座，又不想花几个小时在 CAD 软件里画。描述或草绘零件，检查结果，导出，打印。你不需要懂 CadQuery。如果想亲手改一个尺寸，代码就在那里。
 
-SOMA 本身不是智能体。任何能读取文件并运行命令的 CLI 智能体都可以使用：Claude Code、OpenCode、Codex CLI、Gemini CLI，或者以后出现的其他工具。它运行在模型文件夹中的普通终端里，SOMA 能识别常见的智能体并启动它们。智能体由你自己安装和登录，因此订阅、模型选择和权限设置都由你掌控。SOMA 为智能体提供一个命令行工具（`soma build`、`soma analyze`、`soma render` …）和一个写有项目规则的 `AGENTS.md`。
+SOMA 自带智能体 SOMA AI：模型旁边的聊天窗口，不需要编程智能体。用自己的话、语音或一张草图照片描述零件。有不清楚的地方时，它会提问，答案可以直接点选。SOMA 是免费的；使用 SOMA AI 需要用你自己的 ChatGPT 订阅或 API 密钥登录（Anthropic、OpenAI、Google Gemini、OpenRouter、OpenCode Zen 或 Go）。
+
+如果你已经在用 CLI 智能体，它同样可以使用：Claude Code、OpenCode、Codex CLI、Gemini CLI，或任何能读取文件并运行命令的智能体。它运行在模型文件夹中的普通终端里，SOMA 能识别常见的智能体并启动它们。订阅、模型选择和权限设置都由你掌控。无论哪种方式，SOMA 都为智能体提供一个命令行工具（`soma build`、`soma analyze`、`soma render` …）和一个写有项目规则的 `AGENTS.md`。
 
 ## 安装
 
 从 [somacad.app/download](https://somacad.app/download/)（会为你的系统推荐合适的安装包）或 [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases) 页面下载 SOMA：Windows 有安装程序或便携版 ZIP，Linux 有 AppImage 或 tar.gz，macOS（Apple Silicon）有 dmg。已内置 Python、CadQuery、Git 和 CalculiX。
 
-- 你需要一个已安装并登录的 CLI 智能体，例如 Claude Code、OpenCode、Codex CLI 或 Gemini CLI。SOMA 不自带智能体
+- 使用 SOMA AI 需要 ChatGPT 订阅或 API 密钥。也可以使用你已安装并登录的 CLI 智能体，例如 Claude Code、OpenCode、Codex CLI 或 Gemini CLI
 - 安装后的应用占用超过 1 GB 磁盘空间，大部分用于 Python、CadQuery 和 OpenCascade
 - 安装包尚未签名。在 Windows 上首次启动时 SmartScreen 会发出警告（点击“More info”>“Run anyway”）。使用便携版 ZIP 时，解压前在文件属性中勾选“Unblock”（解除锁定）即可避免警告，并解压到本地文件夹。在 macOS 上，首次打开请右键点击应用 > 打开
 - Linux 需要 glibc 2.31 或更新版本
@@ -36,26 +38,27 @@ SOMA 本身不是智能体。任何能读取文件并运行命令的 CLI 智能�
 ## 快速开始
 
 1. 启动 SOMA，在起始页点击 **New model**（新建模型）。它从一个小示例开始：一个带盖的盒子。
-2. 用右侧终端上方的 **+** 启动你的智能体。SOMA 会列出在你电脑上找到的智能体。
+2. 在右侧用 ChatGPT 或 API 密钥登录 SOMA AI。如果想改用你自己的智能体，用智能体区域上方的 **+** 启动它，SOMA 会列出在你电脑上找到的智能体。
 3. 告诉智能体你需要什么，例如 *“A case for a Raspberry Pi 5 with vents in the lid, printed in PETG”*（一个树莓派 5 外壳，盖子上有通风孔，用 PETG 打印）。也可以用中文描述，取决于你的智能体和模型。SOMA 在每次修改后构建并显示模型。
 4. 点击零件、测量，或在视图上绘制标注并发送给智能体，直到满意为止。然后从菜单导出，例如 STL 或 3MF。
 
-[视频教程](https://www.youtube.com/watch?v=FJrgMl8ZGKI)（英文，9 分钟）演示了以上全部内容以及更多功能：在视图上绘制标注、参数、动画、有限元分析（FEM）、工程图、技能和导出。
+[视频教程](https://www.youtube.com/watch?v=9NlayaSF0Gc)（英文，7 分钟）演示了以上全部内容以及更多功能：在视图上绘制标注、参数、动画、有限元分析（FEM）、工程图、技能和导出。
 
 在应用中按 F1 可打开一份带编号截图的简短指南（英文）。智能体也知道这份指南，所以你也可以直接问它某个功能怎么用。
 
 ## 智能体应用（Codex app、Claude Desktop）
 
-除了在 SOMA 终端里运行智能体，你也可以使用能操作本地文件夹并运行命令的桌面智能体应用，例如 Codex app 或 Claude Desktop 中的 Claude Code。
+除了 SOMA AI 或在 SOMA 终端里运行智能体，你也可以使用能操作本地文件夹并运行命令的桌面智能体应用，例如 Codex app 或 Claude Desktop 中的 Claude Code。
 
 1. 在 SOMA 中打开模型，并保持 SOMA 运行。
-2. 点击终端上方的 **+**，选择 **Copy path for agent app**（复制路径给智能体应用）。对于用 **Open folder**（打开文件夹）打开的模型，路径就是该文件夹。
+2. 点击智能体区域上方的 **+**，选择 **Copy path for agent app**（复制路径给智能体应用）。对于用 **Open folder**（打开文件夹）打开的模型，路径就是该文件夹。
 3. 在智能体应用中把这个路径作为项目文件夹打开，然后告诉智能体你需要什么。
 
 **Send to agent**（发送给智能体）也会把说明复制到剪贴板：把它粘贴到智能体应用中即可。标注说明会写明它在 `.soma/feedback/` 中的图片名，智能体会自己打开。没有文件访问和命令执行能力的聊天工具无法使用。
 
 ## 功能
 
+- **内置 SOMA AI：** 与设计模型的智能体聊天，问题可直接点选，语音输入只在你的电脑上处理
 - **模型即代码：** 使用 CadQuery 的 Python 代码，每次修改都会重新构建
 - **一个模型一个文件：** `.soma` 文件包含代码、结果和历史，就像 CAD 文件一样
 - **点选、测量、绘制：** 点击零件、精确测量或在视图上草绘，并发送给智能体
@@ -88,11 +91,11 @@ SOMA 本身不是智能体。任何能读取文件并运行命令的 CLI 智能�
 
 ## 状态
 
-早期原型。当前版本见 [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases) 页面，变更见 [CHANGELOG.md](CHANGELOG.md)（英文）。
+1.0 版本。当前版本见 [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases) 页面，变更见 [CHANGELOG.md](CHANGELOG.md)（英文）。
 
 - 主要在 Windows 上开发和测试。安装包也可在 Linux（Kubuntu）和 macOS（Apple Silicon）上运行，但在那里使用得少得多
-- 主要用 Claude Code 和 Claude Opus 5.5 作为智能体的模型进行测试，效果非常好。其他智能体和模型也可以使用
-- 在 0.x 版本之间，文件格式和 `soma` API 仍可能变化
+- 主要用以 ChatGPT 登录的 SOMA AI，以及 Claude Code 和 Claude Opus 5.5 进行测试，效果非常好。其他智能体和模型也可以使用
+- 用 SOMA 1.0 制作的模型在以后的版本中仍可使用。破坏文件格式或 `soma` API 的变更只会随新的主版本号发布
 
 > **注意：** SOMA 本身也是 vibe coding 出来的。大部分代码由编程智能体（主要是 Claude Code）在人工指导和审查下编写。它有测试，但仍可能有不完善之处。
 

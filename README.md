@@ -1,8 +1,8 @@
 # SOMA
 
-**Solid Object Modeling with Agents.** A desktop app for designing parametric 3D models together with a coding agent.
+**Solid Object Modeling with Agents.** A desktop app for designing parametric 3D models together with an AI agent.
 
-**[somacad.app](https://somacad.app)** · [Download](https://somacad.app/download/) · [Video tutorial](https://www.youtube.com/watch?v=FJrgMl8ZGKI) · [Changelog](CHANGELOG.md) · [简体中文 (AI translation)](README.zh-CN.md)
+**[somacad.app](https://somacad.app)** · [Download](https://somacad.app/download/) · [Video tutorial](https://www.youtube.com/watch?v=9NlayaSF0Gc) · [Changelog](CHANGELOG.md) · [简体中文 (AI translation)](README.zh-CN.md)
 
 https://github.com/user-attachments/assets/3294d1e4-1f06-477d-9770-c91f3470330d
 
@@ -11,17 +11,19 @@ You tell the agent what you need. It writes the model as Python code with [CadQu
 
 ## What is SOMA?
 
-A CAD program where the AI does the CAD and you are the designer. SOMA brings together the three parts this needs: a code workspace with a terminal for your agent, an editor and Git for every version; a 3D viewer that rebuilds the model on every change; and instructions for the agent, with rules, skills and a command line tool.
+A CAD program where the AI does the CAD and you are the designer. SOMA brings together the three parts this needs: a workspace for the agent, with a chat or a terminal, an editor and Git for every version; a 3D viewer that rebuilds the model on every change; and instructions for the agent, with rules, skills and a command line tool.
 
 It's vibe coding, but for CAD. Made for makers and tinkerers who need a case, a bracket or a mount for their project and don't want to spend hours in a CAD program to get it. Describe or sketch the part, check the result, export it, print it. You don't have to know CadQuery. The code is there if you want to change a dimension yourself.
 
-SOMA is not an agent of its own. Any CLI agent that can read files and run commands works: Claude Code, OpenCode, Codex CLI, Gemini CLI or whatever comes next. It runs in a normal terminal inside the model folder, SOMA detects the common ones and can start them. You install and log in to them yourself, so your subscription, your model choice and your permission settings stay yours. SOMA gives the agent a command line tool (`soma build`, `soma analyze`, `soma render` …) and an `AGENTS.md` with the rules of the project.
+SOMA brings its own agent, SOMA AI: a chat next to the model, no coding agent needed. Describe the part in your own words, by voice or with a photo of a sketch. When something is unclear, it asks, with answers to click. SOMA is free, for SOMA AI you sign in with your ChatGPT subscription or an API key (Anthropic, OpenAI, Google Gemini, OpenRouter, OpenCode Zen or Go).
+
+If you already use a CLI agent, it works just as well: Claude Code, OpenCode, Codex CLI, Gemini CLI or any other agent that can read files and run commands. It runs in a normal terminal inside the model folder, SOMA detects the common ones and can start them. Your subscription, your model choice and your permission settings stay yours. Either way, SOMA gives the agent a command line tool (`soma build`, `soma analyze`, `soma render` …) and an `AGENTS.md` with the rules of the project.
 
 ## Install
 
 Download SOMA from [somacad.app/download](https://somacad.app/download/), which offers the right package for your system, or from the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases): an installer or a portable ZIP for Windows, an AppImage or tar.gz for Linux, a dmg for macOS (Apple Silicon). Python, CadQuery, Git and CalculiX are included.
 
-- You need a CLI agent installed and logged in, for example Claude Code, OpenCode, Codex CLI or Gemini CLI. SOMA does not bring one
+- For SOMA AI you need a ChatGPT subscription or an API key. Or use a CLI agent you have installed and logged in, for example Claude Code, OpenCode, Codex CLI or Gemini CLI
 - The installed app takes over 1 GB of disk space, most of it for Python, CadQuery and OpenCascade
 - The packages are not signed yet. On Windows, SmartScreen warns on the first start ("More info" > "Run anyway"). For the portable ZIP, tick "Unblock" in its Properties before extracting to avoid the warning, and extract it to a local folder. On macOS, open the app the first time with right-click > Open
 - Linux needs glibc 2.31 or newer
@@ -30,26 +32,27 @@ Download SOMA from [somacad.app/download](https://somacad.app/download/), which 
 ## Quick start
 
 1. Start SOMA and click **New model** on the start page. It starts from a small example, a box with a lid.
-2. Start your agent with the **+** above the terminal on the right. SOMA lists the agents it found on your computer.
+2. Sign in to SOMA AI on the right, with ChatGPT or an API key. To use your own agent instead, start it with the **+** above the agent area, SOMA lists the agents it found on your computer.
 3. Tell the agent what you need, for example *"A case for a Raspberry Pi 5 with vents in the lid, printed in PETG"*. SOMA builds the model on every change and shows it.
 4. Click parts, measure, or draw on the view and send it to the agent until it fits. Then export it from the menu, for example as STL or 3MF.
 
-The [video tutorial](https://www.youtube.com/watch?v=FJrgMl8ZGKI) (9 min) shows all of this and more: drawing on the view, parameters, animation, FEM, drawings, skills and export.
+The [video tutorial](https://www.youtube.com/watch?v=9NlayaSF0Gc) (7 min) shows all of this and more: drawing on the view, parameters, animation, FEM, drawings, skills and export.
 
 Press F1 in the app for a short guide with numbered screenshots. The agent knows the same guide, so you can also just ask it how something works.
 
 ## Agent apps (Codex app, Claude Desktop)
 
-Instead of an agent in SOMA's terminal you can use a desktop agent app that works on a local folder and can run commands, for example the Codex app or Claude Code in Claude Desktop.
+Instead of SOMA AI or an agent in SOMA's terminal you can use a desktop agent app that works on a local folder and can run commands, for example the Codex app or Claude Code in Claude Desktop.
 
 1. Open the model in SOMA and keep SOMA open.
-2. Click the **+** above the terminal and choose **Copy path for agent app**. For a model you opened with **Open folder**, the path is simply that folder.
+2. Click the **+** above the agent area and choose **Copy path for agent app**. For a model you opened with **Open folder**, the path is simply that folder.
 3. In the agent app, open this path as the project folder and tell the agent what you need.
 
 **Send to agent** also copies its note to the clipboard: paste it into the agent app. A markup note names its picture in `.soma/feedback/`, which the agent opens itself. A chat without file access and commands does not work.
 
 ## Features
 
+- **SOMA AI built in:** a chat with an agent that designs the model, with questions to click and voice input that stays on your computer
 - **Models as code:** Python with CadQuery, rebuilt on every change
 - **One file per model:** a `.soma` file holds code, result and history, like a CAD file
 - **Point, measure, draw:** click a part, measure exactly or sketch on the view, and send it to the agent
@@ -82,11 +85,11 @@ Look at more examples in 3D on [somacad.app](https://somacad.app/#models): a CNC
 
 ## Status
 
-Early prototype. The current version is on the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases) page, changes are in [CHANGELOG.md](CHANGELOG.md).
+Version 1.0. The current version is on the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases) page, changes are in [CHANGELOG.md](CHANGELOG.md).
 
 - Developed and mainly tested on Windows. The packages also run on Linux (Kubuntu) and macOS (Apple Silicon), but have seen much less use there
-- Mostly tested with Claude Code and Claude Opus 5.5 as the agent's model, with very good results. Other agents and models work too
-- File formats and the `soma` API may still change between 0.x versions
+- Mostly tested with SOMA AI signed in with ChatGPT, and with Claude Code and Claude Opus 5.5, with very good results. Other agents and models work too
+- Models made with SOMA 1.0 keep working in later versions. Changes that break file formats or the `soma` API only come with a new major version
 
 > **Note:** SOMA itself is vibe coded. Most of the code was written by coding agents (mainly Claude Code) under human direction and review. It has tests, but expect rough edges.
 
