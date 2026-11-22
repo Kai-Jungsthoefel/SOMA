@@ -65,8 +65,8 @@ sherpa-onnx, which ship as their package folders.
 | sherpa-onnx-node with its native part (sherpa-onnx-win-x64, -darwin-arm64, -linux-x64), voice input | 2.0.1 | Apache-2.0 | https://github.com/k2-fsa/sherpa-onnx | yes |
 | ONNX Runtime (in sherpa-onnx's native part) | as in sherpa-onnx 2.0.1 | MIT | https://github.com/microsoft/onnxruntime | yes |
 | dugite | 3.2.3 | MIT | https://github.com/desktop/dugite | yes |
-| pi (@earendil-works/pi-coding-agent, with pi-ai, pi-agent-core, pi-tui, pi-codemode, pi-mcp compiled in), the agent of SOMA AI | 1.5.2 | MIT | https://github.com/earendil-works/pi | yes |
-| Packages compiled into the bundle of pi (provider SDKs such as openai, @anthropic-ai/sdk, @google/genai, @aws-sdk/*, and undici, yaml, diff …) | as in pi 1.5.2, see `dist/licenses` | MIT, Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, Unlicense, 0BSD | see `dist/licenses` | yes |
+| pi (@earendil-works/pi-coding-agent, with pi-ai, pi-agent-core, pi-tui, pi-codemode, pi-mcp compiled in), the agent of SOMA AI | 1.6.0 | MIT | https://github.com/earendil-works/pi | yes |
+| Packages compiled into the bundle of pi (provider SDKs such as openai, @anthropic-ai/sdk, @google/genai, @aws-sdk/*, and undici, yaml, diff …) | as in pi 1.6.0, see `dist/licenses` | MIT, Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, Unlicense, 0BSD | see `dist/licenses` | yes |
 | @gotgenes/pi-permission-system | 42.0.2 | MIT | https://github.com/gotgenes/pi-packages | yes |
 | jiti | 2.7.0 | MIT | https://github.com/unjs/jiti | yes |
 | typebox | 1.3.27 | MIT | https://github.com/sinclairzx81/typebox | yes |

@@ -110,8 +110,9 @@ it shows what it does in plain words instead of code.
 The first time, its tab asks for a sign-in. **Sign in with ChatGPT** uses your ChatGPT Plus or Pro plan and opens your
 browser. Or paste an **API key** from Anthropic (Claude), OpenAI, Google Gemini, OpenRouter or OpenCode (Zen or Go),
 billed per use by the provider. **How do I get a key?** opens the page of the provider. The sign-in stays on this
-computer. For the best results we recommend Opus 5.5 (Claude, with an API key) or GPT-6 Astra (with ChatGPT), with
-High effort or more. Before
+computer. For the best results we recommend Opus 5.5 (Claude, with an API key) or GPT-6.2 Astra (with ChatGPT), with
+High effort or more. The model list also brings models that came out after your version of SOMA (it
+loads the newest list from pi.dev, the maker of the agent behind SOMA AI). Before
 the first message, a note names the risks, **Got it** starts the chat.
 
 ![SOMA AI](../help/chat.png)
