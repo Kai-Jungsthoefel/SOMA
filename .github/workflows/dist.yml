@@ -147,9 +147,9 @@ jobs:
         run: |
           ls -l packages
           cat > notes.md <<EOF
-          Early prototype of SOMA, version ${GITHUB_REF_NAME#v}. Changes: [CHANGELOG.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md).
+          SOMA, version ${GITHUB_REF_NAME#v}. Changes: [CHANGELOG.md](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md).
 
-          Each package brings Python with CadQuery, the \`soma\` library, CalculiX and Git. You only need a CLI agent of your choice (for example Claude Code or OpenCode).
+          Each package brings Python with CadQuery, the \`soma\` library, CalculiX, Git and SOMA AI, the built-in agent. For SOMA AI you sign in with ChatGPT or an API key, or you use a CLI agent of your own (for example Claude Code or OpenCode).
 
           | System | File |
           |---|---|
@@ -169,6 +169,6 @@ jobs:
         with:
           name: SOMA ${{ github.ref_name }}
           body_path: notes.md
-          prerelease: true
+          prerelease: false
           files: packages/*
           fail_on_unmatched_files: true
