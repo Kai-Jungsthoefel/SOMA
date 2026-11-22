@@ -24,14 +24,14 @@ export const CHATGPT_PROVIDER = 'openai';
 
 /** Model SOMA chooses after signing in, per provider. Providers without an entry keep pi's choice. */
 export const RECOMMENDED_MODEL: Record<string, string> = {
-  openai: 'gpt-6-astra',
+  openai: 'gpt-6.2-astra',
   anthropic: 'claude-opus-5-5',
   opencode: 'claude-opus-5-5',
   openrouter: 'anthropic/claude-opus-5.5',
 };
 
 /** The models the recommendation names, under every provider that offers them. */
-export const isRecommendedModel = (id: string) => /^(claude-opus-5-5|gpt-6-astra|anthropic\/claude-opus-5\.5|openai\/gpt-6-astra)$/.test(id);
+export const isRecommendedModel = (id: string) => /^(claude-opus-5-5|gpt-6\.2-astra|anthropic\/claude-opus-5\.5|openai\/gpt-6\.2-astra)$/.test(id);
 
 /**
  * Effort: pi's thinking levels, how long the model thinks before it answers. pi keeps the one for new conversations

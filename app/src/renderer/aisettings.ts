@@ -203,7 +203,7 @@ export class AiPage implements SettingsPage {
       if (this.models) showModelMenu(this.menu, btn, this.models, this.current, (m) => void this.pickModel(m), 'right');
     });
     const rec = el('div', { className: 'st-ai-rec' }, icon('sparkle', 13, 2),
-      el('span', {}, 'For the best results we recommend ', el('b', { textContent: 'Opus 5.5' }), ' (Claude, with an API key) or ', el('b', { textContent: 'GPT-6 Astra' }), ' (with ChatGPT), with ', el('b', { textContent: `${EFFORT_LABEL[RECOMMENDED_EFFORT]} effort` }), ' or more.'));
+      el('span', {}, 'For the best results we recommend ', el('b', { textContent: 'Opus 5.5' }), ' (Claude, with an API key) or ', el('b', { textContent: 'GPT-6.2 Astra' }), ' (with ChatGPT), with ', el('b', { textContent: `${EFFORT_LABEL[RECOMMENDED_EFFORT]} effort` }), ' or more.'));
     return field('Model', 'The AI model SOMA AI thinks with, for new conversations and the one of the open model. The model button below the chat input changes it too.',
       btn, el('div', {}, rec, this.modelsError ? el('div', { className: 'ai-err', textContent: this.modelsError }) : null));
   }

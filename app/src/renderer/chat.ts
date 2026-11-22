@@ -320,7 +320,7 @@ export class SomaChat {
     const attach = el('button', { className: 'ibtn s', title: 'Add a photo or a sketch (or paste or drop a picture)' }, icon('clip', 17));
     attach.setAttribute('aria-label', 'Add a picture');
     attach.addEventListener('click', () => this.fileInput.click());
-    this.modelBtn = el('button', { className: 'ai-model', title: 'Model. Recommended for the best results: Opus 5.5 or GPT-6 Astra' });
+    this.modelBtn = el('button', { className: 'ai-model', title: 'Model. Recommended for the best results: Opus 5.5 or GPT-6.2 Astra' });
     this.modelBtn.addEventListener('click', () => void this.openModelMenu());
     this.effortBtn = el('button', { className: 'ai-model ai-effort', title: `Effort: how long SOMA AI thinks. Recommended for the best results: ${EFFORT_LABEL[RECOMMENDED_EFFORT]} or more` });
     this.effortBtn.addEventListener('click', () => void this.openEffortMenu());
@@ -479,7 +479,7 @@ export class SomaChat {
       el('span', { className: 'ai-mark' }, icon('sparkle', 26, 1.8)),
       el('h3', { textContent: back ? 'Another sign-in' : 'Set up SOMA AI' }),
       el('p', { className: 'lead', textContent: 'SOMA AI builds the model for you from what you describe. It thinks with an AI service you choose, so it needs an account there. You only do this once.' }),
-      el('div', { className: 'ai-rec' }, icon('sparkle', 13, 2), el('span', {}, 'For the best results we recommend ', el('b', { textContent: 'Opus 5.5' }), ' (Claude, with an API key) or ', el('b', { textContent: 'GPT-6 Astra' }), ' (with ChatGPT), with ', el('b', { textContent: `${EFFORT_LABEL[RECOMMENDED_EFFORT]} effort` }), ' or more.')),
+      el('div', { className: 'ai-rec' }, icon('sparkle', 13, 2), el('span', {}, 'For the best results we recommend ', el('b', { textContent: 'Opus 5.5' }), ' (Claude, with an API key) or ', el('b', { textContent: 'GPT-6.2 Astra' }), ' (with ChatGPT), with ', el('b', { textContent: `${EFFORT_LABEL[RECOMMENDED_EFFORT]} effort` }), ' or more.')),
       el('div', { className: 'ai-opt rec' },
         el('h4', {}, icon('chat', 16), 'Sign in with ChatGPT', el('span', { className: 'badge', textContent: 'Recommended' })),
         el('p', { textContent: 'Uses your ChatGPT Plus or Pro plan. No extra cost, your plan’s limits apply.' }),
