@@ -27,6 +27,7 @@ PARAMS = []        # je Build geleert (begin), Reihenfolge wie im Code
 WARNINGS = []
 _USER = None       # Werte aus parameters.json (Name -> Wert). None: noch nicht gelesen
 _TREES = {}        # Syntaxbaeume je Datei, fuer den Namen der Konstante
+_GIVEN = None      # values passed to component("Name", WIDTH=...) while that component runs (components.py)
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -237,7 +238,17 @@ def param(default, label=None, *, min=None, max=None, step=None, unit=None, opti
     if _USER is None:  # Modell ohne soma build ausgefuehrt (etwa importiert): Werte aus dem aktuellen Ordner
         _USER = read_user_values(Path.cwd())[0]
     value, source = spec["default"], "code"
-    if name in _USER:
+    if _GIVEN and name in _GIVEN:  # passed to component(): a wrong value is an error in the code, not in the app
+        raw = _GIVEN[name]
+        v, why = _coerce(spec, raw)
+        if why:
+            raise ValueError(f"component(..., {name}={raw!r}): the value is {why}")
+        value, source = v, "component"
+        lo, hi = spec["min"], spec["max"]
+        if spec["kind"] in ("number", "int") and ((lo is not None and v < lo) or (hi is not None and v > hi)):
+            WARNINGS.append(f"{name} = {fmt(spec, v)} (passed to component()) lies outside the range {fmt(spec, lo) if lo is not None else '...'} "
+                            f"to {fmt(spec, hi) if hi is not None else '...'} of the component. It is used anyway.")
+    elif name in _USER:
         raw = _USER[name]
         v, why = _coerce(spec, raw)
         if why:

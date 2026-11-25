@@ -1,4 +1,6 @@
 """soma: helper library of SOMA. In model.py: `from soma import add_part, param, import_step, import_assembly`.
+Other SOMA models inside this one (components/, `soma component add`): `drawer = component("Drawer", WIDTH=500)`,
+placed by named points: `anchor("back", (0, -200, 60))` in the drawer, `place(drawer, "back", cabinet, "slot 1")`.
 Values the user can change in the app (Parameters panel): `WIDTH = param(40.0, "Width", min=20, max=80, unit="mm")`.
 Standard parts (screws, nuts, washers, heat-set inserts): `from soma.fasteners import Screw, Nut, Washer, HeatSetInsert`.
 Animations in animations/*.py: `from soma.anim import Animation`."""
@@ -10,7 +12,7 @@ _STARTED = _time.perf_counter()
 __version__ = "1.0.0"   # Major.minor.bugfix (E68), eine Nummer fuer App und soma, gleich der in app/package.json
 API_VERSION = 1   # steht in .soma/project.json, sichert Abwaertskompatibilitaet (E36)
 
-__all__ = ["add_part", "import_assembly", "import_step", "param", "__version__", "API_VERSION"]
+__all__ = ["add_part", "anchor", "component", "import_assembly", "import_step", "param", "place", "__version__", "API_VERSION"]
 
 
 def __getattr__(name):
@@ -19,6 +21,9 @@ def __getattr__(name):
     if name in ("add_part", "import_assembly", "import_step"):
         from . import registry
         return getattr(registry, name)
+    if name in ("component", "anchor", "place"):  # cadquery is loaded when they run
+        from . import components
+        return getattr(components, name)
     if name == "param":  # ohne cadquery
         from . import params
         return params.param

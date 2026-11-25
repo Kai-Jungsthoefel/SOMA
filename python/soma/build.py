@@ -15,7 +15,7 @@ from pathlib import Path
 
 import cadquery as cq
 
-from . import cqcompat, measure, mesher, parmesh, params, registry
+from . import components, cqcompat, measure, mesher, parmesh, params, registry
 
 DEFAULT_ENTRY = "model.py"
 # Fassung von model.glb, model.map.json und geometry/. Die App zeigt beim Oeffnen den letzten Build ohne neu zu bauen, aber
@@ -186,6 +186,7 @@ def run_model(root, entry=None):
     registry.REGISTRY.clear()
     COMPAT_WARNING = None
     params.begin(root)  # Werte des Nutzers aus parameters.json (Parameter-Panel)
+    components.begin(root)  # component() looks in components/ of this model
     LAST_RUN = None
     old_cwd = os.getcwd()
     os.chdir(root)
@@ -320,11 +321,15 @@ def write_outputs(root, parts, project_name):
             file=_rel(p["file"], root), line=p["line"], end_line=p["end_line"],
             bbox=[[round(v, 3) for v in bb[0]], [round(v, 3) for v in bb[1]]],
             volume=round(done[i]["volume"], 3)))
+        if p.get("component"):  # instance of a component: the tree marks its group, the app reports its state
+            map_parts[-1].update(component=p["component"]["name"], component_group=p["component"]["group"])
         # solid: geschlossener Koerper. Nur dann fuellt der Viewer die Schnittflaeche (bei offenen Flaechen waere das falsch)
         meta = dict(partId=pid, name=p["name"], role=p["role"], group=group, solid=bool(p["shape"].Solids()))
         # axis: Normteile werden in der Explosionsansicht entlang ihrer Achse herausgezogen
         if p.get("axis"):
             meta["axis"] = list(p["axis"])
+        if p.get("component"):
+            meta.update(component=p["component"]["name"], componentGroup=p["component"]["group"])
         glb_parts.append(dict(meta=meta, mesh=done[i]["mesh"], color=p["color"]))
     soma, geo = root / ".soma", root / ".soma" / "geometry"
     glb_size = write_atomic(soma / "model.glb", lambda p: mesher.write_glb(p, glb_parts), geo)

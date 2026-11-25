@@ -7,6 +7,9 @@ den Normteilen samt Tabellen (cqruntime.py, Apache 2.0, E101). Am Ende ruft ein 
 cq-cli) bzw. ocp_vscode auf und legt `result` an. Ein Modell mit eigenen Modulen (parts/) wird ein Ordner mit
 soma_compat.py statt des Blocks.
 
+Components (other SOMA models in components/): a model that uses component() is always exported as a folder. Its
+components/ go along, their soma imports are replaced the same way, and soma_compat.py runs them (cqruntime.py).
+
 Import: Die Markierungen werden zurueckgedreht (Block und Fussblock fallen weg, die Originalzeilen kommen zurueck), die
 Werte des Parameter-Panels gehen nach parameters.json. Ein Skript ohne Markierungen bleibt unveraendert, es baut im
 Kompatibilitaetsmodus (cqcompat.py). Wurde der Block veraendert, bleibt er stehen und das wird gemeldet (E28).
@@ -21,7 +24,7 @@ from pathlib import Path
 from . import __version__, params
 from .build import DEFAULT_ENTRY, read_project_json
 
-CORE = ("add_part", "param", "import_step", "import_assembly")
+CORE = ("add_part", "param", "import_step", "import_assembly", "component", "anchor", "place")
 FASTENERS = ("Screw", "Nut", "Washer", "HeatSetInsert", "lengths", "pick_length", "standards")  # = fasteners.__all__
 MARK = "# soma-import: "
 BLOCK_START = "# >>> soma-compat"
@@ -238,6 +241,40 @@ def _copy_tree(src, dst, warnings, what):
     return copied
 
 
+def _component_files(root):
+    """Files of components/ for the export: {rel: (text with the soma imports replaced, uses fasteners) or source path}.
+    Python files that cannot be parsed are copied as they are (they fail in SOMA too)."""
+    base = root / "components"
+    out = {}
+    if not base.is_dir():
+        return out
+    for f in sorted(p for p in base.rglob("*") if p.is_file()):
+        rel = f.relative_to(root).as_posix()
+        if "__pycache__" in f.parts or f.suffix == ".pyc":
+            continue
+        if f.name == "component.json":  # without the path of the original: it is of no use outside SOMA
+            try:
+                meta = json.loads(f.read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                meta = {}
+            meta = {k: v for k, v in (meta if isinstance(meta, dict) else {}).items() if k in ("name", "entry")}
+            out[rel] = (json.dumps(meta, indent=1, ensure_ascii=False) + "\n", False)
+            continue
+        if f.suffix == ".py":
+            text = f.read_text(encoding="utf-8-sig")
+            try:
+                imp = _soma_imports(_parse(f, rel), rel)
+            except ExportError as e:
+                if "syntax error" in str(e):
+                    out[rel] = f
+                    continue
+                raise
+            out[rel] = (_rewrite(text, imp, "folder") if imp else text, any(m == "soma.fasteners" for _, m, _ in imp))
+        else:
+            out[rel] = f
+    return out
+
+
 def export(project, out):
     """Schreibt das Modell als CadQuery: `out` ist eine .py-Datei (eine Datei) oder ein Ordner (mit parts/).
     Liefert dict(mode, files, warnings). Ein Ordner muss leer sein oder fehlen, eine .py-Datei wird ersetzt (der
@@ -253,9 +290,13 @@ def export(project, out):
     imports = {rel: _soma_imports(_parse(root / rel, rel), rel) for rel in files}
     used = {m for rel in files for _, m, _ in imports[rel]}
     fasteners = "soma.fasteners" in used
+    comps = _component_files(root) if any(n == "component" for rel in files for _, _, names in imports[rel] for n, _ in names) else {}
+    for text in comps.values():
+        if isinstance(text, tuple) and text[1]:
+            fasteners = True
     out = Path(out)
     written = []
-    if len(files) == 1:
+    if len(files) == 1 and not comps:
         mode = "single"
         if out.suffix.lower() != ".py":
             out = out.with_suffix(".py")
@@ -279,6 +320,14 @@ def export(project, out):
             imp = imports[rel]
             text = _rewrite(texts[rel], imp, "folder", footer=rel == entry and bool(used)) if imp or rel == entry and used else texts[rel]
             target.write_text(text, encoding="utf-8", newline="\n")
+            written.append(target)
+        for rel, item in comps.items():  # components/ with their soma imports replaced
+            target = out / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(item, tuple):
+                target.write_text(item[0], encoding="utf-8", newline="\n")
+            else:
+                shutil.copy2(item, target)
             written.append(target)
         if used:
             body = _runtime_lines(values, fasteners)
@@ -379,6 +428,19 @@ def import_script(script, project, backup=None):
             mode = "soma"
         all_values.update(values or {})
         plan.append(("model.py" if rel == src.name else rel, new))
+    extra = []  # components/ of a folder export: other SOMA models, their files come back as they were
+    if base != root and (base / "components").is_dir():
+        for f in sorted(p for p in (base / "components").rglob("*") if p.is_file()):
+            if "__pycache__" in f.parts or f.suffix == ".pyc":
+                continue
+            rel = f.relative_to(base).as_posix()
+            if f.suffix == ".py":
+                text = f.read_text(encoding="utf-8-sig")
+                new, _, w = restore(text)
+                warnings += [f"{rel}: {m}" for m in w]
+                plan.append((rel, new))
+            else:
+                extra.append((f, rel))
     compat = base / f"{COMPAT_MODULE}.py"
     if compat.is_file() and mode == "soma":  # Ordner-Export: die Werte stehen in soma_compat.py
         all_values.update(_values(compat.read_text(encoding="utf-8-sig").splitlines()) or {})
@@ -394,6 +456,14 @@ def import_script(script, project, backup=None):
         target = root / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8", newline="\n")
+        written.append(rel)
+    for f, rel in extra:
+        target = root / rel
+        if target.exists():
+            warnings.append(f"{rel} already exists and was kept.")
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, target)
         written.append(rel)
     (root / "inputs").mkdir(exist_ok=True)
     keep = _free(root / "inputs" / src.name)

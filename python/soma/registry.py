@@ -47,13 +47,16 @@ def _group_path(group):
 
 
 def _leaves(node, loc, groups, color):
-    """Teile einer Baugruppe mit Lage, Gruppenpfad und Farbe (ohne eigene Farbe gilt die der Gruppe darueber)."""
+    """Teile einer Baugruppe mit Lage, Gruppenpfad und Farbe (ohne eigene Farbe gilt die der Gruppe darueber).
+    Also the metadata of the node: role and opacity of the parts of a component (components.py)."""
     loc = loc * node.loc
     color = node.color if node.color is not None else color
+    meta = getattr(node, "metadata", None) or {}
+    label = meta.get("soma_name") or node.name  # components.py keeps the real name here when cq.Assembly needs another
     if node.obj is not None:
-        yield groups, node.name, node.obj, color, loc
+        yield groups, label, node.obj, color, loc, meta
     for child in node.children:
-        yield from _leaves(child, loc, groups + (node.name,), color)
+        yield from _leaves(child, loc, groups + (label,), color)
 
 
 def _unique(name, taken):
@@ -71,8 +74,8 @@ def add_part(name, obj, role=None, color=None, group=None, alpha=None):
 
     name   unique name (any characters, in the STEP file it is written as ASCII)
     obj    cq.Workplane or cq.Shape, a standard part from soma.fasteners (Screw, Nut ...) or an assembly from
-           import_assembly(): then every body becomes a part of its own with its name and color, the
-           sub-assemblies become groups under `name`
+           import_assembly() or component(): then every body becomes a part of its own with its name and color,
+           the sub-assemblies become groups under `name`
     role   "part" (own part, default), "reference" (part brought along: semi-transparent, own branch, not in the
            export) or "hardware" (purchased part like screws: opaque, in the STEP file with its group, not in
            export --all). Standard parts from soma.fasteners are "hardware" if not given
@@ -99,6 +102,9 @@ def _add(name, obj, role, color, group, where, alpha=None):
     """add_part ohne Blick auf den Aufrufer: Der Kompatibilitaetsmodus (cqcompat.py) nennt die Stelle von show_object().
     `alpha` < 1: halbtransparent wie in CQ-editor (options={"alpha": ...}). Unbrauchbare Werte gelten als nicht angegeben."""
     standard_part = hasattr(obj, "__soma_shape__")
+    if isinstance(obj, cq.Assembly):
+        _add_assembly(name, obj, role, color, _group_path(group), where, alpha)
+        return
     if role is None:
         role = getattr(obj, "role", "part") if standard_part else "part"
     if color is None and standard_part:
@@ -108,26 +114,51 @@ def _add(name, obj, role, color, group, where, alpha=None):
     if not isinstance(name, str) or not name.strip():
         raise ValueError("The part name must be a non-empty text")
     groups = _group_path(group)
-    if isinstance(obj, cq.Assembly):
-        leaves = list(_leaves(obj, cq.Location(), (), None))
-        if not leaves:
-            raise ValueError(f"The assembly for {name!r} contains no geometry")
-        if len(leaves) == 1:  # nur ein Koerper: ein Bauteil unter dem angegebenen Namen, ohne eigene Gruppe
-            _, _, o, c, loc = leaves[0]
-            _register(name, to_shape(o).moved(loc), role, color or (c.toTuple()[:3] if c else None), groups, where, alpha=alpha)
-            return
-        taken = {p["name"] for p in REGISTRY}
-        for sub_groups, leaf_name, o, c, loc in leaves:
-            # Die oberste Baugruppe traegt den Namen aus add_part, darunter die Namen aus der Datei
-            path = groups + (name,) + sub_groups[1:]
-            nm = _unique(leaf_name or "Part", taken)
-            taken.add(nm)
-            _register(nm, to_shape(o).moved(loc), role, color or (c.toTuple()[:3] if c else None), path, where, unique_step=True,
-                      alpha=alpha)
-        return
     if any(p["name"] == name for p in REGISTRY):
-        raise ValueError(f"Part name {name!r} is already taken (names must be unique)")
+        owner = next(p for p in REGISTRY if p["name"] == name).get("component")
+        hint = (f" by a part of the component in the group {owner['group']!r}. Choose another name" if owner else
+                " (names must be unique)")
+        raise ValueError(f"Part name {name!r} is already taken{hint}")
     _register(name, to_shape(obj), role, color, groups, where, axis=_axis(obj), fastener=obj if standard_part else None, alpha=alpha)
+
+
+def _add_assembly(name, obj, role, color, groups, where, alpha):
+    """An assembly from import_assembly() or component(): every body becomes a part, sub-assemblies become groups.
+    Parts of a component keep their own role and opacity unless add_part gives one."""
+    if role is not None and role not in ROLES:
+        raise ValueError(f"role must be one of {ROLES}, not {role!r}")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("The part name must be a non-empty text")
+    comp = (getattr(obj, "metadata", None) or {}).get("soma_component")
+    leaves = list(_leaves(obj, cq.Location(), (), None))
+    if not leaves:
+        raise ValueError(f"The assembly for {name!r} contains no geometry")
+    # Only one body: one part under the given name, without a group of its own. A component always gets its group,
+    # the app recognizes the instance by it
+    if len(leaves) == 1 and not comp:
+        _, _, o, c, loc, _meta = leaves[0]
+        _register(name, to_shape(o).moved(loc), role or "part", color or (c.toTuple()[:3] if c else None), groups, where, alpha=alpha)
+        return
+    taken = {p["name"] for p in REGISTRY}
+    inst = groups + (name,)
+    if comp and any(p["group"][:len(inst)] == inst for p in REGISTRY):
+        raise ValueError(f"There is already a group {'/'.join(inst)!r}: give every instance of a component its own name")
+    info = dict(name=comp, group="/".join(inst)) if comp else None
+    for sub_groups, leaf_name, o, c, loc, meta in leaves:
+        # The top assembly carries the name from add_part, below it the names from the file or the component
+        path = inst + sub_groups[1:]
+        nm = leaf_name or "Part"
+        if comp and nm in taken:  # a component used several times: "Front (Drawer 2)"
+            nm = f"{nm} ({name})"
+        nm = _unique(nm, taken)
+        taken.add(nm)
+        leaf_role = role or meta.get("soma_role") or "part"
+        leaf_alpha = alpha if alpha is not None else meta.get("soma_alpha")
+        # A standard part of a component: moved with the instance, so exploding and FEM bolt() know where it is
+        fastener = meta.get("soma_fastener")
+        fastener = fastener.moved(loc) if fastener is not None and hasattr(fastener, "moved") else None
+        _register(nm, to_shape(o).moved(loc), leaf_role, color or (c.toTuple()[:3] if c else None), path, where, unique_step=True,
+                  alpha=leaf_alpha, component=info, axis=_axis(fastener) if fastener is not None else None, fastener=fastener)
 
 
 def _axis(obj):
@@ -145,7 +176,7 @@ def _axis(obj):
     return tuple(round(-x / n, 6) + 0.0 for x in d)  # + 0.0: kein "-0.0" in den Metadaten
 
 
-def _register(name, shape, role, color, groups, where, unique_step=False, axis=None, fastener=None, alpha=None):
+def _register(name, shape, role, color, groups, where, unique_step=False, axis=None, fastener=None, alpha=None, component=None):
     step_name = ascii_name(name)
     if any(p["step_name"] == step_name for p in REGISTRY):
         if not unique_step:
@@ -162,6 +193,8 @@ def _register(name, shape, role, color, groups, where, unique_step=False, axis=N
         color=(*rgb, alpha), axis=axis, **where,
         # Das Normteil selbst (Screw, Nut ...), nur im Speicher: soma.fem liest daraus Groesse, Kopf und Lage (bolt())
         fastener=fastener,
+        # Instance of a component (components.py): its folder and the group of the instance, for the app
+        component=component,
     ))
 
 

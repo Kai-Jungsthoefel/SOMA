@@ -1,4 +1,4 @@
-"""Command line: `soma build`, `soma export`, `soma anim`, `soma drawing`, `soma analyze` and `soma render`."""
+"""Command line: `soma build`, `soma export`, `soma anim`, `soma drawing`, `soma analyze`, `soma render` and `soma component`."""
 import argparse
 import json
 import os
@@ -234,6 +234,98 @@ def cmd_cadquery(args):
         for w in r["warnings"]:
             print(f"Note: {w}")
     return 0
+
+
+def _component_lines(c):
+    state = {"copy": "independent copy", "current": "linked, up to date", "outdated": "linked, OUT OF DATE (the original changed)",
+             "missing": "linked, original not found"}[c["state"]]
+    lines = [f"{c['name']}  ({c['folder']}, {state}{', changed in this model' if c['changed'] else ''})"]
+    if c.get("source"):
+        lines.append(f"  original: {c['source']}")
+    if c.get("message"):
+        lines.append(f"  {c['message']}")
+    if c.get("anchors"):
+        lines.append("  anchors: " + ", ".join(c["anchors"]) + "  (place it with place(obj, \"anchor\", target, ...))")
+    if c["params"]:
+        lines.append("  parameters: " + ", ".join(
+            p["name"] + (f" = {p['default']!r}" if "default" in p else "") + (f" {p['unit']}" if p.get("unit") else "")
+            for p in c["params"]))
+    return lines
+
+
+def cmd_component(args):
+    """Other SOMA models inside this one (components.py)."""
+    from . import components as comp
+    root = Path(args.project).resolve()
+
+    def fail(msg):
+        print(json.dumps(dict(status="error", error=msg), ensure_ascii=False) if args.json else msg,
+              file=sys.stdout if args.json else sys.stderr)
+        return 1
+    try:
+        if args.action == "add":
+            if not args.target:
+                return fail("add needs the model, e.g. soma component add ../Drawer.soma")
+            c = comp.add(root, args.target, link=not args.copy, name=args.name)
+            if args.json:
+                print(json.dumps(dict(status="ok", component=c), ensure_ascii=False))
+                return 0
+            print(f"Added {c['name']!r} to {c['folder']} ({'linked' if c['mode'] == 'link' else 'independent copy'}).")
+            print(_component_lines(c)[-1] if c["params"] else "  no parameters")
+            print("Use it in model.py:  from soma import component")
+            print(f"                     add_part(\"{c['name']}\", component(\"{c['name']}\"))")
+            return 0
+        if args.action == "list":
+            items = comp.status(root)
+            if args.json:
+                print(json.dumps(dict(status="ok", components=items), ensure_ascii=False))
+            elif not items:
+                print("No components. Insert one with: soma component add <model.soma or folder>")
+            else:
+                for c in items:
+                    print("\n".join(_component_lines(c)))
+            return 0
+        if args.action == "update":
+            if args.target:
+                names = [args.target]
+            else:
+                names = [c["name"] for c in comp.status(root) if c["state"] == "outdated"]
+                if not names:
+                    msg = "All linked components are up to date."
+                    print(json.dumps(dict(status="ok", updated=[], message=msg)) if args.json else msg)
+                    return 0
+            done = []
+            for n in names:
+                c, backup = comp.update(root, n, force=args.force)
+                done.append(dict(name=c["name"], backup=str(backup) if backup else None))
+                if not args.json:
+                    print(f"Updated {c['name']!r} from {c['source']}." if backup else f"{c['name']!r} is already up to date.")
+            if args.json:
+                print(json.dumps(dict(status="ok", updated=done), ensure_ascii=False))
+            return 0
+        if not args.target:
+            return fail(f"{args.action} needs the name of the component")
+        if args.action == "remove":
+            name, backup = comp.remove(root, args.target)
+            msg = (f"Removed {name!r} (its files are in {backup}). Remove its component(\"{name}\") and add_part lines from "
+                   "the code too, then build.")
+            print(json.dumps(dict(status="ok", removed=name, backup=str(backup)), ensure_ascii=False) if args.json else msg)
+            return 0
+        if args.action == "relink":
+            if not args.path:
+                return fail("relink needs the original too, e.g. soma component relink \"Drawer\" ../Drawer.soma")
+            c = comp.relink(root, args.target, args.path)
+            print(json.dumps(dict(status="ok", component=c), ensure_ascii=False) if args.json
+                  else "\n".join([f"{c['name']!r} is linked to {c['source']}."] + _component_lines(c)))
+            return 0
+        c = comp.unlink(root, args.target)
+        print(json.dumps(dict(status="ok", component=c), ensure_ascii=False) if args.json
+              else f"{c['name']!r} is now an independent copy. Change it freely in {c['folder']}/.")
+        return 0
+    except comp.ComponentError as e:
+        return fail(str(e))
+    except OSError as e:
+        return fail(f"{type(e).__name__}: {e}")
 
 
 def cmd_warm(args):
@@ -582,6 +674,20 @@ def main(argv=None):
     r.add_argument("--project", default=".")
     r.add_argument("--json", action="store_true")
     r.set_defaults(func=cmd_render)
+
+    c = sub.add_parser("component", help="other SOMA models inside this one: add (linked or --copy), list, update, unlink, "
+                       "remove, relink")
+    c.add_argument("action", choices=["add", "list", "update", "unlink", "remove", "relink"])
+    c.add_argument("target", nargs="?", help="add: the model (.soma file or folder); update, unlink, remove, relink: the "
+                   "component (update without a name: all linked components that are out of date)")
+    c.add_argument("path", nargs="?", help="relink: the original at its new place (.soma file or model folder)")
+    c.add_argument("--copy", action="store_true", help="add: an independent copy instead of a linked one")
+    c.add_argument("--name", help="add: name of the component (default: name of the model)")
+    c.add_argument("--force", action="store_true", help="update: also when the component was changed in this model "
+                   "(the changed copy goes into .soma/component-backups/)")
+    c.add_argument("--project", default=".")
+    c.add_argument("--json", action="store_true")
+    c.set_defaults(func=cmd_component)
 
     s = sub.add_parser("serve", help="measuring service for the app (JSON lines on stdin/stdout)")
     s.set_defaults(func=cmd_serve)
