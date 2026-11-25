@@ -648,6 +648,9 @@ try {
   check('web_fetch: long text in pages, the end says where to go on', WF.pageOf(long, 0).includes(`offset ${WF.PAGE_CHARS}`) && WF.pageOf(long, WF.PAGE_CHARS) === 'x'.repeat(500));
   check('web_fetch: file kind from the first bytes (STEP, ZIP, a web page instead of a file)',
     WF.sniff(Buffer.from('ISO-10303-21;\nHEADER;')) === 'STEP' && WF.sniff(Buffer.from('PK\x03\x04abc')) === 'ZIP' && WF.sniff(Buffer.from('  <!DOCTYPE html><html>')) === 'HTML');
+  check('web_fetch: a page behind a byte order mark or a comment is a page, a Git LFS pointer is no file',
+    WF.sniff(Buffer.from('﻿<!DOCTYPE html><html>')) === 'HTML' && WF.sniff(Buffer.from('<!-- shop --><html>')) === 'HTML'
+      && WF.sniff(Buffer.from('version https://git-lfs.github.com/spec/v1\noid sha256:abc')) === 'LFS');
 
   const wfDir = path.join(tmp, 'wfmodel');
   fs.mkdirSync(path.join(wfDir, 'inputs'), { recursive: true });
@@ -656,6 +659,10 @@ try {
   check('web_fetch: downloads only inside the model folder, not into .git, never over an existing file',
     'file' in tg('inputs/new.step') && 'error' in tg('../outside.step') && 'error' in tg(path.join(tmp, 'abs.step')) && 'error' in tg('.git/x')
       && 'error' in tg('inputs/old.step') && fs.readFileSync(path.join(wfDir, 'inputs', 'old.step'), 'utf8') === 'mine');
+  check('web_fetch: .git in other spellings (.GIT, .git.) and line breaks in the name are refused',
+    'error' in tg('.GIT/hooks/x') && 'error' in tg('.git./hooks/x') && 'error' in tg('.Soma/x') && 'error' in tg('inputs/a\nsite : github.com'),
+    JSON.stringify([tg('.GIT/hooks/x'), tg('.git./hooks/x'), tg('inputs/a\nsite : github.com')]));
+  fs.writeFileSync(path.join(wfDir, 'inputs', 'part.step.part'), 'not ours');
 
   // A small web server on 127.0.0.1 (allowed only with SOMA_TEST_WEB_LOCAL): redirect, file, web page instead of file, refusal
   const http = await import('node:http');
@@ -673,9 +680,10 @@ try {
     const ac = new AbortController();
     const got = await WF.fetchChecked(new URL(`${base}/go`), ac.signal, 'SOMA-AI/test', '*/*');
     const saved = typeof got === 'string' ? { error: got } : await WF.saveBody(got.response, path.join(wfDir, 'inputs', 'part.step'), 1024 * 1024);
-    check('web_fetch: follows a redirect and saves the file, recognized as STEP, no .part left',
+    check('web_fetch: follows a redirect and saves the file, recognized as STEP, no temporary file left, a foreign .part kept',
       typeof got !== 'string' && got.redirects.length === 1 && saved.kind === 'STEP' && fs.readFileSync(path.join(wfDir, 'inputs', 'part.step'), 'utf8').startsWith('ISO-10303-21')
-        && !fs.existsSync(path.join(wfDir, 'inputs', 'part.step.part')), JSON.stringify(saved));
+        && fs.readdirSync(path.join(wfDir, 'inputs')).filter((f) => f.endsWith('.part')).join() === 'part.step.part'
+        && fs.readFileSync(path.join(wfDir, 'inputs', 'part.step.part'), 'utf8') === 'not ours', JSON.stringify(saved));
     const login = await WF.fetchChecked(new URL(`${base}/login`), ac.signal, 'SOMA-AI/test', '*/*');
     const notFile = await WF.saveBody(login.response, path.join(wfDir, 'inputs', 'login.step'), 1024 * 1024);
     check('web_fetch: a web page where a file was expected is not saved, the agent learns why',

@@ -35,7 +35,7 @@ export const treeUrl = (lib: Library) => `https://api.github.com/repos/${lib.rep
 export const rawUrl = (lib: Library, file: string) => `https://raw.githubusercontent.com/${lib.repo}/${lib.branch}/${file.split('/').map(encodeURIComponent).join('/')}`;
 export const pageUrl = (lib: Library, file: string) => `https://github.com/${lib.repo}/blob/${lib.branch}/${file.split('/').map(encodeURIComponent).join('/')}`;
 
-/** The CAD files of a tree answer of GitHub's API. Null when the answer is not a complete tree. */
+/** The CAD files of a tree answer of GitHub's API. Null when the answer is no tree; `truncated` says it is not all. */
 export function filesOfTree(json: unknown): string[] | null {
   const t = json as { tree?: { path?: unknown; type?: unknown }[]; truncated?: unknown };
   if (!t || !Array.isArray(t.tree)) return null;

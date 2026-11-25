@@ -154,6 +154,9 @@ const resultText = (result: unknown) => arr(obj(result).content).map((c) => str(
 function stoppedBy(text: string): { by: 'policy' | 'user'; reason: string } | null {
   // web_fetch asks itself (resources/somaai/soma.ts)
   if (/^The person denied opening /.test(text.trim())) return { by: 'user', reason: '' };
+  // SOMA's extension blocked the call (url_context, web_search with urls)
+  const own = /^SOMA: ([^.]*)/.exec(text.trim());
+  if (own) return { by: 'policy', reason: own[1] };
   if (!text.includes('[pi-permission-system]')) return null;
   if (/user denied/i.test(text)) return { by: 'user', reason: '' };
   return { by: 'policy', reason: /Reason: (.*?)\.?$/m.exec(text)?.[1] ?? '' };

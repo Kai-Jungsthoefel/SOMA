@@ -24,7 +24,7 @@ Paths are relative to the installation folder (macOS: `SOMA.app/Contents`, where
 | Git (dugite) | `resources/app/node_modules/dugite/git/LICENSE.txt` and the `share/licenses` folders below it |
 | node-pty | `resources/app/node_modules/node-pty/LICENSE`, winpty in `resources/app/dist/licenses/node-pty__winpty/` |
 | sherpa-onnx and ONNX Runtime (voice input) | `resources/app/node_modules/sherpa-onnx-node/` and `resources/app/node_modules/sherpa-onnx-<system>/`; Apache-2.0 and MIT texts at the upstream URLs below |
-| pi (SOMA AI) | `resources/app/resources/somaai/LICENSE-pi.txt`; the packages pi needs: their folders under `resources/app/node_modules/` and `resources/app/dist/licenses/` |
+| pi (SOMA AI) | `resources/app/resources/somaai/LICENSE-pi.txt`, pi-web-search in `resources/app/resources/somaai/LICENSE-pi-web-search.txt`; the packages pi needs: their folders under `resources/app/node_modules/` and `resources/app/dist/licenses/` |
 | Python | `resources/python/LICENSE.txt` (Windows) or `resources/python/lib/python3.12/LICENSE.txt` |
 | Python packages | `resources/python/.../site-packages/<package>.dist-info/` (`LICENSE*`, `licenses/`), some inside the package folder |
 | gmsh | `resources/python/share/doc/gmsh/LICENSE.txt` |
@@ -80,7 +80,9 @@ needed at run time (for example the download helpers of dugite).
 
 SOMA AI runs pi as a separate Node process from its package folder, so pi and the packages it needs at run time ship as
 package folders under `resources/app/node_modules/` (see `app/electron-builder.config.cjs`). The npm package of pi has
-no license file; its MIT license is in `resources/app/resources/somaai/LICENSE-pi.txt`.
+no license file; its MIT license is in `resources/app/resources/somaai/LICENSE-pi.txt`. Neither the npm package nor the
+repository of pi-web-search has a license file, only "MIT" in package.json and its README; SOMA includes the MIT
+text with its author in `resources/app/resources/somaai/LICENSE-pi-web-search.txt`.
 
 ## Bundled Python runtime
 

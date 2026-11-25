@@ -236,7 +236,9 @@ export function decodeBody(data: Buffer, type: string): string {
 
 /** What a downloaded file is, from its first bytes: a web page where a file was expected is the usual mistake. */
 export function sniff(head: Buffer): string {
-  const s = head.subarray(0, 512).toString('latin1');
+  // A byte order mark and comments in front of the page do not make it a file
+  const s = head.subarray(0, 512).toString('latin1').replace(/^\xEF\xBB\xBF/, '').replace(/^\s*(<!--[\s\S]*?-->\s*)+/, '');
+  if (s.startsWith('version https://git-lfs')) return 'LFS';
   if (s.startsWith('ISO-10303-21')) return 'STEP';
   if (s.startsWith('PK\x03\x04')) return 'ZIP';
   if (s.startsWith('%PDF')) return 'PDF';
@@ -250,11 +252,15 @@ export function sniff(head: Buffer): string {
  * Returns the full path or why not.
  */
 export function downloadTarget(cwd: string, want: string): { file: string } | { error: string } {
+  // The path is shown in the question to the person: a line break could fake another line there ("site : …")
+  if (/[\x00-\x1f\x7f]/.test(want)) return { error: `"${want.replace(/[\x00-\x1f\x7f]/g, ' ')}" contains control characters. Give a plain file name.` };
   const root = path.resolve(cwd);
   const file = path.resolve(root, want);
   const rel = path.relative(root, file);
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return { error: `"${want}" is not inside the model folder. Save downloads there, usually in inputs/.` };
-  if (rel.split(path.sep)[0] === '.git' || rel.split(path.sep)[0] === '.soma') return { error: `"${want}" is a folder SOMA keeps for itself.` };
+  // Windows and macOS ignore case, Windows drops trailing dots and spaces: ".GIT" and ".git." are .git too
+  const first = rel.split(path.sep)[0].toLowerCase().replace(/[. ]+$/, '');
+  if (first === '.git' || first === '.soma') return { error: `"${want}" is a folder SOMA keeps for itself.` };
   if (fs.existsSync(file)) return { error: `${rel.split(path.sep).join('/')} already exists. Choose another name, SOMA does not overwrite files.` };
   return { file };
 }
@@ -262,7 +268,8 @@ export function downloadTarget(cwd: string, want: string): { file: string } | { 
 /** Saves the body into `file` (through a temporary file next to it), at most `max` bytes. */
 export async function saveBody(response: Response, file: string, max: number): Promise<{ bytes: number; kind: string } | { error: string }> {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const part = `${file}.part`;
+  // A name of its own: an existing .part (a crash, a second download to the same place) is not ours to delete
+  const part = `${file}.${process.pid}-${Date.now().toString(36)}.part`;
   let bytes = 0;
   let head = Buffer.alloc(0);
   const counter = new Transform({
@@ -282,7 +289,11 @@ export async function saveBody(response: Response, file: string, max: number): P
     return { error: msg === 'too large' ? `The file is larger than ${Math.round(max / 1024 ** 2)} MB, it was not saved.` : `The download failed: ${msg}` };
   }
   const kind = sniff(head);
-  if (kind === 'HTML') {
+  if (kind === 'LFS') {
+    fs.rmSync(part, { force: true });
+    return { error: 'The address gave a Git LFS pointer, not the file itself. Nothing was saved. Look for a "raw" or "media" download link of the file.' };
+  }
+  if (kind === 'HTML' || (!kind && /^text\/html\b/i.test(response.headers.get('content-type') ?? ''))) {
     fs.rmSync(part, { force: true });
     return { error: 'The address gave a web page, not a file (often a sign-in page or a page that builds the download link with JavaScript). Nothing was saved. Read the page with web_fetch without `path` to find the real file link, or ask the person to download it.' };
   }
