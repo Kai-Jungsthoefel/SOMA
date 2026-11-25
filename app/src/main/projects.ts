@@ -34,7 +34,7 @@ import {
   getSkillDefaults, readProjectJson, readSkillModes, renameProject, setLastProject, setSkillDefault, stampAppVersion, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
-import { markClosed, markOpen, openElsewhere, OPEN_ELSEWHERE } from './openlock';
+import { claimOpen, markClosed, markOpen, openElsewhere, OPEN_ELSEWHERE } from './openlock';
 
 /** Alles, was zu einem geöffneten Projekt gehört. Beim Wechsel wird es vollständig abgebaut. */
 interface Session {
@@ -103,10 +103,21 @@ const modelPath = (p: string) => (isModelFile(p) ? p : `${p.replace(/\.zip$/i, '
 
 /** The marker the app puts into a model file when saving (zip.ts). null: unreadable, or an older file without it. */
 async function readZipInfo(zipPath: string): Promise<ZipInfo | null> {
-  try {
-    const t = (await readZipTexts(zipPath, [ZIP_INFO_PATH]))[ZIP_INFO_PATH];
-    return t ? JSON.parse(t) as ZipInfo : null;
-  } catch { return null; }
+  const r = await zipInfoOf(zipPath);
+  return 'error' in r ? null : r.info;
+}
+
+/** Like readZipInfo, but tells an unreadable file (a share that is gone, a half-synced file) from one without marker. */
+async function zipInfoOf(zipPath: string): Promise<{ info: ZipInfo | null } | { error: string }> {
+  let t: string | null | undefined;
+  try { t = (await readZipTexts(zipPath, [ZIP_INFO_PATH]))[ZIP_INFO_PATH]; }
+  catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
+  try { return { info: t ? JSON.parse(t) as ZipInfo : null }; } catch { return { info: null }; }
+}
+
+/** Size and time of a file, to notice that someone else wrote it in the meantime. null: not there or not reachable. */
+function fileStamp(p: string): string | null {
+  try { const st = fs.statSync(p); return `${st.size}:${st.mtimeMs}`; } catch { return null; }
 }
 
 /**
@@ -172,9 +183,11 @@ export class ProjectController {
     if (openElsewhere(id)) throw new Error(OPEN_ELSEWHERE);
     // Dasselbe Modell neu öffnen (etwa „Arbeitsstand behalten“ beim Öffnen seiner Datei) verwirft es nie
     if (this.session?.id === id) this.close(); else await this.leave();
+    // Taken only now: another window may have opened it while this one was leaving its model
+    if (!claimOpen(id)) throw new Error(OPEN_ELSEWHERE);
     const dir = projectDir(id);
     const folder = isFolderProject(id);
-    if (folder && !fs.existsSync(dir)) throw new Error(`The folder no longer exists: ${dir}. Open it again with “Open folder” at its new place.`);
+    if (folder && !fs.existsSync(dir)) { markClosed(id); throw new Error(`The folder no longer exists: ${dir}. Open it again with “Open folder” at its new place.`); }
     const builds = new BuildManager(dir);
     const terminals = new TerminalManager(this.wc, dir);
     const ai = new SomaAI(this.wc, dir, !!getAppState(id).aiFresh, () => patchAppState(id, { aiFresh: false }));
@@ -617,6 +630,9 @@ export class ProjectController {
     if (zipPath && !fs.existsSync(path.dirname(zipPath))) zipPath = undefined; // Zielordner weg (z. B. USB-Stick ab): neu fragen
     const legacy = zipPath && !isModelFile(zipPath) ? zipPath : null;
     if (legacy) zipPath = undefined;
+    /** How the file looked when it was checked: building, the snapshot and packing take a while, someone may save meanwhile. */
+    let seen: string | null = null;
+    let backedUp: string | null = null;
     if (!zipPath) {
       const pj = readProjectJson(s.id);
       const prev = legacy ?? app.zipPath;
@@ -635,14 +651,19 @@ export class ProjectController {
       }
       renameProject(s.id, path.basename(zipPath, path.extname(zipPath))); // der Modellname folgt dem Dateinamen
     } else if (fs.existsSync(zipPath)) {
-      // Saved elsewhere since this computer saved or loaded it (network folder, another computer): never replace it unasked
-      const other = await readZipInfo(zipPath);
-      if (other && (other.id !== s.id || (other.head ?? null) !== (app.savedHead ?? null))) {
+      // Saved elsewhere since this computer saved or loaded it (network folder, another computer): never replace it unasked.
+      // A file that cannot be read right now (a share that drops out, a file still syncing) is not replaced unasked either
+      const read = await zipInfoOf(zipPath);
+      const other = 'error' in read ? null : read.info;
+      const changed = other && (other.id !== s.id || (other.head ?? null) !== (app.savedHead ?? null));
+      if ('error' in read || changed) {
         const c = await choose(this.getWin(), {
           title: 'Save model',
-          message: `${path.basename(zipPath)} was saved elsewhere since you opened or saved it here (another computer?). Replace it with your version?`,
-          detail: `${zipPath}\n\nReplace: the other version is kept as a backup. Save as: your version goes into a new file, the other one stays.` +
-            (other.savedAt ? `\nThe other version was saved ${new Date(other.savedAt).toLocaleString()}.` : ''),
+          message: 'error' in read
+            ? `${path.basename(zipPath)} cannot be read right now, so SOMA cannot check whether it was saved elsewhere. Replace it with your version?`
+            : `${path.basename(zipPath)} was saved elsewhere since you opened or saved it here (another computer?). Replace it with your version?`,
+          detail: `${zipPath}\n\nReplace: the file there now is kept as a backup. Save as: your version goes into a new file, the other one stays.` +
+            ('error' in read ? `\nReason: ${read.error}` : other?.savedAt ? `\nThe other version was saved ${new Date(other.savedAt).toLocaleString()}.` : ''),
           buttons: ['Replace', 'Save as …', 'Cancel'],
         });
         if (c === 1) return this.save(true);
@@ -651,10 +672,13 @@ export class ProjectController {
           const dir = path.join(backupsDir(), `${s.id}-file-${new Date().toISOString().replace(/[:.]/g, '-')}`);
           fs.mkdirSync(dir, { recursive: true });
           fs.copyFileSync(zipPath, path.join(dir, path.basename(zipPath)));
-        } catch (e) { return { cancelled: false, error: `The other version could not be backed up, nothing was replaced: ${e instanceof Error ? e.message : String(e)}` }; }
+          backedUp = path.join(dir, path.basename(zipPath));
+        } catch (e) { return { cancelled: false, error: `The file there now could not be backed up, nothing was replaced: ${e instanceof Error ? e.message : String(e)}` }; }
       }
+      seen = fileStamp(zipPath);
     }
     const warnings: string[] = [];
+    if (backedUp) warnings.push(`The version that was in the file is kept as a backup: ${backedUp}`);
     let release: (() => void) | undefined;
     try {
       // Die Datei soll das aktuelle Ergebnis enthalten: laufenden Build abwarten, veralteten vorher nachholen.
@@ -679,6 +703,9 @@ export class ProjectController {
       const info: ZipInfo = { savedAt: new Date().toISOString(), head, id: s.id, name: pj?.name ?? s.id };
       // The analyses go along as a list with their values (their results are too large, zip.ts)
       try { writeResultsIndex(s.dir); } catch (e) { console.warn('[soma] Could not write the list of analyses:', e); }
+      if (seen && fileStamp(zipPath) !== seen) {
+        return { cancelled: false, error: `${path.basename(zipPath)} was changed by someone else while saving. Nothing was replaced: save again to compare.` };
+      }
       const r = await saveProjectZip(s.dir, zipPath, info);
       patchAppState(s.id, { zipPath, savedHead: head, savedAt: Date.now() });
       this.send('save:state', await this.saveState());

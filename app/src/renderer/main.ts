@@ -1018,11 +1018,16 @@ function componentLabel(c: ModelComponent): string {
 }
 
 let componentsBusy: Promise<void> | null = null;
+/** The model the running check is for. */
+let componentsFor = '';
 let componentsError = '';
 /** Asks the main process for the components and their state (reads the originals, takes a moment). */
 function refreshComponents(): Promise<void> {
   if (!project) return Promise.resolve();
   const asked = project.id;
+  // A check still running for the model opened before does not count: this one would get its answer and drop it
+  if (componentsBusy && componentsFor !== asked) componentsBusy = null;
+  componentsFor = asked;
   componentsBusy ??= api.components.list().then((r) => {
     if (project?.id !== asked) return; // another model was opened meanwhile: its own check follows
     components = r.components;
@@ -1030,7 +1035,7 @@ function refreshComponents(): Promise<void> {
     // Said once per new reason, not at every check
     if (r.error && r.error !== componentsError) toast(`The components could not be checked: ${r.error}`, 'error');
     componentsError = r.error ?? '';
-  }).catch(() => { /* stays as it was */ }).finally(() => { componentsBusy = null; });
+  }).catch(() => { /* stays as it was */ }).finally(() => { if (componentsFor === asked) componentsBusy = null; });
   return componentsBusy;
 }
 let components: ModelComponent[] = [];
@@ -1546,7 +1551,9 @@ async function doBuild(): Promise<void> {
 // A .soma file from the system (double-click, "Open with"): like Open, after asking about unsaved text in the editor
 api.project.onOpenFile((file) => void (async () => {
   if (!(await leaveEditor('Open model'))) return;
-  const r = await api.project.openFile(file);
+  // open() throws when the model is open in another window: the message must not get lost (a new window would just sit
+  // on the start page)
+  const r = await api.project.openFile(file).catch((e: unknown) => ({ error: String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '') }));
   if (r.error) toast(r.error, 'error');
 })());
 

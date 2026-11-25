@@ -9,6 +9,8 @@ import { stopWarm, warmUp } from './build';
 import { choose, chooseInputFiles, chooseSkillFiles, setDialogHost, setTestAnswers, trashItem, type ChooseOptions } from './dialogs';
 import { viewDxf } from './dxf';
 import { componentSource, insertModel, isModelFolder, listOrError, relinkComponent, unlinkComponent, updateComponents } from './components';
+import { openElsewhere, OPEN_ELSEWHERE } from './openlock';
+import { readZipTexts, ZIP_INFO_PATH } from './zip';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
@@ -85,6 +87,8 @@ function openInNewWindow(target: string): void {
   const args = [...(app.isPackaged ? [] : [app.getAppPath()]), WINDOW_FLAG, `${OPEN_FLAG}${target}`];
   console.log(`[soma] new window for ${target}`);
   const child = spawn(process.execPath, args, { detached: true, stdio: 'ignore', env: { ...process.env, SOMA_TEST_START: undefined } });
+  // Without a listener a failed start would end this process as an uncaught error
+  child.on('error', (e) => console.error(`[soma] Could not start a new window for ${target}:`, e));
   child.unref();
 }
 
@@ -237,6 +241,14 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('components:openOriginal', async (_e, name: unknown): Promise<OpenResult> => {
     const src = await componentSource(dir(), String(name ?? ''));
     if ('error' in src) return { cancelled: false, error: src.error };
+    // Already open in a window: say so here instead of starting a window that only shows the same message
+    if (!src.folder) {
+      try {
+        const t = (await readZipTexts(src.path, [ZIP_INFO_PATH]))[ZIP_INFO_PATH];
+        const id = t ? (JSON.parse(t) as { id?: unknown }).id : null;
+        if (typeof id === 'string' && openElsewhere(id)) return { cancelled: false, error: OPEN_ELSEWHERE };
+      } catch { /* the new window reads the file and says what is wrong */ }
+    }
     openInNewWindow(src.path);
     return { cancelled: false, opened: true };
   });

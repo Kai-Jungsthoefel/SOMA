@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ModelComponent, ComponentResult } from '../shared/types';
 import { choose, choosePath } from './dialogs';
-import { pythonEnv, pythonExe } from './paths';
+import { resolveInside } from './files';
+import { backupsDir, pythonEnv, pythonExe } from './paths';
 
 /**
  * Components (GitHub discussion #21): other SOMA models inside this one, in components/. The work is done by
@@ -110,7 +111,9 @@ export async function insertModel(win: BrowserWindow | null, dir: string, file: 
 function placeInModel(dir: string, comp: ModelComponent): string | null {
   let entry = 'model.py';
   try { const pj = JSON.parse(fs.readFileSync(path.join(dir, '.soma', 'project.json'), 'utf8')) as { entry?: unknown }; if (typeof pj.entry === 'string' && pj.entry) entry = pj.entry; } catch { /* default */ }
-  const file = path.join(dir, entry);
+  // project.json can be edited by the agent: the entry file must lie inside the model
+  let file: string;
+  try { file = resolveInside(dir, entry); } catch { return null; }
   let text: string;
   try { text = fs.readFileSync(file, 'utf8'); } catch { return null; }
   if (!/\badd_part\s*\(/.test(text)) return null;
@@ -122,15 +125,31 @@ function placeInModel(dir: string, comp: ModelComponent): string | null {
     `add_part(${q}, component(${q}))`,
     '',
   ];
+  // The file as it was goes into the app's backups first (a folder of the user has no Git history to go back to)
+  try {
+    const backup = path.join(backupsDir(), `component-insert-${new Date().toISOString().replace(/[:.]/g, '-')}`, path.basename(file));
+    fs.mkdirSync(path.dirname(backup), { recursive: true });
+    fs.copyFileSync(file, backup);
+  } catch { return null; }
   fs.writeFileSync(file, text.replace(/\s*$/, '\n') + lines.join('\n'), 'utf8');
   return entry;
 }
+
+let updating: Promise<unknown> = Promise.resolve();
 
 /**
  * Updates linked components from their original (`name` null: all out of date). A component that was changed in this
  * model is only updated after asking (the changed copy goes into .soma/component-backups/).
  */
-export async function updateComponents(win: BrowserWindow | null, dir: string, name: string | null): Promise<ComponentResult> {
+export function updateComponents(win: BrowserWindow | null, dir: string, name: string | null): Promise<ComponentResult> {
+  // One update at a time: two at once (a double click, the note and the mark) would replace the same folder together.
+  // The second one then finds nothing out of date any more
+  const run = updating.then(() => updateNow(win, dir, name));
+  updating = run.catch(() => undefined);
+  return run;
+}
+
+async function updateNow(win: BrowserWindow | null, dir: string, name: string | null): Promise<ComponentResult> {
   const all = await listComponents(dir);
   const todo = name ? all.filter((c) => c.name === name) : all.filter((c) => c.state === 'outdated');
   if (!todo.length) return { ok: true, updated: [] };

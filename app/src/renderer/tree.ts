@@ -211,8 +211,8 @@ export class StructureTree {
         segs.push(seg);
         let next = node.items.find((x): x is { group: GroupNode } => 'group' in x && x.group.name === seg)?.group;
         if (!next) { next = { key: `${node.key}/${seg}`, name: seg, items: [] }; node.items.push({ group: next }); }
-        // The group of an instance of a component
-        if (p.component && p.componentGroup === segs.join('/')) next.component = p.component;
+        // The group of an instance of a component. Not its references once more under References: one mark per instance
+        if (p.component && key !== REFS && p.componentGroup === segs.join('/')) next.component = p.component;
         node = next;
       }
       node.items.push({ part: p });
