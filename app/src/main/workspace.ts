@@ -35,6 +35,11 @@ export interface ProjectJson {
 /** `exportDir`: Ordner des letzten Exports, dort beginnt der nächste Dateidialog. */
 export interface AppState {
   zipPath?: string; savedHead?: string | null; savedAt?: number; exportDir?: string;
+  /**
+   * Version in the model file the user already decided about ("Keep current work" after it was saved elsewhere): opening
+   * from Recent does not ask again about the same version. Saving still asks before replacing it.
+   */
+  seenHead?: string | null;
   /** SOMA AI starts a new conversation (after "Load file"), until the person writes or picks one. */
   aiFresh?: boolean;
 }

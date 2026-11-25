@@ -10,6 +10,8 @@ const api: SomaApi = {
     create: (kind) => ipcRenderer.invoke('project:create', kind),
     list: () => ipcRenderer.invoke('project:list'),
     open: (id) => ipcRenderer.invoke('project:open', id),
+    openFile: (file) => ipcRenderer.invoke('project:openFile', file),
+    onOpenFile: (cb) => { ipcRenderer.on('app:openFile', (_e, f) => cb(String(f))); },
     onChanged: (cb) => { ipcRenderer.on('project:changed', (_e, p) => cb(p)); },
     saveState: () => ipcRenderer.invoke('project:saveState'),
     save: (saveAs) => ipcRenderer.invoke('project:save', saveAs),

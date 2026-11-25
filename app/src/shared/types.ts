@@ -479,7 +479,12 @@ export interface SomaApi {
     /** Neues Modell aus der Vorlage. `tutorial` (E94): dieselbe Vorlage unter dem Namen „Tutorial“. */
     create(kind?: 'tutorial'): Promise<ProjectInfo>;
     list(): Promise<ProjectListEntry[]>;
-    open(id: string): Promise<ProjectInfo>;
+    /** null: the user canceled the comparison with the model file. */
+    open(id: string): Promise<ProjectInfo | null>;
+    /** A .soma file given by the system (double-click, "Open with"), see onOpenFile. */
+    openFile(file: string): Promise<OpenResult>;
+    /** The system asks to open a .soma file (double-click while SOMA runs, or at its start). */
+    onOpenFile(cb: (file: string) => void): void;
     onChanged(cb: (p: ProjectInfo) => void): void;
     saveState(): Promise<SaveState>;
     save(saveAs?: boolean): Promise<SaveResult>;

@@ -22,6 +22,9 @@ module.exports = {
   // Ohne asar: dugite und node-pty starten Programme aus ihrem Paketordner, Vorlage und Skills werden in Projekte kopiert.
   // Aus einem asar-Archiv ginge beides nur über Umwege, und das Paket ist ohnehin vom Python bestimmt.
   asar: false,
+  // Double-click on a .soma file opens SOMA (main.ts: fileFromArgv, open-file). Without an icon of its own the files show
+  // the app icon. Windows: only the installer registers it, not the ZIP
+  fileAssociations: [{ ext: 'soma', name: 'SOMA model', description: 'SOMA model', mimeType: 'application/x-soma-model', role: 'Editor' }],
   // node-pty bringt fertige Binaries (N-API) mit, unter Linux baut npm install es. Neu bauen für Electron ist nicht nötig.
   npmRebuild: false,
   // Alles außer den nativen Paketen bündelt esbuild nach dist/

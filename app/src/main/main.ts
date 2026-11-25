@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell, type WebContents } from 'electron';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { aboutInfo, aboutText, osName } from './about';
@@ -20,7 +21,7 @@ import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, renameOldSkillFiles, saveLibrarySkill } from './skilllibrary';
 import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
-import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
+import type { AiResult, AiStatus, FileOpResult, LibraryResult, OpenResult, StorageClear } from '../shared/types';
 import { piEntry, setCatalogRefresh } from './somaai';
 import { allowMicrophone, fakeMicrophone, micAccess, Voice } from './voice';
 import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, saveApiKey, setDefaultEffort, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
@@ -46,6 +47,81 @@ initLog(logsDir(), {
  */
 const softwareGlFlag = () => path.join(app.getPath('userData'), 'software-gl');
 if (process.platform === 'linux' && fs.existsSync(softwareGlFlag())) app.commandLine.appendSwitch('ignore-gpu-blocklist');
+
+// ---- .soma files from the system: double-click, "Open with", the Dock icon (macOS) ---------------------------------
+// The installation registers .soma for SOMA (electron-builder.config.cjs, fileAssociations). The file comes as an
+// argument (Windows, Linux) or as the event open-file (macOS). Every file opens in a SOMA window of its own (wish of the
+// user): the work of the user and the agent in an open window is never interrupted.
+
+/** The .soma file among the arguments of a start, or null. */
+function fileFromArgv(argv: string[], cwd = process.cwd()): string | null {
+  for (const a of argv.slice(1)) {
+    if (a.startsWith('-') || !/\.soma$/i.test(a)) continue;
+    const f = path.resolve(cwd, a);
+    if (fs.existsSync(f)) return f;
+  }
+  return null;
+}
+/**
+ * A window of its own for a model ("Open the original" of a component, a file from the Dock on macOS): SOMA starts
+ * itself again with --soma-window and the model (.soma file or folder).
+ */
+const WINDOW_FLAG = '--soma-window';
+const OPEN_FLAG = '--soma-open=';
+const ownWindow = process.argv.includes(WINDOW_FLAG);
+const argOpen = process.argv.find((a) => a.startsWith(OPEN_FLAG))?.slice(OPEN_FLAG.length) || null;
+/** A file (or for --soma-window a folder) that came before the window could take it: opened once the window has loaded. */
+let pendingFile: string | null = argOpen ?? fileFromArgv(process.argv);
+// The lock only tells whether another SOMA runs with the same app data. Then Chromium's own storage (local storage,
+// caches) stays with the first one, this window gets its own, removed when it ends. Models and settings are shared, a
+// model is open in one window only (openlock.ts)
+const firstInstance = app.requestSingleInstanceLock();
+const sessionDir = !firstInstance ? path.join(app.getPath('userData'), 'window-sessions', String(process.pid)) : null;
+if (sessionDir) app.setPath('sessionData', sessionDir);
+
+/** Starts another SOMA window for a model (.soma file or folder). */
+function openInNewWindow(target: string): void {
+  const args = [...(app.isPackaged ? [] : [app.getAppPath()]), WINDOW_FLAG, `${OPEN_FLAG}${target}`];
+  console.log(`[soma] new window for ${target}`);
+  const child = spawn(process.execPath, args, { detached: true, stdio: 'ignore', env: { ...process.env, SOMA_TEST_START: undefined } });
+  child.unref();
+}
+
+/** Window sessions of SOMA windows that are gone (crash, or the folder was still busy when they ended). */
+function sweepWindowSessions(): void {
+  const base = path.join(app.getPath('userData'), 'window-sessions');
+  let names: string[] = [];
+  try { names = fs.readdirSync(base); } catch { return; }
+  for (const n of names) {
+    const pid = Number(n);
+    let running = false;
+    try { process.kill(pid, 0); running = true; } catch (e) { running = (e as NodeJS.ErrnoException).code === 'EPERM'; }
+    if (!running) void fs.promises.rm(path.join(base, n), { recursive: true, force: true }).catch(() => {});
+  }
+}
+// macOS hands files to the running app: before its window is there it opens the file itself, later a new window does
+app.on('open-file', (e, f) => { e.preventDefault(); if (rendererReady) openInNewWindow(f); else deliverFile(f); });
+
+/** Shows the window and lets the renderer open the file (it asks about unsaved text in the editor first). */
+function deliverFile(f: string): void {
+  console.log(`[soma] open file from the system: ${f}`);
+  if (!win || win.isDestroyed() || !rendererReady) { pendingFile = f; return; }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.send('app:openFile', f);
+}
+
+/** The window has loaded (did-finish-load): it can take files. isLoading() can still be true then (frames). */
+let rendererReady = false;
+
+/** Opens a model file the system named (or, in a window of its own, a model folder). Only existing .soma or .zip files. */
+async function openModelFile(ctl: ProjectController, file: string): Promise<OpenResult> {
+  if (ownWindow && file === argOpen && fs.existsSync(file) && fs.statSync(file).isDirectory()) return ctl.openFolder(file);
+  if (!file || !path.isAbsolute(file) || !/\.(soma|zip)$/i.test(file)) return { cancelled: false, error: `Not a SOMA model file: ${file}` };
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return { cancelled: false, error: `The file was not found: ${file}` };
+  return ctl.openZipFile(file);
+}
 
 let win: BrowserWindow | null = null;
 /** Für Anfragen aus den Terminals (bridge.ts): das Projekt des Fensters. */
@@ -79,7 +155,13 @@ function registerIpc(ctl: ProjectController): void {
   // Nur der feste Name fürs Tutorial (E94), kein freier Text aus dem Renderer
   ipcMain.handle('project:create', (_e, kind?: unknown) => ctl.create(kind === 'tutorial' ? 'Tutorial' : undefined));
   ipcMain.handle('project:list', async () => (await import('./workspace')).listProjects());
-  ipcMain.handle('project:open', (_e, id: string) => ctl.open(id));
+  ipcMain.handle('project:open', async (_e, id: string) => {
+    // Recent: compares with the model file first, it may have been saved on another computer (openKnown)
+    const r = await ctl.openKnown(id);
+    if (r.error) throw new Error(r.error);
+    return r.opened ? ctl.info() : null;
+  });
+  ipcMain.handle('project:openFile', (_e, file: unknown) => openModelFile(ctl, String(file ?? '')));
   ipcMain.handle('project:saveState', () => ctl.saveState());
   ipcMain.handle('project:save', (_e, saveAs?: boolean) => ctl.save(!!saveAs));
   ipcMain.handle('project:openZip', () => ctl.openZip());
@@ -458,6 +540,9 @@ function createWindow(): void {
   wc.on('unresponsive', () => console.error('[soma] Renderer is not responding'));
   wc.on('console-message', (_e, level, message, line, source) => { if (level >= 2) console.error(`[renderer] ${message} (${source}:${line})`); });
   wc.once('did-finish-load', () => {
+    rendererReady = true;
+    // Started by a double-click on a .soma file: open it right away
+    if (pendingFile) { const f = pendingFile; pendingFile = null; deliverFile(f); return; }
     // Die App beginnt auf der Startseite, dort stehen die zuletzt geöffneten Modelle (E69). Ein Arbeitsstand von vor einem
     // Absturz ist dort zu finden. Nur die Tests öffnen gleich das letzte Modell, sonst ein neues (SOMA_TEST_START=home nicht).
     if (process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_START === 'home') return;
@@ -484,7 +569,7 @@ function createWindow(): void {
       if (ok) { await ctl.leave().catch(() => {}); allowClose = true; win?.close(); }
     })();
   });
-  win.on('closed', () => { ctl.close(); ctl.renders.close(); controller = null; win = null; });
+  win.on('closed', () => { ctl.close(); ctl.renders.close(); controller = null; win = null; rendererReady = false; });
   hostDialogs(wc);
 }
 
@@ -521,6 +606,7 @@ function hostDialogs(wc: WebContents): void {
 
 // Erst die Verbindung für `soma render` (E58), dann das Fenster: Die Terminals bekommen Adresse und Schlüssel beim Anlegen
 app.whenReady().then(async () => {
+  sweepWindowSessions();
   logIpcFailures();
   // Dunkel wie die Oberfläche: unter Windows sonst eine weiße Titelleiste, ebenso die Dialoge zum Öffnen und Speichern
   nativeTheme.themeSource = 'dark';
@@ -537,3 +623,5 @@ app.whenReady().then(async () => {
   createWindow();
 });
 app.on('window-all-closed', () => { console.log('[soma] quit'); stopBridge(); stopWarm(); voice.shutdown(); app.quit(); });
+// Chromium still holds files of its storage until the very end: try once, else the next start sweeps it
+app.on('will-quit', () => { if (sessionDir) try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch { /* next start */ } });

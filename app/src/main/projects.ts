@@ -34,6 +34,7 @@ import {
   getSkillDefaults, readProjectJson, readSkillModes, renameProject, setLastProject, setSkillDefault, stampAppVersion, updateProjectSkills,
 } from './workspace';
 import { readZipTexts, saveProjectZip, ZIP_INFO_PATH, type ZipInfo } from './zip';
+import { markClosed, markOpen, openElsewhere, OPEN_ELSEWHERE } from './openlock';
 
 /** Alles, was zu einem geöffneten Projekt gehört. Beim Wechsel wird es vollständig abgebaut. */
 interface Session {
@@ -98,6 +99,14 @@ const isModelFile = (p: string) => p.toLowerCase().endsWith(MODEL_EXT);
 /** Pfad mit .soma: „x“ und „x.zip“ werden „x.soma“. */
 const modelPath = (p: string) => (isModelFile(p) ? p : `${p.replace(/\.zip$/i, '')}${MODEL_EXT}`);
 
+/** The marker the app puts into a model file when saving (zip.ts). null: unreadable, or an older file without it. */
+async function readZipInfo(zipPath: string): Promise<ZipInfo | null> {
+  try {
+    const t = (await readZipTexts(zipPath, [ZIP_INFO_PATH]))[ZIP_INFO_PATH];
+    return t ? JSON.parse(t) as ZipInfo : null;
+  } catch { return null; }
+}
+
 /**
  * Das offene Projekt und alles, was mit Speichern, Öffnen und Verlauf zu tun hat.
  *
@@ -135,6 +144,7 @@ export class ProjectController {
     s.terminals.killAll();
     void s.ai.dispose();
     s.measure.stop();
+    markClosed(s.id);
     this.session = null;
   }
 
@@ -157,6 +167,7 @@ export class ProjectController {
   }
 
   async open(id: string): Promise<ProjectInfo> {
+    if (openElsewhere(id)) throw new Error(OPEN_ELSEWHERE);
     // Dasselbe Modell neu öffnen (etwa „Arbeitsstand behalten“ beim Öffnen seiner Datei) verwirft es nie
     if (this.session?.id === id) this.close(); else await this.leave();
     const dir = projectDir(id);
@@ -183,6 +194,7 @@ export class ProjectController {
     const env = envIsCurrent(dir) ? Promise.resolve(null) : ensureEnv(dir);
     const session: Session = { id, dir, folder, builds, terminals, ai, git, measure: new MeasureService(dir), anims, drawings, stopWatch, signature: '', env, stepStamps: new Map(), stepJobs: new Map(), poll: setInterval(() => void this.pollGit(), POLL_MS) };
     this.session = session;
+    markOpen(id);
     void env.then((err) => { if (err) { console.error('[soma]', err); builds.reportPackageError(err); } });
     // Built animations are not in the model file (.soma/anim/, zip.ts): the ones missing after opening it are built again,
     // once the model builds (packages from requirements.txt may still be installing)
@@ -214,11 +226,31 @@ export class ProjectController {
   }
 
   /**
+   * Opening a model this computer knows (Recent on the start page). Its model file may have been saved elsewhere since
+   * (a network folder, another computer): then it goes the way of opening the file, which compares and asks, instead
+   * of silently opening the older working folder here, whose next save would replace the other computer's work.
+   */
+  async openKnown(id: string): Promise<OpenResult> {
+    const st = getAppState(id);
+    if (!isFolderProject(id) && st.zipPath && isModelFile(st.zipPath) && fs.existsSync(st.zipPath)) {
+      const info = await readZipInfo(st.zipPath);
+      const head = info?.head ?? null;
+      if (info && info.id === id && head && head !== (st.savedHead ?? null) && head !== (st.seenHead ?? null)) {
+        console.log(`[project] ${id}: the model file was saved elsewhere since, comparing`);
+        return this.openZipFile(st.zipPath, true);
+      }
+    }
+    await this.open(id);
+    return { cancelled: false, opened: true };
+  }
+
+  /**
    * „Open folder“ (Ordner-Modus): SOMA in einem Ordner des Nutzers. Erst die Einstiegsdatei klären, dann sagt ein Hinweis,
    * was angelegt und was geändert wird (Wunsch des Nutzers), mit Abbrechen. Ein schon eingerichteter Ordner öffnet ohne Frage.
    */
-  async openFolder(): Promise<OpenResult> {
-    const picked = await chooseFolder(this.getWin());
+  async openFolder(given?: string): Promise<OpenResult> {
+    // `given`: a known folder, e.g. the original of a component (components.ts), else the user picks one
+    const picked = given ?? await chooseFolder(this.getWin());
     if (!picked) return { cancelled: true };
     const dir = path.resolve(picked);
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return { cancelled: false, error: `Not a folder: ${dir}` };
@@ -600,6 +632,25 @@ export class ProjectController {
         if (c !== 0) return { cancelled: true };
       }
       renameProject(s.id, path.basename(zipPath, path.extname(zipPath))); // der Modellname folgt dem Dateinamen
+    } else if (fs.existsSync(zipPath)) {
+      // Saved elsewhere since this computer saved or loaded it (network folder, another computer): never replace it unasked
+      const other = await readZipInfo(zipPath);
+      if (other && (other.id !== s.id || (other.head ?? null) !== (app.savedHead ?? null))) {
+        const c = await choose(this.getWin(), {
+          title: 'Save model',
+          message: `${path.basename(zipPath)} was saved elsewhere since you opened or saved it here (another computer?). Replace it with your version?`,
+          detail: `${zipPath}\n\nReplace: the other version is kept as a backup. Save as: your version goes into a new file, the other one stays.` +
+            (other.savedAt ? `\nThe other version was saved ${new Date(other.savedAt).toLocaleString()}.` : ''),
+          buttons: ['Replace', 'Save as …', 'Cancel'],
+        });
+        if (c === 1) return this.save(true);
+        if (c !== 0) return { cancelled: true };
+        try {
+          const dir = path.join(backupsDir(), `${s.id}-file-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+          fs.mkdirSync(dir, { recursive: true });
+          fs.copyFileSync(zipPath, path.join(dir, path.basename(zipPath)));
+        } catch (e) { return { cancelled: false, error: `The other version could not be backed up, nothing was replaced: ${e instanceof Error ? e.message : String(e)}` }; }
+      }
     }
     const warnings: string[] = [];
     let release: (() => void) | undefined;
@@ -651,7 +702,7 @@ export class ProjectController {
    * Abweichungen: Arbeitsstand behalten oder die Datei laden. Beim Laden wandert der Arbeitsordner in die Sicherungen,
    * nichts wird gelöscht.
    */
-  async openZipFile(zipPath: string): Promise<OpenResult> {
+  async openZipFile(zipPath: string, elsewhere = false): Promise<OpenResult> {
     let texts: Record<string, string | null>;
     try { texts = await readZipTexts(zipPath, ['.soma/project.json', ZIP_INFO_PATH]); }
     catch (e) { return { cancelled: false, error: `Cannot read the file (not a .soma or ZIP file?): ${e instanceof Error ? e.message : String(e)}` }; }
@@ -663,6 +714,8 @@ export class ProjectController {
     } catch { id = ''; }
     if (!isProjectId(id)) return { cancelled: false, error: 'This is not a SOMA file (.soma/project.json is missing or invalid).' };
 
+    // Open in another SOMA window: nothing here may compare, replace or back up its working folder
+    if (openElsewhere(id)) return { cancelled: false, error: OPEN_ELSEWHERE };
     const dir = projectDir(id);
     const remember = () => patchAppState(id, { zipPath, savedHead: info?.head ?? null, savedAt: Date.now() });
 
@@ -703,12 +756,13 @@ export class ProjectController {
     else why = 'The working folder and the file have different versions.';
     const choice = await choose(this.getWin(), {
       title: 'Working folder and file differ',
-      message: `${why} What do you want to open?`,
+      message: `${elsewhere ? `${path.basename(zipPath)} was saved elsewhere since you last worked on it here (another computer, or a copy). ` : ''}${why} What do you want to open?`,
       detail: 'Keep current work: the model opens as it is on this computer.\n' +
-        'Load file: the version from the file opens. The previous working folder is backed up, nothing is deleted.',
+        'Load file: the version from the file opens. The previous working folder is backed up, nothing is deleted.' +
+        (elsewhere ? `\n\n${zipPath}` : ''),
       buttons: ['Keep current work', 'Load file', 'Cancel'],
     });
-    if (choice === 0) { patchAppState(id, { zipPath }); await this.open(id); return { cancelled: false, opened: true }; }
+    if (choice === 0) { patchAppState(id, { zipPath, seenHead: info?.head ?? null }); await this.open(id); return { cancelled: false, opened: true }; }
     if (choice !== 1) return { cancelled: true };
     try {
       if (this.session?.id === id) this.close(); // offene Handles würden das Umbenennen blockieren

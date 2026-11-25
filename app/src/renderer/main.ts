@@ -1450,6 +1450,13 @@ async function doBuild(): Promise<void> {
   if (!r.ok) { toast('Not everything could be saved (see the note in the code panel). The build waits until then.', 'error'); return; }
   await api.build.run();
 }
+// A .soma file from the system (double-click, "Open with"): like Open, after asking about unsaved text in the editor
+api.project.onOpenFile((file) => void (async () => {
+  if (!(await leaveEditor('Open model'))) return;
+  const r = await api.project.openFile(file);
+  if (r.error) toast(r.error, 'error');
+})());
+
 const openProject = async (id: string) => {
   if (!(await leaveEditor('Open model'))) return;
   // Ein geöffneter Ordner kann fehlen (verschoben, Laufwerk ab): Der Hauptprozess sagt es
