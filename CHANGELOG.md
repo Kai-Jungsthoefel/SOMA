@@ -6,6 +6,10 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Added
+
+- SOMA AI can search the web and read web pages, for example to find a part to buy with its STEP model and download it into `inputs/`. It searches with the search of your provider (ChatGPT, OpenAI, Anthropic, Google Gemini; through pi-web-search, MIT, which comes with SOMA). Before it opens a website it asks you, once per site if you like. It names itself honestly, never reaches this computer or your local network, does not overwrite files, and when a shop refuses or needs a sign-in it gives you the link instead of trying to get around it.
+
 ## [1.0.0] - 2026-11-22
 
 SOMA 1.0. It brings its own agent, SOMA AI, so you no longer need a coding agent to design with SOMA. Models made with 1.0 keep working in later versions, changes that break them only come with a new major version.

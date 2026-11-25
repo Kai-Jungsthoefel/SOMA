@@ -68,6 +68,7 @@ sherpa-onnx, which ship as their package folders.
 | pi (@earendil-works/pi-coding-agent, with pi-ai, pi-agent-core, pi-tui, pi-codemode, pi-mcp compiled in), the agent of SOMA AI | 1.6.0 | MIT | https://github.com/earendil-works/pi | yes |
 | Packages compiled into the bundle of pi (provider SDKs such as openai, @anthropic-ai/sdk, @google/genai, @aws-sdk/*, and undici, yaml, diff …) | as in pi 1.6.0, see `dist/licenses` | MIT, Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, Unlicense, 0BSD | see `dist/licenses` | yes |
 | @gotgenes/pi-permission-system | 42.0.2 | MIT | https://github.com/gotgenes/pi-packages | yes |
+| pi-web-search, web search of SOMA AI | 1.7.0 | MIT | https://github.com/ttttmr/pi-web-search | yes |
 | jiti | 2.7.0 | MIT | https://github.com/unjs/jiti | yes |
 | typebox | 1.3.27 | MIT | https://github.com/sinclairzx81/typebox | yes |
 | zod | 4.6.7 | MIT | https://github.com/colinhacks/zod | yes |
