@@ -125,7 +125,7 @@ export async function stepPreview(abs: string, root: string, cwd: string, memo: 
         .split(copy).join(path.basename(abs));
       const isStep = /\.(step|stp)$/i.test(abs);
       if (isStep && /Error reading STEP file|could not be loaded/i.test(last)) return { error: 'The file is not a valid STEP file or it is damaged.' };
-      // Netzdateien: soma meldet schon einen ganzen Satz (z. B. „The 3MF file contains no triangles.“)
+      // Mesh and FreeCAD files: soma already reports a whole sentence (e.g. "The 3MF file contains no triangles.")
       if (!isStep && last) return { error: last };
       return { error: `The ${isStep ? 'STEP ' : ''}file could not be read${last ? `: ${last}` : '.'}` };
     }

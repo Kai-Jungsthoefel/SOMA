@@ -29,7 +29,7 @@ builds it and shows it in 3D. You check the result, point at things, and ask for
 1. **Model menu**: new model, new from CadQuery script, open, recent models, save as. Next to it: whether the model is saved.
 2. **Build status**: "Built" when the model is up to date, "Build failed" if the code has an error. Click for details. With "Auto on" the model is rebuilt whenever the code changes.
 3. **Columns**: show or hide the sidebar, the code and the agent (Ctrl 1, Ctrl 2, Ctrl 3).
-4. **Import**: add files such as STEP models, images or sketches to `inputs/`, where the agent can use them. Dragging files or folders into the window does the same. A `.soma` file can become a component instead (see Components).
+4. **Import**: add files such as STEP or FreeCAD models, images or sketches to `inputs/`, where the agent can use them. Dragging files or folders into the window does the same. A `.soma` file can become a component instead (see Components).
 5. **Export**: write parts as STL, STEP and other formats.
 6. **Save**: saves the model as a .soma file and adds a version to the history (Ctrl S).
 7. **Sidebar**: parameters, files, analysis, animation, skills, help and settings.
@@ -287,6 +287,10 @@ Click a STEP file (`.step`, `.stp`) to look at it in the viewer. A banner names 
 structure tree work as usual, but the parts have no link to code, and Animation and Analysis stay off. Builds of your model
 wait until you click **Back to model**. When the file changes on disk, the viewer loads it again. Large files can take a
 while the first time, after that they open from the preview cache.
+
+FreeCAD files (`.FCStd`) open the same way and can be measured, FreeCAD is not needed. The viewer shows the objects that are
+visible in FreeCAD, with their names and colors, App::Part containers and groups as groups. Only the geometry comes along,
+not the sketches and features. To use the file in the model, ask the agent: it loads it like a STEP file.
 
 Mesh files (`.stl`, `.3mf`, `.amf`, `.obj`) open the same way, for example to check an export before printing. Each
 object in the file becomes a part. Units in 3MF and AMF are converted to millimeters, STL and OBJ are read as millimeters.

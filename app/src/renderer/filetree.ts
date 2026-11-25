@@ -45,7 +45,7 @@ const FILE_ICONS: [RegExp, string][] = [
   [/\.(md|txt|rst|log)$|^[^.]*$/i, 'f-text'],
   [/\.(csv|tsv|xlsx?|ods)$/i, 'f-table'],
   [/\.(json|toml|ya?ml|ini|cfg|xml)$/i, 'f-data'],
-  [/\.(step|stp|iges|igs|brep|x_t|sat)$/i, 'f-cad'],
+  [/\.(step|stp|iges|igs|brep|x_t|sat|fcstd)$/i, 'f-cad'],
   [/\.(stl|3mf|obj|glb|gltf|ply|amf)$/i, 'f-mesh'],
   [/\.(dxf|dwg|svg)$/i, 'f-draw'],
   [/\.(png|jpe?g|gif|webp|bmp|tiff?)$/i, 'f-image'],

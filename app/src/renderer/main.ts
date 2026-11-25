@@ -350,7 +350,7 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
     else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
     else if (VIDEO_EXT.test(n.name)) void videoView.open(n.path);
     // STEP- und Netzdateien des Projekts im Viewer, schreibgeschützt wie die Vorschau eines alten Stands
-    else if (/\.(step|stp|stl|3mf|amf|obj)$/i.test(n.name)) void fileView.open(n.path);
+    else if (/\.(step|stp|fcstd|stl|3mf|amf|obj)$/i.test(n.name)) void fileView.open(n.path);
     else toast('The app has no view for this file type. Right-click: “Open with default app”.', 'info');
   },
   create: async (parent, name, dir) => {
@@ -856,7 +856,7 @@ async function sendMarkup(): Promise<void> {
     const cut = [sectionTool.agentText(), explodeTool.agentText(), animTool.agentText(), resultTool.agentText()].filter(Boolean).join(', ');
     const note = source ? `, drawn on ${source}`
       : (old ? `, shows the older version ${old.short} "${old.subject.slice(0, 80)}"` : '')
-        + (shownFile ? `, shows the STEP file ${shownFile}, not the model` : '') + (cut ? `, ${cut}` : '');
+        + (shownFile ? `, shows the ${fileView.kind} ${shownFile}, not the model` : '') + (cut ? `, ${cut}` : '');
     insertToAgent(`[Markup: ${r.path}${note}] `, `Markup saved: ${r.path}`);
   } catch (e) {
     toast(`The markup could not be saved: ${e instanceof Error ? e.message : String(e)}`, 'error');

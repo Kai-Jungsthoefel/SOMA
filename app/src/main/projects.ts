@@ -68,9 +68,11 @@ interface Session {
 }
 
 /** Nur diese Dateien zeigt der Viewer aus dem Projekt. */
-const STEP_FILE = /\.(step|stp)$/i;
+// Files from the project with CAD geometry in the viewer, so they can be measured. FreeCAD files go through soma's
+// converter (python/soma/fcstd.py) to the same kind of preview as a STEP file
+const STEP_FILE = /\.(step|stp|fcstd)$/i;
 /** Im Viewer zeigbar: STEP und Netzdateien (Netze ohne Messen, ihnen fehlt die CAD-Geometrie) */
-const VIEW_FILE = /\.(step|stp|stl|3mf|amf|obj)$/i;
+const VIEW_FILE = /\.(step|stp|fcstd|stl|3mf|amf|obj)$/i;
 
 const POLL_MS = 2000;
 /** Letzte JSON-Zeile einer Ausgabe von `soma … --json` (davor können Meldungen von Bibliotheken stehen). */
@@ -891,7 +893,7 @@ export class ProjectController {
     const s = this.need();
     const fail = (error: string): FileViewResult => ({ rel: typeof rel === 'string' ? rel : '', key: '', glb: new ArrayBuffer(0), map: { version: 0, parts: [] }, error });
     if (typeof rel !== 'string' || !rel || rel.length > 1000) return Promise.resolve(fail('Invalid file.'));
-    if (!VIEW_FILE.test(rel)) return Promise.resolve(fail('Only STEP files (.step, .stp) and mesh files (.stl, .3mf, .amf, .obj) can be shown in the viewer.'));
+    if (!VIEW_FILE.test(rel)) return Promise.resolve(fail('Only STEP files (.step, .stp), FreeCAD files (.FCStd) and mesh files (.stl, .3mf, .amf, .obj) can be shown in the viewer.'));
     let abs: string;
     try { abs = resolveInside(s.dir, rel); } catch { return Promise.resolve(fail('The file is outside the project.')); }
     const running = s.stepJobs.get(abs);

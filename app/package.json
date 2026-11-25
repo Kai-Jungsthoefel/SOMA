@@ -41,6 +41,7 @@
     "test:buildlock": "node test/buildlock.mjs",
     "test:parmesh": "node test/parmesh.mjs",
     "test:meshexport": "node test/meshexport.mjs",
+    "test:fcstd": "node test/fcstd.mjs",
     "help:shots": "npm run build && node test/helpshots.mjs",
     "dist": "npm run build && electron-builder --config electron-builder.config.cjs --publish never",
     "dist:dir": "npm run build && electron-builder --config electron-builder.config.cjs --publish never --dir",

@@ -11,7 +11,7 @@ import path from 'node:path';
 
 const DIR = import.meta.dirname;
 // Längste zuerst, damit sie nicht am Ende allein laufen
-const ALL = ['animation', 'fem', 'versions', 'smoke', 'editor', 'skills', 'params', 'explode', 'fasteners', 'drawing', 'drawview', 'section', 'measure', 'stepview', 'cadquery', 'folder', 'groups', 'components', 'modelfile', 'dxf', 'packages', 'settings', 'compact', 'somaai', 'aichat', 'voice', 'tutorial', 'updates', 'buildlock', 'parmesh', 'meshexport', 'unit'];
+const ALL = ['animation', 'fem', 'versions', 'smoke', 'editor', 'skills', 'params', 'explode', 'fasteners', 'drawing', 'drawview', 'section', 'measure', 'stepview', 'cadquery', 'folder', 'groups', 'components', 'modelfile', 'dxf', 'packages', 'settings', 'compact', 'somaai', 'aichat', 'voice', 'tutorial', 'updates', 'buildlock', 'parmesh', 'meshexport', 'fcstd', 'unit'];
 const SLOW = ['animation', 'fem'];
 const args = process.argv.slice(2);
 const all = args.includes('--all');
