@@ -234,6 +234,38 @@ print([c.name for c in registry.import_assembly(f).children], round(registry.imp
   check('STEP-Datei ohne Baugruppe im Viewer: ein Teil, benannt nach der Datei', await names() === '["Logo_KJ"]', `${await names()} ${(await ev(() => window.__t.toast())).text}`);
   await ev(() => window.__t.openFile('inputs/two.step'));
   check('Zwei freie Formen: zwei Teile', await names() === '["two 1","two 2"]', await names());
+
+  // 12) FreeCAD file (.FCStd) from the project: converted by soma like a STEP file, with CAD geometry (measurable).
+  // A minimal file: a body in an App::Part moved by 100 in x (the shape is stored without that placement)
+  const fc = spawnSync(PY, ['-c', String.raw`
+import sys, zipfile
+import cadquery as cq
+from OCP.BRepTools import BRepTools
+p = sys.argv[1] + "/shape.brp"
+BRepTools.Write_s(cq.Solid.makeBox(20, 10, 5).wrapped, p)
+pl = lambda x: f'<Property name="Placement" type="App::PropertyPlacement"><PropertyPlacement Px="{x}" Py="0" Pz="0" Q0="0" Q1="0" Q2="0" Q3="1"/></Property>'
+lab = lambda v: f'<Property name="Label" type="App::PropertyString"><String value="{v}"/></Property>'
+doc = ('<Document SchemaVersion="4" ProgramVersion="0.21.2"><Objects><Object type="App::Part" name="Part"/><Object type="Part::Box" name="Box"/></Objects><ObjectData>'
+       '<Object name="Part"><Properties>' + lab("Holder") + pl(100) + '<Property name="Group" type="App::PropertyLinkList"><LinkList count="1"><Link value="Box"/></LinkList></Property></Properties></Object>'
+       '<Object name="Box"><Properties>' + lab("Clamp") + pl(0) + '<Property name="Shape" type="Part::PropertyPartShape"><Part file="PartShape.brp"/></Property></Properties></Object>'
+       '</ObjectData></Document>')
+with zipfile.ZipFile(sys.argv[1] + "/clamp.FCStd", "w") as z:
+    z.writestr("Document.xml", doc)
+    z.write(p, "PartShape.brp")
+`, inputs], { encoding: 'utf8', windowsHide: true, timeout: 120000 });
+  check('FreeCAD file for the test written', fc.status === 0, fc.stderr.slice(-300));
+  await ev(() => window.__t.openFile('inputs/clamp.FCStd'));
+  f = await fv();
+  let clampBox = null, clampBuild = '';
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(cacheRoot, f.key, 'model.map.json'), 'utf8'));
+    clampBox = m.parts[0].bbox;
+    clampBuild = m.build;
+  } catch { /* check fails */ }
+  check('FreeCAD file in the viewer: part "Clamp", banner "FreeCAD file"', await names() === '["Clamp"]' && (f.banner ?? '').includes('FreeCAD file'), `${await names()} ${f.banner} ${(await ev(() => window.__t.toast())).text}`);
+  check('FreeCAD file: placement of the App::Part applied (x 100 to 120)', !!clampBox && Math.abs(clampBox[0][0] - 100) < 0.01 && Math.abs(clampBox[1][0] - 120) < 0.01, JSON.stringify(clampBox));
+  const fcMeasure = await ev(([k, b]) => window.soma.measure.prepare({ file: 'inputs/clamp.FCStd', key: k }, b), [f.key, clampBuild]).catch((e) => ({ ok: false, error: String(e) }));
+  check('FreeCAD file: can be measured (CAD geometry)', fcMeasure?.ok === true, JSON.stringify(fcMeasure).slice(0, 160));
   await domClick('btn-file-back');
   await waitFor('Modell wieder da', () => JSON.stringify(window.__t.treeNames()) === '["Platte","Block","Stift"]', 30000).catch(() => {});
 
