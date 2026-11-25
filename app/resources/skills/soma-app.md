@@ -29,7 +29,7 @@ builds it and shows it in 3D. You check the result, point at things, and ask for
 1. **Model menu**: new model, new from CadQuery script, open, recent models, save as. Next to it: whether the model is saved.
 2. **Build status**: "Built" when the model is up to date, "Build failed" if the code has an error. Click for details. With "Auto on" the model is rebuilt whenever the code changes.
 3. **Columns**: show or hide the sidebar, the code and the agent (Ctrl 1, Ctrl 2, Ctrl 3).
-4. **Import**: add files such as STEP models, images or sketches to `inputs/`, where the agent can use them. Dragging files or folders into the window does the same.
+4. **Import**: add files such as STEP models, images or sketches to `inputs/`, where the agent can use them. Dragging files or folders into the window does the same. A `.soma` file can become a component instead (see Components).
 5. **Export**: write parts as STL, STEP and other formats.
 6. **Save**: saves the model as a .soma file and adds a version to the history (Ctrl S).
 7. **Sidebar**: parameters, files, analysis, animation, skills, help and settings.
@@ -161,7 +161,9 @@ SOMA AI can look things up on the internet, for example a part to buy with its S
 search of your provider (ChatGPT, OpenAI, Anthropic and Google Gemini have one; with an API key the provider may charge
 for each search) and reads web pages and downloads files into the model folder, usually `inputs/`. Before it opens a
 website it asks you. Shops that need a sign-in, refuse programs or only work in a browser it cannot read: then it gives
-you the link, and you download the file yourself and drag it into SOMA.
+you the link, and you download the file yourself and drag it into SOMA. Free CAD models of common parts (bearings, motors,
+profiles, Adafruit boards) it can take from open libraries; it notes where they came from and their license in
+`NOTES.md`.
 
 ## Viewer
 
@@ -182,6 +184,35 @@ only when the change takes the model out of the picture, or when the model becom
 
 Click selects a part, Ctrl+click adds more. Right-click a part for isolate, hide, transparent, zoom, code and agent.
 Keys: H hides, Shift H shows all, I isolates, T makes transparent, Esc clears the selection.
+
+## Components
+
+A component is another SOMA model inside this one, for example a drawer you designed on its own, used three times in a
+workbench. Click **Import** (or drag the `.soma` file into the window) and choose:
+
+- **Linked**: stays connected to the original file. When the original is saved with changes, the structure tree says
+  "the original has changed" with an **Update** button, and the component shows a yellow "Update" mark.
+- **Copy**: independent of the original. You or the agent can change it in this model.
+- **Add file to inputs/**: just the file, as before.
+
+SOMA copies the model into `components/` and adds it at the end of `model.py`. Ask the agent to place it, to use it
+several times or to change its parameters ("three drawers, 120 mm high, stacked under the top"). In the structure tree
+a chain marks a linked component, a copy symbol a copy. Right-click the group, or a part of the component in the
+viewer, for Update, Open the original, Unlink
+(make it an independent copy) and its files. If the original was moved or the model is on another computer, the
+component keeps working and the menu has **Find the original …** to connect it again. A model folder (a folder
+opened with "Open folder") can be imported as a component like a `.soma` file. The agent can do the same with
+`soma component add`, `list`, `update`, `relink` and `remove`.
+
+**Open the original** opens the model the component came from in a second SOMA window, this one stays as it is.
+Change the original there and click Save: back in this window, the structure tree offers the update. A model can be
+open in one window at a time. A model meant to be used as a component can name the
+points where it attaches ("anchors"), so the agent can put it in place by name, for example the back of a drawer onto
+a slot of a cabinet.
+
+A component that was changed in this model is only updated after asking. The replaced copy is kept in
+`.soma/component-backups/`. If the original is not found (moved, or on another computer), the component keeps working
+with its copy.
 
 ## Tools
 
@@ -274,7 +305,14 @@ The viewer shows that it is loading, **Cancel** or Esc stops it. Versions the ag
 open at once.
 
 A model is a single `.soma` file with code, results and the whole history. The first Save asks where to put it,
-after that Ctrl S saves to the same file. Copy or send the file like any other document.
+after that Ctrl S saves to the same file. Copy or send the file like any other document. Double-clicking a `.soma`
+file opens it in a SOMA window of its own (after installing with the installer; the portable ZIP on Windows does not
+register it). A model can be open in one window at a time.
+
+SOMA works on a copy of the model on this computer and writes it into the file when you save. If the file is in a
+shared folder and someone saves it on another computer, SOMA notices: opening the model from Recent compares it with
+the file and asks which version to open, and Save asks before replacing the other version (Replace keeps it as a
+backup, Save as writes yours into a new file).
 
 ## Export
 
