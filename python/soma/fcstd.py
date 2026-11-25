@@ -9,7 +9,9 @@ Which objects become parts (what FreeCAD shows in its 3D view):
 - visible objects with a shape. A PartDesign::Body stands for its features: the features (also the visible Tip, which
   carries the same shape as the body) are never parts of their own.
 - objects that other objects use as input (booleans, extrusions, arrays, the base of a body) are left out, even when
-  visible, because they are already contained in the result. Sketches, datum and origin objects never count.
+  visible, because they are already contained in the result. Only if that result is shown: inputs of a hidden result
+  stay, and drawings, CAM jobs or FEM analyses that refer to a body never hide it. Sketches, datum and origin objects
+  never count.
 - App::Part and App::DocumentObjectGroup become groups. A hidden App::Part hides everything in it (as in FreeCAD).
 - App::Link: links within the file are resolved with the link's placement. Links into other files are reported.
 
@@ -21,11 +23,13 @@ NEMA_17_with_connector.FCStd from the FreeCAD library: Body001 (Placement z 9.6)
 with the container placement does it sit on the motor's rear plate. This module therefore applies the container
 placements itself, and the shapes it returns are in global coordinates.
 """
+import lzma
 import os
 import struct
 import sys
 import tempfile
 import zipfile
+import zlib
 import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass, field
@@ -35,6 +39,15 @@ import cadquery as cq
 
 EXTS = (".fcstd",)
 MAX_DEPTH = 32  # nesting of containers and links, deeper means a cycle in a broken file
+# Unpacked sizes from the ZIP directory (zipfile never returns more than that): a damaged file or a zip bomb would
+# otherwise fill the memory. Real files stay far below: the XML of big assemblies has a few MB
+MAX_XML = 200 * 2**20       # Document.xml, GuiDocument.xml
+MAX_SHAPES = 2 * 2**30      # all shape files of the objects together
+MAX_SIDE = 64 * 2**20       # a color or material list
+# What reading a damaged member can raise: broken deflate data (zlib.error), a cut-off member (EOFError), an unknown
+# compression method (NotImplementedError), an encrypted member (RuntimeError), a size that does not fit in memory
+_ZIP_ERRORS = (zipfile.BadZipFile, OSError, RuntimeError, EOFError, NotImplementedError, MemoryError, ValueError,
+               zlib.error, lzma.LZMAError)
 
 # Never parts: 2D, construction and annotation objects. Their shapes (if any) are helpers, not bodies
 _SKIP_TYPES = ("Sketcher::", "App::Origin", "App::Line", "App::Plane", "App::Point", "App::Placement",
@@ -49,6 +62,29 @@ _CONSUMING = {"Base", "Tool", "Shapes", "Source", "BaseFeature", "Profile", "Sec
 
 class FcstdError(ValueError):
     """The file cannot be imported at all, with a message for the user."""
+
+
+class _TooLarge(Exception):
+    pass
+
+
+def _read_member(zf, member, limit):
+    """Bytes of a ZIP member, _TooLarge if it unpacks to more than limit. KeyError if it is missing."""
+    info = zf.getinfo(member)
+    if info.file_size > limit:
+        raise _TooLarge(info.file_size)
+    return zf.read(info)
+
+
+def _mb(n):
+    return f"{n / 2**20:,.0f} MB"
+
+
+def _zip_why(e):
+    """Reason for a member that cannot be unpacked. zlib calls its exception just "error"."""
+    if isinstance(e, zlib.error):
+        return f"damaged compressed data: {e}"
+    return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
 
 
 @dataclass
@@ -167,11 +203,14 @@ def _location(p):
 
 def _parse_xml(zf, member, what):
     try:
-        return ET.fromstring(zf.read(member))
+        return ET.fromstring(_read_member(zf, member, MAX_XML))
     except KeyError:
         return None
-    except (ET.ParseError, zipfile.BadZipFile, OSError, RuntimeError) as e:  # RuntimeError: encrypted member
-        raise FcstdError(f"The {what} in the FreeCAD file is damaged ({e}).") from None
+    except _TooLarge as e:
+        raise FcstdError(f"The {what} in the FreeCAD file ({member}) would unpack to {_mb(e.args[0])}, more than the "
+                         f"{_mb(MAX_XML)} a real FreeCAD file has: the file is damaged or not a FreeCAD file.") from None
+    except (ET.ParseError, *_ZIP_ERRORS) as e:
+        raise FcstdError(f"The {what} in the FreeCAD file is damaged ({member}: {_zip_why(e)}).") from None
 
 
 # ---- Shapes --------------------------------------------------------------------------------------------------------
@@ -214,11 +253,13 @@ def _read_shape(zf, member, tmpdir):
     from OCP.BRepTools import BRepTools
     from OCP.TopoDS import TopoDS_Shape
     try:
-        data = zf.read(member)
+        data = _read_member(zf, member, MAX_SHAPES)
     except KeyError:
         return None, f"its shape file {member} is missing in the FCStd file"
-    except (zipfile.BadZipFile, OSError, RuntimeError) as e:  # RuntimeError: encrypted member
-        return None, f"its shape file {member} cannot be unpacked ({e})"
+    except _TooLarge as e:
+        return None, f"its shape file {member} would unpack to {_mb(e.args[0])}, too large"
+    except _ZIP_ERRORS as e:
+        return None, f"its shape file {member} cannot be unpacked ({_zip_why(e)})"
     if not data.strip():
         return None, ""
     path = Path(tmpdir) / ("shape.bin" if b"Open CASCADE Topology" in data[:200] else "shape.brp")
@@ -263,12 +304,12 @@ def _unpack(v):
 
 def _color_list(zf, member):
     try:
-        b = zf.read(member)
+        b = _read_member(zf, member, MAX_SIDE)
         n = struct.unpack("<I", b[:4])[0]
         if n == 0 or len(b) < 4 + 4 * n:
             return []
         return list(struct.unpack(f"<{n}I", b[4:4 + 4 * n]))
-    except (KeyError, struct.error, zipfile.BadZipFile, OSError):
+    except (KeyError, struct.error, _TooLarge, *_ZIP_ERRORS):  # colors only: a damaged list leaves the default
         return []
 
 
@@ -276,7 +317,7 @@ def _material_list(zf, el):
     """ShapeAppearance of FreeCAD 1.0 and later (App::PropertyMaterialList): [(diffuse packed, transparency 0..1)].
     Per entry four packed colors (ambient, diffuse, specular, emissive), shininess and transparency as float."""
     try:
-        b = zf.read(el.get("file"))
+        b = _read_member(zf, el.get("file"), MAX_SIDE)
         pos = 0
         if el.get("version") not in ("2", "3"):  # older layout: an int32 version first if negative, else the count
             first = struct.unpack("<i", b[:4])[0]
@@ -288,7 +329,7 @@ def _material_list(zf, el):
             _, diffuse, _, _, _, transp = struct.unpack("<4I2f", b[pos + 24 * i:pos + 24 * (i + 1)])
             out.append((diffuse, transp))
         return out
-    except (KeyError, TypeError, struct.error, zipfile.BadZipFile, OSError):
+    except (KeyError, TypeError, struct.error, _TooLarge, *_ZIP_ERRORS):
         return []
 
 
@@ -381,18 +422,67 @@ class _Reader:
             for c in (o.children if o.is_container else []) + o.links("ElementList"):
                 if c in self.objs and c != n:
                     self.parent.setdefault(c, n)
-        # Who uses whom as input: those inputs are inside the result already
+        # Who uses whom as input: those inputs are inside the result already. All consumers, not only the first: an
+        # input is left out only if one of them really shows it (see consumer())
         self.used_by = {}
         for n, o in self.objs.items():
+            # Drawings, CAM jobs, FEM analyses, measurements, spreadsheets refer to a body but never show it
+            if o.type.startswith(_SKIP_TYPES):
+                continue
             clone = "Clone" in ((o.prop("Proxy").find("Python").get("class") or "") if o.prop("Proxy") is not None
                                 and o.prop("Proxy").find("Python") is not None else "")
-            for pname in _CONSUMING:
+            for pname in sorted(_CONSUMING):
                 if pname == "Objects" and clone:  # a Draft clone leaves its original visible
                     continue
                 for t in o.links(pname):
-                    if t in self.objs and t != n:
-                        self.used_by.setdefault(t, n)
+                    if t in self.objs and t != n and n not in self.used_by.setdefault(t, []):
+                        self.used_by[t].append(n)
+        # Targets of links within the file: a hidden object shown through a link is shown all the same
+        self.link_targets = {}
+        for n, o in self.objs.items():
+            if o.is_link:
+                for t in o.links("LinkedObject"):
+                    self.link_targets.setdefault(t, []).append(n)
+        self._counts = {}
         self.taken_shapes = {}
+
+    def shown(self, name, seen=frozenset()):
+        """Does FreeCAD show the object: visible and not inside a hidden App::Part, or shown through a visible link.
+        A feature inside a body counts as shown when the body is (the body shows the result of its features)."""
+        if name in seen or len(seen) > MAX_DEPTH or name not in self.objs:
+            return False
+        seen = seen | {name}
+        if any(self.shown(lk, seen) for lk in self.link_targets.get(name, ())):
+            return True
+        if not self.visible.get(name, True) and not (self.parent.get(name) in self.objs
+                                                      and self.objs[self.parent[name]].is_body):
+            return False
+        p = self.parent.get(name)
+        while p is not None and p in self.objs and p not in seen:
+            po = self.objs[p]
+            if po.is_body:  # the body decides, its features are hidden apart from the Tip
+                return self.shown(p, seen)
+            if po.is_container and po.shape_file is None and "Placement" in po.props and not self.visible.get(p, True):
+                return False  # a hidden App::Part hides everything in it, a plain group does not
+            seen = seen | {p}
+            p = self.parent.get(p)
+        return True
+
+    def consumer(self, name, seen=frozenset()):
+        """The consumer that contains this object in a shown result, or None. A consumer counts if it is shown itself
+        or if it is in turn used by such a consumer (A in a hidden Cut, the Cut in a visible Fusion)."""
+        if name in self._counts:
+            return self._counts[name]
+        found = None
+        for c in self.used_by.get(name, ()):
+            if c in seen or len(seen) > MAX_DEPTH:
+                continue
+            if self.shown(c) or self.consumer(c, seen | {name}) is not None:
+                found = c
+                break
+        if not seen:  # only the complete answer is kept, one inside a cycle may lack a branch
+            self._counts[name] = found
+        return found
 
     def label(self, name):
         o = self.objs.get(name)
@@ -410,6 +500,18 @@ class _Reader:
         for n, o in self.objs.items():
             if n not in self.parent:
                 self.walk(n, cq.Location(), (), None, None, False, 0)
+        # Containers that contain each other (a broken file) have no top: nothing above would ever reach them
+        cyclic = set()
+        for n in self.objs:
+            seen, p = {n}, self.parent.get(n)
+            while p is not None and p not in seen:
+                seen.add(p)
+                p = self.parent.get(p)
+            if p is not None and p == n:
+                cyclic.add(n)
+        if cyclic:
+            self.warn("Containers contain each other in a cycle (the file is damaged), their content is not imported: "
+                      + ", ".join(f"'{self.label(n)}'" for n in sorted(cyclic)) + ".")
 
     def walk(self, name, loc, groups, replace, rename, forced, depth):
         """Collects the parts of one object. loc: placement of the containers around it. replace: a link without
@@ -420,9 +522,15 @@ class _Reader:
         if depth > MAX_DEPTH:
             self.warn(f"'{label}': containers or links nested too deeply (a cycle?), not imported.")
             return
-        if o.type.startswith(_SKIP_TYPES):
-            return
         visible = forced or self.visible.get(name, True)
+        if o.type.startswith(_SKIP_TYPES):
+            if visible and o.type.startswith(("Mesh::", "Points::")):
+                self.note(f"'{label}' is a {'mesh' if o.type.startswith('Mesh::') else 'point cloud'} ({o.type}), "
+                          "not imported: only solids and surfaces come along. In FreeCAD, Part > Create shape from "
+                          "mesh and Part > Convert to solid turn a mesh into a solid.")
+            elif visible and o.type.startswith("Sketcher::"):
+                self.note(f"'{label}' is a sketch ({o.type}), not imported: sketches are 2D construction geometry.")
+            return
         if o.is_link:
             if visible:
                 self.link(o, loc, groups, replace, rename, depth)
@@ -436,15 +544,17 @@ class _Reader:
                 if not visible:
                     return
                 loc = loc * (replace if replace is not None else _location(o.prop("Placement")))
+            elif replace is not None:  # a plain group has no placement of its own: the link's moves all inside
+                loc = loc * replace
             for c in o.children:
                 if c in self.objs and self.parent.get(c) == name:
                     self.walk(c, loc, groups + (label,), None, None, False, depth + 1)
             return
         if not visible or o.shape_file is None:
             return
-        if not forced and name in self.used_by:
-            self.note(f"'{o.label}' is visible but used by '{self.label(self.used_by[name])}', left out "
-                      "(it is part of that result).")
+        user = None if forced else self.consumer(name)
+        if user is not None:
+            self.note(f"'{o.label}' is visible but used by '{self.label(user)}', left out (it is part of that result).")
             return
         shape = self.shape(o)
         if shape is None:
@@ -538,15 +648,32 @@ def read(path):
         except FcstdError as e:  # colors and visibility only: go on without them
             gui, warn_gui = None, str(e)
         r = _Reader(zf, doc, gui, tmp)
+        # A zip bomb in the shape files: refuse up front instead of filling the memory part by part
+        total = 0
+        for member in {o.shape_file for o in r.objs.values() if o.shape_file}:
+            try:
+                total += zf.getinfo(member).file_size
+            except KeyError:
+                pass  # reported for the object that needs it
+        if total > MAX_SHAPES:
+            raise FcstdError(f"The shape files in the FreeCAD file would unpack to {_mb(total)}, more than "
+                             f"{_mb(MAX_SHAPES)}: the file is damaged or too large to import.")
         if warn_gui:
-            r.warn(f"{warn_gui} Visibility and colors are unknown, all objects count as visible.")
+            # Newer FreeCAD versions also store the visibility in Document.xml, the reader falls back to it
+            known = any(o.prop("Visibility") is not None for o in r.objs.values())
+            r.warn(f"{warn_gui} Colors are unknown, "
+                   + ("visibility comes from Document.xml." if known else "all objects count as visible (hidden "
+                      "construction bodies may show up as parts)."))
         r.run()
         res = r.res
     if not res.parts:
-        details = " ".join(res.warnings)
+        # Say why: what could not be imported first, then what was left out on purpose (meshes, sketches, inputs)
+        reasons = res.warnings + res.notes
+        details = " ".join(reasons[:5]) + (f" (and {len(reasons) - 5} more)" if len(reasons) > 5 else "")
         raise FcstdError("The FreeCAD file contains no usable geometry"
                          + (f": {details}" if details else " (no visible solid or surface objects).")
-                         + ("" if details else " Check in FreeCAD that the bodies are visible and recomputed, then save again."))
+                         + ("" if reasons else " Check in FreeCAD that the bodies are visible and recomputed, "
+                            "then save again."))
     return res
 
 
@@ -629,6 +756,9 @@ def write_step(res, out, name):
     tmp = out.with_name(f".{out.stem}.tmp-{os.getpid()}.step")
     try:
         build.step_assembly(parts, name).export(str(tmp))
+        if not tmp.is_file():  # OCCT can fail without an exception and write nothing
+            raise FcstdError(f"The STEP export wrote no file (in {out.parent.as_posix()}). Check that the folder is "
+                             "writable and the parts are valid solids.")
         os.replace(tmp, out)
     finally:
         if tmp.exists():

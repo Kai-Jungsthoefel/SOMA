@@ -191,19 +191,21 @@ def cmd_glb(args):
     """STEP -> GLB im Basismodus (Vorschau alter Staende, fremde Dateien). Netzdateien (STL, 3MF, AMF, OBJ) ueber
     meshview, ohne Geometrie zum Messen."""
     from . import meshview, preview
+    warnings = []
     try:
         if Path(args.step).suffix.lower() in meshview.MESH_EXTS:
             parts, _ = meshview.mesh_to_glb(args.step, args.out, args.name)
         else:
-            parts = preview.step_to_glb(args.step, args.out, args.name)
+            parts, warnings = preview.step_to_glb(args.step, args.out, args.name)
     except meshview.MeshFileError as e:
         print(f"Conversion failed: {e}", file=sys.stderr)
         return 1
     except Exception as e:
         print(f"Conversion failed: {type(e).__name__}: {e}", file=sys.stderr)
         return 1
-    print(json.dumps(dict(status="ok", parts=[p["name"] for p in parts]), ensure_ascii=False) if args.json
-          else f"{len(parts)} part(s) to {args.out}")
+    # warnings: what a FreeCAD file could not bring along (also in model.map.json as notes)
+    print(json.dumps(dict(status="ok", parts=[p["name"] for p in parts], warnings=warnings), ensure_ascii=False)
+          if args.json else f"{len(parts)} part(s) to {args.out}")
     return 0
 
 
@@ -348,29 +350,28 @@ def cmd_fcstd(args):
     from . import fcstd
     src = Path(args.file)
     out = None
+
+    def error(msg, code=1):
+        if args.json:
+            print(json.dumps(dict(status="error", error=msg), ensure_ascii=False))
+            return code
+        return _fail(msg, code)
     if args.action == "convert":
         out = Path(args.out) if args.out else src.with_suffix(".step")
         if out.suffix.lower() not in (".step", ".stp"):
-            return _fail(f"--out must be a .step or .stp file, not {out.name}", 2)
+            return error(f"--out must be a .step or .stp file, not {out.name}", 2)
         # Never overwrite silently: an existing file only with --overwrite
         if out.exists() and not args.overwrite:
-            return _fail(f"{out.as_posix()} already exists. Choose another file with --out, or pass --overwrite to replace it.")
+            return error(f"{out.as_posix()} already exists. Choose another file with --out, or pass --overwrite to replace it.")
     try:
         res = fcstd.read(src)
         if out is not None:
             out.parent.mkdir(parents=True, exist_ok=True)
             fcstd.write_step(res, out, src.stem)
     except fcstd.FcstdError as e:
-        if args.json:
-            print(json.dumps(dict(status="error", error=str(e)), ensure_ascii=False))
-            return 1
-        return _fail(f"{src.name}: {e}")
+        return error(str(e) if args.json else f"{src.name}: {e}")
     except Exception as e:  # noqa: BLE001  Export or OCP: explain instead of a traceback
-        msg = f"{'Conversion' if out else 'Reading'} failed: {type(e).__name__}: {e}"
-        if args.json:
-            print(json.dumps(dict(status="error", error=msg), ensure_ascii=False))
-            return 1
-        return _fail(msg)
+        return error(f"{'Conversion' if out else 'Reading'} failed: {type(e).__name__}: {e}")
     if args.json:
         parts = []
         for p in res.parts:

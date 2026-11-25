@@ -30,10 +30,14 @@ def step_to_glb(step_path, out_dir, name=None):
     if not step_path.is_file():
         raise FileNotFoundError(f"STEP file not found: {step_path}")
     out.mkdir(parents=True, exist_ok=True)
+    warnings = []
     if fcstd.is_fcstd(step_path):  # FreeCAD file from the project: its visible geometry, like import_assembly()
         assy, res = fcstd.read_assembly(step_path)
-        for w in res.warnings:
-            print("Warning:", w, file=sys.stderr)  # stdout may carry JSON (soma glb --json)
+        # Into model.map.json ("notes", which the viewer shows for a file) and so also into the cached preview.
+        # stderr only for someone calling soma glb by hand: stdout may carry JSON (soma glb --json)
+        warnings = list(res.warnings)
+        for w in warnings:
+            print("Warning:", w, file=sys.stderr)
     else:
         assy = stepimport.read_assembly(step_path, name)
     items = []
@@ -63,6 +67,9 @@ def step_to_glb(step_path, out_dir, name=None):
         glb_parts.append(dict(meta=dict(partId=pid, name=name, role="basic", group=groups[i], solid=bool(shape.Solids())),
                               mesh=done[i]["mesh"], color=rgba))
     mesher.write_glb(out / "model.glb", glb_parts)
-    (out / "model.map.json").write_text(json.dumps(dict(version=0, build=build_id, parts=map_parts), indent=1, ensure_ascii=False), encoding="utf-8")
+    info = dict(version=0, build=build_id, parts=map_parts)
+    if warnings:
+        info["notes"] = warnings
+    (out / "model.map.json").write_text(json.dumps(info, indent=1, ensure_ascii=False), encoding="utf-8")
     measure.remove_old_geometry(out, build_id)
-    return map_parts
+    return map_parts, warnings

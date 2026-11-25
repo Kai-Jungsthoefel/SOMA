@@ -3,7 +3,8 @@
 // cover a group, a boolean with its inputs, a PartDesign body with a visible tip in an App::Part with a placement, hidden
 // objects and a hidden App::Part, links within the file (with and without LinkTransform) and to another file, broken,
 // empty and missing shape files, a binary BREP, a non-ASCII label, wire and datum objects, a file without
-// GuiDocument.xml and files that cannot be imported. Then `soma fcstd info|convert`, import_assembly()/import_step() in
+// GuiDocument.xml and files that cannot be imported. Also consumers that do not hide their inputs (drawing, CAM job,
+// hidden boolean), a link to a plain group, damaged ZIP members and a zip bomb. Then `soma fcstd info|convert`, import_assembly()/import_step() in
 // `soma build`, and `soma glb` for the viewer. Python only. Run: node test/fcstd.mjs
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -142,6 +143,63 @@ write("nogeo.FCStd", [
     O("Broken", "Part::Feature", "Broken", pl(), b"garbage"),
 ])
 (out / "notzip.FCStd").write_text("hello")
+
+# Consumers that do not show their inputs: a drawing view and a CAM job refer to a body, a hidden Cut uses two boxes.
+# A hidden Cut2 inside a visible Fusion: its inputs are in the Fusion, so they stay out
+write("consumers.FCStd", [
+    O("Bracket", "Part::Box", "Bracket", pl(), brep(box(10, 10, 10))),
+    O("View", "TechDraw::DrawViewPart", "View", links("Source", ["Bracket"])),
+    O("Job", "Path::FeaturePython", "Job", link("Base", "Bracket")),
+    O("A", "Part::Box", "A", pl(), brep(box(1, 1, 1))),
+    O("B", "Part::Box", "B", pl(), brep(box(1, 1, 1))),
+    O("Cut", "Part::Cut", "Cut", pl() + link("Base", "A") + link("Tool", "B"), brep(box(1, 1, 1)), vis=False),
+    O("C", "Part::Box", "C", pl(), brep(box(2, 2, 2))),
+    O("D", "Part::Box", "D", pl(), brep(box(2, 2, 2))),
+    O("Cut2", "Part::Cut", "Cut2", pl() + link("Base", "C") + link("Tool", "D"), brep(box(2, 2, 2)), vis=False),
+    O("Fusion", "Part::MultiFuse", "Fusion", pl() + links("Shapes", ["Cut2"]), brep(box(2, 2, 2))),
+])
+# A link (without LinkTransform) to a plain group, which has no placement: the link's placement moves its content
+write("linkgroup.FCStd", [
+    O("Grp", "App::DocumentObjectGroup", "Grp", links("Group", ["Box"]), vis=False),
+    O("Box", "Part::Box", "Box", pl(), brep(box(10, 10, 10))),
+    O("Link", "App::Link", "Lnk", pl(0, 50, 0) + xlink("Grp") + boolp("LinkTransform", False)),
+])
+write("meshonly.FCStd", [O("Mesh", "Mesh::Feature", "Scan")])
+
+# Damaged ZIP members: deflate data of one member garbled
+import zlib
+def deflated(name, members):
+    with zipfile.ZipFile(out / name, "w", zipfile.ZIP_DEFLATED) as z:
+        for k, v in members.items():
+            z.writestr(k, v)
+
+def garble(name, member):
+    f = out / name
+    with zipfile.ZipFile(f) as z:
+        info = z.getinfo(member)
+    b = bytearray(f.read_bytes())
+    start = info.header_offset + 30 + len(member.encode()) + len(info.extra)
+    for k in range(start + 2, start + min(info.compress_size - 2, 40)):
+        b[k] ^= 0x5A
+    f.write_bytes(bytes(b))
+
+def simple_doc(objs, extra=""):
+    return ('<?xml version="1.0" encoding="utf-8"?><Document SchemaVersion="4" ProgramVersion="0.21.2" FileVersion="1"><Objects>'
+            + "".join(f'<Object type="Part::Box" name="{n}"/>' for n in objs) + '</Objects><ObjectData>'
+            + "".join(f'<Object name="{n}"><Properties>{label(n)}<Property name="Shape" type="Part::PropertyPartShape"><Part file="{n}.brp"/></Property></Properties></Object>' for n in objs)
+            + '</ObjectData></Document>' + extra)
+
+big_gui = ('<Document SchemaVersion="1"><ViewProviderData>' + "".join(f'<ViewProvider name="V{i}"><Properties></Properties></ViewProvider>' for i in range(200))
+           + '</ViewProviderData></Document>')
+cube = brep(box(3, 3, 3))
+deflated("badshape.FCStd", {"Document.xml": simple_doc(["Good", "Bad"]), "Good.brp": cube, "Bad.brp": cube})
+garble("badshape.FCStd", "Bad.brp")
+deflated("badgui.FCStd", {"Document.xml": simple_doc(["Good"]), "GuiDocument.xml": big_gui, "Good.brp": cube})
+garble("badgui.FCStd", "GuiDocument.xml")
+deflated("baddoc.FCStd", {"Document.xml": simple_doc(["Good"] * 1) + " " * 4000, "Good.brp": cube})
+garble("baddoc.FCStd", "Document.xml")
+# Zip bomb: a Document.xml that unpacks to more than 200 MB (a few hundred KB packed)
+deflated("xmlbomb.FCStd", {"Document.xml": simple_doc(["Good"], " " * (201 * 2**20)), "Good.brp": cube})
 print("ok")
 `;
 
@@ -204,6 +262,40 @@ for f, want in (("nogeo.FCStd", "The FreeCAD file contains no usable geometry: '
         out(f"{f}: error", False, "no error")
     except fcstd.FcstdError as e:
         out(f"{f}: clear error", want in str(e), str(e))
+
+cs = fcstd.read(d / "consumers.FCStd")
+cn = sorted(p.name for p in cs.parts)
+out("Drawing view and CAM job do not hide the body they refer to", "Bracket" in cn, cn)
+out("Inputs of a hidden Cut stay, inputs of a hidden Cut inside a visible Fusion do not", cn == ["A", "B", "Bracket", "Fusion"], cn)
+lg = fcstd.read(d / "linkgroup.FCStd")
+lb = {p.group: box(p) for p in lg.parts}
+out("Link without LinkTransform to a plain group: link placement applied", lb.get(("Lnk",)) == [0, 50, 0, 10, 60, 10] and lb.get(("Grp",)) == [0, 0, 0, 10, 10, 10], lb)
+bs = fcstd.read(d / "badshape.FCStd")
+out("Damaged shape member: warning naming the object, the rest imported", [p.name for p in bs.parts] == ["Good"]
+    and any(w.startswith("'Bad' not imported: its shape file Bad.brp cannot be unpacked") for w in bs.warnings), bs.warnings)
+bg = fcstd.read(d / "badgui.FCStd")
+out("Damaged GuiDocument.xml: parts imported, warning about colors and visibility", [p.name for p in bg.parts] == ["Good"]
+    and any("view data in the FreeCAD file is damaged" in w and "all objects count as visible" in w for w in bg.warnings), bg.warnings)
+for f, want in (("baddoc.FCStd", "The document in the FreeCAD file is damaged (Document.xml: damaged compressed data"),
+                ("xmlbomb.FCStd", "would unpack to 201 MB, more than the 200 MB"),
+                ("meshonly.FCStd", "contains no usable geometry: 'Scan' is a mesh (Mesh::Feature), not imported"),
+                ("nogeo.FCStd", "'Sketch' is a sketch")):
+    try:
+        fcstd.read(d / f)
+        out(f"{f}: error", False, "no error")
+    except fcstd.FcstdError as e:
+        out(f"{f}: clear error", want in str(e), str(e))
+    except Exception as e:  # noqa: BLE001
+        out(f"{f}: clear error", False, f"{type(e).__name__}: {e}")
+old = fcstd.MAX_SHAPES
+fcstd.MAX_SHAPES = 100  # the real limit (2 GB) would need a 2 GB test file
+try:
+    fcstd.read(d / "badshape.FCStd")
+    out("Shape files over the limit: error", False, "no error")
+except fcstd.FcstdError as e:
+    out("Shape files over the limit: clear error", "shape files in the FreeCAD file would unpack to" in str(e), str(e))
+finally:
+    fcstd.MAX_SHAPES = old
 `;
 
 try {
@@ -213,7 +305,7 @@ try {
   const r = py(['-c', CHECKS, work]);
   const lines = r.stdout.split(/\r?\n/).filter((l) => l.startsWith('['));
   for (const l of lines) { const [label, ok, detail] = JSON.parse(l); check(label, ok, ok ? '' : detail); }
-  check('Checks ran to the end', r.status === 0 && lines.length >= 25, `${lines.length} checks, ${r.stderr.slice(-400)}`);
+  check('Checks ran to the end', r.status === 0 && lines.length >= 36,`${lines.length} checks, ${r.stderr.slice(-400)}`);
 
   // CLI: info as JSON (the OCCT message about the broken BREP must not end up in stdout), convert, no silent overwrite
   const parts = path.join(work, 'parts.FCStd');
@@ -234,6 +326,11 @@ try {
   check('--overwrite replaces it', over.status === 0 && /written: /.test(over.stdout), (over.stdout + over.stderr).slice(-300));
   const wrongExt = soma(['fcstd', 'convert', parts, '--out', path.join(work, 'x.stl')]);
   check('--out must be STEP', wrongExt.status === 2 && /must be a \.step or \.stp file/.test(wrongExt.stderr), wrongExt.stderr.slice(-200));
+  const jsonOf = (r) => { try { return JSON.parse(r.stdout); } catch { return null; } };
+  const againJ = soma(['fcstd', 'convert', parts, '--json']);
+  check('--json: existing STEP file as status error JSON', againJ.status === 1 && jsonOf(againJ)?.status === 'error' && /already exists/.test(jsonOf(againJ)?.error), (againJ.stdout + againJ.stderr).slice(-300));
+  const wrongJ = soma(['fcstd', 'convert', parts, '--out', path.join(work, 'x.stl'), '--json']);
+  check('--json: --out must be STEP as status error JSON', wrongJ.status === 2 && jsonOf(wrongJ)?.status === 'error' && /must be a \.step/.test(jsonOf(wrongJ)?.error), (wrongJ.stdout + wrongJ.stderr).slice(-300));
   const bad = soma(['fcstd', 'convert', path.join(work, 'nogeo.FCStd')]);
   check('No geometry: error, no file written', bad.status === 1 && /^nogeo\.FCStd: The FreeCAD file contains no usable geometry/.test(bad.stderr) && !fs.existsSync(path.join(work, 'nogeo.step')), bad.stderr.slice(-300));
   const back = py(['-c', String.raw`
@@ -273,11 +370,15 @@ print(json.dumps(dict(leaves=leaves, plate=[round(c, 2) for c in colors.get("Pla
 
   // Viewer: soma glb converts an FCStd from the project like a STEP file
   const glbDir = path.join(work, 'glb');
-  const glb = soma(['glb', parts, '--out', glbDir, '--name', 'parts']);
+  const glb = soma(['glb', parts, '--out', glbDir, '--name', 'parts', '--json']);
   let gm = null;
   try { gm = JSON.parse(fs.readFileSync(path.join(glbDir, 'model.map.json'), 'utf8')); } catch { /* checked below */ }
   check('soma glb with an FCStd: six parts with groups for the viewer', glb.status === 0 && gm?.parts?.length === 6 && fs.existsSync(path.join(glbDir, 'model.glb'))
     && gm.parts.some((p) => p.name === 'Plate' && p.group === 'Group A'), (glb.stdout + glb.stderr).slice(-300));
+  // The viewer toasts the notes of model.map.json, also for a cached preview
+  const gj = jsonOf(glb);
+  check('soma glb with an FCStd: the four warnings in the JSON result and as notes in model.map.json', gj?.warnings?.length === 4 && gm?.notes?.length === 4
+    && gm.notes.some((n) => n.startsWith("'Broken' not imported")), (glb.stdout + JSON.stringify(gm?.notes)).slice(-400));
   const glbBad = soma(['glb', path.join(work, 'nogeo.FCStd'), '--out', path.join(work, 'glb-bad')]);
   check('soma glb with an FCStd without geometry: clear error', glbBad.status === 1 && /contains no usable geometry/.test(glbBad.stderr), glbBad.stderr.slice(-300));
 } catch (e) {
