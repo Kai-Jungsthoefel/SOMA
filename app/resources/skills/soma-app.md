@@ -150,9 +150,10 @@ the computer and says so if not.
 SOMA AI works in the model's folder with your permissions on this computer. There it reads, writes and runs commands
 without asking, and every step is saved in the History. It asks you first, in plain words, before it works with files
 outside the model, opens a website, downloads something or installs software: **Allow**, **Allow until I close the model**
-(for a website: **Allow this site until I close the model**) or **Don't allow**. It never goes back in the History
-and never reads sign-ins or keys. SOMA stops commands that are known to be dangerous, but it cannot catch everything: only give it files from sources you trust. What you type and the files
-it reads go to the provider you signed in with.
+(for a website: **Allow this site …**, for a parts library: **Allow this library …**) or **Don't allow**. It never goes
+back in the History and never reads sign-ins or keys. SOMA stops commands that are known to be dangerous, but it cannot
+catch everything: only give it files from sources you trust. What you type and the files it reads go to the provider
+you signed in with.
 
 Settings > SOMA AI shows the sign-ins, the model and its effort, voice input, what the conversation of the open model
 used (tokens, and the cost with an API key) and the note about the risks again.
@@ -188,31 +189,26 @@ Keys: H hides, Shift H shows all, I isolates, T makes transparent, Esc clears th
 ## Components
 
 A component is another SOMA model inside this one, for example a drawer you designed on its own, used three times in a
-workbench. Click **Import** (or drag the `.soma` file into the window) and choose:
+workbench. Click **Import** (or drag the `.soma` file or a model folder into the window) and choose:
 
-- **Linked**: stays connected to the original file. When the original is saved with changes, the structure tree says
-  "the original has changed" with an **Update** button, and the component shows a yellow "Update" mark.
+- **Linked**: stays connected to the original. When the original is saved with changes, the structure tree says
+  "the original has changed" with an **Update** button, and the component gets a yellow mark.
 - **Copy**: independent of the original. You or the agent can change it in this model.
 - **Add file to inputs/**: just the file, as before.
 
-SOMA copies the model into `components/` and adds it at the end of `model.py`. Ask the agent to place it, to use it
-several times or to change its parameters ("three drawers, 120 mm high, stacked under the top"). In the structure tree
-a chain marks a linked component, a copy symbol a copy. Right-click the group, or a part of the component in the
-viewer, for Update, Open the original, Unlink
-(make it an independent copy) and its files. If the original was moved or the model is on another computer, the
-component keeps working and the menu has **Find the original …** to connect it again. A model folder (a folder
-opened with "Open folder") can be imported as a component like a `.soma` file. The agent can do the same with
-`soma component add`, `list`, `update`, `relink` and `remove`.
+SOMA copies the model into `components/` and, when the model's script uses `add_part`, adds it at the end. Ask the
+agent to place it, to use it several times or to change its parameters ("three drawers, 120 mm high, stacked under the
+top"). A model meant to be used as a component can name the points where it attaches ("anchors"), so the agent can put
+it in place by name, for example the back of a drawer onto a slot of a cabinet.
 
-**Open the original** opens the model the component came from in a second SOMA window, this one stays as it is.
-Change the original there and click Save: back in this window, the structure tree offers the update. A model can be
-open in one window at a time. A model meant to be used as a component can name the
-points where it attaches ("anchors"), so the agent can put it in place by name, for example the back of a drawer onto
-a slot of a cabinet.
+In the structure tree a chain marks a linked component, a copy symbol a copy. Right-click the group, or a part of the
+component in the viewer, for Update, Open the original, Unlink (make it an independent copy) and its files.
+**Open the original** opens it in a second SOMA window, this one stays as it is: change the original there and click
+Save, and back here the structure tree offers the update. A model can be open in one window at a time.
 
-A component that was changed in this model is only updated after asking. The replaced copy is kept in
-`.soma/component-backups/`. If the original is not found (moved, or on another computer), the component keeps working
-with its copy.
+If the original was moved or the model is on another computer, the component keeps working with its copy, and the menu
+has **Find the original …** to connect it again. A component that was changed in this model is only updated after
+asking; the replaced copy is kept in `.soma/component-backups/`.
 
 ## Tools
 
@@ -310,8 +306,8 @@ open at once.
 
 A model is a single `.soma` file with code, results and the whole history. The first Save asks where to put it,
 after that Ctrl S saves to the same file. Copy or send the file like any other document. Double-clicking a `.soma`
-file opens it in a SOMA window of its own (after installing with the installer; the portable ZIP on Windows does not
-register it). A model can be open in one window at a time.
+file opens it in a SOMA window of its own (after installing with the installer on Windows or macOS; the portable ZIP on
+Windows and the Linux packages do not register it). A model can be open in one window at a time.
 
 SOMA works on a copy of the model on this computer and writes it into the file when you save. If the file is in a
 shared folder and someone saves it on another computer, SOMA notices: opening the model from Recent compares it with
