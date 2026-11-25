@@ -1,8 +1,12 @@
+import type { ModelComponent } from '../shared/types';
 import { icon } from './icons';
 import { el } from './ui';
 
-/** `group`: Pfad der Gruppe mit „/“, z. B. „Gehäuse/Schrauben“, oder null. */
-export interface PartRow { id: string; name: string; role: string; color: string; group: string | null }
+/**
+ * `group`: Pfad der Gruppe mit „/“, z. B. „Gehäuse/Schrauben“, oder null. `component`: the part belongs to an instance of
+ * this component (folder name in components/), whose group is `componentGroup`.
+ */
+export interface PartRow { id: string; name: string; role: string; color: string; group: string | null; component?: string | null; componentGroup?: string | null }
 
 /** Klick auf einen Namen: allein auswählen, mit Strg dazu oder heraus, mit Shift den Bereich bis hierher (`ids`). */
 export type TreeSelect = { how: 'replace' | 'toggle'; id: string } | { how: 'range'; id: string; ids: string[] };
@@ -15,13 +19,15 @@ interface Hooks {
   isGhost(id: string): boolean;
   showAll(): void;
   context(id: string, x: number, y: number): void;
-  groupContext(ids: string[], name: string, x: number, y: number): void;
+  groupContext(ids: string[], name: string, x: number, y: number, comp: ModelComponent | null): void;
+  /** Update linked components from their original (null: all out of date). */
+  updateComponents(name: string | null): void;
   /** Auf- oder zugeklappt: Die Werkzeuge oben in der Mitte rücken zur Seite oder zeigen nur Symbole. */
   resized(): void;
 }
 
 /** Gruppe im Baum. `items` in der Reihenfolge, in der sie im Modell zuerst vorkommen (Gruppen und Teile gemischt). */
-interface GroupNode { key: string; name: string; items: ({ group: GroupNode } | { part: PartRow })[] }
+interface GroupNode { key: string; name: string; items: ({ group: GroupNode } | { part: PartRow })[]; component?: string }
 
 /** Schlüssel der Gruppe der Referenzen (E34). Sie steht am Ende. */
 const REFS = 'ref';
@@ -53,7 +59,11 @@ export class StructureTree {
    * (bei großen Baugruppen sähe man sonst alles auf einmal).
    */
   private expanded = new Set<string>();
+  /** Components of the model by folder name (components/<folder>), with their state. */
+  private comps = new Map<string, ModelComponent>();
   private readonly head = el('div', { className: 'tr-hd' });
+  /** Note about linked components whose original changed or is missing, also when the tree is collapsed. */
+  private readonly note = el('div', { className: 'tr-note', hidden: true });
   private readonly search = el('div', { className: 'tr-search', hidden: true });
   private readonly input = el('input', { type: 'search', placeholder: 'Search part', ariaLabel: 'Search part', spellcheck: false });
   private readonly hits = el('span', { className: 'tr-hits' });
@@ -66,7 +76,7 @@ export class StructureTree {
     this.search.append(icon('search', 14, 1.9), this.input, this.hits, clear);
     this.input.addEventListener('input', () => { this.filter = this.input.value.trim().toLowerCase(); this.render(); });
     this.input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.setSearching(false); } });
-    root.replaceChildren(this.head, this.search, this.rowsEl, this.foot);
+    root.replaceChildren(this.head, this.note, this.search, this.rowsEl, this.foot);
     window.addEventListener('pointerup', () => { this.painting = null; });
     window.addEventListener('pointercancel', () => { this.painting = null; });
     this.render();
@@ -77,6 +87,12 @@ export class StructureTree {
 
   /** Hinweis statt Liste, z. B. während des ersten Builds. */
   message(text: string): void { this.placeholder = text; this.parts = []; this.render(); }
+
+  /** Components with their state (api.components.list). */
+  setComponents(list: ModelComponent[]): void {
+    this.comps = new Map(list.map((c) => [c.folder.replace(/^components\//, ''), c]));
+    this.render();
+  }
 
   set(parts: PartRow[], selected: string[]): void { this.parts = parts; this.selected = new Set(selected); this.placeholder = ''; this.render(); }
 
@@ -124,6 +140,7 @@ export class StructureTree {
     const hidden = shown.filter((p) => !this.hooks.isVisible(p.id)).length;
     this.root.classList.toggle('open', this.open);
     this.renderHead(shown.length, hidden);
+    this.renderNote();
     this.rowsEl.hidden = !this.open;
     this.foot.hidden = !this.open || !hidden;
     if (!this.open) return;
@@ -163,13 +180,39 @@ export class StructureTree {
     this.head.replaceChildren(...kids);
   }
 
+  /** Linked components that need attention: the original changed, or it is not found. */
+  private renderNote(): void {
+    const linked = [...this.comps.values()].filter((c) => c.mode === 'link');
+    const outdated = linked.filter((c) => c.state === 'outdated');
+    const missing = linked.filter((c) => c.state === 'missing');
+    this.note.hidden = !outdated.length && !missing.length;
+    if (this.note.hidden) { this.note.replaceChildren(); return; }
+    const kids: HTMLElement[] = [];
+    if (outdated.length) {
+      const names = outdated.map((c) => c.name).join(', ');
+      const upd = el('button', { className: 'tr-upd', textContent: outdated.length > 1 ? 'Update all' : 'Update', title: 'Copy the current state of the original into this model' });
+      upd.addEventListener('click', () => this.hooks.updateComponents(null));
+      kids.push(el('div', { className: 'tr-note-row warn' }, icon('alert', 13, 2),
+        el('span', { textContent: outdated.length > 1 ? `${outdated.length} components out of date: ${names}` : `${names}: the original has changed`, title: outdated.map((c) => c.source ?? '').join('\n') }), upd));
+    }
+    for (const c of missing) {
+      kids.push(el('div', { className: 'tr-note-row miss' }, icon('link', 13, 2),
+        el('span', { textContent: `${c.name}: original not found`, title: `${c.message ?? ''}\nThe component keeps working with its copy.`.trim() })));
+    }
+    this.note.replaceChildren(...kids);
+  }
+
   private static build(key: string, parts: PartRow[]): GroupNode {
     const root: GroupNode = { key, name: '', items: [] };
     for (const p of parts) {
       let node = root;
+      const segs: string[] = [];
       for (const seg of (p.group ?? '').split('/').filter(Boolean)) {
+        segs.push(seg);
         let next = node.items.find((x): x is { group: GroupNode } => 'group' in x && x.group.name === seg)?.group;
         if (!next) { next = { key: `${node.key}/${seg}`, name: seg, items: [] }; node.items.push({ group: next }); }
+        // The group of an instance of a component
+        if (p.component && p.componentGroup === segs.join('/')) next.component = p.component;
         node = next;
       }
       node.items.push({ part: p });
@@ -219,13 +262,15 @@ export class StructureTree {
     chev.addEventListener('click', toggle);
     const name = el('button', { className: 'nm', textContent: g.name, title: open ? 'Collapse group' : 'Expand group' });
     name.addEventListener('click', toggle);
+    const comp = g.component ? this.comps.get(g.component) ?? null : null;
     const row = el('div', { className: 'tr-row gr' + (anyVisible ? '' : ' off') + (holdsSel ? ' sel' : '') }, StructureTree.branches(anc, last, false), chev,
       this.eyeButton(`group ${g.name}`, g.key, anyVisible, (hide) => this.hooks.setVisible(ids, !hide)),
       this.ghostButton(`group ${g.name}`, g.key, ghosts === ids.length, ghosts > 0 && ghosts < ids.length, (on) => this.hooks.setGhost(ids, on)),
-      name, el('span', { className: 'cnt', textContent: String(ids.length) }));
+      name, g.component ? this.componentChip(g.component, comp) : null, el('span', { className: 'cnt', textContent: String(ids.length) }));
     row.setAttribute('role', 'treeitem');
     row.dataset.group = g.key;
-    row.addEventListener('contextmenu', (e) => { e.preventDefault(); this.hooks.groupContext(ids, g.name, e.clientX, e.clientY); });
+    if (g.component) row.dataset.component = g.component;
+    row.addEventListener('contextmenu', (e) => { e.preventDefault(); this.hooks.groupContext(ids, g.name, e.clientX, e.clientY, comp); });
     return row;
   }
 
@@ -241,6 +286,23 @@ export class StructureTree {
     row.dataset.id = p.id;
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); this.hooks.context(p.id, e.clientX, e.clientY); });
     return row;
+  }
+
+  /**
+   * Mark of a component instance: chain for linked, copy symbol for an independent copy. Yellow when the original has
+   * changed (click: update), dimmed when it is not found.
+   */
+  private componentChip(folder: string, c: ModelComponent | null): HTMLElement {
+    const link = c?.mode === 'link';
+    const state = c?.state ?? 'copy';
+    const what = !c ? `Component (${folder})`
+      : { copy: 'Independent copy of another model', current: 'Linked to another model, up to date', outdated: 'Linked, the original has changed: click to update', missing: 'Linked, the original is not found' }[state]
+        + (c.source ? `\n${c.source}` : '') + (c.changed ? '\nChanged in this model' : '');
+    const chip = el('button', { className: `tr-comp ${state}`, title: what, ariaLabel: what }, icon(link ? 'link' : 'copy', 12, 2),
+      state === 'outdated' ? el('span', { textContent: 'Update' }) : null);
+    chip.tabIndex = state === 'outdated' ? 0 : -1;
+    chip.addEventListener('click', (e) => { e.stopPropagation(); if (state === 'outdated' && c) this.hooks.updateComponents(c.name); });
+    return chip;
   }
 
   /** Klick auf einen Namen: Strg schaltet das Teil in der Auswahl um, Shift wählt die sichtbaren Teile vom letzten Klick bis hier. */
@@ -305,11 +367,12 @@ export class StructureTree {
   state() {
     return {
       open: this.open, searching: this.searching, title: this.title, names: this.names(),
-      head: this.head.textContent, hits: this.hits.textContent, foot: this.foot.hidden ? '' : this.foot.textContent,
+      head: this.head.textContent, note: this.note.hidden ? '' : this.note.textContent, hits: this.hits.textContent, foot: this.foot.hidden ? '' : this.foot.textContent,
       rows: [...this.rowsEl.querySelectorAll<HTMLElement>('.tr-row')].map((r) => ({
         name: r.querySelector('.nm')?.textContent ?? '', group: r.classList.contains('gr'), depth: r.querySelectorAll('.br i').length - (r.classList.contains('gr') ? 1 : 2),
         hidden: r.classList.contains('off'), ghost: !!r.querySelector('.gh.on'), partly: !!r.querySelector('.gh.partly'), sel: r.classList.contains('sel'),
-        count: r.querySelector('.cnt')?.textContent ?? null,
+        count: r.querySelector('.cnt')?.textContent ?? null, component: r.dataset.component ?? null,
+        compState: r.querySelector('.tr-comp')?.classList[1] ?? null,
       })),
     };
   }

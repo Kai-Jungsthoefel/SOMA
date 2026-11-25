@@ -19,7 +19,7 @@ interface VertexEntry { id: number; p: number[] }
  * `solid`: geschlossener Körper (fehlt bei älteren Builds, gilt dann als geschlossen). Nur dann füllt der Schnitt die Schnittfläche.
  * `axis`: nur bei Normteilen, Richtung aus dem Material heraus. Daran zieht die Explosionsansicht sie heraus.
  */
-interface PartMeta { partId: string; name: string; role: string; group?: string | null; solid?: boolean; axis?: number[]; faces: FaceEntry[]; edges?: EdgeEntry[]; vertices?: VertexEntry[] }
+interface PartMeta { partId: string; name: string; role: string; group?: string | null; component?: string; componentGroup?: string; solid?: boolean; axis?: number[]; faces: FaceEntry[]; edges?: EdgeEntry[]; vertices?: VertexEntry[] }
 interface PartEntry {
   group: THREE.Object3D; meta: PartMeta; meshes: THREE.Mesh[]; lines: THREE.LineSegments[];
   /** Lage des Knotens laut GLB (Einbaulage) und die Verschiebung der Explosionsansicht davon weg. */
@@ -406,9 +406,10 @@ export class Viewer {
 
   // ---- Sichtbarkeit und Darstellung -----------------------------------------------------------------------------
 
-  partList(): { id: string; name: string; role: string; color: string; group: string | null }[] {
+  partList(): { id: string; name: string; role: string; color: string; group: string | null; component: string | null; componentGroup: string | null }[] {
     return [...this.parts.values()].map((p) => ({
       id: p.meta.partId, name: p.meta.name, role: p.meta.role, group: p.meta.group ?? null,
+      component: p.meta.component ?? null, componentGroup: p.meta.componentGroup ?? null,
       color: p.meshes[0] ? '#' + (p.meshes[0].material as THREE.MeshStandardMaterial).color.getHexString() : '#888',
     }));
   }

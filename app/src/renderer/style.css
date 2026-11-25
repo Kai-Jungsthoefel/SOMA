@@ -521,6 +521,20 @@ code { font-family:var(--mono); font-size:.95em; }
 .tr-row.off .nm { color:var(--tx3); }
 .tr-row.sel .nm { color:var(--acc-tx); font-weight:500; }
 .tr-hint { padding:4px 8px; color:var(--tx2); }
+/* Components (other models inside this one): chain = linked, copy symbol = independent copy. Yellow: the original has
+   changed, a click updates. Dimmed: the original is not found */
+.tr-row .tr-comp { display:flex; align-items:center; gap:3px; height:18px; margin-left:6px; padding:0 4px; border-radius:4px; color:var(--tx2); flex-shrink:0; font-size:11.5px; }
+.tr-row .tr-comp.outdated { color:var(--warn); box-shadow:inset 0 0 0 1px rgba(232,197,71,.5); cursor:pointer; text-shadow:none; background:rgba(10,11,13,.55); }
+.tr-row .tr-comp.outdated:hover { background:rgba(232,197,71,.18); }
+.tr-row .tr-comp.missing { color:var(--tx3); }
+.tr-note { display:flex; flex-direction:column; gap:2px; flex-shrink:0; margin:0 0 4px; }
+.tr-note-row { display:flex; align-items:center; gap:6px; min-height:26px; padding:0 3px 0 8px; border-radius:6px; font-size:12px; background:rgba(10,11,13,.72); text-shadow:none; }
+.tr-note-row svg.ic { filter:none; flex-shrink:0; }
+.tr-note-row span { overflow:hidden; text-overflow:ellipsis; max-width:260px; }
+.tr-note-row.warn { color:var(--warn); box-shadow:inset 0 0 0 1px rgba(232,197,71,.45); }
+.tr-note-row.miss { color:var(--tx2); box-shadow:inset 0 0 0 1px var(--line2); }
+.tr-upd { margin-left:auto; height:22px; padding:0 9px; border-radius:5px; color:var(--bg); background:var(--warn); font-weight:500; flex-shrink:0; }
+.tr-upd:hover { filter:brightness(1.1); }
 .tr-ft { display:flex; align-items:center; gap:6px; height:26px; flex-shrink:0; padding:0 4px; font-size:12px; color:var(--tx2); }
 .tr-ft button { margin-left:auto; height:22px; padding:0 8px; border-radius:5px; color:var(--acc-tx); }
 .tr-ft button:hover { background:rgba(255,255,255,.09); }

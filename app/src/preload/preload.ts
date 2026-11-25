@@ -66,6 +66,13 @@ const api: SomaApi = {
     },
   },
   dxf: { view: (rel, known) => ipcRenderer.invoke('dxf:view', rel, known ?? null) },
+  components: {
+    list: () => ipcRenderer.invoke('components:list'),
+    update: (name) => ipcRenderer.invoke('components:update', name),
+    unlink: (name) => ipcRenderer.invoke('components:unlink', name),
+    openOriginal: (name) => ipcRenderer.invoke('components:openOriginal', name),
+    relink: (name) => ipcRenderer.invoke('components:relink', name),
+  },
   term: {
     create: (opts) => ipcRenderer.invoke('term:create', opts),
     write: (id, data) => ipcRenderer.send('term:write', id, data),

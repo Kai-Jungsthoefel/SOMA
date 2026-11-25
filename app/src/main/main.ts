@@ -8,6 +8,7 @@ import { bridgeEnv, startBridge, stopBridge } from './bridge';
 import { stopWarm, warmUp } from './build';
 import { choose, chooseInputFiles, chooseSkillFiles, setDialogHost, setTestAnswers, trashItem, type ChooseOptions } from './dialogs';
 import { viewDxf } from './dxf';
+import { componentSource, insertModel, isModelFolder, listOrError, relinkComponent, unlinkComponent, updateComponents } from './components';
 import { backupText, createEntry, entryPath, importInputs, listFiles, renameEntry, resolveInside, saveFeedbackImage, trashEntry, writeProjectText } from './files';
 import { ProjectController } from './projects';
 import { terminalEnv } from './terminals';
@@ -21,7 +22,7 @@ import { areaDir, clearPreviews, isStorageArea, storageStats } from './storage';
 import { checkLibraryText, createLibrarySkill, importLibrarySkills, libraryState, ownFile, readLibrarySkill, removeLibrarySkill, renameOldSkillFiles, saveLibrarySkill } from './skilllibrary';
 import { isSkillId, isSkillMode, librarySkill } from './skills';
 import { fileOpBlockReason } from '../shared/editable';
-import type { AiResult, AiStatus, FileOpResult, LibraryResult, OpenResult, StorageClear } from '../shared/types';
+import type { AiResult, AiStatus, FileOpResult, ImportResult, LibraryResult, OpenResult, StorageClear } from '../shared/types';
 import { piEntry, setCatalogRefresh } from './somaai';
 import { allowMicrophone, fakeMicrophone, micAccess, Voice } from './voice';
 import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, saveApiKey, setDefaultEffort, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
@@ -203,11 +204,41 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('build:exportAssembly', () => ctl.exportModel('step', null, undefined, true));
 
   ipcMain.handle('fs:list', () => listFiles(dir()));
-  ipcMain.handle('fs:import', (_e, paths: string[]) => importInputs(dir(), Array.isArray(paths) ? paths.map(String) : []));
+  /**
+   * Import: .soma files can become components (other models inside this one), the app asks for each. Everything else
+   * goes to inputs/ as before.
+   */
+  const importWithModels = async (root: string, paths: string[]): Promise<ImportResult> => {
+    const models = paths.filter((p) => (/\.soma$/i.test(p) && fs.statSync(p, { throwIfNoEntry: false })?.isFile()) || isModelFolder(p));
+    const files = paths.filter((p) => !models.includes(p));
+    const inserted: NonNullable<ImportResult['inserted']> = [];
+    const errors: string[] = [];
+    const ownZip = (await ctl.saveState().catch(() => null))?.zipPath ?? null;
+    for (const m of models) {
+      const r = await insertModel(win, root, m, ownZip);
+      if (r === 'inputs') files.push(m);
+      else if (r && !r.ok) errors.push(`${path.basename(m)}: ${r.error}`);
+      else if (r?.component) inserted.push({ name: r.component.name, mode: r.component.mode, placed: r.placed ?? null });
+    }
+    const res: ImportResult = files.length ? await importInputs(root, files) : { files: [], errors: [] };
+    return { ...res, errors: [...res.errors, ...errors], inserted };
+  };
+  ipcMain.handle('fs:import', (_e, paths: string[]) => importWithModels(dir(), Array.isArray(paths) ? paths.map(String) : []));
   ipcMain.handle('fs:importPick', async () => {
     const root = dir();
     const files = await chooseInputFiles(win);
-    return files.length ? importInputs(root, files) : null;
+    return files.length ? importWithModels(root, files) : null;
+  });
+  ipcMain.handle('components:list', () => listOrError(dir()));
+  ipcMain.handle('components:relink', (_e, name: unknown) => relinkComponent(win, dir(), String(name ?? '')));
+  ipcMain.handle('components:update', (_e, name: unknown) => updateComponents(win, dir(), typeof name === 'string' ? name : null));
+  ipcMain.handle('components:unlink', (_e, name: unknown) => unlinkComponent(win, dir(), String(name ?? '')));
+  // In a SOMA window of its own: the work here goes on, and the Update note shows when the original was saved there
+  ipcMain.handle('components:openOriginal', async (_e, name: unknown): Promise<OpenResult> => {
+    const src = await componentSource(dir(), String(name ?? ''));
+    if ('error' in src) return { cancelled: false, error: src.error };
+    openInNewWindow(src.path);
+    return { cancelled: false, opened: true };
   });
   ipcMain.handle('fs:create', (_e, parent: string, name: string, isDir: boolean) => createEntry(dir(), String(parent ?? ''), String(name ?? ''), !!isDir));
   ipcMain.handle('fs:rename', (_e, rel: string, name: string) => renameEntry(dir(), String(rel ?? ''), String(name ?? '')));

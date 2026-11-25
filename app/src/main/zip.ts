@@ -23,7 +23,7 @@ const SKIP_FILES = new Set(['.soma/model.glb', '.soma/model.map.json', '.soma/bu
  * soma render entstehen aus dem Code neu (E75, beim Hotwire 41 % der ZIP). Die Bilder der Anleitung kopiert die App beim
  * Öffnen ins Projekt (E83).
  */
-const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/env', '.soma/help', 'renders']);
+const SKIP_PATHS = new Set(['.soma/geometry', '.soma/anim', '.soma/env', '.soma/help', '.soma/component-backups', 'renders']);
 /**
  * Folders of which only these files are packed. The drawings index (E97) is what the "Drawings" view lists and links to
  * the model. Without it the view was empty after opening the file, although the PDFs in output/drawings were there.

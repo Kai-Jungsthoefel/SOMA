@@ -1,6 +1,6 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, KNOWN_AGENTS, openTabTitle, type OpenPrefs, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
-import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, MeshExportOptions, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
+import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, ModelComponent, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, MeshExportOptions, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
@@ -476,6 +476,12 @@ function reportImport(r: ImportResult): void {
   showPanel('files');
   const lines: string[] = [];
   if (r.files.length) lines.push(`Added to inputs/: ${r.files.map((f) => f.replace(/^inputs\//, '')).join(', ')}`, 'The agent can now use them in the script.');
+  // .soma files inserted as components: they show up in the tree once the model has built
+  for (const c of r.inserted ?? []) {
+    lines.push(`Inserted “${c.name}” as a ${c.mode === 'link' ? 'linked component' : 'copy'}.`
+      + (c.placed ? ` It was added at the end of ${c.placed}. Ask the agent to place it.` : ' Ask the agent to place it in the model.'));
+  }
+  if (r.inserted?.length) void refreshComponents();
   // Ein Ordner voller Verknüpfungen soll die Meldung nicht über den Bildschirm ziehen
   const shown = r.errors.slice(0, 8);
   if (r.errors.length > shown.length) shown.push(`… and ${r.errors.length - shown.length} more`);
@@ -498,7 +504,8 @@ const tree = new StructureTree($('tree'), {
   isGhost: (id) => viewer.isGhosted(id),
   showAll: () => { viewer.showAll(); resultTool.forgetProbe(); },
   context: (id, x, y) => openPartMenu(id, x, y),
-  groupContext: (ids, name, x, y) => openGroupMenu(ids, name, x, y),
+  groupContext: (ids, name, x, y, comp) => openGroupMenu(ids, name, x, y, comp),
+  updateComponents: (name) => void updateComponents(name),
   resized: () => fitDock(),
 });
 
@@ -956,13 +963,35 @@ function openPartMenu(id: string, x: number, y: number): void {
     menuItem('Show code', { icon: 'code', disabled: !e?.file, onClick: () => { selectPart(id, null); if (e?.file && e.line) void openCode(e.file, { ...lineRange(e), label: e.name, color: partInfo(id)?.color }); } }),
     menuItem('Send to agent', { icon: 'send', onClick: () => { selectPart(id, null); insertToAgent(selectionText()); } }),
     menuItem('Export …', { icon: 'export', onClick: () => { selectPart(id, null); exportScope = 'sel'; openExportMenu(); } }),
+    // A part of a component (in the viewer as in the tree): what can be done with the component
+    ...componentItems(componentOf(partInfo(id)?.component ?? null), true),
   ];
   m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
   menus.at(m, x, y);
 }
 
+/** The component (state from api.components.list) a part belongs to, by its folder name in the model map. */
+function componentOf(slug: string | null): ModelComponent | null {
+  return slug ? components.find((c) => c.folder === `components/${slug}`) ?? null : null;
+}
+
+/** Menu entries for a component: its state, update, open or find the original, unlink, its files. */
+function componentItems(comp: ModelComponent | null, named = false): (HTMLElement | null)[] {
+  if (!comp) return [];
+  return [
+    el('div', { className: 'msep' }),
+    el('div', { className: 'mh', textContent: named ? `Component “${comp.name}” · ${componentLabel(comp)}` : componentLabel(comp) }),
+    comp.mode === 'link' && comp.state !== 'missing'
+      ? menuItem(comp.state === 'outdated' ? 'Update from the original' : 'Up to date with the original', { icon: 'refresh', disabled: comp.state !== 'outdated', onClick: () => void updateComponents(comp.name) }) : null,
+    comp.source && comp.state !== 'missing' ? menuItem('Open the original', { icon: 'openext', onClick: () => void openOriginal(comp.name) }) : null,
+    comp.state === 'missing' ? menuItem('Find the original …', { icon: 'search', onClick: () => void relinkComponent(comp.name) }) : null,
+    comp.mode === 'link' ? menuItem('Unlink (independent copy)', { icon: 'copy', onClick: () => void unlinkComponent(comp.name) }) : null,
+    menuItem('Show its files', { icon: 'folder', onClick: () => { showPanel('files'); void openCode(`${comp.folder}/${comp.entry}`); } }),
+  ];
+}
+
 /** Rechtsklick auf eine Gruppe: dasselbe für alle ihre Teile. */
-function openGroupMenu(ids: string[], name: string, x: number, y: number): void {
+function openGroupMenu(ids: string[], name: string, x: number, y: number, comp: ModelComponent | null = null): void {
   const anyVisible = ids.some((id) => viewer.isVisible(id));
   const allGhost = ids.every((id) => viewer.isGhosted(id));
   const m = $('menu-ctx');
@@ -973,9 +1002,70 @@ function openGroupMenu(ids: string[], name: string, x: number, y: number): void 
     menuItem(anyVisible ? 'Hide' : 'Show', { icon: anyVisible ? 'eyeoff' : 'eye', onClick: () => { viewer.setVisible(ids, !anyVisible); refreshTree(); } }),
     menuItem(allGhost ? 'Not transparent' : 'Transparent', { icon: 'ghost', onClick: () => { viewer.setGhosted(ids, !allGhost); refreshTree(); } }),
     menuItem('Zoom to group', { icon: 'fit', onClick: () => viewer.setView('fit', ids) }),
+    // Instance of a component: its state and what can be done with it
+    ...componentItems(comp),
   ];
   m.replaceChildren(...items.filter((x): x is HTMLElement => !!x));
   menus.at(m, x, y);
+}
+
+// ---- Components (other models inside this one, discussion #21) ----------------------------------------------------
+
+/** State of a component in a few words, for menus and tooltips. */
+function componentLabel(c: ModelComponent): string {
+  const state = { copy: 'Independent copy', current: 'Linked, up to date', outdated: 'Linked, the original has changed', missing: 'Linked, original not found' }[c.state];
+  return `${state}${c.changed ? ' · changed here' : ''}`;
+}
+
+let componentsBusy: Promise<void> | null = null;
+let componentsError = '';
+/** Asks the main process for the components and their state (reads the originals, takes a moment). */
+function refreshComponents(): Promise<void> {
+  if (!project) return Promise.resolve();
+  const asked = project.id;
+  componentsBusy ??= api.components.list().then((r) => {
+    if (project?.id !== asked) return; // another model was opened meanwhile: its own check follows
+    components = r.components;
+    tree.setComponents(r.components);
+    // Said once per new reason, not at every check
+    if (r.error && r.error !== componentsError) toast(`The components could not be checked: ${r.error}`, 'error');
+    componentsError = r.error ?? '';
+  }).catch(() => { /* stays as it was */ }).finally(() => { componentsBusy = null; });
+  return componentsBusy;
+}
+let components: ModelComponent[] = [];
+
+async function updateComponents(name: string | null): Promise<void> {
+  const r = await api.components.update(name);
+  if (r.canceled) return;
+  if (!r.ok) { toast(r.error ?? 'The component could not be updated.', 'error'); await refreshComponents(); return; }
+  const n = r.updated ?? [];
+  toast(n.length ? `Updated from the original: ${n.join(', ')}. The model builds again.` : 'All components are up to date.', 'ok');
+  await refreshComponents();
+}
+
+/** The original of a component was not found: the user picks it, the component is linked to it again. */
+async function relinkComponent(name: string): Promise<void> {
+  const r = await api.components.relink(name);
+  if (r.canceled) return;
+  if (!r.ok) { toast(r.error ?? 'The component could not be linked.', 'error'); return; }
+  toast(r.component?.state === 'outdated' ? `“${name}” is linked again. The original has changed since: Update brings it in.` : `“${name}” is linked again.`, 'ok');
+  await refreshComponents();
+}
+
+/** Opens the original of a component in a SOMA window of its own. Saved there, the Update note shows here. */
+async function openOriginal(name: string): Promise<void> {
+  const r = await api.components.openOriginal(name);
+  if (r.error) toast(r.error, 'error');
+  else toast(`The original of “${name}” opens in a new window. Save it there, then Update here.`, 'ok');
+}
+
+async function unlinkComponent(name: string): Promise<void> {
+  const r = await api.components.unlink(name);
+  if (r.canceled) return;
+  if (!r.ok) { toast(r.error ?? 'The component could not be unlinked.', 'error'); return; }
+  toast(`“${name}” is now an independent copy.`, 'ok');
+  await refreshComponents();
 }
 
 /** Rechtsklick auf mehrere ausgewählte Teile: Isolieren, Ausblenden, Transparent für alle. */
@@ -1228,6 +1318,9 @@ async function onProject(p: ProjectInfo): Promise<void> {
   if (tour.active && p.id !== tourProject) tour.stop(false, false);
   loadSeq++; // laufende Ladevorgänge des vorherigen Projekts verwerfen
   map = null;
+  components = [];
+  tree.setComponents([]);
+  void refreshComponents();
   lastOkAt = null;
   textCache.clear();
   markup.close();
@@ -2103,7 +2196,7 @@ api.build.onStatus((s) => {
   if (s.state === 'building' && buildStatus.state !== 'building') buildStarts++;
   renderBuild(s);
   paramsPanel.setBuild(s);
-  if (s.state === 'ok' && !s.stale) { void loadModel(); void refreshFiles(); void refreshViewLists(); }
+  if (s.state === 'ok' && !s.stale) { void loadModel(); void refreshFiles(); void refreshViewLists(); void refreshComponents(); }
   // Nach jedem Build (auch einem gescheiterten): Liste und Werte neu, der Build kennt die Parameter des Codes
   if (panel === 'params' && s.state !== 'building') void paramsPanel.refresh();
 });
@@ -2131,6 +2224,9 @@ api.render.onNotice((n) => {
 // Ergebnisse von soma analyze melden sich nicht von selbst (.soma/results/ beobachtet niemand): ab und zu nachsehen
 setInterval(() => { if (project && !document.hidden) void refreshViewLists(); }, 10000);
 window.addEventListener('focus', () => scheduleViewLists());
+// Back from another window (maybe the original of a component was saved there): is everything still up to date?
+let componentsChecked = 0;
+window.addEventListener('focus', () => { if (components.length && Date.now() - componentsChecked > 3000) { componentsChecked = Date.now(); void refreshComponents(); } });
 api.project.onSaveState((st) => renderSaveState(st));
 // Das Projekt kommt ausschließlich über das Ereignis (Startseite, Menü, im Testmodus öffnet es der Hauptprozess beim Start). Ein zweiter Weg würde alles doppelt aufbauen.
 
@@ -2272,6 +2368,12 @@ if (api.testMode) {
     treeOpen: (on: boolean) => tree.setOpen(on),
     picked: () => picked.map(partName),
     treeExpandAll: () => tree.expandAll(),
+    components: () => components,
+    unlinkComponent: (name: string) => unlinkComponent(name),
+    openOriginal: (name: string) => openOriginal(name),
+    /** Right-click on a part, as in the viewer (viewer.onContext). */
+    partMenu: (id: string) => openPartMenu(id, 200, 200),
+    relinkComponent: (name: string) => relinkComponent(name),
     termText: (id: number) => terminals.text(id),
     /** The tabs of the agent area in their order: name, in front, hidden (SOMA AI closed), and the id of a terminal. */
     agentTabs: () => [...document.querySelectorAll<HTMLElement>('#term-tabs .tab')].map((t) => ({

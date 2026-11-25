@@ -6,6 +6,7 @@ __pycache__/
 *.pyc
 
 # Viewer cache and app-internal files (regenerated)
+.soma/component-backups/
 .soma/model.glb
 .soma/model.map.json
 .soma/build.json

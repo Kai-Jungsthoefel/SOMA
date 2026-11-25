@@ -34,7 +34,7 @@
       <button id="btn-lay-code" aria-pressed="false" title="Show or hide the code (Ctrl 2)" aria-label="Code"><i data-icon="code" data-size="16" data-stroke="1.9"></i></button>
       <button id="btn-lay-agent" aria-pressed="true" title="Expand or collapse the agent (Ctrl 3). Collapsed, it keeps running." aria-label="Agent"><i data-icon="panel" data-size="17" data-stroke="1.7"></i></button>
     </div>
-    <button id="btn-import" class="btn" title="Add files to inputs/ (STEP, images, drawings …). The agent can then use them. Dragging files or folders into the window does the same."><i data-icon="import" data-size="15"></i>Import</button>
+    <button id="btn-import" class="btn" title="Add files to inputs/ (STEP, images, drawings …). The agent can then use them. A SOMA model (.soma file or model folder) can come in as a component instead. Dragging files or folders into the window does the same."><i data-icon="import" data-size="15"></i>Import</button>
     <button id="btn-export" class="btn" aria-haspopup="menu" aria-expanded="false"><i data-icon="export" data-size="15"></i>Export<i data-icon="down" data-size="13" data-stroke="2"></i></button>
     <button id="btn-save" class="btn primary" title="Add a snapshot to the history and write the .soma file">Save <span class="kbd">Ctrl S</span></button>
   </header>
@@ -76,7 +76,7 @@
           <button class="ibtn s side-close" aria-label="Close files"><i data-icon="x" data-size="15" data-stroke="2"></i></button></div>
         <label class="ftree-search"><i data-icon="search" data-size="13" data-stroke="2"></i><input id="files-filter" type="search" placeholder="Search files" spellcheck="false" autocomplete="off" aria-label="Search files by name"></label>
         <div id="tab-files" class="ftree"></div>
-        <div id="dropzone" class="dropzone" title="STEP files, images and sketches go to inputs/. Existing files are not overwritten."><i data-icon="upload" data-size="16"></i><span><b>Drop here:</b> goes to <code>inputs/</code></span></div>
+        <div id="dropzone" class="dropzone" title="STEP files, images and sketches go to inputs/. Existing files are not overwritten. A SOMA model (.soma file or model folder) can become a component instead."><i data-icon="upload" data-size="16"></i><span><b>Drop here:</b> goes to <code>inputs/</code>, a SOMA model can become a component</span></div>
       </section>
       <!-- Analysis (E82): Liste aller Ergebnisse und der ruhige Bericht zum gezeigten (analysispanel.ts) -->
       <section id="panel-analysis" class="panel cx" aria-label="Analyses" hidden>

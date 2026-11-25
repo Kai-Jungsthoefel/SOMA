@@ -400,7 +400,7 @@ export function newestSourceMtime(dir: string): number {
       else try { newest = Math.max(newest, fs.statSync(p).mtimeMs); } catch { /* verschwunden */ }
     }
   };
-  for (const top of ['parts', 'inputs']) walk(path.join(dir, top), 0);
+  for (const top of ['parts', 'inputs', 'components']) walk(path.join(dir, top), 0);
   for (const f of fs.readdirSync(dir)) if (f.endsWith('.py') || f === 'parameters.json') try { newest = Math.max(newest, fs.statSync(path.join(dir, f)).mtimeMs); } catch { /* weg */ }
   return newest;
 }

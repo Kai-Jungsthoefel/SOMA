@@ -84,7 +84,20 @@ export interface ExportResult { ok: boolean; files: string[]; target?: string; c
 /** Neues Modell aus einem CadQuery-Skript (E100). `info`: das geöffnete Modell, `warnings`: Hinweise des Imports. */
 export interface CadQueryImportResult { info?: ProjectInfo; warnings: string[]; cancelled?: boolean; error?: string }
 /** Dateien, die per Ziehen nach inputs/ kopiert wurden (E33). */
-export interface ImportResult { files: string[]; errors: string[] }
+/** `inserted`: .soma files inserted as components (components.ts), `placed`: the file the app added it to, or null. */
+export interface ImportResult { files: string[]; errors: string[]; inserted?: { name: string; mode: 'link' | 'copy'; placed: string | null }[] }
+
+/** A parameter of a component, as read from its code (python/soma/components.py). */
+export interface ComponentParam { name: string; default?: unknown; label?: string; unit?: string; min?: number; max?: number }
+/**
+ * Another SOMA model inside this one, in components/ (GitHub discussion #21). `state`: copy (independent), current,
+ * outdated (the original changed), missing (original not found). `changed`: the copy was changed in this model.
+ */
+export interface ModelComponent {
+  name: string; folder: string; mode: 'link' | 'copy'; source: string | null; updated: string | null; changed: boolean;
+  entry: string; params: ComponentParam[]; anchors?: string[]; state: 'copy' | 'current' | 'outdated' | 'missing'; message: string | null;
+}
+export interface ComponentResult { ok: boolean; error?: string; canceled?: boolean; component?: ModelComponent; placed?: string | null; updated?: string[] }
 /**
  * Schreiben aus dem Editor. `conflict`: Die Datei hat sich seit dem Laden außerhalb geändert (meist durch den Agenten),
  * `disk` ist ihr aktueller Inhalt (null: gelöscht). `backup`: Pfad der Sicherung der überschriebenen Fassung.
@@ -577,6 +590,18 @@ export interface SomaApi {
   };
   /** DXF-Ansicht im Code-Panel (E80). `known`: Fingerabdruck des gezeigten Stands, bei gleicher Datei kommt nur `unchanged`. */
   dxf: { view(rel: string, known?: string | null): Promise<DxfResult> };
+  /** Components (other models inside this one): state, update from the original, unlink. */
+  components: {
+    /** `error`: `soma component list` failed (the tree says so). */
+    list(): Promise<{ components: ModelComponent[]; error?: string }>;
+    /** `name` null: all linked components that are out of date. */
+    update(name: string | null): Promise<ComponentResult>;
+    unlink(name: string): Promise<ComponentResult>;
+    /** Opens the original model (its .soma file or folder) in a SOMA window of its own. */
+    openOriginal(name: string): Promise<OpenResult>;
+    /** The original was not found: the user picks it, the component is linked to it again. */
+    relink(name: string): Promise<ComponentResult>;
+  };
   term: {
     create(opts?: { command?: string; title?: string }): Promise<number>;
     write(id: number, data: string): void;
