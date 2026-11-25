@@ -184,6 +184,7 @@ def run_model(root, entry=None):
             kind="EntryMissing")
     global LAST_RUN, COMPAT_WARNING
     registry.REGISTRY.clear()
+    registry.IMPORT_WARNINGS.clear()
     COMPAT_WARNING = None
     params.begin(root)  # Werte des Nutzers aus parameters.json (Parameter-Panel)
     LAST_RUN = None
@@ -364,6 +365,7 @@ def _run_build(root):
         result["warnings"].extend(out["notes"])
         if COMPAT_WARNING:
             result["warnings"].append(COMPAT_WARNING)
+        result["warnings"].extend(registry.IMPORT_WARNINGS)
         result["warnings"].extend(params.unused_warnings())
         # Zusatzpakete, die das Modell geladen hat, in requirements.txt (E67). Ein Fehler dabei kostet den Build nicht
         try:

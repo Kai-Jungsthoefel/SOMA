@@ -9,6 +9,8 @@ REGISTRY = []  # wird pro Build geleert (siehe build.py)
 # Beim Ausfuehren von Animationsdateien (animrun.py): Die Bauteile sind schon bekannt. Importiert eine Animation das Modell
 # (`from model import HINGE_Y`), laeuft model.py ein zweites Mal, add_part() bleibt dann wirkungslos.
 IGNORE_ADD = False
+# Warnings of imported FreeCAD files (objects that could not be read), cleared per build like REGISTRY
+IMPORT_WARNINGS = []
 DEFAULT_COLORS = {"part": (0.62, 0.66, 0.72), "reference": (0.1, 0.65, 0.3), "hardware": (0.45, 0.46, 0.49)}
 REFERENCE_ALPHA = 0.45
 ROLES = ("part", "reference", "hardware")
@@ -165,9 +167,22 @@ def _register(name, shape, role, color, groups, where, unique_step=False, axis=N
     ))
 
 
+def _import_notes(path, res):
+    """Warnings of a FreeCAD import go into the build result (soma build prints them, the app shows them)."""
+    for w in res.warnings:
+        text = f"{path}: {w}"
+        if text not in IMPORT_WARNINGS:
+            IMPORT_WARNINGS.append(text)
+
+
 def import_step(path):
     """Imports a STEP file brought along (e.g. from inputs/) as one shape. The parts and groups of the file merge into
-    one body. To keep them: import_assembly()."""
+    one body. To keep them: import_assembly(). Also reads FreeCAD files (.FCStd): the geometry of the visible objects."""
+    from . import fcstd
+    if fcstd.is_fcstd(path):
+        shape, res = fcstd.read_shape(path)
+        _import_notes(path, res)
+        return shape
     from . import stepimport
     return stepimport.read_shape(path)
 
@@ -175,6 +190,13 @@ def import_step(path):
 def import_assembly(path):
     """Imports a STEP file with its structure: parts with names and colors, sub-assemblies as groups.
     Move it as a whole with `asm.loc = cq.Location((x, y, z))`, register it with add_part("Name", asm).
-    A file without an assembly (a single body, or several side by side) gives one part per body."""
+    A file without an assembly (a single body, or several side by side) gives one part per body.
+    FreeCAD files (.FCStd) work the same: the visible bodies and objects with their labels and colors, App::Part
+    containers and groups as groups. Only the geometry comes along, not the parametric history."""
+    from . import fcstd
+    if fcstd.is_fcstd(path):
+        asm, res = fcstd.read_assembly(path)
+        _import_notes(path, res)
+        return asm
     from . import stepimport
     return stepimport.read_assembly(path)

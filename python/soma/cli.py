@@ -1,4 +1,4 @@
-"""Command line: `soma build`, `soma export`, `soma anim`, `soma drawing`, `soma analyze` and `soma render`."""
+"""Command line: `soma build`, `soma export`, `soma fcstd`, `soma anim`, `soma drawing`, `soma analyze` and `soma render`."""
 import argparse
 import json
 import os
@@ -233,6 +233,57 @@ def cmd_cadquery(args):
             print(f"{verb}: {f}")
         for w in r["warnings"]:
             print(f"Note: {w}")
+    return 0
+
+
+def cmd_fcstd(args):
+    """FreeCAD-Datei (.FCStd) ansehen oder in STEP umwandeln, ohne FreeCAD: die Geometrie der sichtbaren Objekte."""
+    from . import fcstd
+    src = Path(args.file)
+    out = None
+    if args.action == "convert":
+        out = Path(args.out) if args.out else src.with_suffix(".step")
+        if out.suffix.lower() not in (".step", ".stp"):
+            return _fail(f"--out must be a .step or .stp file, not {out.name}", 2)
+        # Nie still ueberschreiben: eine vorhandene Datei nur mit --overwrite
+        if out.exists() and not args.overwrite:
+            return _fail(f"{out.as_posix()} already exists. Choose another file with --out, or pass --overwrite to replace it.")
+    try:
+        res = fcstd.read(src)
+        if out is not None:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            fcstd.write_step(res, out, src.stem)
+    except fcstd.FcstdError as e:
+        if args.json:
+            print(json.dumps(dict(status="error", error=str(e)), ensure_ascii=False))
+            return 1
+        return _fail(f"{src.name}: {e}")
+    except Exception as e:  # noqa: BLE001  Export or OCP: explain instead of a traceback
+        msg = f"{'Conversion' if out else 'Reading'} failed: {type(e).__name__}: {e}"
+        if args.json:
+            print(json.dumps(dict(status="error", error=msg), ensure_ascii=False))
+            return 1
+        return _fail(msg)
+    if args.json:
+        parts = []
+        for p in res.parts:
+            bb = p.shape.BoundingBox()
+            parts.append(dict(name=p.name, group="/".join(p.group) or None, type=p.kind, object=p.source,
+                              color=[round(c, 3) for c in p.color] if p.color else None, solids=len(p.shape.Solids()),
+                              bbox=[[round(bb.xmin, 3), round(bb.ymin, 3), round(bb.zmin, 3)],
+                                    [round(bb.xmax, 3), round(bb.ymax, 3), round(bb.zmax, 3)]]))
+        print(json.dumps(dict(status="ok", file=out.as_posix() if out else None, freecad=res.program, parts=parts,
+                              warnings=res.warnings, notes=res.notes), ensure_ascii=False))
+        return 0
+    print(f"{src.name}: {len(res.parts)} part(s)" + (f" (saved with FreeCAD {res.program})" if res.program else ""))
+    for line in fcstd.summary_lines(res):
+        print(f"  {line}")
+    for n in res.notes:
+        print(f"Note: {n}")
+    for w in res.warnings:
+        print(f"Warning: {w}")
+    if out is not None:
+        print(f"written: {out.as_posix()}")
     return 0
 
 
@@ -529,7 +580,16 @@ def main(argv=None):
     q.add_argument("--json", action="store_true")
     q.set_defaults(func=cmd_cadquery)
 
-    g = sub.add_parser("glb", help="convert a STEP or mesh file (STL, 3MF, AMF, OBJ) to GLB for the viewer (basic mode)")
+    f = sub.add_parser("fcstd", help="FreeCAD file (.FCStd): list its visible parts (info) or convert it to STEP (convert), "
+                                     "without FreeCAD")
+    f.add_argument("action", choices=["info", "convert"])
+    f.add_argument("file", help="the .FCStd file")
+    f.add_argument("--out", help="convert: target .step file (default: next to the FCStd file with the same name)")
+    f.add_argument("--overwrite", action="store_true", help="convert: replace the target file if it exists")
+    f.add_argument("--json", action="store_true")
+    f.set_defaults(func=cmd_fcstd)
+
+    g = sub.add_parser("glb", help="convert a STEP, FreeCAD (FCStd) or mesh file (STL, 3MF, AMF, OBJ) to GLB for the viewer (basic mode)")
     g.add_argument("step", help="STEP or mesh file")
     g.add_argument("--out", required=True, help="target folder (model.glb and model.map.json)")
     g.add_argument("--name", help="name for parts without their own name (default: file name)")

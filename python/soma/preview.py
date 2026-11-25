@@ -3,6 +3,7 @@
 Wird fuer die Vorschau alter Staende (Versions-Schieber) und fuer fremde STEP-Dateien im Viewer gebraucht (E33, E35).
 """
 import json
+import sys
 import uuid
 from pathlib import Path
 
@@ -24,12 +25,17 @@ def _flatten(assy, loc=None, groups=None):
 def step_to_glb(step_path, out_dir, name=None):
     """Schreibt <out_dir>/model.glb und model.map.json. Liefert die Bauteilliste. name: fuer eine Datei ohne Baugruppe der
     Name der Teile (die App wandelt eine Arbeitskopie source.step um, das Teil soll wie die Datei heissen)."""
-    from . import stepimport
+    from . import fcstd, stepimport
     step_path, out = Path(step_path), Path(out_dir)
     if not step_path.is_file():
         raise FileNotFoundError(f"STEP file not found: {step_path}")
     out.mkdir(parents=True, exist_ok=True)
-    assy = stepimport.read_assembly(step_path, name)
+    if fcstd.is_fcstd(step_path):  # FreeCAD file from the project: its visible geometry, like import_assembly()
+        assy, res = fcstd.read_assembly(step_path)
+        for w in res.warnings:
+            print("Warning:", w, file=sys.stderr)  # stdout may carry JSON (soma glb --json)
+    else:
+        assy = stepimport.read_assembly(step_path, name)
     items = []
     groups = []
     for name, obj, color, loc, grp in _flatten(assy):
