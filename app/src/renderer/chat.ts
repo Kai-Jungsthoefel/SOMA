@@ -129,6 +129,11 @@ export function stepWords(tool: string, args: Json): StepWords {
     if (args.path) { const p = fileName(str(args.path)); return { run: `Downloading ${p} …`, done: `Downloaded ${p}`, fail: `Could not download ${p}`, meta: site }; }
     return { run: `Reading ${site} …`, done: `Read ${site}`, fail: `Could not read ${site}` };
   }
+  if (tool === 'part_library') {
+    if (args.file) { const p = fileName(str(args.path || args.file)); return { run: `Getting ${p} from a parts library …`, done: `Got ${p} from a parts library`, fail: `Could not get ${p}` }; }
+    const q = str(args.query).trim();
+    return { run: 'Searching parts libraries …', done: 'Searched parts libraries', fail: 'Searching the parts libraries did not work', meta: q.length > 60 ? `${q.slice(0, 57)}…` : q || undefined };
+  }
   const f = fileName(str(args.path));
   if (tool === 'read') return { run: `Looking at ${f} …`, done: `Looked at ${f}`, fail: `Could not look at ${f}` };
   if (tool === 'write') {
@@ -191,6 +196,8 @@ export function plainQuestion(facts: Record<string, string>): { icon: string; ti
   // SOMA's own web_fetch (resources/somaai/soma.ts) asks once per website, in the same form
   if (surface === 'web_fetch') {
     const url = facts.url ?? '';
+    // part_library asks once per library (resources/somaai/partlib.ts)
+    if (facts.library) return { icon: 'globe', title: 'SOMA AI wants to use an online parts library', what: `${facts.library} (${facts.site ?? url})`, whatIcon: 'globe', full: url };
     const save = facts['save to'];
     return { icon: 'globe', title: save ? 'SOMA AI wants to download a file from the internet' : 'SOMA AI wants to open a website', what: save ? `${facts.site ?? url} › ${save}` : (facts.site ?? url), whatIcon: 'globe', full: url };
   }
@@ -1258,7 +1265,7 @@ export class SomaChat {
     };
     const acts = el('div', { className: 'acts' },
       btn('Don’t allow', no, 'Not allowed. SOMA AI was told and will try another way.'),
-      session ? btn(web ? 'Allow this site until I close the model' : 'Allow until I close the model', session, 'Allowed until you close the model.') : null,
+      session ? btn(web ? (facts.library ? 'Allow this library until I close the model' : 'Allow this site until I close the model') : 'Allow until I close the model', session, 'Allowed until you close the model.') : null,
       btn('Allow', yes, 'Allowed once.'));
     card.append(
       el('h4', {}, icon(q.icon, 18), el('span', { textContent: q.title })),

@@ -4,6 +4,11 @@ import {
   DOWNLOAD_TIMEOUT_MS, MAX_DOWNLOAD_BYTES, MAX_TEXT_BYTES, TEXT_TIMEOUT_MS,
   decodeBody, downloadTarget, fetchChecked, htmlToText, pageOf, readLimited, refusalText, refuseUrl, saveBody, sizeText,
 } from './webfetch.ts';
+import os from 'node:os';
+import path from 'node:path';
+import {
+  INDEX_TTL_MS, LIBRARIES, attribution, filesOfTree, libraryById, rawUrl, readCache, searchFiles, treeUrl, writeCache,
+} from './partlib.ts';
 
 /**
  * Start of the title of the input dialog from ask_user, followed by the questions as JSON. The chat
@@ -105,6 +110,26 @@ export default function soma(pi: Pi): void {
   let asking: Promise<unknown> = Promise.resolve();
   const site = (u: URL) => u.hostname.replace(/^www\./, '').toLowerCase();
 
+  /**
+   * Asks the person before SOMA AI goes online (web_fetch per website, part_library per library), in the form of the
+   * permission extension's questions (chat.ts shows them as such). `key` is what "until the model is closed" allows.
+   * One question at a time: models open several pages at once, the chat answers one question after the other. After
+   * waiting, the key may have been allowed meanwhile.
+   */
+  const allow = async (ctx: Ctx, signal: AbortSignal | undefined, key: string, facts: string[]): Promise<boolean> => {
+    if (allowedSites.has(key)) return true;
+    if (!ctx.hasUI) throw new Error('Nobody can allow going online right now. Say what you need from the internet and why.');
+    const turn = asking.then(async () => {
+      if (allowedSites.has(key)) return true;
+      const session = `Yes, allow ${key} until the model is closed`;
+      const choice = await ctx.ui.select(['Permission Required', `surface : ${WEB_SURFACE}`, ...facts].join('\n'), ['Yes', session, 'No'], { signal });
+      if (choice === session) allowedSites.add(key);
+      return choice === 'Yes' || choice === session;
+    });
+    asking = turn.catch(() => undefined);
+    return turn;
+  };
+
   pi.registerTool<FetchParams>({
     name: 'web_fetch',
     label: 'Open a website',
@@ -130,21 +155,8 @@ export default function soma(pi: Pi): void {
       if (target && 'error' in target) throw new Error(target.error);
 
       const host = site(url);
-      if (!allowedSites.has(host)) {
-        if (!ctx.hasUI) throw new Error('Nobody can allow opening websites right now. Say which page you need and why.');
-        // One question at a time: models open several pages at once, the chat answers one question after the other.
-        // After waiting, the site may have been allowed meanwhile
-        const turn = asking.then(async () => {
-          if (allowedSites.has(host)) return 'Yes';
-          const session = `Yes, allow ${host} until the model is closed`;
-          const title = ['Permission Required', `surface : ${WEB_SURFACE}`, `site : ${host}`, `url : ${url.href}`,
-            ...(params.path ? [`save to : ${params.path}`] : [])].join('\n');
-          const choice = await ctx.ui.select(title, ['Yes', session, 'No'], { signal });
-          if (choice === session) allowedSites.add(host);
-          return choice === session ? 'Yes' : choice;
-        });
-        asking = turn.catch(() => undefined);
-        if ((await turn) !== 'Yes') throw new Error(`The person denied opening ${host}. Do not try to reach it another way: work without it or ask them.`);
+      if (!(await allow(ctx, signal, host, [`site : ${host}`, `url : ${url.href}`, ...(params.path ? [`save to : ${params.path}`] : [])]))) {
+        throw new Error(`The person denied opening ${host}. Do not try to reach it another way: work without it or ask them.`);
       }
 
       const download = !!target;
@@ -198,6 +210,113 @@ export default function soma(pi: Pi): void {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
       }
+    },
+  });
+
+  // ---- Open CAD libraries (partlib.ts) -------------------------------------------------------------------------------
+
+  /** File lists are kept in pi's folder of the app data (somaai.ts sets PI_CODING_AGENT_DIR), for a day. */
+  const cacheDir = () => path.join(process.env.PI_CODING_AGENT_DIR || os.tmpdir(), 'part-libraries');
+  const libKey = (id: string) => `the ${libraryById(id)?.name ?? id}`;
+
+  /** GET with SOMA's checks, the time limit and the stop of the person. */
+  const get = async (url: string, signal: AbortSignal | undefined, ms: number) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(new Error('timeout')), ms);
+    const onAbort = () => ctl.abort(signal?.reason);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      const got = await fetchChecked(new URL(url), ctl.signal, userAgent(), '*/*');
+      if (typeof got === 'string') throw new Error(got);
+      if (!got.response.ok) { await got.response.body?.cancel().catch(() => {}); throw new Error(refusalText(got.response.status, got.url)); }
+      return { response: got.response, done: () => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); } };
+    } catch (e) {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      if (signal?.aborted) throw new Error('Stopped.');
+      if (ctl.signal.aborted) throw new Error('GitHub did not answer in time.');
+      throw e;
+    }
+  };
+
+  pi.registerTool<{ query?: string; library?: string; file?: string; path?: string }>({
+    name: 'part_library',
+    label: 'Search open CAD libraries',
+    description: 'Search open CAD libraries on GitHub by file and folder names, and download a part from them. Libraries: '
+      + LIBRARIES.map((l) => `"${l.id}" (${l.name}, ${l.license}: ${l.about})`).join('; ') + '. '
+      + 'Search: give `query` with a few words or a number ("608 bearing", "nema 17", "4884"), optionally `library`. '
+      + 'Download: give `library`, `file` exactly as the search listed it, and `path` inside the model folder (e.g. "inputs/608zz.step"). '
+      + 'Prefer STEP. After a download, write the source line the result gives into NOTES.md (the licenses ask for it). '
+      + 'SOMA asks the person once per library.',
+    parameters: Type.Object({
+      query: Type.Optional(Type.String({ description: 'Search words. Leave out when downloading.' })),
+      library: Type.Optional(Type.String({ description: `One of: ${LIBRARIES.map((l) => l.id).join(', ')}. Leave out to search all.` })),
+      file: Type.Optional(Type.String({ description: 'Download: the file as the search listed it.' })),
+      path: Type.Optional(Type.String({ description: 'Download: where to save it inside the model folder, usually inputs/.' })),
+    }),
+    async execute(_id, params, signal, _onUpdate, ctx) {
+      const text = (t: string, details: Record<string, unknown> = {}) => ({ content: [{ type: 'text' as const, text: t }], details });
+      const ask = async (libs: typeof LIBRARIES) => {
+        for (const l of libs) {
+          if (!(await allow(ctx, signal, libKey(l.id), [`library : ${l.name}`, `site : github.com`, `url : https://github.com/${l.repo}`]))) {
+            throw new Error(`The person did not allow using the ${l.name}. Work without it or ask them.`);
+          }
+        }
+      };
+      /** The file list of a library: from the cache when it is younger than a day, otherwise from GitHub. */
+      const index = async (l: (typeof LIBRARIES)[number]): Promise<{ files: string[]; note: string }> => {
+        const cached = readCache(cacheDir(), l);
+        if (cached && Date.now() - cached.fetched < INDEX_TTL_MS) return { files: cached.files, note: '' };
+        try {
+          const { response, done } = await get(treeUrl(l), signal, 60_000);
+          try {
+            const { data } = await readLimited(response, 40 * 1024 ** 2);
+            const files = filesOfTree(JSON.parse(data.toString('utf8')));
+            if (!files) throw new Error('GitHub sent no file list.');
+            try { writeCache(cacheDir(), l, files); } catch { /* works without the cache, only slower next time */ }
+            return { files, note: '' };
+          } finally { done(); }
+        } catch (e) {
+          if (cached) return { files: cached.files, note: ` (list from ${new Date(cached.fetched).toISOString().slice(0, 10)}, GitHub did not answer: ${e instanceof Error ? e.message : String(e)})` };
+          throw e;
+        }
+      };
+
+      if (params.file) {
+        const l = libraryById(params.library ?? '');
+        if (!l) throw new Error(`Name the library of the file: ${LIBRARIES.map((x) => x.id).join(' or ')}.`);
+        if (!params.path) throw new Error('Give `path`: where to save the file inside the model folder, e.g. "inputs/part.step".');
+        const target = downloadTarget(ctx.cwd, params.path);
+        if ('error' in target) throw new Error(target.error);
+        await ask([l]);
+        const { files } = await index(l);
+        if (!files.includes(params.file)) throw new Error(`The ${l.name} has no file "${params.file}". Use the name exactly as the search listed it.`);
+        const { response, done } = await get(rawUrl(l, params.file), signal, DOWNLOAD_TIMEOUT_MS);
+        try {
+          const saved = await saveBody(response, target.file, MAX_DOWNLOAD_BYTES);
+          if ('error' in saved) throw new Error(saved.error);
+          const source = attribution(l, params.file);
+          return text(`Saved ${params.path} (${sizeText(saved.bytes)}${saved.kind ? `, ${saved.kind}` : ''}).\nWrite this source line into NOTES.md:\n${source}`,
+            { library: l.id, file: params.file, path: params.path, bytes: saved.bytes, source });
+        } finally { done(); }
+      }
+
+      const query = String(params.query ?? '').trim();
+      if (!query) throw new Error('Give `query` to search, or `library`, `file` and `path` to download.');
+      const libs = params.library ? [libraryById(params.library)].filter((l): l is (typeof LIBRARIES)[number] => !!l) : LIBRARIES;
+      if (!libs.length) throw new Error(`Unknown library "${params.library}". Libraries: ${LIBRARIES.map((l) => l.id).join(', ')}.`);
+      await ask(libs);
+      const out: string[] = [];
+      let total = 0;
+      for (const l of libs) {
+        const { files, note } = await index(l);
+        const hits = searchFiles(files, query, 20);
+        total += hits.length;
+        out.push(`## ${l.id}: ${l.name}, license ${l.license}${note}`,
+          hits.length ? (hits[0].partial ? '(nothing has all the words, these miss one)\n' : '') + hits.map((h) => `- ${h.item} [${h.formats.join(', ')}]  file: "${h.files[0]}"`).join('\n') : '(nothing found)');
+      }
+      return text(`${out.join('\n')}\n\n${total ? 'Download with `library`, `file` and `path`. Names are free text: check the part (dimensions, type) after the download.' : 'Nothing found: try fewer or other words (a size, a standard number, an English name), or search shops and manufacturers with web_search.'}`,
+        { query, hits: total });
     },
   });
 }

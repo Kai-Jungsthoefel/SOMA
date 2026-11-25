@@ -103,7 +103,7 @@ try {
   check('… the download from the same website needs no second question and lands in inputs/', !step(7).error && /Saved inputs\/part\.step.*STEP/.test(step(7).text)
     && fs.readFileSync(path.join(dir, 'inputs', 'part.step'), 'utf8').startsWith('ISO-10303-21'), step(7).text.slice(0, 200));
   const tools = (first.tools ?? []).map((x) => x.function?.name ?? x.name);
-  check('SOMA AI has web_fetch, and web_search from pi-web-search is loaded', tools.includes('web_fetch') && tools.includes('web_search') && tools.includes('ask_user'), JSON.stringify(tools));
+  check('SOMA AI has web_fetch, and web_search from pi-web-search is loaded', tools.includes('web_fetch') && tools.includes('web_search') && tools.includes('part_library') && tools.includes('ask_user'), JSON.stringify(tools));
   const asked = await ev(() => window.__ai.asked);
   check('Two questions during the run: the copy out of the folder, and the website (once)', asked.length === 2 && asked[0].method === 'select' && asked[0].title.includes('outside-copy')
     && asked[1].title.includes('surface : web_fetch'), JSON.stringify(asked).slice(0, 400));

@@ -200,10 +200,10 @@ try {
   const SKD = { bundled: path.join(APP, 'resources', 'skills'), user: path.join(tmp, 'keine-eigenen-skills') };
   const dm = defaultModes(SKD, {});
   check('Neue Modelle: ohne Vorgabe des Nutzers Arbeitsweise (mit Parametrik) und Normteile immer, alle übrigen bei Bedarf', dm.always.join(',') === 'design-workflow,cadquery,parametric,standard-parts'
-    && dm.demand.join(',') === 'cadquery-scripts,shell-environment,soma-app,3d-printing,resin-powder,cnc,laser,sheet-metal,plasma,tolerances,joints,strength,assemblies,components,analysis,animation,fem,drawings', JSON.stringify(dm));
+    && dm.demand.join(',') === 'cadquery-scripts,shell-environment,soma-app,3d-printing,resin-powder,cnc,laser,sheet-metal,plasma,tolerances,joints,strength,assemblies,components,purchased-parts,analysis,animation,fem,drawings', JSON.stringify(dm));
   const dm2 = defaultModes(SKD, { 'design-workflow': 'demand', tolerances: 'always', '3d-printing': 'always', laser: 'off' });
   check('Neue Modelle: Vorgabe des Nutzers geht vor, in der Reihenfolge des Panels, „Aus“ fehlt ganz', dm2.always.join(',') === 'cadquery,parametric,3d-printing,tolerances,standard-parts'
-    && dm2.demand.join(',') === 'design-workflow,cadquery-scripts,shell-environment,soma-app,resin-powder,cnc,sheet-metal,plasma,joints,strength,assemblies,components,analysis,animation,fem,drawings', JSON.stringify(dm2));
+    && dm2.demand.join(',') === 'design-workflow,cadquery-scripts,shell-environment,soma-app,resin-powder,cnc,sheet-metal,plasma,joints,strength,assemblies,components,purchased-parts,analysis,animation,fem,drawings', JSON.stringify(dm2));
   // Bei Bedarf (E55): Hinweis unter der ersten Überschrift, Werte als Standard der App, vom Nutzer gesetzte mit Namen
   const rd = renderSkill(SRC, {}, 'demand');
   check('Bei Bedarf: Hinweis direkt unter der Überschrift, mit Leerzeilen, Werte als Standard der App, NOTES.md', rd.includes('# Skill\n\n> **On demand:**')
@@ -615,6 +615,7 @@ try {
   const hc = SK.checkSkillText(guide);
   check('Anleitung ist ein gültiger Skill ohne Hinweise, Bei Bedarf für neue Modelle', !hc.errors.length && !hc.warnings.length && SK.parseSkill('soma-app', guide).defaultMode === 'demand',
     [...hc.errors, ...hc.warnings].join(' | '));
+
   // web_fetch of SOMA AI (resources/somaai/webfetch.ts): where it may go, HTML as text, downloads
   const wfOut = path.join(tmp, 'webfetch.mjs');
   await build({ entryPoints: [path.join(APP, 'resources', 'somaai', 'webfetch.ts')], outfile: wfOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
@@ -692,6 +693,40 @@ try {
     delete process.env.SOMA_TEST_WEB_LOCAL;
     srv.close();
   }
+
+  // part_library of SOMA AI (resources/somaai/partlib.ts): file lists of open CAD libraries, search, download address
+  const plOut = path.join(tmp, 'partlib.mjs');
+  await build({ entryPoints: [path.join(APP, 'resources', 'somaai', 'partlib.ts')], outfile: plOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const PL = await import(pathToFileURL(plOut).href);
+  const plTree = { truncated: false, tree: [
+    { path: 'Mechanical Parts/Bearings', type: 'tree' },
+    { path: 'Mechanical Parts/Bearings/608ZZ_Ball_Bearing.step', type: 'blob' },
+    { path: 'Mechanical Parts/Bearings/608ZZ_Ball_Bearing.FCStd', type: 'blob' },
+    { path: 'Mechanical Parts/Bearings/608ZZ_Ball_Bearing.stl', type: 'blob' },
+    { path: 'Mechanical Parts/Bearings/6080_Large_Bearing.stp', type: 'blob' },
+    { path: 'Mechanical Parts/Bearings/608ZZ.png', type: 'blob' },
+    { path: 'Industrial Design/Hinge/Rustic hinge/Hinge_200.step', type: 'blob' },
+    { path: 'Electrical Parts/Motors/NEMA_17 motor.FCStd', type: 'blob' },
+    { path: 'README.md', type: 'blob' },
+  ] };
+  const plFiles = PL.filesOfTree(plTree);
+  check('part_library: only CAD files of the tree, no folders, pictures or texts', plFiles.length === 6 && !plFiles.some((f) => /\.(png|md)$/.test(f)) && PL.filesOfTree({ message: 'rate limit' }) === null, JSON.stringify(plFiles));
+  const h608 = PL.searchFiles(plFiles, '608 bearing');
+  check('part_library: one hit per part with its formats, STEP first, the exact name before a longer one',
+    h608[0].item === 'Mechanical Parts/Bearings/608ZZ_Ball_Bearing' && h608[0].formats.join(',') === 'STEP,FCSTD,STL' && h608[0].files[0].endsWith('.step') && h608.length === 2 && !h608[0].partial,
+    JSON.stringify(h608.map((h) => [h.item, h.formats])));
+  const gate = PL.searchFiles(plFiles, 'gate hinge');
+  check('part_library: nothing with all words: hits with one word less, marked as partial', gate.length === 1 && gate[0].partial && gate[0].item.endsWith('Hinge_200'), JSON.stringify(gate));
+  check('part_library: nothing found stays empty', PL.searchFiles(plFiles, 'servo').length === 0 && PL.searchFiles(plFiles, '  ').length === 0);
+  const fc = PL.libraryById('FreeCAD');
+  check('part_library: download address with spaces encoded, source line with license',
+    PL.rawUrl(fc, 'Industrial Design/Hinge/Rustic hinge/Hinge_200.step') === 'https://raw.githubusercontent.com/FreeCAD/FreeCAD-library/master/Industrial%20Design/Hinge/Rustic%20hinge/Hinge_200.step'
+      && /CC-BY 3\.0/.test(PL.attribution(fc, 'Industrial Design/Hinge/Rustic hinge/Hinge_200.step')), PL.rawUrl(fc, 'Industrial Design/Hinge/Rustic hinge/Hinge_200.step'));
+  const plCache = path.join(tmp, 'part-libraries');
+  check('part_library: no cache yet, then the written list comes back with its time', PL.readCache(plCache, fc) === null
+    && (PL.writeCache(plCache, fc, plFiles, 1234), PL.readCache(plCache, fc)?.fetched === 1234) && PL.readCache(plCache, fc).files.length === 6);
+  fs.writeFileSync(path.join(plCache, 'freecad.json'), '{broken');
+  check('part_library: a broken cache counts as none', PL.readCache(plCache, fc) === null);
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();
