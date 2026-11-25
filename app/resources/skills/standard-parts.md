@@ -11,7 +11,7 @@ topics: Screws, nuts, washers and inserts with soma.fasteners; Position and hole
 # Skill: Standard parts
 
 Nominal sizes in mm. Real parts vary: if the user has the parts, ask them to measure what matters. Other purchased
-parts (motors, switches, displays): never guess, ask for a datasheet or a STEP file.
+parts (motors, switches, displays): never guess, find their CAD model or data sheet (skill for purchased parts).
 
 ## Screws, nuts, washers, inserts: `soma.fasteners`
 
