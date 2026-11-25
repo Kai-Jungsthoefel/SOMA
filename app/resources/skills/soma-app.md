@@ -149,13 +149,19 @@ the computer and says so if not.
 
 SOMA AI works in the model's folder with your permissions on this computer. There it reads, writes and runs commands
 without asking, and every step is saved in the History. It asks you first, in plain words, before it works with files
-outside the model, downloads something or installs software: **Allow**, **Allow until I close the model** or
-**Don't allow**. It never goes back in the History and never reads sign-ins or keys. SOMA stops commands that are known
-to be dangerous, but it cannot catch everything: only give it files from sources you trust. What you type and the files
+outside the model, opens a website, downloads something or installs software: **Allow**, **Allow until I close the model**
+(for a website: **Allow this site until I close the model**) or **Don't allow**. It never goes back in the History
+and never reads sign-ins or keys. SOMA stops commands that are known to be dangerous, but it cannot catch everything: only give it files from sources you trust. What you type and the files
 it reads go to the provider you signed in with.
 
 Settings > SOMA AI shows the sign-ins, the model and its effort, voice input, what the conversation of the open model
 used (tokens, and the cost with an API key) and the note about the risks again.
+
+SOMA AI can look things up on the internet, for example a part to buy with its STEP model. It searches with the
+search of your provider (ChatGPT, OpenAI, Anthropic and Google Gemini have one; with an API key the provider may charge
+for each search) and reads web pages and downloads files into the model folder, usually `inputs/`. Before it opens a
+website it asks you. Shops that need a sign-in, refuse programs or only work in a browser it cannot read: then it gives
+you the link, and you download the file yourself and drag it into SOMA.
 
 ## Viewer
 

@@ -5,6 +5,7 @@
 // conversation and ending pi when the model is left. Run: npm run test:somaai (builds first).
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { checker, cleanup, startApp } from './harness.mjs';
@@ -15,6 +16,14 @@ const { check } = t;
 
 const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-somaai-'));
 const auth = path.join(ud, 'somaai', 'auth.json');
+// A website on 127.0.0.1 for web_fetch (allowed only with SOMA_TEST_WEB_LOCAL, below): a product page and its STEP file
+const web = http.createServer((req, res) => {
+  if (req.url === '/files/part.step') { res.writeHead(200, { 'content-type': 'application/octet-stream' }); res.end('ISO-10303-21;\nHEADER;\nENDSEC;\n'); return; }
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+  res.end('<html><head><title>Test bearing</title></head><body><h1>Bearing 608</h1><p>8 x 22 x 7 mm</p><a href="/files/part.step">STEP</a></body></html>');
+});
+await new Promise((r) => web.listen(0, '127.0.0.1', r));
+const site = `http://127.0.0.1:${web.address().port}`;
 const steps = [
   { tool: 'bash', args: { command: 'echo "RUN_AS_NODE=[$ELECTRON_RUN_AS_NODE]"' } },
   { tool: 'bash', args: { command: 'soma build' } },
@@ -22,6 +31,8 @@ const steps = [
   { tool: 'bash', args: { command: 'cp model.py ../outside-copy.py' } },
   { tool: 'read', args: { path: auth } },
   { tool: 'bash', args: { command: 'git reset --hard HEAD' } },
+  { tool: 'web_fetch', args: { url: `${site}/bearing` } },
+  { tool: 'web_fetch', args: { url: `${site}/files/part.step`, path: 'inputs/part.step' } },
   { text: 'Done, the box is built.' },
 ];
 const mock = await startMockLlm(steps);
@@ -30,7 +41,7 @@ fs.writeFileSync(auth, '{}\n'); // something to read, if the rule did not stop i
 // A 1x1 PNG stands in for the photo of a sketch
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
-const app = await startApp({ name: 'somaai', userData: ud, env: { NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' } });
+const app = await startApp({ name: 'somaai', userData: ud, env: { NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost', SOMA_TEST_WEB_LOCAL: '1' } });
 const { ev } = app;
 const results = () => ev(() => window.__ai.events.filter((e) => e.record.type === 'tool_execution_end').map((e) => ({
   tool: e.record.toolName, error: !!e.record.isError, text: JSON.stringify(e.record.result?.content ?? e.record.result ?? ''),
@@ -47,6 +58,9 @@ try {
       const r = e.record;
       if (r.type !== 'extension_ui_request' || !['select', 'confirm', 'input', 'editor'].includes(r.method)) return;
       window.__ai.asked.push({ method: r.method, title: String(r.title ?? ''), options: r.options ?? [] });
+      // A website is allowed until the model is closed (web_fetch), everything else gets "No"
+      const site = (r.options ?? []).find((o) => /^Yes, allow .* until/.test(o));
+      if (/surface : web_fetch/.test(String(r.title ?? '')) && site) { window.soma.ai.respond({ id: r.id, value: site }); return; }
       const no = (r.options ?? []).find((o) => o === 'No');
       window.soma.ai.respond(r.method === 'confirm' ? { id: r.id, confirmed: false } : no ? { id: r.id, value: no } : { id: r.id, cancelled: true });
     });
@@ -84,8 +98,15 @@ try {
   check('Copying out of the model folder asks, and No blocks it', step(3).error && /denied/i.test(step(3).text) && !fs.existsSync(path.join(dir, '..', 'outside-copy.py')), step(3).text.slice(0, 160));
   check('Reading the sign-in of SOMA AI is denied without a question', step(4).error && /sign-in of SOMA AI/.test(step(4).text), step(4).text.slice(0, 200));
   check('Going back in the history is denied, the agent learns why', step(5).error && /forward only/.test(step(5).text), step(5).text.slice(0, 200));
+  check('web_fetch asks once for the website and then reads the page as text with its file links', !step(6).error && step(6).text.includes('Bearing 608')
+    && step(6).text.includes('Links to files') && step(6).text.includes('/files/part.step'), step(6).text.slice(0, 300));
+  check('… the download from the same website needs no second question and lands in inputs/', !step(7).error && /Saved inputs\/part\.step.*STEP/.test(step(7).text)
+    && fs.readFileSync(path.join(dir, 'inputs', 'part.step'), 'utf8').startsWith('ISO-10303-21'), step(7).text.slice(0, 200));
+  const tools = (first.tools ?? []).map((x) => x.function?.name ?? x.name);
+  check('SOMA AI has web_fetch, and web_search from pi-web-search is loaded', tools.includes('web_fetch') && tools.includes('web_search') && tools.includes('ask_user'), JSON.stringify(tools));
   const asked = await ev(() => window.__ai.asked);
-  check('Exactly one question during the run (the copy out of the folder)', asked.length === 1 && asked[0].method === 'select' && asked[0].title.includes('outside-copy'), JSON.stringify(asked).slice(0, 300));
+  check('Two questions during the run: the copy out of the folder, and the website (once)', asked.length === 2 && asked[0].method === 'select' && asked[0].title.includes('outside-copy')
+    && asked[1].title.includes('surface : web_fetch'), JSON.stringify(asked).slice(0, 400));
   const settings = JSON.parse(fs.readFileSync(path.join(ud, 'somaai', 'settings.json'), 'utf8'));
   check('pi settings: SOMA\'s keys set, the chosen model kept', settings.defaultProjectTrust === 'never' && settings.defaultModel === 'mock-cad'
     && (process.platform !== 'win32' || /sh\.exe$/.test(settings.shellPath ?? '')), JSON.stringify(settings));
@@ -138,6 +159,7 @@ try {
 } finally {
   await app.stop();
   await mock.close();
+  web.close();
   cleanup(ud);
 }
 if (t.fails) console.log(app.log().split('\n').filter((l) => l.includes('[somaai]')).slice(-30).join('\n'));

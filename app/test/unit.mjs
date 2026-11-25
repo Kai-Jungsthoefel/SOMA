@@ -615,6 +615,83 @@ try {
   const hc = SK.checkSkillText(guide);
   check('Anleitung ist ein gültiger Skill ohne Hinweise, Bei Bedarf für neue Modelle', !hc.errors.length && !hc.warnings.length && SK.parseSkill('soma-app', guide).defaultMode === 'demand',
     [...hc.errors, ...hc.warnings].join(' | '));
+  // web_fetch of SOMA AI (resources/somaai/webfetch.ts): where it may go, HTML as text, downloads
+  const wfOut = path.join(tmp, 'webfetch.mjs');
+  await build({ entryPoints: [path.join(APP, 'resources', 'somaai', 'webfetch.ts')], outfile: wfOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const WF = await import(pathToFileURL(wfOut).href);
+  const local = ['127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.178.1', '169.254.1.1', '100.64.0.1', '0.0.0.0', '::1', 'fe80::1', 'fd12::1', '::ffff:127.0.0.1', '::ffff:7f00:1', 'not-an-ip'];
+  const pub = ['93.184.216.34', '8.8.8.8', '172.32.0.1', '2606:4700::1111'];
+  check('web_fetch: addresses of this computer and the local network count as local, public ones not',
+    local.every((a) => WF.isLocalAddress(a)) && pub.every((a) => !WF.isLocalAddress(a)),
+    JSON.stringify({ local: local.filter((a) => !WF.isLocalAddress(a)), pub: pub.filter((a) => WF.isLocalAddress(a)) }));
+  const refusals = await Promise.all(['http://127.0.0.1:9333/', 'http://localhost/', 'http://nas.local/', 'http://router/', 'file:///C:/x', 'ftp://example.com/', 'https://user:pw@example.com/', 'http://[::1]/']
+    .map(async (u) => [u, await WF.refuseUrl(new URL(u))]));
+  check('web_fetch: local addresses, other protocols and passwords in the address are refused', refusals.every(([, r]) => !!r), JSON.stringify(refusals.filter(([, r]) => !r)));
+  const html = `<!doctype html><html><head><title>608ZZ Bearing &amp; more</title><script>var x = "<p>hidden</p>";</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"608ZZ Bearing","sku":"am-4456","brand":{"@type":"Brand","name":"AndyMark"},"offers":{"@type":"Offer","price":"1.90","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>
+    <style>p{color:red}</style></head><body><nav><a href="/">Home</a></nav><h1>8&nbsp;mm ID Bearing</h1><p>Bore 8&#160;mm, OD 22 mm, width 7&nbsp;mm.</p>
+    <ul><li>Shielded</li><li>ABEC&#x2d;1</li></ul><a href="/files/am-4456.STEP?v=2">STEP model</a> <a href='docs/sheet.pdf'>Data sheet</a> <a href="javascript:void(0)">Cart</a>
+    <!-- <a href="/secret.step">old</a> --><img src="x.png" alt="Bearing photo"></body></html>`;
+  const pg = WF.htmlToText(html, new URL('https://www.andymark.com/products/608zz'));
+  check('web_fetch: page as text (title, headings, lists, entities, no scripts, styles or comments)',
+    pg.title === '608ZZ Bearing & more' && pg.text.includes('# 8 mm ID Bearing') && pg.text.includes('Bore 8 mm, OD 22 mm') && pg.text.includes('- ABEC-1')
+      && !/hidden|color:red|secret/.test(pg.text) && pg.text.includes('[image: Bearing photo]') && !pg.scripted, pg.text);
+  check('web_fetch: links absolute, file links (STEP, PDF) listed separately, javascript: left out',
+    JSON.stringify(pg.files) === JSON.stringify(['https://www.andymark.com/files/am-4456.STEP?v=2', 'https://www.andymark.com/products/docs/sheet.pdf'])
+      && pg.text.includes('[STEP model](https://www.andymark.com/files/am-4456.STEP?v=2)') && !pg.text.includes('javascript'), JSON.stringify(pg.files));
+  check('web_fetch: product data of the shop (schema.org): name, brand, part number, price, availability',
+    pg.facts.length === 1 && pg.facts[0] === 'name: 608ZZ Bearing; brand: AndyMark; sku: am-4456; price: 1.90 USD (InStock)', JSON.stringify(pg.facts));
+  check('web_fetch: a page that only builds itself with JavaScript is marked',
+    WF.htmlToText('<html><body><div id="app"></div><script src="a.js"></script><script src="b.js"></script><script>boot()</script></body></html>', new URL('https://x.com/')).scripted);
+  const long = 'x'.repeat(WF.PAGE_CHARS + 500);
+  check('web_fetch: long text in pages, the end says where to go on', WF.pageOf(long, 0).includes(`offset ${WF.PAGE_CHARS}`) && WF.pageOf(long, WF.PAGE_CHARS) === 'x'.repeat(500));
+  check('web_fetch: file kind from the first bytes (STEP, ZIP, a web page instead of a file)',
+    WF.sniff(Buffer.from('ISO-10303-21;\nHEADER;')) === 'STEP' && WF.sniff(Buffer.from('PK\x03\x04abc')) === 'ZIP' && WF.sniff(Buffer.from('  <!DOCTYPE html><html>')) === 'HTML');
+
+  const wfDir = path.join(tmp, 'wfmodel');
+  fs.mkdirSync(path.join(wfDir, 'inputs'), { recursive: true });
+  fs.writeFileSync(path.join(wfDir, 'inputs', 'old.step'), 'mine');
+  const tg = (p) => WF.downloadTarget(wfDir, p);
+  check('web_fetch: downloads only inside the model folder, not into .git, never over an existing file',
+    'file' in tg('inputs/new.step') && 'error' in tg('../outside.step') && 'error' in tg(path.join(tmp, 'abs.step')) && 'error' in tg('.git/x')
+      && 'error' in tg('inputs/old.step') && fs.readFileSync(path.join(wfDir, 'inputs', 'old.step'), 'utf8') === 'mine');
+
+  // A small web server on 127.0.0.1 (allowed only with SOMA_TEST_WEB_LOCAL): redirect, file, web page instead of file, refusal
+  const http = await import('node:http');
+  const srv = http.createServer((req, res) => {
+    if (req.url === '/go') { res.writeHead(302, { location: '/files/part.step' }); res.end(); return; }
+    if (req.url === '/files/part.step') { res.writeHead(200, { 'content-type': 'application/octet-stream' }); res.end('ISO-10303-21;\nHEADER;\nENDSEC;\n'); return; }
+    if (req.url === '/login') { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<!DOCTYPE html><html><body>Please sign in</body></html>'); return; }
+    if (req.url === '/away') { res.writeHead(302, { location: 'http://10.0.0.1/admin' }); res.end(); return; }
+    res.writeHead(403); res.end('no');
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  process.env.SOMA_TEST_WEB_LOCAL = '1';
+  try {
+    const ac = new AbortController();
+    const got = await WF.fetchChecked(new URL(`${base}/go`), ac.signal, 'SOMA-AI/test', '*/*');
+    const saved = typeof got === 'string' ? { error: got } : await WF.saveBody(got.response, path.join(wfDir, 'inputs', 'part.step'), 1024 * 1024);
+    check('web_fetch: follows a redirect and saves the file, recognized as STEP, no .part left',
+      typeof got !== 'string' && got.redirects.length === 1 && saved.kind === 'STEP' && fs.readFileSync(path.join(wfDir, 'inputs', 'part.step'), 'utf8').startsWith('ISO-10303-21')
+        && !fs.existsSync(path.join(wfDir, 'inputs', 'part.step.part')), JSON.stringify(saved));
+    const login = await WF.fetchChecked(new URL(`${base}/login`), ac.signal, 'SOMA-AI/test', '*/*');
+    const notFile = await WF.saveBody(login.response, path.join(wfDir, 'inputs', 'login.step'), 1024 * 1024);
+    check('web_fetch: a web page where a file was expected is not saved, the agent learns why',
+      'error' in notFile && /web page, not a file/.test(notFile.error) && !fs.existsSync(path.join(wfDir, 'inputs', 'login.step')), JSON.stringify(notFile));
+    const big = await WF.fetchChecked(new URL(`${base}/files/part.step`), ac.signal, 'SOMA-AI/test', '*/*');
+    const tooBig = await WF.saveBody(big.response, path.join(wfDir, 'inputs', 'big.step'), 10);
+    check('web_fetch: a file over the limit is not saved', 'error' in tooBig && !fs.existsSync(path.join(wfDir, 'inputs', 'big.step')), JSON.stringify(tooBig));
+    const denied = await WF.fetchChecked(new URL(`${base}/x`), ac.signal, 'SOMA-AI/test', '*/*');
+    check('web_fetch: a refusal (403) tells the agent not to get around it', typeof denied !== 'string' && denied.response.status === 403
+      && /Do not try to get around this/.test(WF.refusalText(403, new URL(base))));
+    delete process.env.SOMA_TEST_WEB_LOCAL;
+    const away = await WF.fetchChecked(new URL(`${base}/away`), ac.signal, 'SOMA-AI/test', '*/*');
+    check('web_fetch: without the test switch even the first local address is refused', typeof away === 'string' && /local network/.test(away), String(away));
+  } finally {
+    delete process.env.SOMA_TEST_WEB_LOCAL;
+    srv.close();
+  }
 } catch (e) {
   console.log('ABBRUCH:', e.message);
   t.fail();

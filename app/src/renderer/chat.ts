@@ -118,6 +118,17 @@ export function stepWords(tool: string, args: Json): StepWords {
     if (has(/\bpython3?(\.exe)?\b/)) return w('Running a Python script', 'Ran a Python script', 'The Python script did not work yet');
     return w('Running a command', 'Ran a command', 'The command did not work');
   }
+  // The web tools of SOMA AI (resources/somaai/soma.ts and pi-web-search)
+  if (tool === 'web_search') {
+    const q = str(args.query).trim();
+    return { run: 'Searching the web …', done: 'Searched the web', fail: 'The web search did not work', meta: q.length > 60 ? `${q.slice(0, 57)}…` : q || undefined };
+  }
+  if (tool === 'web_fetch') {
+    let site = str(args.url);
+    try { site = new URL(site).hostname.replace(/^www\./, ''); } catch { /* as written */ }
+    if (args.path) { const p = fileName(str(args.path)); return { run: `Downloading ${p} …`, done: `Downloaded ${p}`, fail: `Could not download ${p}`, meta: site }; }
+    return { run: `Reading ${site} …`, done: `Read ${site}`, fail: `Could not read ${site}` };
+  }
   const f = fileName(str(args.path));
   if (tool === 'read') return { run: `Looking at ${f} …`, done: `Looked at ${f}`, fail: `Could not look at ${f}` };
   if (tool === 'write') {
@@ -136,6 +147,8 @@ const resultText = (result: unknown) => arr(obj(result).content).map((c) => str(
 
 /** The permission extension stopped the call: by a rule (`policy`) or because the user said no (`user`). */
 function stoppedBy(text: string): { by: 'policy' | 'user'; reason: string } | null {
+  // web_fetch asks itself (resources/somaai/soma.ts)
+  if (/^The person denied opening /.test(text.trim())) return { by: 'user', reason: '' };
   if (!text.includes('[pi-permission-system]')) return null;
   if (/user denied/i.test(text)) return { by: 'user', reason: '' };
   return { by: 'policy', reason: /Reason: (.*?)\.?$/m.exec(text)?.[1] ?? '' };
@@ -174,6 +187,12 @@ export function plainQuestion(facts: Record<string, string>): { icon: string; ti
   if (surface.startsWith('external_directory')) {
     const write = surface.endsWith('_write');
     return { icon: 'pen', title: write ? 'SOMA AI wants to change files outside this model' : 'SOMA AI wants to work with files outside this model', what: shortPlace(place), whatIcon: 'folder', full: place };
+  }
+  // SOMA's own web_fetch (resources/somaai/soma.ts) asks once per website, in the same form
+  if (surface === 'web_fetch') {
+    const url = facts.url ?? '';
+    const save = facts['save to'];
+    return { icon: 'globe', title: save ? 'SOMA AI wants to download a file from the internet' : 'SOMA AI wants to open a website', what: save ? `${facts.site ?? url} › ${save}` : (facts.site ?? url), whatIcon: 'globe', full: url };
   }
   if (/^(curl|wget)\b/.test(rule)) {
     const url = /https?:\/\/[^\s'"]+/.exec(cmd)?.[0] ?? '';
@@ -1211,7 +1230,9 @@ export class SomaChat {
 
   /** A question of the permission extension, in plain words (draft, slides 5 and 8). No button is highlighted. */
   private permission(id: string, title: string, options: string[]): void {
-    const q = plainQuestion(questionFacts(title));
+    const facts = questionFacts(title);
+    const q = plainQuestion(facts);
+    const web = facts.surface === 'web_fetch';
     const yes = options.find((o) => o === 'Yes');
     const session = options.find((o) => /^Yes, allow/.test(o));
     const no = options.find((o) => o === 'No') ?? options.find((o) => /^No/.test(o));
@@ -1237,7 +1258,7 @@ export class SomaChat {
     };
     const acts = el('div', { className: 'acts' },
       btn('Don’t allow', no, 'Not allowed. SOMA AI was told and will try another way.'),
-      session ? btn('Allow until I close the model', session, 'Allowed until you close the model.') : null,
+      session ? btn(web ? 'Allow this site until I close the model' : 'Allow until I close the model', session, 'Allowed until you close the model.') : null,
       btn('Allow', yes, 'Allowed once.'));
     card.append(
       el('h4', {}, icon(q.icon, 18), el('span', { textContent: q.title })),

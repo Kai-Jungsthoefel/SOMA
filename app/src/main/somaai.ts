@@ -19,6 +19,8 @@ import { terminalEnv } from './terminals';
 
 const PI_PACKAGE = ['node_modules', '@earendil-works', 'pi-coding-agent'];
 const GUARD_PACKAGE = ['node_modules', '@gotgenes', 'pi-permission-system'];
+/** Web search through the chosen model's own search (OpenAI, ChatGPT, Anthropic, Gemini). web_fetch is SOMA's own (soma.ts). */
+const SEARCH_PACKAGE = ['node_modules', 'pi-web-search'];
 /** Commands the chat may send to pi. Everything else (bash, export_html, switch_session …) stays out of reach. */
 const COMMANDS = new Set([
   'prompt', 'steer', 'follow_up', 'abort', 'new_session', 'get_state', 'get_messages', 'get_available_models', 'set_model',
@@ -60,6 +62,12 @@ export function piVersion(): string | null {
   catch { return null; }
 }
 
+/** pi-web-search, null when the installation lacks it: SOMA AI then works without web search. */
+function searchDir(): string | null {
+  const d = path.join(app.getAppPath(), ...SEARCH_PACKAGE);
+  return fs.existsSync(path.join(d, 'package.json')) ? d : null;
+}
+
 function guardDir(): string | null {
   const d = path.join(app.getAppPath(), ...GUARD_PACKAGE);
   return fs.existsSync(path.join(d, 'package.json')) ? d : null;
@@ -98,7 +106,8 @@ function aiEnv(dir: string): NodeJS.ProcessEnv {
   const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
   const sh = windowsShell();
   if (sh) env[key] = [sh.bin, env[key] ?? ''].join(path.delimiter);
-  return { ...piProcessEnv(env), PI_OFFLINE: '1' };
+  // SOMA_VERSION: web_fetch names SOMA AI with its version towards websites (resources/somaai/soma.ts)
+  return { ...piProcessEnv(env), PI_OFFLINE: '1', SOMA_VERSION: app.getVersion() };
 }
 
 /** Writes a JSON file of SOMA in pi's folder. One that is not valid JSON goes into a backup next to it first. */
@@ -290,6 +299,8 @@ export class SomaAI {
     const args = [entry, ...(this.fresh ? [] : ['--continue']), '--no-approve', '--offline', '--no-mcp', '-ne', '-ns', '-np', '--no-themes', '-e', guard];
     const own = path.join(aiResources(), 'soma.ts');
     if (fs.existsSync(own)) args.push('-e', own);
+    const search = searchDir();
+    if (search) args.push('-e', search);
     const prompt = path.join(aiResources(), 'system.md');
     if (fs.existsSync(prompt)) args.push('--append-system-prompt', prompt);
 

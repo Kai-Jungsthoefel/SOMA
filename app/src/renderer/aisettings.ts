@@ -295,7 +295,7 @@ export class AiPage implements SettingsPage {
     return [
       el('ul', { className: 'st-ai-rules' },
         li('folder', 'In the model’s folder', 'it reads, writes and runs commands without asking. Every step is in the History.'),
-        li('help', 'It asks first', 'before it works with files outside the model, downloads something or installs software.'),
+        li('help', 'It asks first', 'before it works with files outside the model, opens a website (once per site), downloads something or installs software.'),
         li('shield', 'Never', 'going back in the History, reading sign-ins and keys, and commands known to be dangerous.')),
       field('Note before the first message', 'The risks of working with SOMA AI, as the chat shows them before the first message.', again),
     ];

@@ -67,6 +67,7 @@
     "mediabunny": "^1.61.3",
     "node-pty": "^1.1.0",
     "pdfjs-dist": "^6.4.299",
+    "pi-web-search": "1.7.0",
     "sherpa-onnx-node": "2.0.1",
     "three": "^0.180.0",
     "three-mesh-bvh": "^0.9.15",

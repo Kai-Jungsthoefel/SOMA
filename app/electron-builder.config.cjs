@@ -48,6 +48,8 @@ module.exports = {
     'node_modules/typebox/**',
     'node_modules/@silvia-odwyer/photon-node/**',
     'node_modules/@gotgenes/pi-permission-system/**',
+    // Web search of SOMA AI: TypeScript source only, its imports of pi come from pi's bundle
+    'node_modules/pi-web-search/**',
     'node_modules/zod/**',
     'node_modules/web-tree-sitter/**',
     'node_modules/tree-sitter-bash/**',
