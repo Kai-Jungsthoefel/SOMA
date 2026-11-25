@@ -294,15 +294,30 @@ def cmd_component(args):
                     msg = "All linked components are up to date."
                     print(json.dumps(dict(status="ok", updated=[], message=msg)) if args.json else msg)
                     return 0
-            done = []
+            if args.target:  # one component: its error is the answer
+                c, backup = comp.update(root, args.target, force=args.force)
+                done = [dict(name=c["name"], backup=str(backup) if backup else None)]
+                print(json.dumps(dict(status="ok", updated=done), ensure_ascii=False) if args.json else
+                      f"Updated {c['name']!r} from {c['source']}." if backup else f"{c['name']!r} is already up to date.")
+                return 0
+            done, failed = [], []  # all of them: one that cannot be updated does not hold up the others
             for n in names:
-                c, backup = comp.update(root, n, force=args.force)
+                try:
+                    c, backup = comp.update(root, n, force=args.force)
+                except (comp.ComponentError, OSError) as e:
+                    failed.append(dict(name=n, error=str(e)))
+                    continue
                 done.append(dict(name=c["name"], backup=str(backup) if backup else None))
-                if not args.json:
-                    print(f"Updated {c['name']!r} from {c['source']}." if backup else f"{c['name']!r} is already up to date.")
             if args.json:
-                print(json.dumps(dict(status="ok", updated=done), ensure_ascii=False))
-            return 0
+                print(json.dumps(dict(status="error" if failed else "ok", updated=done, failed=failed,
+                                      **({"error": f"{len(failed)} of {len(names)} component(s) not updated"} if failed else {})),
+                                 ensure_ascii=False))
+            else:
+                for d in done:
+                    print(f"Updated {d['name']!r}." if d["backup"] else f"{d['name']!r} is already up to date.")
+                for f in failed:
+                    print(f"Not updated {f['name']!r}: {f['error']}", file=sys.stderr)
+            return 1 if failed else 0
         if not args.target:
             return fail(f"{args.action} needs the name of the component")
         if args.action == "remove":

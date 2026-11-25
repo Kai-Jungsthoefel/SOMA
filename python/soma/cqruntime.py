@@ -33,7 +33,12 @@ def param(default, label=None, *, name=None, **_spec):
         line = _soma_linecache.getline(frame.f_code.co_filename, pos.lineno if pos and pos.lineno else frame.f_lineno)
         match = _SOMA_ASSIGN.match(line)
         name = match.group(1) if match else None
-    value = _soma_value(name, default)
+    if name is not None and name in _SOMA_GIVEN:  # passed to component(): a wrong value is an error in the code
+        value, why = _soma_coerce(default, _SOMA_GIVEN[name], _spec.get("options"))
+        if why:
+            raise ValueError(f"component(..., {name}={_SOMA_GIVEN[name]!r}): the value is {why}")
+    else:
+        value = _soma_value(name, default)
     if name is not None:
         _SOMA_PARAM_NAMES[name] = value
     return value
@@ -42,14 +47,32 @@ def param(default, label=None, *, name=None, **_spec):
 def _soma_value(name, default):
     if name not in _SOMA_VALUES:
         return default
-    value = _SOMA_VALUES[name]
-    if isinstance(default, bool) or isinstance(value, bool):
-        return value if isinstance(default, bool) and isinstance(value, bool) else default
+    value, why = _soma_coerce(default, _SOMA_VALUES[name], None)
+    return default if why else value  # like SOMA: a value that does not fit leaves the default
+
+
+def _soma_coerce(default, raw, options):
+    """A value in the type of the default, as SOMA checks it: (value, None) or (None, reason)."""
+    if options is not None:
+        choices = list(options.keys() if isinstance(options, dict) else options)
+        same = [o for o in choices if o == raw and isinstance(o, bool) == isinstance(raw, bool)]
+        return (same[0], None) if same else (None, "not one of the options")
+    if isinstance(default, bool):
+        return (raw, None) if isinstance(raw, bool) else (None, "not true or false")
     if isinstance(default, (int, float)):
-        if not isinstance(value, (int, float)):
-            return default
-        return int(value) if isinstance(default, int) and float(value).is_integer() else value
-    return value if isinstance(value, type(default)) else default
+        if isinstance(raw, str):  # typed by hand, e.g. "40" or "40,5"
+            try:
+                raw = float(raw.strip().replace(",", "."))
+            except ValueError:
+                return None, "not a number"
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)) or raw != raw or abs(raw) == float("inf"):
+            return None, "not a number"
+        if isinstance(default, int):
+            return (int(raw), None) if raw == int(raw) else (None, "not a whole number")
+        return float(raw), None
+    if isinstance(default, str):
+        return (raw, None) if isinstance(raw, str) else (None, "not a text")
+    return (raw, None) if isinstance(raw, type(default)) else (None, f"not a {type(default).__name__}")
 
 
 def _soma_path(path):
@@ -87,6 +110,7 @@ def import_assembly(path):
 
 _SOMA_ANCHORS = {}       # anchors of the model being run: name -> (origin, x direction, normal)
 _SOMA_PARAM_NAMES = {}   # param() names and values of the model being run (component(): unknown names, soma_params)
+_SOMA_GIVEN = {}         # values passed to component() for the model being run: a wrong type is an error
 _SOMA_STACK = []         # folders of the components being run, inside each other
 _SOMA_BUILT = {}         # (folder, values) -> (parts, anchors): a component used several times is built once
 
@@ -112,8 +136,10 @@ def _soma_anchor_data(name, at, normal, x_dir):
     n = n.normalized()
     if x_dir is not None:
         x = _soma_cq.Vector(*_soma_vec(x_dir, f"anchor {name!r}: x_dir"))
-    else:  # any direction at right angles: world X, or world Y when the normal is along X
-        x = _soma_cq.Vector(1, 0, 0) if abs(n.x) < 0.9 else _soma_cq.Vector(0, 1, 0)
+    elif abs(n.z) > 1 - 1e-6:  # up or down: world X
+        x = _soma_cq.Vector(1, 0, 0)
+    else:  # sideways: up (world +Z). Anchors facing each other then turn about Z, the component stays upright
+        x = _soma_cq.Vector(0, 0, 1)
     x = x - n * x.dot(n)
     if x.Length < 1e-9:
         raise ValueError(f"anchor {name!r}: x_dir must not point along the normal")
@@ -127,7 +153,8 @@ def _soma_frame(data):
 
 
 def _soma_place(obj, anchor, to, to_anchor, flip, own):
-    """Location for `obj` so that its anchor sits on the target (place()). `own`: anchors of the model itself."""
+    """Location for `obj` so that its anchor sits on the target (place()). `own`: anchors of the model itself.
+    A point as the target only moves the component, a cq.Location or an anchor also turns it."""
     def anchors_of(asm, what):
         found = (getattr(asm, "metadata", None) or {}).get("soma_anchors")
         if not isinstance(asm, _soma_cq.Assembly) or found is None:
@@ -140,7 +167,8 @@ def _soma_place(obj, anchor, to, to_anchor, flip, own):
                              ". Define one in its model with anchor(\"name\", (x, y, z))")
         return _soma_frame(found[name])
 
-    mine = pick(anchors_of(obj, f"{getattr(obj, 'name', obj)!r}"), anchor, f"{getattr(obj, 'name', 'the component')!r}")
+    found = anchors_of(obj, f"{getattr(obj, 'name', obj)!r}")
+    mine = pick(found, anchor, f"{getattr(obj, 'name', 'the component')!r}")
     if isinstance(to, _soma_cq.Assembly):
         if to_anchor is None:
             raise ValueError("place(): name the anchor of the target too, e.g. place(drawer, \"back\", cabinet, \"slot 1\")")
@@ -149,20 +177,24 @@ def _soma_place(obj, anchor, to, to_anchor, flip, own):
         target = pick(own, to, "this model")
     elif isinstance(to, _soma_cq.Location):
         target = to
-    else:
-        target = _soma_cq.Location(_soma_cq.Vector(*_soma_vec(to, "place(): the target")))
+    else:  # a point: the anchor goes there, the component keeps its orientation (flip does not apply)
+        o, p = found[anchor][0], _soma_vec(to, "place(): the target")
+        return _soma_cq.Location(_soma_cq.Vector(p[0] - o[0], p[1] - o[1], p[2] - o[2]))
     if flip:  # face to face: the normals point against each other, the x directions agree
         target = target * _soma_cq.Location(_soma_cq.Vector(0, 0, 0), _soma_cq.Vector(1, 0, 0), 180)
     return target * mine.inverse
 
 
 def anchor(name, at=(0, 0, 0), normal=(0, 0, 1), x_dir=None):
-    """A named point of this model where it attaches to others (SOMA). Here: kept for place()."""
+    """A named point of this model where it attaches to others (SOMA). Here: kept for place(). x_dir by default:
+    world X for a normal up or down, up (+Z) for a sideways normal, so place() keeps components upright."""
     _SOMA_ANCHORS[str(name)] = _soma_anchor_data(name, at, normal, x_dir)
 
 
 def place(obj, anchor, to, to_anchor=None, flip=False):
-    """Moves a component so that its anchor sits on the target (SOMA). Returns the component."""
+    """Moves a component so that its anchor sits on the target (SOMA). Returns the component. Target: another
+    component with to_anchor or an anchor name of this model (also turns it), a cq.Location (its frame, also turns
+    it) or a point (only moves it)."""
     obj.loc = _soma_place(obj, anchor, to, to_anchor, flip, _SOMA_ANCHORS)
     return obj
 
@@ -183,21 +215,68 @@ def _soma_find(root, name):
             meta = {}
         meta = meta if isinstance(meta, dict) else {}
         label = meta["name"].strip() if isinstance(meta.get("name"), str) and meta["name"].strip() else d
-        names.append(repr(label))
-        if label.lower() == key or d.lower() in (key, slug):
-            return _soma_os.path.abspath(folder), label, meta
+        names.append((label, d, _soma_os.path.abspath(folder), meta))
+    # Its name first: names without Latin letters share a slug ("component", "component-2" ...)
+    for test in (lambda label, d: label.lower() == key, lambda label, d: d.lower() == key,
+                 lambda label, d: d.lower() == slug):
+        for label, d, folder, meta in names:
+            if test(label, d):
+                return folder, label, meta
+    names = [repr(n[0]) for n in names]
     raise ValueError(f"No component {name!r} in {base}. There are: {', '.join(names) or 'none'}")
 
 
-def _soma_inside(module, folder):
-    paths = [getattr(module, "__file__", None)] + list(getattr(module, "__path__", None) or [])
-    for p in paths:
-        try:
-            if p and _soma_os.path.commonpath([_soma_os.path.abspath(p), folder]) == folder:
-                return True
-        except ValueError:  # other drive
+def _soma_real(path):
+    return _soma_os.path.normcase(_soma_os.path.realpath(_soma_os.path.abspath(path)))
+
+
+def _soma_own_modules(folder, keep=()):
+    """{name: module} of the modules of the model in `folder` itself: x.py or the package x/ directly in the folder
+    (parts.params too). Not installed packages, also when they lie inside the folder (.soma/env, a .venv): their top
+    folder is not named like the module. Importing those a second time breaks C extensions (numpy: "cannot load
+    module more than once per process"). `keep`: modules that stay (this file as soma_compat)."""
+    try:
+        names = {_soma_os.path.normcase(e.split(".")[0]) for e in _soma_os.listdir(folder)}
+    except OSError:
+        return {}
+    real = _soma_real(folder)
+    out = {}
+    for k, m in list(_soma_sys.modules.items()):
+        top = _soma_os.path.normcase(k.split(".")[0])
+        if m is None or k == "__main__" or top not in names or any(m is x for x in keep):
             continue
-    return False
+        for p in [getattr(m, "__file__", None)] + list(getattr(m, "__path__", None) or []):
+            try:
+                rel = _soma_os.path.relpath(_soma_real(p), real).replace("\\", "/").split("/")
+            except (TypeError, ValueError, OSError):  # no file, other drive
+                continue
+            if rel[0] != ".." and (rel[0] if len(rel) > 1 else rel[0].split(".")[0]) == top:
+                out[k] = m
+                break
+    return out
+
+
+def _soma_isolate(outers, folder, keep=()):
+    """Before a component in `folder` runs inside the models `outers` (the innermost last): puts their own modules
+    aside and takes their folders off sys.path, so the component gets its own helpers.py and parts/ and does not
+    import the model around it by accident. Returns what _soma_restore() needs."""
+    stash = _soma_own_modules(outers[-1], keep)
+    for k in stash:
+        del _soma_sys.modules[k]
+    old_path = list(_soma_sys.path)
+    skip = {_soma_real(o) for o in outers}
+    _soma_sys.path[:] = [p for p in old_path if not isinstance(p, str) or _soma_real(p or ".") not in skip]
+    _soma_sys.path.insert(0, str(folder))
+    return stash, old_path
+
+
+def _soma_restore(saved, folder, keep=()):
+    """After the component ran (also after an error): its modules go, those of the model around it come back."""
+    stash, old_path = saved
+    _soma_sys.path[:] = old_path
+    for k in _soma_own_modules(folder, keep):
+        del _soma_sys.modules[k]
+    _soma_sys.modules.update(stash)
 
 
 def _soma_run(folder, label, meta, values):
@@ -211,24 +290,21 @@ def _soma_run(folder, label, meta, values):
             own = _soma_json.load(f).get("values") or {}
     except (OSError, ValueError, AttributeError):
         own = {}
-    outer = _SOMA_STACK[-1] if _SOMA_STACK else _SOMA_DIR
-    saved = (list(_SOMA_PARTS), dict(_SOMA_VALUES), dict(_SOMA_ANCHORS), dict(_SOMA_PARAM_NAMES))
-    me = _soma_sys.modules.get(__name__)
-    stash = {k: m for k, m in list(_soma_sys.modules.items())
-             if m is not None and m is not me and k != "__main__" and _soma_inside(m, outer)}
-    for k in stash:
-        del _soma_sys.modules[k]
-    old_cwd, old_path = _soma_os.getcwd(), list(_soma_sys.path)
+    saved = (list(_SOMA_PARTS), dict(_SOMA_VALUES), dict(_SOMA_ANCHORS), dict(_SOMA_PARAM_NAMES), dict(_SOMA_GIVEN))
+    me = (_soma_sys.modules.get(__name__),)
+    old_cwd = _soma_os.getcwd()
+    isolated = _soma_isolate([_SOMA_DIR] + _SOMA_STACK, folder, me)
     _SOMA_PARTS.clear()
     _SOMA_VALUES.clear()
-    _SOMA_VALUES.update(own if isinstance(own, dict) else {}, **values)
+    _SOMA_VALUES.update(own if isinstance(own, dict) else {})
+    _SOMA_GIVEN.clear()
+    _SOMA_GIVEN.update(values)
     _SOMA_ANCHORS.clear()
     _SOMA_PARAM_NAMES.clear()
     _SOMA_STACK.append(folder)
     shown = []  # a component that is a plain CadQuery script: show_object() or `result`, as SOMA builds it
     try:
         _soma_os.chdir(folder)
-        _soma_sys.path.insert(0, folder)
         ns = _soma_runpy.run_path(entry, run_name="__main__", init_globals={
             "show_object": lambda obj, name=None, options=None, **_kw: shown.append((obj, name, options)),
             "debug": lambda *_a, **_kw: None, "log": lambda *_a, **_kw: None})
@@ -247,11 +323,9 @@ def _soma_run(folder, label, meta, values):
     finally:
         _SOMA_STACK.pop()
         _soma_os.chdir(old_cwd)
-        _soma_sys.path[:] = old_path
-        for k, m in list(_soma_sys.modules.items()):
-            if m is not None and m is not me and k != "__main__" and _soma_inside(m, folder):
-                del _soma_sys.modules[k]
-        _soma_sys.modules.update(stash)
+        _soma_restore(isolated, folder, me)
+        _SOMA_GIVEN.clear()
+        _SOMA_GIVEN.update(saved[4])
         _SOMA_PARTS[:] = saved[0]
         _SOMA_VALUES.clear()
         _SOMA_VALUES.update(saved[1])

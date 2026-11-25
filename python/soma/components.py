@@ -235,9 +235,12 @@ def find(root, name):
     """Folder and metadata of the component called `name` (its name or its folder, case does not matter)."""
     key = str(name).strip().lower()
     found = [(f, _meta_of(f)) for f in folders(root)]
-    for f, m in found:
-        if m["name"].lower() == key or f.name.lower() == key or f.name.lower() == _slug(key):
-            return f, m
+    # Its name first: names without Latin letters share a slug ("component", "component-2" ...)
+    for test in (lambda f, m: m["name"].lower() == key, lambda f, m: f.name.lower() == key,
+                 lambda f, m: f.name.lower() == _slug(key)):
+        for f, m in found:
+            if test(f, m):
+                return f, m
     names = ", ".join(repr(m["name"]) for _, m in found)
     raise ComponentError(f"No component {name!r} in {DIR}/. " + (f"There are: {names}." if names else
                          "Insert one first: soma component add <model.soma or folder> (or Import in the app)."))
@@ -356,12 +359,18 @@ def _now():
     return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def _check_source(root, src):
+    """A model cannot contain itself: not the model folder, not a folder around it. A model file or another model
+    folder inside it (inputs/Drawer.soma) is fine."""
+    if src == root or src in root.parents:
+        raise ComponentError("A model cannot contain itself or a folder around it")
+
+
 def add(root, source, link=True, name=None):
     """Copies the model at `source` into components/ and returns its entry from status()."""
     root = Path(root).resolve()
     src = Path(source).expanduser().resolve()
-    if src == root or root in src.parents:
-        raise ComponentError("A model cannot contain itself or a folder of its own")
+    _check_source(root, src)
     files, project = read_source(src)
     entry = project.get("entry") if isinstance(project.get("entry"), str) else DEFAULT_ENTRY
     if entry not in files:
@@ -370,11 +379,13 @@ def add(root, source, link=True, name=None):
     display = str(name or own or src.stem).strip()
     if not display:
         raise ComponentError("The component needs a name")
-    folder = root / DIR / _slug(display)
     taken = [m for m in status(root, check_source=False) if m["name"].lower() == display.lower()]
-    if folder.exists() or taken:
-        raise ComponentError(f"There is already a component {display!r} ({DIR}/{folder.name}). Update it with "
+    if taken:
+        raise ComponentError(f"There is already a component {display!r} ({taken[0]['folder']}). Update it with "
                              f"`soma component update \"{display}\"` or choose another name with --name")
+    folder, i = root / DIR / _slug(display), 2
+    while folder.exists():  # another component with the same slug ("抽屉" and "柜子" are both "component")
+        folder, i = root / DIR / f"{_slug(display)}-{i}", i + 1
     _write_files(folder, files)
     meta = dict(name=display, mode="link" if link else "copy", source=str(src), entry=entry,
                 hash=fingerprint(files), updated=_now())
@@ -459,8 +470,7 @@ def relink(root, name, source):
     if entry not in files:
         raise ComponentError(f"{src.name} is not a SOMA model: {entry} is missing")
     root = Path(root).resolve()
-    if src == root or root in src.parents:
-        raise ComponentError("A model cannot contain itself or a folder of its own")
+    _check_source(root, src)
     raw = _read_meta(folder) or {}
     raw.update(name=meta["name"], mode="link", source=str(src), entry=raw.get("entry") if isinstance(raw.get("entry"), str) else entry)
     if not isinstance(raw.get("hash"), str):  # copied in by hand: the files as they are count as the copied state
@@ -493,7 +503,8 @@ def anchor(name, at=(0, 0, 0), normal=(0, 0, 1), x_dir=None):
     name     e.g. "back", "slot 1"
     at       the point (x, y, z) in this model, mm
     normal   direction of the anchor (default up, +Z). Only matters when place() should also turn the component
-    x_dir    second direction, at right angles to the normal (default: along X). Fixes the turn about the normal
+    x_dir    second direction, at right angles to the normal. Fixes the turn about the normal. Default: world X
+             for a normal up or down, up (+Z) for a sideways normal: place() then keeps components upright
 
     The model that uses this one as a component places it with place(). Anchors do nothing else, they are not parts.
     """
@@ -506,8 +517,9 @@ def place(obj, anchor, to, to_anchor=None, flip=False):
 
     obj        a component: component("Drawer")
     anchor     name of one of its anchors (soma component list shows them)
-    to         another component with `to_anchor` (one of its anchors; place that one first), the name of an anchor
-               of this model, or a point (x, y, z) or cq.Location
+    to         another component with `to_anchor` (one of its anchors; place that one first) or the name of an
+               anchor of this model: moves and turns it. A cq.Location: its frame, moves and turns it. A point
+               (x, y, z): only moves it, the component keeps its orientation
     flip       False: the anchors' directions agree. True: face to face, the normals point against each other
 
         cabinet = component("Cabinet")
@@ -518,21 +530,6 @@ def place(obj, anchor, to, to_anchor=None, flip=False):
     from . import cqruntime
     obj.loc = cqruntime._soma_place(obj, anchor, to, to_anchor, flip, ANCHORS)
     return obj
-
-
-def _inside(module, root):
-    paths = []
-    f = getattr(module, "__file__", None)
-    if f:
-        paths.append(f)
-    paths.extend(getattr(module, "__path__", None) or [])  # namespace packages like parts/ without __init__.py
-    for p in paths:
-        try:
-            Path(p).resolve().relative_to(root)
-            return True
-        except (ValueError, OSError, TypeError):
-            continue
-    return False
 
 
 def component(name, **values):
@@ -562,20 +559,19 @@ def component(name, **values):
 
 def _run(folder, meta, values):
     """Runs the model of the component in its own folder, with its own parts and parameters. Everything of the model
-    around it (registered parts, parameters, its modules such as parts.params) is put aside and restored afterwards."""
+    around it (registered parts, parameters, its modules such as parts.params) is put aside and restored afterwards.
+    The folders of the models around it are off sys.path meanwhile. Installed packages stay (cqruntime)."""
     import runpy
-    from . import cqcompat, params, registry
+    from . import cqcompat, cqruntime, params, registry
     entry = folder / (meta.get("entry") if isinstance(meta.get("entry"), str) else DEFAULT_ENTRY)
     if not entry.is_file():
         raise ComponentError(f"Component {meta['name']!r} has no {entry.name} ({DIR}/{folder.name})")
-    outer = _STACK[-1] if _STACK else Path.cwd().resolve()
+    outers = list(_STACK) or [Path.cwd().resolve()]
     saved = dict(reg=list(registry.REGISTRY), ignore=registry.IGNORE_ADD, params=list(params.PARAMS),
                  warnings=list(params.WARNINGS), user=params._USER, trees=dict(params._TREES), shown=list(cqcompat.SHOWN),
                  anchors=dict(ANCHORS), given=params._GIVEN)
-    stash = {k: m for k, m in list(sys.modules.items()) if m is not None and _inside(m, outer)}
-    for k in stash:
-        del sys.modules[k]
-    old_cwd, old_path = os.getcwd(), list(sys.path)
+    old_cwd = os.getcwd()
+    isolated = cqruntime._soma_isolate([str(o) for o in outers], folder)
     registry.REGISTRY.clear()
     registry.IGNORE_ADD = False  # also when an animation imports the model: the component has to deliver its parts
     cqcompat.SHOWN.clear()
@@ -585,7 +581,6 @@ def _run(folder, meta, values):
     _STACK.append(folder)
     try:
         os.chdir(folder)
-        sys.path.insert(0, str(folder))
         ns = runpy.run_path(str(entry), init_globals=cqcompat.script_globals(), run_name="__main__")
         if not registry.REGISTRY:
             cqcompat.register_shown(ns, entry)
@@ -604,11 +599,7 @@ def _run(folder, meta, values):
     finally:
         _STACK.pop()
         os.chdir(old_cwd)
-        sys.path[:] = old_path
-        for k, m in list(sys.modules.items()):
-            if m is not None and _inside(m, folder):
-                del sys.modules[k]
-        sys.modules.update(stash)
+        cqruntime._soma_restore(isolated, folder)
         registry.REGISTRY[:] = saved["reg"]
         registry.IGNORE_ADD = saved["ignore"]
         params.PARAMS[:] = saved["params"]

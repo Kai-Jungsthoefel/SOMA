@@ -85,8 +85,8 @@ for i in range(COUNT):
 
 - A part name that comes twice gets the instance in brackets: `Front (Drawer 2)`.
 - One instance different from the others (round handles only in this cabinet): best a parameter of the component
-  (`HANDLE="round"`, in its original, or in a copy). Only if that is not possible, change the returned assembly of that
-  one instance, e.g. replace a part's shape: `next(c for c in d.children if c.name == "Handle").obj = round_handle`.
+  (`HANDLE="round"`, in its original, or in a copy). Otherwise a second copy for that instance:
+  `soma component add Drawer.soma --copy --name "Drawer round"`, changed in its own folder.
 
 ## Anchors
 
@@ -108,14 +108,15 @@ cabinet.loc = cq.Location((0, 0, LEG_H))
 drawer = place(component("Drawer"), "back", cabinet, "slot 1", flip=True)   # place the target first
 add_part("Cabinet", cabinet)
 add_part("Drawer", drawer)
-anchor("floor", (500, 0, 0))                    # an anchor of this model ...
-place(component("Bin"), "bottom", "floor")      # ... as a target by its name
-place(component("Bin"), "bottom", (500, 0, 0))  # or a point, or a cq.Location
+anchor("floor", (500, 0, 0))                                 # an anchor of this model ...
+add_part("Bin", place(component("Bin"), "bottom", "floor"))  # ... as a target by its name
+add_part("Bin 2", place(component("Bin"), "bottom", (800, 0, 0)))  # or a point
 ```
 
-- `place()` sets `.loc` of the component and returns it. Without normals it only moves. With normals it also turns:
-  by default the two anchors point the same way, `flip=True` puts them face to face (a drawer back against the back
-  wall of a cabinet: their normals point against each other). `x_dir=` in `anchor()` fixes the turn about the normal.
+- `place()` sets `.loc` of the component and returns it. Onto a point it only moves. Onto an anchor (or a
+  `cq.Location`) it also turns: by default the two anchors point the same way, `flip=True` puts them face to face (a
+  drawer back against the back wall of a cabinet). Sideways anchors keep the component upright, it turns about Z.
+  `x_dir=` in `anchor()` fixes the turn about the normal.
 - `soma component list` shows the anchors of each component. Anchors named in a loop show as a pattern
   (`slot {i + 1}`): the names are `slot 1`, `slot 2`, ... An unknown name stops the build with the list.
 - Add anchors to a linked component in its original (ask the user), to a copy in `components/<folder>/`.

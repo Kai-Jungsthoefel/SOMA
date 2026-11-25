@@ -2,7 +2,8 @@
 // copy, the app adds it to model.py, the tree marks the instance, a changed original shows "Update" in the tree, the update
 // copies it in, a component changed in this model asks first, unlink makes it a copy. Two instances with their own
 // parameters, placing by anchors, the agent's command `soma component list`, "Export as CadQuery" with components, a model
-// folder as a component (part named like the model), finding a moved original, opening the original.
+// folder as a component (part named like the model), finding a moved original, opening the original. Then soma alone:
+// packages of the project environment load once, components do not see the model around them, anchors keep upright.
 // Call: npm run test:components (builds first).
 // SMOKE_VISIBLE=offscreen SMOKE_SHOTS=1 saves pictures.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -48,6 +49,120 @@ with zipfile.ZipFile(out + ".part", "w") as z:
 os.replace(out + ".part", out)
 `, src, zipFile], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(r.stderr);
+}
+
+/** soma alone, without the app: modules and sys.path while components run, anchors, export, management. */
+function pythonChecks() {
+  const py = (args, cwd) => spawnSync(PY, args, { encoding: 'utf8', cwd, env: { ...process.env, PYTHONUTF8: '1' } });
+  const pr = path.join(tmp, 'py-root');
+  const put = (rel, text) => { fs.mkdirSync(path.dirname(path.join(pr, rel)), { recursive: true }); fs.writeFileSync(path.join(pr, rel), text); };
+  // A package of the project environment that breaks when it is imported twice, like numpy (a C extension)
+  const site = py(['-c', 'import sys, sysconfig; print(sysconfig.get_path("purelib", "venv", vars={"base": sys.argv[1], "platbase": sys.argv[1]}))',
+    path.join(pr, '.soma', 'env')]).stdout.trim();
+  const ONCE = 'import builtins\nbuiltins._once = getattr(builtins, "_once", 0) + 1\nif builtins._once > 1:\n    raise ImportError("cannot load module more than once per process")\n';
+  put(path.relative(pr, path.join(site, 'once', '__init__.py')), ONCE);
+  put('helpers.py', 'WHO = "root"\n');
+  put('rootonly.py', 'X = 1\n');
+  put('model.py', `import cadquery as cq
+from soma import add_part, component, place
+import once, helpers
+cab = component("Cabinet")
+d1 = place(component("Drawer"), "back", cab, "slot")
+d2 = place(component("Drawer"), "bottom", (1000, 0, 0))
+assert helpers.WHO == "root", helpers.WHO
+add_part("Cabinet", cab)
+add_part("Drawer 1", d1)
+add_part("Drawer 2", d2)
+`);
+  const drawer = `import cadquery as cq
+from soma import add_part, anchor, param
+import once, helpers
+assert helpers.WHO == "drawer", helpers.WHO
+try:
+    import rootonly
+    raise SystemExit("the drawer imported rootonly.py of the model around it")
+except ImportError:
+    pass
+W = param(200.0, "Width")
+add_part("Front", cq.Workplane().box(W, 10, 100).translate((0, 0, 50)))
+add_part("Knob", cq.Workplane().box(20, 20, 20).translate((0, -15, 90)))
+anchor("back", (0, 5, 0), normal=(0, 1, 0))
+anchor("bottom", (0, 0, 0))
+`;
+  for (const dir of ['components/drawer', 'components/cabinet/components/drawer']) {
+    put(`${dir}/model.py`, drawer);
+    put(`${dir}/helpers.py`, 'WHO = "drawer"\n');
+    put(`${dir}/component.json`, '{"name": "Drawer", "mode": "copy"}\n');
+  }
+  put('components/cabinet/model.py', `import cadquery as cq
+from soma import add_part, anchor, component, place
+import once, helpers
+assert helpers.WHO == "cabinet", helpers.WHO
+add_part("Shell", cq.Workplane().box(300, 300, 500).translate((0, 0, 250)))
+anchor("slot", (0, 150, 100), normal=(0, -1, 0))
+add_part("Inner", place(component("Drawer"), "back", "slot", flip=True))
+assert helpers.WHO == "cabinet", helpers.WHO
+`);
+  put('components/cabinet/helpers.py', 'WHO = "cabinet"\n');
+  put('components/cabinet/component.json', '{"name": "Cabinet", "mode": "copy"}\n');
+  const b = py(['-m', 'soma', 'build', '--project', pr]);
+  check('soma build: a package of .soma/env imported by the model and its (nested) components loads once, a component does not import the model\'s own modules',
+    b.status === 0, (b.stdout + b.stderr).slice(-400));
+  let parts = [];
+  try { parts = JSON.parse(fs.readFileSync(path.join(pr, '.soma', 'model.map.json'), 'utf8')).parts; } catch { /* no build */ }
+  const bb = (name) => parts.find((p) => p.name === name)?.bbox.map((c) => c.map(Math.round).join(',')).join(' ');
+  check('place(): sideways anchors facing each other keep the drawer upright (turned about Z), a point target only moves it',
+    bb('Knob') === '-10,120,180 10,140,200' && bb('Knob (Drawer 1)') === '-10,160,180 10,180,200' && bb('Knob (Drawer 2)') === '990,-25,80 1010,-5,100',
+    `${bb('Knob')} | ${bb('Knob (Drawer 1)')} | ${bb('Knob (Drawer 2)')}`);
+
+  // The export: plain CadQuery with soma blocked, the package in a .venv inside the folder
+  const out = path.join(tmp, 'py-export');
+  const ex = py(['-m', 'soma', 'cadquery', 'export', '--out', path.join(out, 'model.py'), '--project', pr]);
+  const dir = path.join(out, 'model');
+  fs.mkdirSync(path.join(dir, '.venv', 'Lib', 'site-packages', 'once'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.venv', 'pyvenv.cfg'), '');
+  fs.writeFileSync(path.join(dir, '.venv', 'Lib', 'site-packages', 'once', '__init__.py'), ONCE);
+  fs.writeFileSync(path.join(dir, 'bad.py'), fs.readFileSync(path.join(dir, 'model.py'), 'utf8').replace('component("Drawer"), "back"', 'component("Drawer", W="wide"), "back"'));
+  const runExport = (file) => py(['-c', `import runpy, sys
+sys.modules["soma"] = None
+sys.path.insert(0, ".")
+sys.path.append(".venv/Lib/site-packages")
+runpy.run_path("${file}", run_name="export")
+import soma_compat
+d1 = next(p for p in soma_compat._SOMA_PARTS if p["name"] == "Drawer 1")
+print("drawer 1", [round(v) for v in d1["shape"].loc.toTuple()[1]])
+`], dir);
+  const good = runExport('model.py'), bad = runExport('bad.py');
+  check('Export as CadQuery with components: runs without soma, the package in .venv loads once, the drawer turned about Z',
+    ex.status === 0 && good.stdout.includes('drawer 1 [0, 0, 180]'), ex.stderr + good.stdout + good.stderr.slice(-400));
+  check('Export: a value of the wrong type for component() stops it as in SOMA', bad.status !== 0
+    && bad.stderr.includes("component(..., W='wide'): the value is not a number"), bad.stderr.slice(-300));
+
+  // Management: names without Latin letters, a model file in inputs/, the folder around the model, update of all
+  const mg = path.join(tmp, 'py-manage'), m = path.join(mg, 'M');
+  for (const d of ['src1', 'src2']) {
+    fs.mkdirSync(path.join(mg, d), { recursive: true });
+    fs.writeFileSync(path.join(mg, d, 'model.py'), 'import cadquery as cq\nfrom soma import add_part\nadd_part("A", cq.Workplane().box(1, 1, 1))\n');
+  }
+  fs.mkdirSync(path.join(m, 'inputs'), { recursive: true });
+  fs.writeFileSync(path.join(m, 'model.py'), 'x = 1\n');
+  fs.writeFileSync(path.join(mg, 'model.py'), 'x = 1\n');
+  py(['-c', 'import sys, zipfile\nwith zipfile.ZipFile(sys.argv[1], "w") as z:\n    z.write(sys.argv[2], "model.py")', path.join(m, 'inputs', 'Cab.soma'), path.join(mg, 'src1', 'model.py')]);
+  const comp = (...args) => py(['-m', 'soma', 'component', ...args, '--project', m], m);
+  const a1 = comp('add', path.join(mg, 'src1'), '--name', '抽屉'), a2 = comp('add', path.join(mg, 'src2'), '--name', '柜子');
+  const again = comp('add', path.join(mg, 'src2'), '--name', '柜子');
+  const fromInputs = comp('add', 'inputs/Cab.soma', '--copy'), around = comp('add', mg);
+  check('soma component add: names without Latin letters get folders component and component-2, the same name again is refused',
+    a1.status === 0 && a2.status === 0 && a2.stdout.includes('components/component-2') && again.status === 1
+    && again.stderr.includes("already a component '柜子' (components/component-2)"), a2.stdout + a2.stderr + again.stderr);
+  check('soma component add: a model file in inputs/ is fine, the folder around the model is refused',
+    fromInputs.status === 0 && around.status === 1 && around.stderr.includes('cannot contain itself'), fromInputs.stderr + around.stdout + around.stderr);
+  fs.appendFileSync(path.join(mg, 'src1', 'model.py'), '# changed\n');
+  fs.appendFileSync(path.join(mg, 'src2', 'model.py'), '# changed\n');
+  fs.appendFileSync(path.join(m, 'components', 'component', 'model.py'), '# changed here\n');
+  const up = comp('update');
+  check('soma component update without a name: updates the others, names the one it cannot update, exit code 1',
+    up.status === 1 && up.stdout.includes("Updated '柜子'") && up.stderr.includes("Not updated '抽屉'"), up.stdout + up.stderr);
 }
 
 try {
@@ -227,6 +342,9 @@ print(len(parts), [round(v) for v in third["shape"].loc.toTuple()[0]], "soma" in
   if (other) {
     try { execFileSync(process.platform === 'win32' ? 'taskkill' : 'kill', process.platform === 'win32' ? ['/PID', String(other), '/T', '/F'] : ['-9', String(other)], { stdio: 'ignore' }); } catch { /* gone */ }
   }
+
+  // 12) soma alone: modules and sys.path of components, upright anchors, the export, managing components
+  pythonChecks();
 } catch (e) {
   console.log('ABORTED:', e.message);
   t.fail();
