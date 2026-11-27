@@ -61,8 +61,10 @@ lid = lid.cut(s.clearance_hole())    # normal fit 9/32 in = 7.14 mm; fit="fine"/
 s.head_diameter, s.tap_drill         # 9.525 mm, 5.105 mm (#7 drill)
 ```
 
-`lengths("ASME B18.3", "1/4-20")` and `pick_length(...)` work in inches. The table's lengths start at 3/4 in: for a
-shorter screw the user has, `check_length=False`.
+`lengths("ASME B18.3", "1/4-20")` works in inches. `pick_length` of an inch screw needs the unit of the minimum:
+`pick_length("ASME B18.3", "1/4-20", plate + 6, unit="mm")` for a length from the geometry, `unit="in"` for one in
+inches. It returns inches, ready for `Screw(..., length=...)`. The table's lengths start at 3/4 in: for a shorter screw
+the user has, `check_length=False`.
 
 ## Nut traps
 

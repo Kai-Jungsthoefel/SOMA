@@ -27,6 +27,7 @@ Size and length are inch, as they are sold; every number the object returns is m
     s.d, s.length, s.head_diameter                           # 6.35, 19.05, 9.525 (mm)
     plate = plate.cut(s.clearance_hole())                    # clearance hole from the inch table, tap_hole() too
     lengths("ASME B18.3", "1/4-20")                          # standard lengths in inches
+    pick_length("ASME B18.3", "1/4-20", 12.5, unit="mm")     # 0.75: minimum from the geometry, result in inches
 """
 import copy
 import csv
@@ -258,15 +259,33 @@ def lengths(standard, size):
     return [x for x in series if short - 1e-9 <= x <= long_ + 1e-9]
 
 
-def pick_length(standard, size, min_length, max_length=None):
+def pick_length(standard, size, min_length, max_length=None, *, unit=None):
     """Shortest standard length that is at least `min_length` (and at most `max_length`, if given).
-    In mm, for inch screws (ASME B18.3) in inches, like lengths()."""
+
+    `unit` is the unit of min_length and max_length: "mm" (default for metric screws) or "in". Inch screws (ASME B18.3)
+    need it: a length computed from the geometry is mm, one from the user may be inches, and 3 mm read as 3 in would be
+    a screw 25 times too long. The result is the length as the screw takes it, like lengths(): mm for metric screws,
+    inches for inch screws, ready for Screw(..., length=...).
+        pick_length("ASME B18.3", "1/4-20", plate + 6, unit="mm")   # -> 0.75 (in)
+    """
+    inch = bool(SCREWS[_norm_standard(standard, SCREWS, "Screw")].get("inch"))
+    if unit is None:
+        if inch:
+            raise ValueError(f"{standard} {size}: say the unit of min_length, pick_length(..., unit=\"mm\") for a "
+                             "length from the geometry or unit=\"in\". The result is in inches, as the screw takes it")
+        unit = "mm"
+    if unit not in ("mm", "in"):
+        raise ValueError(f"unit must be \"mm\" or \"in\", not {unit!r}")
+    # into the unit of the table: inches for inch screws, mm otherwise
+    k = 1.0 if (unit == "in") == inch else (1 / INCH if inch else INCH)
+    lo = min_length * k
+    hi = None if max_length is None else max_length * k
     options = lengths(standard, size)
-    fitting = [x for x in options if x >= min_length - 1e-9 and (max_length is None or x <= max_length + 1e-9)]
+    fitting = [x for x in options if x >= lo - 1e-9 and (hi is None or x <= hi + 1e-9)]
     if not fitting:
         span = f"{_fmt(min_length)} to {_fmt(max_length)}" if max_length is not None else f"of at least {_fmt(min_length)}"
-        unit = "in" if SCREWS[_norm_standard(standard, SCREWS, "Screw")].get("inch") else "mm"
-        raise ValueError(f"{standard} {size}: no standard length {span} {unit}. Standard lengths: "
+        table = "in" if inch else "mm"
+        raise ValueError(f"{standard} {size}: no standard length {span} {unit}. Standard lengths ({table}): "
                          + ", ".join(_fmt(x) for x in options))
     return fitting[0]
 
@@ -788,8 +807,13 @@ class Screw(_Part):
         self.length_in = length_in
         self.d, self.length, self.pitch = d_in * INCH, length_in * INCH, INCH / tpi
         self.dims = {c: vals[c] * INCH for c in spec["cols"]}
+        options = lengths(name, self.size)
+        if not check_length and options and length_in > 2 * options[-1]:
+            # Also without the check: far beyond the table's longest is a length in mm (19.05 for 3/4 in)
+            raise ValueError(f"{self.designation}: {_fmt_in(length_in)} in is far longer than the table's longest "
+                             f"({_fmt_in(options[-1])} in). Inch screws take the length in inches ({_fmt(length_in)} mm "
+                             f"would be {_fmt(round(length_in / INCH, 3))} in)")
         if check_length:
-            options = lengths(name, self.size)
             if options and not any(abs(length_in - x) < 0.01 for x in options):
                 hint = " Non-standard length: check_length=False"
                 if length_in > options[-1]:

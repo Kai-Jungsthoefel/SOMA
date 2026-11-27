@@ -95,6 +95,21 @@ try {
     const first = await build(dir2, { ...env, SOMA_UNITS: 'in' }).done; // first build: output/ and .soma/ exist from now on
     check('In the terminals of a user who works in inches (SOMA_UNITS=in) soma build reminds the agent', first.code === 0
       && first.out.includes('the user works in inches') && first.out.includes('convert with 25.4'), first.out);
+    // The app's settings win over SOMA_UNITS from the terminal's start: read at every call, so a terminal opened before a
+    // switch learns it. Back to mm: once a note that inches are over, then nothing
+    const sd = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-lock-settings-'));
+    const sf = path.join(sd, 'settings.json');
+    const units = (u) => fs.writeFileSync(sf, JSON.stringify({ viewer: { units: u } }));
+    try {
+      units('in');
+      const a = await build(dir2, ['--force'], { ...env, SOMA_UNITS: 'mm', SOMA_SETTINGS: sf }).done;
+      units('mm');
+      const b = await build(dir2, ['--force'], { ...env, SOMA_UNITS: 'in', SOMA_SETTINGS: sf }).done;
+      const c = await build(dir2, ['--force'], { ...env, SOMA_UNITS: 'in', SOMA_SETTINGS: sf }).done;
+      check('soma build reads the units from the app\'s settings at every call, after a switch back to mm once a note',
+        a.out.includes('the user works in inches') && b.out.includes('now works in millimetres') && !b.out.includes('works in inches')
+        && !c.out.includes('millimetres') && !c.out.includes('inches'), [a.out, b.out, c.out].join('\n---\n'));
+    } finally { fs.rmSync(sd, { recursive: true, force: true }); }
     clearRuns();
     const r1 = build(dir2, { ...env, SLEEP: '6' });
     await until('build running', () => ran() >= 1);

@@ -203,7 +203,15 @@ out("Notations: \"ASME B18.3 #10-32x1\" as one text, \"1/4 x 1-1/2\" means UNC 1
     and Screw("ASME B18.3", "#4", "3/4", at=(0, 0, 0)).size == "#4-40" and Screw("ASME B18.3", "1/4-28", 0.75, at=(0, 0, 0)).tpi == 28)
 out("Inch lengths in inches: series up to the table's longest, 0.88 read as 7/8, pick_length",
     lengths("ASME B18.3", "1/4-20")[:4] == [0.75, 0.875, 1.0, 1.25] and lengths("ASME B18.3", "1/4-20")[-1] == 5.0
-    and pick_length("ASME B18.3", "#10-32", 0.8) == 0.875, lengths("ASME B18.3", "1/4-20")[:5])
+    and pick_length("ASME B18.3", "#10-32", 0.8, unit="in") == 0.875, lengths("ASME B18.3", "1/4-20")[:5])
+out("pick_length of an inch screw needs the unit: mm from the geometry gives inches for the screw, without unit an error",
+    pick_length("ASME B18.3", "1/4-20", 3, unit="mm") == 0.75 and pick_length("ASME B18.3", "1/4-20", 26, unit="mm") == 1.25
+    and pick_length("ISO 4762", "M3", 0.35, unit="in") == 10 and pick_length("ISO 4762", "M3", 9, unit="mm") == 10
+    and 'unit="mm"' in err(lambda: pick_length("ASME B18.3", "1/4-20", 3)), err(lambda: pick_length("ASME B18.3", "1/4-20", 3)))
+out("A length in mm is refused even with check_length=False (19.05 would be a 19 in screw)",
+    "in inches" in err(lambda: Screw("ASME B18.3", "1/4-20", 19.05, at=(0, 0, 0), check_length=False))
+    and Screw("ASME B18.3", "1/4-20", 0.6, at=(0, 0, 0), check_length=False).length_in == 0.6,
+    err(lambda: Screw("ASME B18.3", "1/4-20", 19.05, at=(0, 0, 0), check_length=False)))
 imsgs = {
     "size": err(lambda: Screw("ASME B18.3", "9/16-12 x 2", at=(0, 0, 0))),
     "tpi": err(lambda: Screw("ASME B18.3", "1/4-32 x 1", at=(0, 0, 0))),

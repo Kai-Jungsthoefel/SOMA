@@ -69,11 +69,65 @@ def _foreign_shell_note(project):
     return note + (" Details: .soma/skills/shell-environment.md" if skill.is_file() else "")
 
 
-# The app's terminals and SOMA AI carry the user's units (SOMA_UNITS, Settings > Viewer > Units). The model stays in mm,
-# the reminder keeps the agent from reading a bare "2" as 2 mm for someone who measures in inches (discussion #22)
+# The user's units (Settings > Viewer > Units). The model stays in mm, the reminder keeps the agent from reading a bare
+# "2" as 2 mm for someone who measures in inches (discussion #22)
 INCH_NOTE = ("Note: the user works in inches (SOMA Settings > Viewer > Units). Dimensions they give without a unit are "
              "inches. The model stays in mm: convert with 25.4. A parameter the user thinks of in inches gets "
              "unit=\"in\" and its value in inches, convert it to mm before CadQuery.")
+MM_NOTE = ("Note: the user now works in millimetres (SOMA Settings > Viewer > Units). Dimensions they give without a "
+           "unit are millimetres again.")
+
+
+def _user_units():
+    """The units set in the app right now, None outside the app.
+
+    The app's terminals and SOMA AI carry the path of its settings (SOMA_SETTINGS): read at every call, so an agent in a
+    terminal opened before a change, or in another window, learns the new units. SOMA_UNITS (the units when the terminal
+    started) only when the file cannot be read.
+    """
+    f = os.environ.get("SOMA_SETTINGS")
+    if f:
+        try:
+            data = json.loads(Path(f).read_text(encoding="utf-8-sig"))
+            if isinstance(data, dict):
+                viewer = data.get("viewer")
+                units = viewer.get("units") if isinstance(viewer, dict) else None
+                return units if units in ("mm", "in") else "mm"  # the app's default
+        except FileNotFoundError:
+            return "mm"  # nothing changed in the settings yet
+        except (OSError, ValueError):
+            pass
+    units = os.environ.get("SOMA_UNITS")
+    return units if units in ("mm", "in") else None
+
+
+def _units_note(project):
+    """INCH_NOTE for someone who works in inches. Once MM_NOTE after a switch back, so the agent drops the inches."""
+    units = _user_units()
+    if units is None:
+        return None
+    # The marker lives next to the app's settings, not in the model: it must never become part of its history
+    marker = None
+    if os.environ.get("SOMA_SETTINGS"):
+        import hashlib
+        key = hashlib.sha1(str(Path(project).resolve()).lower().encode("utf-8")).hexdigest()[:16]
+        marker = Path(os.environ["SOMA_SETTINGS"]).parent / "units-notes" / key
+    if units == "in":
+        if marker is None:
+            return INCH_NOTE
+        try:  # several windows may write it at once: same content, no harm
+            marker.parent.mkdir(exist_ok=True)
+            marker.write_text("in\n", encoding="utf-8", newline="\n")
+        except OSError:
+            pass  # without the marker only the note after a switch back is missing
+        return INCH_NOTE
+    if marker is not None and marker.is_file():
+        try:
+            marker.unlink()
+        except OSError:
+            pass
+        return MM_NOTE
+    return None
 
 
 def cmd_build(args):
@@ -83,8 +137,9 @@ def cmd_build(args):
     note = None if args.json else _foreign_shell_note(args.project)
     if note:
         print(note)
-    if not args.json and os.environ.get("SOMA_UNITS") == "in":
-        print(INCH_NOTE)
+    units = None if args.json else _units_note(args.project)
+    if units:
+        print(units)
     # Das Aufraeumen von OCP und vtk beim normalen Beenden kostet fast eine Sekunde und bringt nichts:
     # alle Dateien sind geschrieben und geschlossen, also Puffer leeren und sofort beenden
     sys.stdout.flush()
