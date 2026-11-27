@@ -464,6 +464,15 @@ try {
   rs = await ev(() => window.__t.result());
   check('Klick auf die Lasche: Wert 1 mm an der Stelle, „An Agent geben“ nennt ihn', pin?.name === 'Lasche' && near(pin.value, 1, 0.02)
     && rs.note.startsWith('[Result: "Wall thickness" (.soma/results/thickness.glb, limit 1.20 mm), part "Lasche": 1.00 mm at ('), JSON.stringify([pin, rs.note]));
+  // Units "Inches" (E111): the report, the legend and the spot in inches, the agent gets mm with inches in brackets
+  await ev(() => window.__t.changeSettings({ viewer: { units: 'in' } }));
+  await waitFor('report in inches', () => window.__t.analysis().number === '0.039in', 10000).catch(() => {});
+  an = await ev(() => window.__t.analysis());
+  rs = await ev(() => window.__t.result());
+  check('Inches: smallest wall 0.039 in, legend in "in", the agent gets 1.00 mm (0.039 in)', an.number === '0.039in' && /^in\b/.test(rs.scale?.legend ?? '')
+    && rs.note.includes('limit 1.20 mm (0.047 in)') && rs.note.includes('1.00 mm (0.039 in)'), JSON.stringify([an.number, rs.scale?.legend, rs.note]));
+  await ev(() => window.__t.changeSettings({ viewer: { units: 'mm' } }));
+  await waitFor('report in mm', () => window.__t.analysis().number === '1mm', 10000).catch(() => {});
   await ev(() => window.__t.viewer.setView('iso'));
   await shot('analyse-1');
   r = soma(['render', '--result', 'thickness']);

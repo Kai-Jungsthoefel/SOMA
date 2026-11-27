@@ -1,6 +1,7 @@
 import type { FemBc, ResultEntry, ResultPart } from '../shared/types';
 import { icon } from './icons';
 import { loc, safety, worstOf, withUnit, type ResultTool } from './resulttool';
+import { prefUnits, qty, qtyNum, qtyUnit } from './unitpref';
 import { el, fmtWhen, menuItem, menus } from './ui';
 
 // Reiter Analysis (E82): Liste aller Ergebnisse und der ruhige Bericht zum gezeigten. Der Bericht sagt in einer großen Zahl, ob
@@ -32,8 +33,11 @@ function direction(v: number[]): string {
   for (const [i, pos, neg] of AXES) if (Math.abs(v[i]) / n > 0.985) return v[i] > 0 ? pos : neg;
   return `along (${v.map((x) => loc(x / n, 2)).join(', ')})`;
 }
-const newton = (v: number[]) => `${loc(Math.hypot(v[0], v[1], v[2]), 1)} N`;
-const modulus = (e: number) => (e >= 1000 ? `${loc(e / 1000, 1)} GPa` : `${loc(e, 0)} MPa`);
+const newton = (v: number[]) => qty(Math.hypot(v[0], v[1], v[2]), 'N', 1);
+// In inches as million psi (Msi), the way US data sheets give it
+const modulus = (e: number) => (prefUnits() === 'in' ? `${loc((e * 145.0377377) / 1e6, 1)} Msi` : e >= 1000 ? `${loc(e / 1000, 1)} GPa` : `${loc(e, 0)} MPa`);
+/** Critical area of a part (mm²): cm² in mm, in² in inches. */
+const critArea = (a: number) => (prefUnits() === 'in' ? qty(a, 'mm²', 2) : `${loc(a / 100, 2)} cm²`);
 
 export class AnalysisPanel {
   /** Bericht oder Liste. Der Bericht gehört zum gezeigten Ergebnis. */
@@ -131,7 +135,7 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
     this.ui.rerun.disabled = busy;
     const when = fmtWhen(r.created * 1000, true);
     const meta = el('div', { className: 'cx-meta' }, [r.fem ? 'FEM' : 'Analysis', r.seconds != null ? `${loc(r.seconds, 1)} s` : null,
-      r.fem ? `${loc(r.fem.mesh.size, 2)} mm mesh` : null].filter(Boolean).join(' · ') + ' · ');
+      r.fem ? `${qty(r.fem.mesh.size, 'mm', 2)} mesh` : null].filter(Boolean).join(' · ') + ' · ');
     if (busy) meta.append('recalculating …');
     else if (r.stale) meta.append(el('span', { className: 'w', textContent: 'older than the code' }));
     else meta.append(when);
@@ -154,8 +158,8 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
   private summary(r: ResultEntry, dim: boolean): HTMLElement {
     const w = worstOf(r);
     const crit = r.parts.filter((p) => p.critical > 0).sort((a, b) => (r.bad === 'low' ? (a.min ?? 0) - (b.min ?? 0) : (b.max ?? 0) - (a.max ?? 0)));
-    const value = (v: number | undefined) => (v == null ? '–' : r.fem ? safety(v) : loc(v, 2));
-    const big = el('span', { className: 'n' }, w ? value(w.value) : '–', !r.fem && r.unit ? el('small', { textContent: r.unit }) : null);
+    const value = (v: number | undefined) => (v == null ? '–' : r.fem ? safety(v) : qtyNum(v, r.unit, r.unit === '°' ? 1 : 2));
+    const big = el('span', { className: 'n' }, w ? value(w.value) : '–', !r.fem && r.unit ? el('small', { textContent: qtyUnit(r.unit) }) : null);
     const what = r.fem ? 'lowest safety factor' : `${r.bad === 'low' ? 'smallest' : 'largest'} ${r.quantity.toLowerCase()}`;
     const req = r.fem ? `required ${loc(r.threshold, 1)}` : `limit ${withUnit(r.threshold, r.unit)}`;
     const ok = !crit.length;
@@ -171,7 +175,7 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
       d.style.background = 'var(--err)';
       const go = el('button', { className: 'go', title: 'Show the spot', ariaLabel: `Show the spot in ${p.name}` }, icon('target', 14, 1.9));
       const row = el('div', { className: 'cx-pr' }, d, el('span', { className: 'nm', textContent: p.name }),
-        el('span', { className: 'a', textContent: r.fem ? '' : `${loc(p.critical / 100, 2)} cm²` }),
+        el('span', { className: 'a', textContent: r.fem ? '' : critArea(p.critical) }),
         el('span', { className: 'v', textContent: value(r.bad === 'low' ? p.min : p.max) }), go);
       if (p.worst?.at) row.addEventListener('click', () => this.d.tool.showSpot(p.name)); else go.disabled = true;
       box.append(row);
@@ -203,7 +207,7 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
     const fem = r.fem;
     if (!fem) {
       sec.append(...this.row('limit', 'Limit', withUnit(r.threshold, r.unit), `critical ${r.bad === 'low' ? 'below' : 'above'}`, [
-        ['Quantity', r.unit ? `${r.quantity} (${r.unit})` : r.quantity], ['Color scale', `${withUnit(r.range[0], r.unit)} to ${withUnit(r.range[1], r.unit)}`],
+        ['Quantity', r.unit ? `${r.quantity} (${qtyUnit(r.unit)})` : r.quantity], ['Color scale', `${withUnit(r.range[0], r.unit)} to ${withUnit(r.range[1], r.unit)}`],
         ...(r.neutral ? [['Contact', `${withUnit(r.neutral[0], r.unit)} to ${withUnit(r.neutral[1], r.unit)}, not critical`] as [string, string]] : []),
       ]));
       sec.append(...this.row('parts', 'Parts', plural(r.parts.length, 'part'), '', r.parts.map((p) => [p.name, p.group ?? ''] as [string, string])));
@@ -217,12 +221,12 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
     (fem.contacts ?? []).forEach((c, i) => {
       const pct = (a: number) => `${Math.round((100 * a) / Math.max(c.area, 1e-12))} %`;
       const det: [string, string | HTMLElement][] = [
-        ['Faces', `${loc(c.area, 1)} mm²`], ['Carries', `${loc(c.force, 1)} N`],
-        ['Highest pressure', `${loc(c.maxPressure.value, 2)} MPa`],
-        ['Open', c.openArea > 0 ? `${pct(c.openArea)} of the faces, gap up to ${loc(c.maxGap, 3)} mm` : 'closed everywhere'],
+        ['Faces', qty(c.area, 'mm²', 1)], ['Carries', qty(c.force, 'N', 1)],
+        ['Highest pressure', qty(c.maxPressure.value, 'MPa', 2)],
+        ['Open', c.openArea > 0 ? `${pct(c.openArea)} of the faces, gap up to ${qty(c.maxGap, 'mm', 3)}` : 'closed everywhere'],
       ];
       if (c.slideArea != null) det.push(['Sliding', c.slideArea > 0 ? el('span', { className: c.slideArea > 0.5 * c.area ? 'wc' : '', textContent: `${pct(c.slideArea)} at the friction limit` }) : 'sticks everywhere']);
-      det.push(['Slip', `up to ${loc(c.maxSlip, 3)} mm`]);
+      det.push(['Slip', `up to ${qty(c.maxSlip, 'mm', 3)}`]);
       sec.append(...this.row(`contact${i}`, 'Contact', c.friction ? `Friction ${loc(c.friction, 2)}` : 'No friction', `${c.a} – ${c.b}`, det));
     });
     // Schrauben mit Vorspannung: Kraft am Ende, Auslastung (über 90 % gelb wie im Bericht von soma)
@@ -230,14 +234,14 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
       const use = el('span', { className: b.utilization > 0.9 ? 'wc' : '', textContent: `${Math.round(100 * b.utilization)} % of the yield strength` });
       const det: [string, string | HTMLElement][] = [
         ['Screw', `${b.designation}, ${b.grade}`], ['Thread in', b.engaged],
-        ['Preload', `${loc(b.preload, 0)} N${b.auto ? (b.limit && b.limit !== 'screw' ? `, limited by ${b.limit}` : ', automatic') : ''}`],
-        ['In the end', `${loc(b.force, 0)} N pull, ${loc(b.shear, 0)} N across`], ['Load', use],
+        ['Preload', `${qty(b.preload, 'N', 0)}${b.auto ? (b.limit && b.limit !== 'screw' ? `, limited by ${b.limit}` : ', automatic') : ''}`],
+        ['In the end', `${qty(b.force, 'N', 0)} pull, ${qty(b.shear, 'N', 0)} across`], ['Load', use],
       ];
-      sec.append(...this.row(`bolt${i}`, 'Bolt', `${loc(b.force, 0)} N`, b.part, det));
+      sec.append(...this.row(`bolt${i}`, 'Bolt', qty(b.force, 'N', 0), b.part, det));
     });
     const bonded = (fem.touching ?? []).filter((t) => t.joint === 'bonded');
     if (bonded.length) {
-      const det: [string, string][] = bonded.map((t) => [`${t.a} – ${t.b}`, `${loc(t.area, 1)} mm²`]);
+      const det: [string, string][] = bonded.map((t) => [`${t.a} – ${t.b}`, qty(t.area, 'mm²', 1)]);
       det.push(['Joined', 'glued where they touch; study.contact() makes it a contact']);
       sec.append(...this.row('bonded', 'Touching', 'Bonded', bonded.length === 1 ? `${bonded[0].a} – ${bonded[0].b}` : plural(bonded.length, 'pair'), det));
     }
@@ -252,7 +256,7 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
       const det = el('dl', { className: 'cx-det' });
       for (const { m, parts } of mats.values()) {
         det.append(el('dd', { className: 'sub' }, m.name, el('span', { textContent: ` · ${parts.length > 3 ? plural(parts.length, 'part') : parts.join(', ')}` })));
-        const pairs: [string, string][] = [['E modulus', modulus(m.E)], ['Strength', `${loc(m.strength, 0)} MPa, allowable ${loc(m.strength / r.threshold, 1)} MPa`]];
+        const pairs: [string, string][] = [['E modulus', modulus(m.E)], ['Strength', `${qty(m.strength, 'MPa', 0)}, allowable ${qty(m.strength / r.threshold, 'MPa', 1)}`]];
         if (m.nu != null) pairs.push(['Poisson ν', loc(m.nu, 2)]);
         if (m.density != null) pairs.push(['Density', `${loc(m.density, 2)} g/cm³`]);
         if (m.note) pairs.push(['Note', m.note]);
@@ -268,11 +272,11 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
       const pct = (c: number) => `${c > 0 ? '+' : ''}${Math.round(c * 100) + 0} %`;
       const first = worst[0], rest = worst.slice(1);
       const big = Math.abs(first.coarse!.change) > 0.15;
-      check = el('span', {}, `coarser mesh ${loc(fem.coarse.size, 2)} mm: `, el('span', { className: big ? 'wc' : 'okc', textContent: `${first.name} ${pct(first.coarse!.change)}` }),
+      check = el('span', {}, `coarser mesh ${qty(fem.coarse.size, 'mm', 2)}: `, el('span', { className: big ? 'wc' : 'okc', textContent: `${first.name} ${pct(first.coarse!.change)}` }),
         rest.length ? `, others ≤ ${Math.round(Math.max(...rest.map((p) => Math.abs(p.coarse!.change))) * 100)} %` : '');
     }
-    sec.append(...this.row('mesh', 'Mesh', `${loc(mesh.size, 2)} mm`, `${mesh.elements.toLocaleString('en-US')} elements`, [
-      ['Element size', `${loc(mesh.size, 2)} mm${mesh.auto == null ? '' : mesh.auto ? ', automatic from the model size' : ', set in the study'}`],
+    sec.append(...this.row('mesh', 'Mesh', qty(mesh.size, 'mm', 2), `${mesh.elements.toLocaleString('en-US')} elements`, [
+      ['Element size', `${qty(mesh.size, 'mm', 2)}${mesh.auto == null ? '' : mesh.auto ? ', automatic from the model size' : ', set in the study'}`],
       ['Elements', `${mesh.elements.toLocaleString('en-US')} tetrahedra, 10 nodes`],
       ...(mesh.nodes ? [['Nodes', mesh.nodes.toLocaleString('en-US')] as [string, string]] : []),
       ['Solver', mesh.solver],
@@ -282,7 +286,7 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
   }
 
   private bcRow(b: FemBc, i: number, balance: number | undefined): HTMLElement[] {
-    const faces: [string, string][] = [['Faces', b.label], ['Area', `${loc(b.area, 1)} mm²`]];
+    const faces: [string, string][] = [['Faces', b.label], ['Area', qty(b.area, 'mm²', 1)]];
     if (b.kind === 'fix') {
       const axes = b.axes && b.axes !== 'xyz' ? b.axes.toUpperCase().split('').join(', ') : null;
       const det: [string, string | HTMLElement][] = [['Directions', axes ? `${axes} only` : 'all'], ...faces];
@@ -292,21 +296,21 @@ Saved in the model file without its result. The value is from ${fmtWhen(r.create
     }
     const total = b.total ?? [0, 0, 0];
     if (b.kind === 'pressure') {
-      return this.row(`bc${i}`, 'Pressure', `${loc(b.value ?? 0, 3)} MPa`, b.part, [['Total force', `${newton(total)} ${direction(total)}`], ...faces]);
+      return this.row(`bc${i}`, 'Pressure', qty(b.value ?? 0, 'MPa', 3), b.part, [['Total force', `${newton(total)} ${direction(total)}`], ...faces]);
     }
-    return this.row(`bc${i}`, 'Force', `${newton(total)} ${direction(total)}`.trim(), b.part, [['Vector', `(${total.map((x) => loc(x, 1)).join(', ')}) N`], ...faces]);
+    return this.row(`bc${i}`, 'Force', `${newton(total)} ${direction(total)}`.trim(), b.part, [['Vector', `(${total.map((x) => qtyNum(x, 'N', 1)).join(', ')}) ${qtyUnit('N')}`], ...faces]);
   }
 
   private partsTable(r: ResultEntry): HTMLElement {
     const fem = !!r.fem;
     const parts = [...r.parts].sort((a, b) => (r.bad === 'low' ? (a.min ?? Infinity) - (b.min ?? Infinity) : (b.max ?? -Infinity) - (a.max ?? -Infinity)));
-    const head = fem ? ['Part', 'Safety', 'MPa', 'mm'] : ['Part', 'Min', 'Max', 'cm² crit.'];
+    const head = fem ? ['Part', 'Safety', qtyUnit('MPa'), qtyUnit('mm')] : ['Part', 'Min', 'Max', prefUnits() === 'in' ? 'in² crit.' : 'cm² crit.'];
     const rows = parts.map((p) => {
       const d = el('span', { className: 'dot' });
       d.style.background = p.critical > 0 ? 'var(--err)' : 'transparent';
       const cells = fem
-        ? [p.min != null ? safety(p.min) : '–', p.stress ? loc(p.stress.value, 1) : '–', p.displacement ? loc(p.displacement.value, 3) : '–']
-        : [p.min != null ? loc(p.min, 2) : '–', p.max != null ? loc(p.max, 2) : '–', p.critical > 0 ? loc(p.critical / 100, 2) : '–'];
+        ? [p.min != null ? safety(p.min) : '–', p.stress ? qtyNum(p.stress.value, 'MPa', 1) : '–', p.displacement ? qtyNum(p.displacement.value, 'mm', 3) : '–']
+        : [p.min != null ? qtyNum(p.min, r.unit) : '–', p.max != null ? qtyNum(p.max, r.unit) : '–', p.critical > 0 ? critArea(p.critical).replace(/ (cm|in)²$/, '') : '–'];
       return el('tr', {}, el('td', { className: 'nm', title: p.name }, d, p.name), ...cells.map((c) => el('td', { textContent: c })));
     });
     return el('section', { className: 'cx-sec' },

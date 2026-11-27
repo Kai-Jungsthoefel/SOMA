@@ -2,6 +2,7 @@ import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, KNOWN_AGENTS, openTabTitle, type OpenPrefs, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
 import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, ModelComponent, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, MeshExportOptions, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
 import { MM_PER_INCH } from '../shared/units';
+import { prefUnits, setPrefUnits } from './unitpref';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
@@ -254,6 +255,11 @@ function applySettings(): void {
   measureTool.setDecimals(v.decimals);
   measureTool.setUnits(v.units);
   sectionTool.setUnits(v.units);
+  if (prefUnits() !== v.units) {
+    setPrefUnits(v.units);
+    resultTool.unitsChanged();
+    analysisPanel.render();
+  }
   if (selection) void renderSelection();
 }
 

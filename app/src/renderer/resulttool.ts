@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import type { ResultEntry } from '../shared/types';
+import { fromShownQty } from '../shared/units';
 import { icon } from './icons';
 import { resultColor } from './overlay';
 import { fmtScale, type ResultField, type ResultLayer, type ResultProbe } from './resultview';
 import { el, menus } from './ui';
+import { agentQty, prefUnits, qty, qtyNum, qtyUnit, qtyValue } from './unitpref';
 import type { Viewer } from './viewer';
 
 // Ergebnisse von `soma analyze` im Viewer (E58, E82): farbig zeigen, Wert unter dem Zeiger, eine Stelle für den Agenten merken.
@@ -35,20 +37,20 @@ interface Deps {
   changed(): void;
 }
 
-const num = (v: number, unit: string) => (+v.toFixed(unit === '°' ? 1 : 2) + 0).toLocaleString('en-US'); // + 0: kein „-0“
-// Ohne Einheit (Sicherheitsfaktor der FEM) steht die Zahl allein
-export const withUnit = (v: number, unit: string) => `${num(v, unit)}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
-const dot = (v: number, unit: string) => `${v.toFixed(unit === '°' ? 1 : 2)}${unit === '°' ? '°' : unit ? ` ${unit}` : ''}`;
+// Ohne Einheit (Sicherheitsfaktor der FEM) steht die Zahl allein. Lengths, areas, stresses and forces in the user's units (E111)
+export const withUnit = (v: number, unit: string) => qty(v, unit, unit === '°' ? 1 : 2);
+/** For the agent: SOMA's unit, the user's in brackets. */
+const dot = (v: number, unit: string) => agentQty(v, unit, unit === '°' ? 1 : 2);
 export const loc = (v: number, digits: number) => (+v.toFixed(digits) + 0).toLocaleString('en-US');
 /** Höchster Sicherheitsfaktor in der Datei (soma.fem VALUE_CAP): Dort ist kaum Spannung, der Wert selbst sagt nichts. */
 export const SAFETY_CAP = 99;
 export const safety = (v: number) => (v >= SAFETY_CAP ? `over ${SAFETY_CAP}` : loc(v, 2));
 /** FEM an einer Stelle: die gezeigte Größe zuerst, dann die anderen. */
 const femAt = (p: ResultProbe, field: ResultField, label: boolean) => {
-  const stress = p.stress != null ? `${loc(p.stress, 1)} MPa` : null;
-  const disp = p.disp != null ? `${loc(p.disp, 3)} mm` : null;
+  const stress = p.stress != null ? qty(p.stress, 'MPa', 1) : null;
+  const disp = p.disp != null ? qty(p.disp, 'mm', 3) : null;
   // Pressung nur, wo Kontakt ist (oder wenn sie die gezeigte Größe ist)
-  const press = p.press != null && (p.press > 0 || field === 'press') ? `contact ${loc(p.press, 2)} MPa` : null;
+  const press = p.press != null && (p.press > 0 || field === 'press') ? `contact ${qty(p.press, 'MPa', 2)}` : null;
   const sf = `${label || field !== 'value' ? 'Safety ' : ''}${safety(p.value)}`;
   const parts = field === 'stress' ? [stress, sf, disp, press] : field === 'disp' ? [disp, sf, stress, press]
     : field === 'press' ? [press, sf, stress, disp] : [sf, stress, disp, press];
@@ -128,7 +130,9 @@ export class ResultTool {
     }
     // Eigene Grenzen gelten sofort beim Tippen, solange sie gültig sind (von kleiner als bis), sonst rot umrandet und unverändert
     const typed = () => {
-      const lo = ui.lo.valueAsNumber, hi = ui.hi.valueAsNumber;
+      // Typed in the units shown, kept in SOMA's (E111)
+      const unit = this.d.layer.view?.unit ?? '';
+      const lo = fromShownQty(ui.lo.valueAsNumber, unit, prefUnits()), hi = fromShownQty(ui.hi.valueAsNumber, unit, prefUnits());
       const ok = Number.isFinite(lo) && Number.isFinite(hi) && lo < hi;
       ui.lo.classList.toggle('bad', !ok);
       ui.hi.classList.toggle('bad', !ok);
@@ -258,6 +262,11 @@ export class ResultTool {
     this.d.changed();
   }
 
+  /** The units setting changed (E111): legend, labels and the custom range show the new ones. */
+  unitsChanged(): void {
+    if (this.active) { this.renderAll(); this.applyScale(); }
+  }
+
   private renderAll(): void {
     // Anderes Ergebnis oder neu berechnet: Der Wert im Schild gilt nicht mehr, die nächste Bewegung holt den neuen
     this.hideTip();
@@ -283,7 +292,7 @@ export class ResultTool {
     const bar = el('div', { className: 'lg-bar' });
     bar.style.background = `linear-gradient(to bottom, ${stops.join(', ')})`;
     const ticks = [hi, lo + (hi - lo) * 0.5, lo].map((x) => {
-      const t = el('span', { className: 'lg-t', textContent: withUnit(+x.toPrecision(3), '') });
+      const t = el('span', { className: 'lg-t', textContent: (+qtyValue(x, v.unit).toPrecision(3) + 0).toLocaleString('en-US') });
       t.style.top = `${y(x).toFixed(1)}px`;
       return t;
     });
@@ -292,15 +301,15 @@ export class ResultTool {
     if (Number.isFinite(v.threshold) && v.threshold >= lo && v.threshold <= hi) {
       // Schmal: nur die Zahl, das Wort steht im Hinweis und im Menü der Skala
       const word = r.fem ? (this.d.layer.field === 'stress' ? 'allowable' : 'required') : 'limit';
-      const thr = el('div', { className: 'lg-thr', title: `${withUnit(v.threshold, v.unit)} ${word}` }, el('i'), el('span', { textContent: withUnit(v.threshold, '') }));
+      const thr = el('div', { className: 'lg-thr', title: `${withUnit(v.threshold, v.unit)} ${word}` }, el('i'), el('span', { textContent: qtyNum(v.threshold, v.unit, v.unit === '°' ? 1 : 2) }));
       thr.style.top = `${y(v.threshold).toFixed(1)}px`;
       // Zahlen der Teilung, die unter dem Strich lägen, weichen
       for (const t of ticks) if (Math.abs(parseFloat(t.style.top) - y(v.threshold)) < 14) t.hidden = true;
       this.ui.legendBody.append(thr);
     }
     // Kopf kurz (Einheit, bei der Sicherheit „Safety“), ausgeschrieben im Hinweis und im Menü
-    const full = v.unit ? `${v.quantity} (${v.unit})` : v.quantity;
-    this.ui.legendTitle.textContent = v.unit || (r.fem ? 'Safety' : v.quantity);
+    const full = v.unit ? `${v.quantity} (${qtyUnit(v.unit)})` : v.quantity;
+    this.ui.legendTitle.textContent = (v.unit && qtyUnit(v.unit)) || (r.fem ? 'Safety' : v.quantity);
     this.ui.legendTitle.title = full;
     this.ui.legendFull.textContent = full;
     this.ui.scaleMode.textContent = RANGE_LABEL[this.mode];
@@ -424,7 +433,7 @@ export class ResultTool {
         const b = r.fem.bcs[t.bc];
         const total = b?.total;
         if (!b || !total) continue;
-        tags.push({ el: el('div', { className: 'c3d' }, icon('force', 13, 2.2), el('b', { textContent: `${loc(Math.hypot(total[0], total[1], total[2]), 1)} N` })), at: t.at });
+        tags.push({ el: el('div', { className: 'c3d' }, icon('force', 13, 2.2), el('b', { textContent: qty(Math.hypot(total[0], total[1], total[2]), 'N', 1) })), at: t.at });
       }
     }
     const spotTag = (part: string, label: string, value: string) => {
@@ -444,7 +453,7 @@ export class ResultTool {
       if (!best || !visible(best.name)) return;
       const d = el('span', { className: 'dot' });
       d.style.background = 'var(--tx2)';
-      tags.push({ el: el('div', { className: 'c3d pt' }, d, 'Max ', el('b', { textContent: `${loc(best.value, digits)} ${unit}` })), at: l.shownAt(best.name, best.at) });
+      tags.push({ el: el('div', { className: 'c3d pt' }, d, 'Max ', el('b', { textContent: qty(best.value, unit, digits) })), at: l.shownAt(best.name, best.at) });
     };
     if (l.field === 'stress') peak('stress', 'MPa', 1);
     else if (l.field === 'disp') peak('displacement', 'mm', 3);
@@ -455,7 +464,7 @@ export class ResultTool {
       if (best && (visible(best.part) || r.fem?.contacts?.some((c) => visible(c.b)))) {
         const d = el('span', { className: 'dot' });
         d.style.background = 'var(--tx2)';
-        tags.push({ el: el('div', { className: 'c3d pt' }, d, 'Max ', el('b', { textContent: `${loc(best.value, 2)} MPa` })), at: l.shownAt(best.part, best.at) });
+        tags.push({ el: el('div', { className: 'c3d pt' }, d, 'Max ', el('b', { textContent: qty(best.value, 'MPa', 2) })), at: l.shownAt(best.part, best.at) });
       }
     }
     // Schlimmste Stelle: kleinster Wert, wenn wenig schlecht ist (Wandstärke, Sicherheit), sonst größter (Überhang)
@@ -501,8 +510,9 @@ export class ResultTool {
     // Beim Tippen nicht überschreiben (aus „1.“ würde „1“)
     const typing = document.activeElement === this.ui.lo || document.activeElement === this.ui.hi;
     if (this.custom && this.mode === 'custom' && !typing) {
-      this.ui.lo.value = String(this.custom.range[0]);
-      this.ui.hi.value = String(this.custom.range[1]);
+      const unit = this.d.layer.view?.unit ?? '';
+      this.ui.lo.value = String(+qtyValue(this.custom.range[0], unit).toPrecision(4));
+      this.ui.hi.value = String(+qtyValue(this.custom.range[1], unit).toPrecision(4));
       this.ui.lo.classList.remove('bad');
       this.ui.hi.classList.remove('bad');
     }
@@ -575,8 +585,8 @@ export class ResultTool {
     const head = `[Result: "${r.title}" (${r.file}, limit ${dot(r.threshold, r.unit)})`;
     const p = this.pinned;
     // FEM: Sicherheit mit Spannung und Verschiebung, damit der Agent die Stelle ohne neue Rechnung einordnen kann
-    const extra = p && p.stress != null ? ` (${p.stress.toFixed(1)} MPa${p.disp != null ? `, displacement ${p.disp.toFixed(3)} mm` : ''}`
-      + `${p.press ? `, contact pressure ${p.press.toFixed(2)} MPa` : ''})` : '';
+    const extra = p && p.stress != null ? ` (${agentQty(p.stress, 'MPa', 1)}${p.disp != null ? `, displacement ${agentQty(p.disp, 'mm', 3)}` : ''}`
+      + `${p.press ? `, contact pressure ${agentQty(p.press, 'MPa', 2)}` : ''})` : '';
     return p ? `${head}, part "${p.name}": ${r.fem ? 'safety factor ' : ''}${r.fem && p.value >= SAFETY_CAP ? `over ${SAFETY_CAP}` : dot(p.value, r.unit)}${extra} at (${p.point.map((v) => v.toFixed(1)).join(', ')}) mm] ` : `${head}] `;
   }
 

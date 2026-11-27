@@ -101,3 +101,27 @@ export function evalNumber(text: string, unit?: string | null): EvalResult {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+/**
+ * Values of analyses and FEM in the user's units (E111): SOMA computes in mm, mm², MPa and N, people who work in inches
+ * read in, in², psi and lbf. Only the display changes, results and limits on disk stay as they are. Angles and factors
+ * without a unit stay.
+ */
+const IMPERIAL: Record<string, { unit: string; k: number; digits: number }> = {
+  mm: { unit: 'in', k: 1 / MM_PER_INCH, digits: 1 },
+  'mm²': { unit: 'in²', k: 1 / MM_PER_INCH ** 2, digits: 2 },
+  'mm³': { unit: 'in³', k: 1 / MM_PER_INCH ** 3, digits: 2 },
+  MPa: { unit: 'psi', k: 145.0377377, digits: -2 },
+  N: { unit: 'lbf', k: 0.2248089431, digits: 0 },
+};
+
+/** The value and unit to show. `digits` are those for the SOMA unit, the result has as many as fit the shown one. */
+export function shownQty(v: number, unit: string, units: DisplayUnits, digits = 2): { v: number; unit: string; digits: number } {
+  const c = units === 'in' ? IMPERIAL[unit] : undefined;
+  return c ? { v: v * c.k, unit: c.unit, digits: Math.max(0, Math.min(6, digits + c.digits)) } : { v, unit, digits };
+}
+/** A value typed in the shown unit back into SOMA's unit. */
+export const fromShownQty = (v: number, unit: string, units: DisplayUnits) => {
+  const c = units === 'in' ? IMPERIAL[unit] : undefined;
+  return c ? v / c.k : v;
+};

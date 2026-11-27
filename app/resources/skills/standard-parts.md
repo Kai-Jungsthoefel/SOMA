@@ -37,7 +37,7 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
   of thickness `T`: `w = Washer("ISO 7089", "M3", at=s.point(T), direction="+Z")`, then
   `Nut("ISO 4032", "M3", at=w.outer, direction="+Z")`.
 - Standards: screws ISO 4762 (socket head, the default), ISO 7380 (button head, low), ISO 10642 (countersunk),
-  ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw). Nuts ISO 4032, thin ISO 4035, high ISO 4033, square
+  ISO 4017, ISO 4014, DIN 931 (hex head), ISO 4026 (set screw), ASME B18.3 (socket head, inch, below). Nuts ISO 4032, thin ISO 4035, high ISO 4033, square
   DIN 557. Washers ISO 7089, large ISO 7093 on soft material. Inserts by ruthex (default), CNCKitchen, McMaster-Carr,
   Hilitchi. In prints, heat-set inserts instead of nuts where the screw is opened often.
 - Read sizes from the objects instead of typing numbers: `s.head_diameter`, `s.head_height`, `s.key`, `s.clearance()`,
@@ -47,6 +47,22 @@ add_part("Screw 1", s, group="Hardware")               # role "hardware" automat
   whole insert length.
 - Cut each hole only from the part it belongs to. All options are in the docstrings of the file
   `python -c "import soma.fasteners as f; print(f.__file__)"` prints.
+
+### Inch screws
+
+Only socket head cap screws to ASME B18.3 exist in inch sizes (#0 to 1 in, UNC and UNF). There are no inch nuts,
+washers, other heads or inserts in the tables: if the user needs them, ask for the part and model it like a purchased
+part. Size and length are inches, as the screw is sold. Everything the object returns (and `at`, `sunk`, `point()`)
+stays mm, like the model:
+
+```python
+s = Screw("ASME B18.3", "1/4-20 x 3/4", at=(20, 15, LID_TOP))  # "#10-32 x 1", "1/4 x 1-1/2" (UNC); length=0.75 too
+lid = lid.cut(s.clearance_hole())    # normal fit 9/32 in = 7.14 mm; fit="fine"/"coarse": close/loose fit
+s.head_diameter, s.tap_drill         # 9.525 mm, 5.105 mm (#7 drill)
+```
+
+`lengths("ASME B18.3", "1/4-20")` and `pick_length(...)` work in inches. The table's lengths start at 3/4 in: for a
+shorter screw the user has, `check_length=False`.
 
 ## Nut traps
 

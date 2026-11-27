@@ -262,6 +262,7 @@ Ask the agent for a technical drawing ("Make a drawing of the bracket with all d
 - Point at a view or a dimension on the sheet to highlight it. Click it to see it on the model: a view turns the camera to its direction, a section sets the section tool to the same plane, a detail zooms in, a dimension shows its points and value. The card below has "Code" and "Send to agent". Escape clears it.
 - The bar of the viewer switches between all pages and single pages, shows page previews on the left and fits the page width or the whole page. Select text and click "Quote to agent" to send it with its page.
 - "Export" at the top saves all sheets as one PDF, or each sheet as PDF, DXF or both into a folder. The export button above a sheet saves just that sheet.
+- Drawings in inches: ask for one ("an inch drawing on ANSI B"). The agent then dimensions in inches the US way (`.250`, `1.500`, tolerances like `±.005`) on ANSI sizes A to E, and the title block says DIMENSIONS IN INCHES. A clicked dimension shows its value in the drawing's units.
 - A note "has not been built yet" names drawing files without sheets here, for example in a model saved with an older SOMA. "Build" builds them.
 
 ## Files and code
@@ -374,7 +375,7 @@ The folder itself is the model: there is no .soma file to save, and your files s
 
 1. **General**: the tabs of the agent area when a model opens, the start page (checking GitHub for new versions, the tutorial card) and the build time limit (10 minutes unless you change it, or no limit).
 2. **Tabs when a model opens**: up to three, the first one is in front. Each is SOMA AI, an empty terminal, one of the agents (Claude Code, OpenCode, Codex, Gemini CLI) or your own command, to start other agent harnesses or command line tools automatically. By default only SOMA AI opens.
-3. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, units (millimetres or inches) and decimal places of measurements. With inches, measuring, the selection and the section show inches, the model stays in millimetres and the agent learns that you work in inches.
+3. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, units (millimetres or inches) and decimal places of measurements. With inches, measuring, the selection, the section and analyses show inches (FEM stresses in psi and forces in lbf), the model stays in millimetres and the agent learns that you work in inches. Inch screws to ASME B18.3 (`1/4-20`, `#10-32`) with their holes are among the standard parts the agent uses.
 4. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search) and its effort, what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
 5. **Skills**: edit the built-in skills or write your own. They are available in every model. Models whose copy of the skill was not changed there take over your version.
 6. **Shortcuts**: all keys and mouse actions.

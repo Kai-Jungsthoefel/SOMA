@@ -6,9 +6,9 @@ order: 33
 category: Check and present
 default: on-demand
 when: the user wants a technical drawing, a manufacturing or assembly drawing, a PDF or DXF with dimensions, or a parts list
-topics: Before drawing; Sheet and views; Sections and details; Dimensions; Tolerances and notes; Assembly drawings; Free drawing; Build and check; Feedback
+topics: Before drawing; Sheet and views; Sections and details; Dimensions; Tolerances and notes; Inch drawings; Assembly drawings; Free drawing; Build and check; Feedback
 var standard: ISO | | Standard | ISO=ISO (first angle projection), ASME=ASME (third angle projection)
-var size: A3 | | Usual sheet size | A4, A3, A2, A1, A0
+var size: A3 | | Usual sheet size | A4, A3, A2, A1, A0, ANSI A, ANSI B, ANSI C, ANSI D, ANSI E
 var tolerance: ISO 2768-m | | General tolerances | ISO 2768-f=ISO 2768-f (fine), ISO 2768-m=ISO 2768-m (medium), ISO 2768-c=ISO 2768-c (coarse), none=none
 var language: en | | Language on the drawing | en=English, de=German
 ---
@@ -122,6 +122,19 @@ sh.text("Deburr all edges", (30, 30))
 - Notes above the title block or bottom left: "Deburr all edges", "Break sharp edges 0.3 x 45°", heat treatment.
 - Title block: `number`, `material`, `author`, `owner`, `revision`, `tolerance`. Take company and drawing number from
   `NOTES.md` or ask the user, do not invent them. With `titleblock=False` you draw your own.
+
+## Inch drawings
+
+- When: the user works in inches, the shop or supplier is in the US, or the part comes from a US drawing. Ask once if
+  it is not clear. The model stays in mm either way, only the drawing shows inches.
+- `Sheet(..., units="in", size="ANSI B", projection="third")`: lengths, diameters and radii in inches with three
+  decimals and no leading zero as in ASME Y14.5 (`.250`, `1.500`). The title block says DIMENSIONS IN INCHES.
+  Sizes ANSI A (8.5 x 11 in, portrait), B (11 x 17), C (17 x 22), D (22 x 34), E (34 x 44).
+- `tol=` is in inches on such a sheet: `tol=0.005` is ±.005, `tol=(0.002, -0.001)`. Angles stay in degrees.
+- Everything else stays mm: model points, `at=`, `offset=`, `text_at=`, text heights. A typed `text=` is shown as
+  written, so write inches there too (`"<> REF"`, `"2X Ø<> THRU"`).
+- General tolerances the US way: short in the title block (`tolerance=".XXX ±.005"`), the full block as a note above
+  it ("UNLESS OTHERWISE SPECIFIED: .XX ±.01 .XXX ±.005 ANGLES ±0.5°"). Scales 1:2, 1:4, 1:8, 2:1 and 4:1 are fine.
 
 ## Assembly drawings
 

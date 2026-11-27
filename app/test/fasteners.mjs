@@ -181,6 +181,43 @@ n30 = Nut("ISO 4032", "M3", at=(0, 0, 0), angle=30)
 nr = n0.rotate((0, 0, 0), (0, 0, 1), 30).translate((0, 0, 5))
 out("rotate() dreht den Sechskant mit, translate() verschiebt, moved() verlangt eine Location",
     nr.shape.translate((0, 0, -5)).cut(n30.shape).Volume() < 1e-6 and near(nr.seat, (0, 0, 5)) and raises(lambda: n0.moved((1, 2, 3))), nr.seat)
+
+# 11) Inch socket head cap screws (ASME B18.3): size and length in inches, everything returned in mm
+u = Screw("ASME B18.3", "1/4-20 x 3/4", at=(0, 0, 10))
+ub = bb(u.shape)
+out("ASME B18.3 1/4-20 x 3/4: head 0.375 x 0.25 in, hex key 3/16 in, shank 1/4 in, length 3/4 in (in mm)",
+    abs(u.head_diameter - 9.525) < 1e-6 and abs(u.head_height - 6.35) < 1e-6 and abs(u.key - 4.7625) < 1e-6 and abs(u.d - 6.35) < 1e-6
+    and abs(u.length - 19.05) < 1e-6 and abs(ub[4] - (10 - 19.05)) < 1e-3 and abs(ub[5] - 16.35) < 1e-3 and u.shape.isValid()
+    and u.designation == "ASME B18.3 1/4-20 x 3/4", (u.designation, ub))
+out("1/4-20 holes: clearance close 17/64, normal 9/32, loose 19/64 in, tap drill #7 (0.201 in)",
+    abs(u.clearance("fine") - 17 / 64 * 25.4) < 1e-6 and abs(u.clearance() - 9 / 32 * 25.4) < 1e-6 and abs(u.clearance("coarse") - 19 / 64 * 25.4) < 1e-6
+    and abs(u.tap_drill - 0.201 * 25.4) < 1e-6, (u.clearance(), u.tap_drill))
+ucut = plate.cut(Screw("ASME B18.3", "1/4-20 x 1", at=(0, 0, 5), sunk=True).clearance_hole()).val()
+usk = Screw("ASME B18.3", "1/4-20 x 1", at=(0, 0, 5), sunk=True)
+utap = bb(u.tap_hole())
+out("Inch screw sunk in a counterbore without overlap, tap hole 5.105 mm to 3 pitches (1/20 in) beyond the shank",
+    ucut.isValid() and overlap(usk.shape, ucut) < 1e-6 and abs(utap[1] - 0.201 * 25.4 / 2) < 1e-3 and abs(utap[4] - (10 - 19.05 - 3 * 1.27)) < 1e-3, utap)
+out("Notations: \"ASME B18.3 #10-32x1\" as one text, \"1/4 x 1-1/2\" means UNC 1/4-20, length=\"3/4\" or 0.75",
+    Screw("ASME B18.3 #10-32x1", at=(0, 0, 0)).designation == "ASME B18.3 #10-32 x 1" and abs(Screw("ASME B18.3 #10-32x1", at=(0, 0, 0)).d - 0.19 * 25.4) < 1e-6
+    and Screw("asme b18.3", "1/4 x 1-1/2", at=(0, 0, 0)).designation == "ASME B18.3 1/4-20 x 1-1/2"
+    and Screw("ASME B18.3", "#4", "3/4", at=(0, 0, 0)).size == "#4-40" and Screw("ASME B18.3", "1/4-28", 0.75, at=(0, 0, 0)).tpi == 28)
+out("Inch lengths in inches: series up to the table's longest, 0.88 read as 7/8, pick_length",
+    lengths("ASME B18.3", "1/4-20")[:4] == [0.75, 0.875, 1.0, 1.25] and lengths("ASME B18.3", "1/4-20")[-1] == 5.0
+    and pick_length("ASME B18.3", "#10-32", 0.8) == 0.875, lengths("ASME B18.3", "1/4-20")[:5])
+imsgs = {
+    "size": err(lambda: Screw("ASME B18.3", "9/16-12 x 2", at=(0, 0, 0))),
+    "tpi": err(lambda: Screw("ASME B18.3", "1/4-32 x 1", at=(0, 0, 0))),
+    "mm": err(lambda: Screw("ASME B18.3", "1/4-20", 25, at=(0, 0, 0))),
+    "short": err(lambda: Screw("ASME B18.3", "1/4-20 x 1/2", at=(0, 0, 0))),
+    "metric": err(lambda: Screw("ISO 4762", "1/4-20x1", at=(0, 0, 0))),
+    "nut": err(lambda: Nut("ISO 4032", "1/4-20", at=(0, 0, 0))),
+}
+out("Unknown inch size 9/16 and thread 1/4-32: available sizes named", "9/16 is not in the table. Available: #0-80" in imsgs["size"]
+    and "For 1/4: 1/4-20, 1/4-28" in imsgs["tpi"], imsgs["size"])
+out("Length 25 for an inch screw: hint that it is inches (25 mm = 0.984 in); 1/2 in shorter than the table, check_length=False",
+    "25 mm would be 0.984 in" in imsgs["mm"] and "nothing shorter than 3/4 in" in imsgs["short"]
+    and Screw("ASME B18.3", "1/4-20 x 1/2", at=(0, 0, 0), check_length=False).length == 12.7, imsgs["mm"])
+out("Inch size for a metric screw or a nut: points to ASME B18.3, no inch nuts", "ASME B18.3" in imsgs["metric"] and "no inch nuts" in imsgs["nut"], imsgs["nut"])
 `;
 
 const MODEL = `import cadquery as cq
@@ -243,6 +280,19 @@ try {
   ].join('\n')]);
   check('Skill „Normteile“: Codeblock und die genannten Aufrufe laufen', block.includes('soma.fasteners') && run.status === 0 && run.stdout.startsWith('ok 10'),
     (run.stderr || run.stdout).slice(-160));
+  // The skill's second block shows inch screws
+  const inchBlock = [...skill.matchAll(/```python\r?\n([\s\S]*?)\r?\n```/g)][1]?.[1] ?? '';
+  const runInch = py(['-c', [
+    'import cadquery as cq',
+    'from soma.fasteners import Screw, lengths, pick_length',
+    'LID_TOP = 23.0',
+    'lid = cq.Workplane().box(40, 40, 3, centered=(True, True, False)).translate((0, 0, 20))',
+    inchBlock,
+    'assert lid.val().isValid() and abs(s.head_diameter - 9.525) < 1e-6 and lengths("ASME B18.3", "1/4-20")[0] == 0.75',
+    'print("ok")',
+  ].join('\n')]);
+  check('Skill "Standard parts": the inch example runs', inchBlock.includes('ASME B18.3') && runInch.status === 0 && runInch.stdout.startsWith('ok'),
+    (runInch.stderr || runInch.stdout).slice(-160));
 
   // 2) In der App
   app = await startApp({ name: 'fasteners' });

@@ -259,6 +259,65 @@ print(json.dumps(dict(errors=len(aud.errors), types=types, layers=layers, detail
   check('Modell baut nicht: Meldung mit Ort, keine Zeichnung', b4.status === 1 && b4.stderr.includes('The model does not build, so no drawing does either')
     && b4.stderr.includes('model.py:10'), b4.stderr.slice(-200));
 
+  // 1b) Inch drawing (discussion #22): the model stays mm, the dimension texts are inches as in ASME Y14.5 (three
+  // decimals, no leading zero), tol= in inches, the note in the title block, ANSI sizes, units in index.json
+  const idir = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-drawing-in-'));
+  try {
+    fs.mkdirSync(path.join(idir, 'drawings'));
+    fs.writeFileSync(path.join(idir, 'model.py'), `import cadquery as cq
+from soma import add_part
+add_part("Plate", cq.Workplane("XY").box(25.4, 50.8, 6.35, centered=(True, True, False)).faces(">Z").workplane().hole(12.7))
+`);
+    fs.writeFileSync(path.join(idir, 'drawings', 'inch.py'), `from soma.drawing import Sheet
+sh = Sheet("Inch", size="ANSI B", scale="2:1", units="in", projection="third", tolerance=".XXX ±.005")
+top = sh.view("Plate", "top", at=(150, 150), origin=(0, 0, 6.35))
+top.dim((-12.7, -25.4, 6.35), (12.7, -25.4, 6.35), offset=-10, tol=0.005)
+top.dim((12.7, -25.4, 6.35), (12.7, 25.4, 6.35), offset=10, tol=(0.002, -0.001))
+top.diameter((0, 0, 6.35), 6.35, angle=45)
+top.dim((-12.7, 25.4, 6.35), (12.7, 25.4, 6.35), offset=10, text="1.250 REF")
+small = Sheet("Small", size="ansi-a", units="in", titleblock=False)
+small.view("Plate", "front", at=(100, 150))
+`);
+    const ib = soma(idir, 'drawing', 'build', '--json');
+    let ir = null;
+    try { ir = JSON.parse(ib.stdout); } catch { /* reported below */ }
+    const ix = Object.fromEntries((ir?.built ?? []).map((x) => [x.name, x]));
+    const inch = ix.Inch;
+    check('Inch drawing: ANSI B (17 x 11 in) and ANSI A (8.5 x 11 in, portrait) built', ib.status === 0 && inch?.width === 431.8 && inch.height === 279.4
+      && inch.size === 'ANSI B' && ix.Small?.width === 215.9 && ix.Small.height === 279.4, (ib.stderr || ib.stdout).slice(-300));
+    check('Inch drawing: labels in inches (1.000, 2.000, Ø.500), only the typed "1.250 REF" is reported', j(inch?.dims.map((d) => d.label)) === j(['1.000', '2.000', 'Ø.500', '"1.250 REF"'])
+      && j(inch.warnings.map((x) => x.line)) === '[7]' && inch.warnings[0].message.includes('differs from the measured 1.000'),
+      j({ labels: inch?.dims.map((d) => d.label), w: inch?.warnings.map((x) => x.message) }));
+    let iidx = null;
+    try { iidx = JSON.parse(fs.readFileSync(path.join(idir, '.soma', 'drawings', 'index.json'), 'utf8')); } catch { /* below */ }
+    const ie = iidx?.drawings.find((d) => d.name === 'Inch');
+    check('index.json: units "in", values stay mm (25.4), mm sheets say "mm"', ie?.units === 'in' && ie.dims[0].value === 25.4 && idx?.drawings.every((d) => d.units === 'mm'),
+      j({ units: ie?.units, value: ie?.dims[0]?.value, mm: idx?.drawings.map((d) => d.units) }));
+    const inchCheck = py(['-c', String.raw`
+import json, sys, ezdxf
+out = {}
+for name in ("Inch", "Small"):
+    msp = ezdxf.readfile(sys.argv[1] + "/" + name + ".dxf").modelspace()
+    dims = [" ".join(e.plain_text() for e in d.virtual_entities() if e.dxftype() == "MTEXT") for d in msp.query("DIMENSION")]
+    out[name] = dict(dims=dims, texts=[t.dxf.text for t in msp.query("TEXT")])
+print(json.dumps(out))
+`, path.join(idir, 'output', 'drawings')]);
+    let id = null;
+    try { id = JSON.parse(inchCheck.stdout); } catch { /* below */ }
+    const dt = id?.Inch.dims ?? [];
+    check('Inch DXF: 25.4 mm shows "1.000" with "±.005", 50.8 mm "2.000" with +.002/-.001, Ø12.7 shows "Ø.500"',
+      /^1\.000.*±\.005/.test(dt[0] ?? '') && /^2\.000.*\+\.002.*-\.001/.test(dt[1] ?? '') && dt[2] === 'Ø.500' && dt[3] === '1.250 REF', j(dt));
+    check('Inch DXF: note DIMENSIONS IN INCHES in the title block, and on a sheet without title block', id?.Inch.texts.includes('DIMENSIONS IN INCHES')
+      && id.Small.texts.includes('DIMENSIONS IN INCHES') && ie?.titleblock?.[3] === 51, j({ inch: id?.Inch.texts, small: id?.Small.texts, tb: ie?.titleblock }));
+    const iinfo = soma(idir, 'drawing', 'info', 'Inch');
+    check('soma drawing info names the inch dimensions', iinfo.stdout.includes('dimensions in inches') && /line 6: Ø\.500 \(diameter, top\)/.test(iinfo.stdout), iinfo.stdout.slice(0, 300));
+    fs.writeFileSync(path.join(idir, 'drawings', 'inch.py'), 'from soma.drawing import Sheet\nSheet("Bad", units="inch")\n');
+    const ibad = soma(idir, 'drawing', 'build', '--json');
+    let ibr = null;
+    try { ibr = JSON.parse(ibad.stdout); } catch { /* below */ }
+    check('units="inch" is an error with the allowed values', ibr?.errors?.[0]?.message.includes('units must be "mm" or "in"') && ibr.errors[0].line === 2, j(ibr?.errors ?? ibad.stderr.slice(-200)));
+  } finally { cleanup(idir); }
+
   // 2) In der App: PDF im Code-Panel, nichts davon zählt als ungespeicherte Änderung
   app = await startApp({ name: 'drawing' });
   const { ev, waitFor } = app;

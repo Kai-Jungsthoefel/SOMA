@@ -2,6 +2,7 @@ import type { DrawingDim, DrawingEntry, DrawingList, DrawingView, DrawingWarning
 import type { Pane } from './code';
 import { icon } from './icons';
 import { PdfView, type PdfDeps } from './pdfview';
+import { MM_PER_INCH } from '../shared/units';
 import { el, menuItem, menus } from './ui';
 
 // Dokument „Drawings“ (E76): alle Blätter aus .soma/drawings/index.json als ein PDF in der Code-Spalte, ohne Seitenleiste.
@@ -43,6 +44,11 @@ const inside = (b: number[], x: number, y: number, pad = 0) => x >= b[0] - pad &
 const KIND: Record<string, string> = { view: 'View', section: 'Section', detail: 'Detail' };
 const DIM_KIND: Record<string, string> = { linear: 'Length', diameter: 'Diameter', radius: 'Radius', angle: 'Angle' };
 const fmt = (v: number) => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(3).replace(/\.?0+$/, '');
+/** Millimetres as inches with three decimals like the dimensions of an inch sheet, here with the leading zero. */
+const inches = (mm: number) => (Math.abs(mm) < 5e-4 ? 0 : mm / MM_PER_INCH).toFixed(3);
+/** The measured value of a dimension in the units of its sheet (index values are mm, angles degrees). */
+const measured = (d: DrawingDim, units: DrawingEntry['units']) =>
+  d.kind === 'angle' ? `${fmt(d.value)}°` : units === 'in' ? `${inches(d.value)} in` : `${fmt(d.value)} mm`;
 const where = (file: string | null, line: number | null) => (file ? `${file}${line ? ` line ${line}` : ''}` : '');
 
 export class DrawingsView implements Pane {
@@ -457,7 +463,7 @@ export class DrawingsView implements Pane {
     } else {
       const d = h.d;
       title = d.label;
-      meta = `${DIM_KIND[d.kind] ?? d.kind} in ${d.view} · measured ${fmt(d.value)}${d.kind === 'angle' ? '°' : ' mm'}`;
+      meta = `${DIM_KIND[d.kind] ?? d.kind} in ${d.view} · measured ${measured(d, e.units)}`;
       file = d.file ?? e.file; line = d.line;
     }
     const lines: HTMLElement[] = [];
@@ -490,7 +496,9 @@ export class DrawingsView implements Pane {
       return `[Drawing "${e.name}", ${v.kind === 'view' ? 'view' : v.kind} "${v.name}" (${where(v.file ?? e.file, v.line)}), scale ${v.scale}] `;
     }
     const d = h.d;
-    return `[Drawing "${e.name}", dimension ${d.label} in view "${d.view}" (${where(d.file ?? e.file, d.line)}), measured ${fmt(d.value)}${d.kind === 'angle' ? '°' : ' mm'}] `;
+    // Both units for the agent on an inch sheet: the model and the code are mm, the sheet shows inches
+    const value = d.kind === 'angle' ? `${fmt(d.value)}°` : e.units === 'in' ? `${fmt(d.value)} mm (${inches(d.value)} in)` : `${fmt(d.value)} mm`;
+    return `[Drawing "${e.name}", dimension ${d.label} in view "${d.view}" (${where(d.file ?? e.file, d.line)}), measured ${value}] `;
   }
 
   // ---- Prüfhilfen -------------------------------------------------------------------------------------------------

@@ -397,6 +397,8 @@ export interface DrawingWarning { message: string; file: string | null; line: nu
 export interface DrawingEntry {
   id: string; name: string; file: string | null; line: number | null;
   size: string; width: number; height: number; scale: string;
+  /** Unit of the dimension texts (Sheet(units=...)). Dimension values in the index stay mm. */
+  units: 'mm' | 'in';
   pdf: string; dxf: string | null;
   /** Was die PDF-Seite vom Blatt zeigt, falls nicht genau das Papier. */
   pageBox: number[];
