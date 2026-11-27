@@ -123,7 +123,7 @@ the first message, a note names the risks, **Got it** starts the chat.
 4. **Steps**: what SOMA AI did, in plain words. Steps of the same kind become one row with a count. **Details** shows the command, **Show changes** the change in a file.
 5. **Questions**: when SOMA AI needs your decision, it asks all its questions at once. Click an answer or write your own, then **Send answers**. A single question with answers to pick goes with one click. **Skip** lets SOMA AI decide.
 6. **Working**: shows that SOMA AI is working and for how long. Esc in the input stops it. At the end of its answer, "Worked for" says how long it took.
-7. **Add a picture**: a photo or a sketch with measurements. Pasting or dropping a picture into the chat works too. The **microphone** next to it is voice input (see "Voice input").
+7. **Add a picture**: a photo or a sketch with measurements. You can also paste or drop a picture into the chat. GitHub Copilot in SOMA does not support picture attachments yet, so this button is hidden and pasting or dropping a picture does not attach it. The **microphone** still works (see "Voice input").
 8. **Model**: the AI model SOMA AI thinks with. The recommended models come first, the field at the top searches. The choice also applies to new conversations, like in Settings > SOMA AI.
 9. **Effort**: how long SOMA AI thinks before it acts, from Low to Max (the levels the model offers). More effort gives better models but is slower and uses more of your plan or credit. We recommend High or more. The choice also applies to new conversations, like in Settings > SOMA AI. A model that does not think has no effort button.
 10. **Send and stop**: sends your message (Enter). While SOMA AI works and the input is empty, it stops SOMA AI.
@@ -151,7 +151,7 @@ For developer setup, see GitHub's [app registration guide](https://docs.github.c
 
 ### Voice input
 
-The microphone next to **Add a picture** lets you speak to SOMA AI instead of typing. The first click asks which
+The microphone below the chat input lets you speak to SOMA AI instead of typing. The first click asks which
 language you speak and downloads the speech model once (487 MB, 25 European languages). After that: click the
 microphone, speak, click it again. The text lands in the input where the cursor is and is not sent, so you can read and
 correct it first. Esc in the input drops a recording. Recognition runs on this computer, nothing you say leaves it.
