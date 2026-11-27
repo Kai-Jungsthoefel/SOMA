@@ -24,6 +24,7 @@ export interface ChatDeps {
   toast(text: string, kind?: 'ok' | 'info' | 'error'): void;
   /** "I already use Claude Code": a terminal tab instead. */
   openTerminal(): void;
+  openAiSettings(): void;
   store: { get(k: string): string | null; set(k: string, v: string): void };
   /** Dot on the tab: grey not set up, green ready, orange working, yellow waiting for an answer. */
   onState(s: ChatState): void;
@@ -268,6 +269,7 @@ export class SomaChat {
   private showing: Promise<void> | null = null;
   private showAgain = false;
   private signInUrl = '';
+  private copilotAvailable = false;
   /**
    * After a new sign-in: its recommended model, set once pi runs. A continued conversation keeps the model it had,
    * the new default in pi's settings alone would not change it.
@@ -405,7 +407,15 @@ export class SomaChat {
   private async decide(): Promise<void> {
     const st = await this.deps.api.ai.status().catch(() => null);
     if (!st?.available) { this.renderUnavailable(); return; }
-    this.accounts = await this.deps.api.ai.accounts().catch(() => []);
+    const [accounts, copilot] = await Promise.all([
+      this.deps.api.ai.accounts().catch(() => []),
+      this.deps.api.ai.copilotStatus().catch((error: unknown) => {
+        console.error('Could not read GitHub Copilot availability:', error);
+        return null;
+      }),
+    ]);
+    this.accounts = accounts;
+    this.copilotAvailable = copilot?.available === true;
     if (this.phase === 'signing') return;
     if (!this.accounts.length) { this.renderSetup(false); return; }
     if (this.deps.store.get(NOTE_KEY) !== '1') { this.renderNote(); return; }
@@ -463,12 +473,16 @@ export class SomaChat {
       el('p', { className: 'lead', textContent: 'This installation of SOMA lacks the built-in agent. Reinstalling SOMA brings it back. Agents in a terminal still work: start one with + above.' })));
   }
 
-  /** First start, or "Use another sign-in": ChatGPT, an API key, or a terminal agent (draft, slide 1). */
+  /** First start or "Use another sign-in". */
   private renderSetup(back: boolean): void {
     this.setPhase('setup');
     this.top.replaceChildren();
     const chatgpt = el('button', { className: 'btn primary', textContent: 'Sign in with ChatGPT' });
     chatgpt.addEventListener('click', () => void this.signIn());
+    const copilot = this.copilotAvailable && !this.accounts.some((a) => a.provider === COPILOT_PROVIDER)
+      ? el('button', { className: 'btn sm', textContent: 'Set up GitHub Copilot' })
+      : null;
+    copilot?.addEventListener('click', () => this.deps.openAiSettings());
     const key = keyForm({ api: this.deps.api, toast: this.deps.toast, saved: (provider) => this.accountsChanged(provider) });
     const term = el('button', { className: 'btn sm', textContent: 'Open a terminal' });
     term.addEventListener('click', () => this.deps.openTerminal());
@@ -484,6 +498,10 @@ export class SomaChat {
         el('h4', {}, icon('chat', 16), 'Sign in with ChatGPT', el('span', { className: 'badge', textContent: 'Recommended' })),
         el('p', { textContent: 'Uses your ChatGPT Plus or Pro plan. No extra cost, your plan’s limits apply.' }),
         el('div', { className: 'acts' }, chatgpt, el('span', { className: 'c3 small', textContent: 'Opens your browser' }))),
+      copilot ? el('div', { className: 'ai-opt' },
+        el('h4', {}, icon('chat', 16), 'GitHub Copilot (text-only preview)'),
+        el('p', { textContent: 'Use your GitHub Copilot subscription to ask CAD questions. This preview can’t read or edit your model or run commands.' }),
+        el('div', { className: 'acts' }, copilot, el('span', { className: 'c3 small', textContent: 'Opens Settings' }))) : null,
       el('div', { className: 'ai-opt' },
         el('h4', {}, icon('apikey', 16), 'Use an API key'),
         el('p', { textContent: 'Pay per use, billed by the provider. Works with Claude, OpenAI, Google Gemini, OpenRouter and OpenCode (Zen or Go).' }),

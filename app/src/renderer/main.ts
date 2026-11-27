@@ -1830,6 +1830,7 @@ let lastChatState: ChatState = 'off';
 const chat = new SomaChat({
   api, toast, store,
   openTerminal: () => { void terminals.add({ title: 'Terminal' }); },
+  openAiSettings: () => { void settings.open(undefined, 'ai'); },
   onState: (s) => { renderChatDot(s); revealChat(s); },
 });
 $('term-panes').append(chat.el);

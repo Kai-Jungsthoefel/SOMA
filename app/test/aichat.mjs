@@ -68,6 +68,14 @@ try {
   check('Without a sign-in: set-up with ChatGPT, API key and terminal', setup.includes('Sign in with ChatGPT') && setup.includes('Save key') && setup.includes('Open a terminal'), setup.join(' | '));
   check('Dot on the tab: grey (not set up)', (await dot()) === 'off', await dot());
   await shot('setup');
+  check('Configured Copilot is discoverable from chat setup, between ChatGPT and API keys',
+    setup.includes('Set up GitHub Copilot') && setup.indexOf('Sign in with ChatGPT') < setup.indexOf('Set up GitHub Copilot')
+      && setup.indexOf('Set up GitHub Copilot') < setup.indexOf('Save key'));
+  await click('Set up GitHub Copilot');
+  await app.waitFor('Copilot sign-in in SOMA AI settings', () =>
+    document.querySelector('#st-ai')?.getBoundingClientRect().width > 0
+      && window.__t.settingsPages().ai.text.includes('Sign in with GitHub Copilot'));
+  await ev(() => window.__t.closeSettings());
 
   await ev(() => { const s = document.querySelector('.ai-pane select'); s.value = 'anthropic'; s.dispatchEvent(new Event('change')); });
   await ev(() => { const k = document.querySelector('.ai-pane input[type=password]'); k.value = ' with space '; });
