@@ -15,7 +15,7 @@ A CAD program where the AI does the CAD and you are the designer. SOMA brings to
 
 It's vibe coding, but for CAD. Made for makers and tinkerers who need a case, a bracket or a mount for their project and don't want to spend hours in a CAD program to get it. Describe or sketch the part, check the result, export it, print it. You don't have to know CadQuery. The code is there if you want to change a dimension yourself.
 
-SOMA brings its own agent, SOMA AI: a chat next to the model, no coding agent needed. Describe the part in your own words, by voice or with a photo of a sketch. When something is unclear, it asks, with answers to click. SOMA is free, for SOMA AI you sign in with your ChatGPT subscription or an API key (Anthropic, OpenAI, Google Gemini, OpenRouter, OpenCode Zen or Go).
+SOMA brings its own agent, SOMA AI: a chat next to the model, no coding agent needed. Describe the part in your own words, by voice or with a photo of a sketch. When something is unclear, it asks, with answers to click. SOMA is free, for SOMA AI you sign in with your ChatGPT or GitHub Copilot subscription or an API key (Anthropic, OpenAI, Google Gemini, OpenRouter, OpenCode Zen or Go).
 
 If you already use a CLI agent, it works just as well: Claude Code, OpenCode, Codex CLI, Gemini CLI or any other agent that can read files and run commands. It runs in a normal terminal inside the model folder, SOMA detects the common ones and can start them. Your subscription, your model choice and your permission settings stay yours. Either way, SOMA gives the agent a command line tool (`soma build`, `soma analyze`, `soma render` …) and an `AGENTS.md` with the rules of the project.
 
@@ -23,7 +23,7 @@ If you already use a CLI agent, it works just as well: Claude Code, OpenCode, Co
 
 Download SOMA from [somacad.app/download](https://somacad.app/download/), which offers the right package for your system, or from the [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases): an installer or a portable ZIP for Windows, an AppImage or tar.gz for Linux, a dmg for macOS (Apple Silicon). Python, CadQuery, Git and CalculiX are included.
 
-- For SOMA AI you need a ChatGPT subscription or an API key. Or use a CLI agent you have installed and logged in, for example Claude Code, OpenCode, Codex CLI or Gemini CLI
+- For SOMA AI you need a ChatGPT or GitHub Copilot subscription or an API key. Or use a CLI agent you have installed and logged in, for example Claude Code, OpenCode, Codex CLI or Gemini CLI
 - The installed app takes over 1 GB of disk space, most of it for Python, CadQuery and OpenCascade
 - The packages are not signed yet. On Windows, SmartScreen warns on the first start ("More info" > "Run anyway"). For the portable ZIP, tick "Unblock" in its Properties before extracting to avoid the warning, and extract it to a local folder. On macOS, open the app the first time with right-click > Open
 - Linux needs glibc 2.31 or newer
@@ -32,7 +32,7 @@ Download SOMA from [somacad.app/download](https://somacad.app/download/), which 
 ## Quick start
 
 1. Start SOMA and click **New model** on the start page. It starts from a small example, a box with a lid.
-2. Sign in to SOMA AI on the right, with ChatGPT or an API key. To use your own agent instead, start it with the **+** above the agent area, SOMA lists the agents it found on your computer.
+2. Sign in to SOMA AI on the right, with ChatGPT, GitHub Copilot or an API key. To use your own agent instead, start it with the **+** above the agent area, SOMA lists the agents it found on your computer.
 3. Tell the agent what you need, for example *"A case for a Raspberry Pi 5 with vents in the lid, printed in PETG"*. SOMA builds the model on every change and shows it.
 4. Click parts, measure, or draw on the view and send it to the agent until it fits. Then export it from the menu, for example as STL or 3MF.
 

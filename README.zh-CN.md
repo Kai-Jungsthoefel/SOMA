@@ -21,7 +21,7 @@ https://github.com/user-attachments/assets/3294d1e4-1f06-477d-9770-c91f3470330d
 
 这就是 CAD 版的 vibe coding。它面向创客和爱好者：你的项目需要一个外壳、一个支架或一个安装座，又不想花几个小时在 CAD 软件里画。描述或草绘零件，检查结果，导出，打印。你不需要懂 CadQuery。如果想亲手改一个尺寸，代码就在那里。
 
-SOMA 自带智能体 SOMA AI：模型旁边的聊天窗口，不需要编程智能体。用自己的话、语音或一张草图照片描述零件。有不清楚的地方时，它会提问，答案可以直接点选。SOMA 是免费的；使用 SOMA AI 需要用你自己的 ChatGPT 订阅或 API 密钥登录（Anthropic、OpenAI、Google Gemini、OpenRouter、OpenCode Zen 或 Go）。
+SOMA 自带智能体 SOMA AI：模型旁边的聊天窗口，不需要编程智能体。用自己的话、语音或一张草图照片描述零件。有不清楚的地方时，它会提问，答案可以直接点选。SOMA 是免费的；使用 SOMA AI 需要用你自己的 ChatGPT 或 GitHub Copilot 订阅或 API 密钥登录（Anthropic、OpenAI、Google Gemini、OpenRouter、OpenCode Zen 或 Go）。
 
 如果你已经在用 CLI 智能体，它同样可以使用：Claude Code、OpenCode、Codex CLI、Gemini CLI，或任何能读取文件并运行命令的智能体。它运行在模型文件夹中的普通终端里，SOMA 能识别常见的智能体并启动它们。订阅、模型选择和权限设置都由你掌控。无论哪种方式，SOMA 都为智能体提供一个命令行工具（`soma build`、`soma analyze`、`soma render` …）和一个写有项目规则的 `AGENTS.md`。
 
@@ -29,7 +29,7 @@ SOMA 自带智能体 SOMA AI：模型旁边的聊天窗口，不需要编程智�
 
 从 [somacad.app/download](https://somacad.app/download/)（会为你的系统推荐合适的安装包）或 [releases](https://github.com/Kai-Jungsthoefel/SOMA/releases) 页面下载 SOMA：Windows 有安装程序或便携版 ZIP，Linux 有 AppImage 或 tar.gz，macOS（Apple Silicon）有 dmg。已内置 Python、CadQuery、Git 和 CalculiX。
 
-- 使用 SOMA AI 需要 ChatGPT 订阅或 API 密钥。也可以使用你已安装并登录的 CLI 智能体，例如 Claude Code、OpenCode、Codex CLI 或 Gemini CLI
+- 使用 SOMA AI 需要 ChatGPT 或 GitHub Copilot 订阅或 API 密钥。也可以使用你已安装并登录的 CLI 智能体，例如 Claude Code、OpenCode、Codex CLI 或 Gemini CLI
 - 安装后的应用占用超过 1 GB 磁盘空间，大部分用于 Python、CadQuery 和 OpenCascade
 - 安装包尚未签名。在 Windows 上首次启动时 SmartScreen 会发出警告（点击“More info”>“Run anyway”）。使用便携版 ZIP 时，解压前在文件属性中勾选“Unblock”（解除锁定）即可避免警告，并解压到本地文件夹。在 macOS 上，首次打开请右键点击应用 > 打开
 - Linux 需要 glibc 2.31 或更新版本
@@ -38,7 +38,7 @@ SOMA 自带智能体 SOMA AI：模型旁边的聊天窗口，不需要编程智�
 ## 快速开始
 
 1. 启动 SOMA，在起始页点击 **New model**（新建模型）。它从一个小示例开始：一个带盖的盒子。
-2. 在右侧用 ChatGPT 或 API 密钥登录 SOMA AI。如果想改用你自己的智能体，用智能体区域上方的 **+** 启动它，SOMA 会列出在你电脑上找到的智能体。
+2. 在右侧用 ChatGPT、GitHub Copilot 或 API 密钥登录 SOMA AI。如果想改用你自己的智能体，用智能体区域上方的 **+** 启动它，SOMA 会列出在你电脑上找到的智能体。
 3. 告诉智能体你需要什么，例如 *“A case for a Raspberry Pi 5 with vents in the lid, printed in PETG”*（一个树莓派 5 外壳，盖子上有通风孔，用 PETG 打印）。也可以用中文描述，取决于你的智能体和模型。SOMA 在每次修改后构建并显示模型。
 4. 点击零件、测量，或在视图上绘制标注并发送给智能体，直到满意为止。然后从菜单导出，例如 STL 或 3MF。
 
