@@ -12,6 +12,48 @@ const { check } = t;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-unit-'));
 
 try {
+  const deviceOut = path.join(tmp, 'copilotdevice.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'main', 'copilotdevice.ts')], outfile: deviceOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const { authorizeCopilotDevice } = await import(pathToFileURL(deviceOut).href);
+  const device = { device_code: 'd'.repeat(40), user_code: 'ABCD-1234', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 5 };
+  const pauses = [], posted = [], codes = [];
+  const replies = [device, { error: 'authorization_pending' }, { error: 'slow_down', interval: 12 }, { access_token: 'ghu_fake', expires_in: 28800 }];
+  const granted = await authorizeCopilotDevice('test-client', {
+    signal: new AbortController().signal,
+    onCode: (code) => codes.push(code),
+    request: async (url, options) => {
+      posted.push([url, Object.fromEntries(options.body), options.redirect]);
+      return Response.json(replies.shift());
+    },
+    pause: async (ms) => pauses.push(ms),
+  });
+  check('Copilot device authorization sends only the user code to the UI, respects slow_down and uses the documented token exchange',
+    JSON.stringify(codes) === '["ABCD-1234"]' && JSON.stringify(pauses) === '[5000,5000,12000]' &&
+    posted[1][0] === 'https://github.com/login/oauth/access_token' && posted[1][1].device_code === device.device_code &&
+    posted[1][1].grant_type === 'urn:ietf:params:oauth:grant-type:device_code' && posted.every((p) => p[2] === 'error') &&
+    granted.token === 'ghu_fake' && granted.expiresAt > Date.now());
+
+  const badDevice = await authorizeCopilotDevice('test-client', {
+    signal: new AbortController().signal, onCode: () => codes.push('bad'),
+    request: async () => Response.json({ ...device, verification_uri: 'https://example.com/login/device' }),
+  }).then(() => '', (e) => e.message);
+  check('Copilot device authorization rejects unexpected verification URLs before showing any code', /valid device code/.test(badDevice) && codes.length === 1);
+
+  const cancel = new AbortController();
+  let polls = 0;
+  const aborted = await authorizeCopilotDevice('test-client', {
+    signal: cancel.signal, onCode: () => cancel.abort(),
+    request: async () => { polls++; return Response.json(device); },
+  }).then(() => '', (e) => e.name);
+  check('Cancelling Copilot device authorization stops token polling', aborted === 'AbortError' && polls === 1);
+
+  const expired = await authorizeCopilotDevice('test-client', {
+    signal: new AbortController().signal, onCode: () => {},
+    request: async (url) => Response.json(url.endsWith('/device/code') ? device : { error: 'expired_token' }),
+    pause: async () => {},
+  }).then(() => '', (e) => e.message);
+  check('An expired Copilot device code explicitly asks the user to sign in again', /expired.*signing in again/i.test(expired));
+
   const out = path.join(tmp, 'files.mjs');
   await build({ entryPoints: [path.join(APP, 'src', 'main', 'files.ts')], outfile: out, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
   const { importInputs, saveFeedbackImage, writeProjectText, backupText, createEntry, renameEntry, trashEntry, entryPath, listFiles } = await import(pathToFileURL(out).href);

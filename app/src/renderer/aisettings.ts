@@ -1,5 +1,5 @@
-import { accountLabel, CHATGPT_PROVIDER, EFFORT_LABEL, EFFORT_LEVELS, PI_DEFAULT_EFFORT, RECOMMENDED_EFFORT, type AiAccount, type AiModel, type Effort } from '../shared/somaai';
-import type { AiStatus, SomaApi, VoiceStatus } from '../shared/types';
+import { accountLabel, CHATGPT_PROVIDER, COPILOT_PROVIDER, EFFORT_LABEL, EFFORT_LEVELS, PI_DEFAULT_EFFORT, RECOMMENDED_EFFORT, type AiAccount, type AiModel, type Effort } from '../shared/somaai';
+import type { AiStatus, CopilotAccountStatus, SomaApi, VoiceStatus } from '../shared/types';
 import { VOICE_LANGUAGES, VOICE_MODEL } from '../shared/voice';
 import { effortText, keyForm, showEffortMenu, showModelMenu } from './aiparts';
 import { icon } from './icons';
@@ -52,6 +52,9 @@ export class AiPage implements SettingsPage {
   private usage: { stats: Json; provider: string } | null = null;
   private signing = false;
   private signInUrl = '';
+  private copilot: CopilotAccountStatus = { available: false };
+  private copilotSigning = false;
+  private copilotCode = '';
   private seq = 0;
   private menu: HTMLElement;
   private voice: VoiceStatus | null = null;
@@ -63,6 +66,11 @@ export class AiPage implements SettingsPage {
     this.menu.setAttribute('role', 'menu');
     document.body.append(this.menu);
     deps.api.ai.onSignInUrl((url) => { this.signInUrl = url; if (this.signing) this.render(); });
+    deps.api.ai.onCopilotDeviceCode((code) => {
+      if (!this.copilotSigning) return;
+      this.copilotCode = code;
+      this.render();
+    });
     deps.api.voice.onStatus((s) => {
       const was = this.voice?.download?.phase;
       this.voice = s;
@@ -80,16 +88,18 @@ export class AiPage implements SettingsPage {
     const seq = ++this.seq;
     this.render();
     const api = this.deps.api.ai;
-    const [status, accounts, current, effort, voice] = await Promise.all([
+    const [status, accounts, current, effort, voice, copilot] = await Promise.all([
       api.status().catch(() => null), api.accounts().catch(() => [] as AiAccount[]), api.defaultModel().catch(() => null),
       api.defaultEffort().catch(() => null), this.deps.api.voice.status().catch(() => null),
+      api.copilotStatus().catch(() => ({ available: true, error: 'Could not read GitHub Copilot sign-in status.' })),
     ]);
     if (seq !== this.seq) return;
     this.voice = voice;
     this.status = status;
-    this.accounts = accounts;
+    this.accounts = accounts.filter((a) => a.provider !== COPILOT_PROVIDER);
     this.current = current;
     this.effort = effort;
+    this.copilot = copilot;
     this.render();
     // Slower: the list of models (pi's SDK, about a second) and what the conversation used
     const [models, usage] = await Promise.all([
@@ -135,7 +145,70 @@ export class AiPage implements SettingsPage {
     await this.refresh();
   }
 
+  private async connectCopilot(): Promise<void> {
+    this.copilotSigning = true;
+    this.copilotCode = '';
+    this.render();
+    const r = await this.deps.api.ai.signInCopilot().catch(() => ({ ok: false, cancelled: false, error: 'Could not start GitHub Copilot sign-in.' }));
+    this.copilotSigning = false;
+    this.copilotCode = '';
+    if (r.ok) {
+      this.deps.toast('Signed in with GitHub Copilot.');
+      await this.deps.accountsChanged();
+    }
+    else if (!r.cancelled) this.deps.toast(r.error ?? 'GitHub Copilot sign-in failed.', 'error');
+    await this.refresh();
+  }
+
+  private copilotRow(): HTMLElement {
+    const { modelCount, error } = this.copilot;
+    const actions = el('div', { className: 'st-ai-wait' });
+    const action = (label: string, run: () => Promise<{ ok: boolean; error?: string } | void>, primary = false) => {
+      const button = el('button', { className: primary ? 'btn sm acc' : 'btn sm', textContent: label });
+      button.addEventListener('click', () => {
+        void run().then((r) => {
+          if (r && !r.ok) this.deps.toast(r.error ?? `${label} failed.`, 'error');
+        }, () => this.deps.toast(`${label} failed.`, 'error'));
+      });
+      return button;
+    };
+    if (this.copilotSigning) {
+      const code = this.copilotCode;
+      actions.append(el(code ? 'code' : 'span', { textContent: code || 'Waiting for a device code …' }));
+      if (code) actions.append(
+        action('Copy code', async () => {
+          const r = await this.deps.api.copyText(code);
+          if (r.ok) this.deps.toast('Device code copied.');
+          return r;
+        }),
+        action('Open GitHub', () => this.deps.api.ai.openCopilotDevicePage(), true),
+      );
+      actions.append(action('Cancel', () => this.deps.api.ai.cancelCopilotSignIn()));
+    } else if (modelCount === undefined) {
+      actions.append(action('Sign in with GitHub Copilot', () => this.connectCopilot(), true));
+    }
+    if (!this.copilotSigning && (modelCount !== undefined || error)) {
+      actions.append(action('Sign out', async () => {
+        const r = await this.deps.api.ai.signOutCopilot();
+        if (r.ok) {
+          await this.deps.accountsChanged();
+          await this.refresh();
+        }
+        return r;
+      }));
+    }
+    const description = this.copilotCode ? 'Enter this code on GitHub to authorize SOMA.'
+      : error ?? (modelCount === undefined ? 'Developer preview: text chat only, without access to your model files or tools.'
+        : `Connected. ${modelCount} models available in the chat model picker. Copilot can answer questions but cannot access model files or tools.`);
+    return field('GitHub Copilot', description, actions);
+  }
+
   private async pickModel(m: AiModel): Promise<void> {
+    if (m.provider === COPILOT_PROVIDER) {
+      if (this.deps.modelOpen()) await this.deps.useModel(m.provider, m.id);
+      else this.deps.toast('Open a project to select Copilot in the chat model picker.', 'info');
+      return;
+    }
     const r = await this.deps.api.ai.setDefaultModel(m.provider, m.id).catch((e) => ({ ok: false, error: String(e) }));
     if (!r.ok) { this.deps.toast(r.error ?? 'The model could not be changed.', 'error'); return; }
     this.current = { provider: m.provider, id: m.id };
@@ -185,6 +258,7 @@ export class AiPage implements SettingsPage {
       }
       rows.push(field('ChatGPT', 'Uses your ChatGPT Plus or Pro plan. Opens your browser to sign in.', control));
     }
+    if (this.copilot.available) rows.push(this.copilotRow());
     const key = el('div', { className: 'st-ai-key' }, ...keyForm({
       api: this.deps.api, toast: this.deps.toast,
       saved: async (provider) => { await this.deps.accountsChanged(provider); await this.refresh(); },
@@ -196,7 +270,7 @@ export class AiPage implements SettingsPage {
 
   private modelRow(): HTMLElement {
     const name = this.current ? this.models?.find((m) => m.provider === this.current!.provider && m.id === this.current!.id)?.name ?? this.current.id : null;
-    const btn = el('button', { className: 'btn sm st-ai-model', disabled: !this.accounts.length || this.models === null },
+    const btn = el('button', { className: 'btn sm st-ai-model', disabled: (!this.accounts.length && !this.copilot.modelCount) || this.models === null },
       el('span', { textContent: this.models === null && this.accounts.length ? 'Loading models …' : name ?? 'Chosen by SOMA AI' }), icon('down', 12, 2));
     btn.dataset.act = 'model';
     btn.addEventListener('click', () => {
@@ -313,7 +387,8 @@ export class AiPage implements SettingsPage {
     }
     kids.push(
       group('Sign-ins',
-        ...(this.accounts.length ? this.accounts.map((a) => this.accountRow(a)) : [el('p', { className: 'st-lead', textContent: 'Not signed in yet. SOMA AI needs one of these to work.' })]),
+        ...(this.accounts.length || this.copilot.modelCount ? this.accounts.map((a) => this.accountRow(a))
+          : [el('p', { className: 'st-lead', textContent: 'Not signed in yet. SOMA AI needs one of these to work.' })]),
         ...this.signInRows()),
       group('Model', this.modelRow(), this.effortRow()),
       group('Voice input', this.voiceRow()),

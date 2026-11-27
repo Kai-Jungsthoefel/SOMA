@@ -24,6 +24,9 @@ import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } fr
 import { piEntry, setCatalogRefresh } from './somaai';
 import { allowMicrophone, fakeMicrophone, micAccess, Voice } from './voice';
 import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, saveApiKey, setDefaultEffort, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
+import { cancelCopilotSignIn, copilotAccountStatus, copilotModels, signInCopilot, signOutCopilot } from './copilotauth';
+import { COPILOT_PROVIDER, type AiAccount } from '../shared/somaai';
+import { COPILOT_DEVICE_URL } from './copilotdevice';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -164,7 +167,8 @@ function registerIpc(ctl: ProjectController): void {
   // „Send to agent“ legt den Text auch in die Zwischenablage, für Agenten-Apps außerhalb der App (Claude Desktop, Codex-App)
   ipcMain.handle('app:copyText', (_e, text: unknown): FileOpResult => {
     if (typeof text !== 'string' || text.length > 1_000_000) return { ok: false, error: 'Nothing to copy.' };
-    if (process.env.SOMA_TEST === '1') testClipboard = text; else clipboard.writeText(text);
+    if (process.env.SOMA_TEST === '1' && process.env.SOMA_TEST_NATIVE_UI !== '1') testClipboard = text;
+    else clipboard.writeText(text);
     return { ok: true };
   });
   ipcMain.handle('app:openUrl', async (_e, url: unknown): Promise<FileOpResult> => {
@@ -204,22 +208,65 @@ function registerIpc(ctl: ProjectController): void {
   // SOMA AI (somaai.ts): one pi process per open model, only reachable through the commands SomaAI allows
   const noModel: AiResult = { ok: false, error: 'No model is open.' };
   ipcMain.handle('ai:status', (): AiStatus => ctl.session?.ai.status() ?? { available: !!piEntry(), running: false });
-  ipcMain.handle('ai:start', () => ctl.session?.ai.start() ?? noModel);
-  ipcMain.handle('ai:command', (_e, cmd: unknown) => ctl.session?.ai.command(cmd) ?? noModel);
+  ipcMain.handle('ai:start', () => ctl.session?.ai.start(!aiAccounts().length) ?? noModel);
+  ipcMain.handle('ai:command', async (_e, cmd: unknown) => {
+    const ai = ctl.session?.ai;
+    if (!ai) return noModel;
+    const copilot = copilotModels();
+    if (copilot.length && cmd && typeof cmd === 'object' && 'type' in cmd && cmd.type === 'get_available_models') {
+      if (ai.isCopilot) {
+        if (!aiAccounts().length) return { ok: true, data: { models: copilot } };
+        const pi = await listModels();
+        if (!pi.ok) return pi;
+        return { ok: true, data: { models: [...pi.models ?? [], ...copilot] } };
+      }
+      const pi = await ai.command(cmd);
+      if (!pi.ok) return pi;
+      const data = pi.data;
+      const models = data && typeof data === 'object' && 'models' in data && Array.isArray(data.models) ? data.models : [];
+      return { ok: true, data: { models: [...models, ...copilot] } };
+    }
+    return ai.command(cmd);
+  });
   ipcMain.handle('ai:runTimes', () => ctl.session?.ai.runTimes() ?? noModel);
   ipcMain.on('ai:respond', (_e, res: unknown) => ctl.session?.ai.respond(res));
   ipcMain.handle('ai:stop', () => ctl.session?.ai.stopAndWait());
   // Sign-in (somaaiauth.ts) holds for the whole app. A running pi of the open model ends, the next message starts it
   // again with the new sign-in and model (the conversation continues)
   const restartAi = <T extends { ok: boolean }>(r: T): T => { if (r.ok) ctl.session?.ai.restart(); return r; };
-  ipcMain.handle('ai:accounts', () => aiAccounts());
+  ipcMain.handle('ai:accounts', (): AiAccount[] => [
+    ...aiAccounts(), ...(copilotModels().length ? [{ provider: COPILOT_PROVIDER, type: 'oauth' as const }] : []),
+  ]);
   ipcMain.handle('ai:saveKey', (_e, provider: unknown, key: unknown) => restartAi(saveApiKey(provider, key)));
   ipcMain.handle('ai:signIn', async (e) => restartAi(await signInChatGPT((url) => {
     if (!e.sender.isDestroyed()) e.sender.send('ai:signInUrl', url);
     if (process.env.SOMA_TEST !== '1') void shell.openExternal(url);
   })));
   ipcMain.handle('ai:cancelSignIn', () => cancelSignIn());
-  ipcMain.handle('ai:signOut', (_e, provider: unknown) => restartAi(signOut(provider)));
+  const signOutOfCopilot = async () => {
+    const result = signOutCopilot();
+    if (result.ok) await ctl.session?.ai.stopCopilot();
+    return result;
+  };
+  ipcMain.handle('ai:signOut', (_e, provider: unknown) => provider === COPILOT_PROVIDER ? signOutOfCopilot() : restartAi(signOut(provider)));
+  ipcMain.handle('ai:copilotStatus', () => copilotAccountStatus());
+  ipcMain.handle('ai:signInCopilot', async (e) => {
+    const result = await signInCopilot((code) => {
+      if (!e.sender.isDestroyed()) e.sender.send('ai:copilotDeviceCode', code);
+    });
+    if (result.ok) await ctl.session?.ai.stopCopilot();
+    return result;
+  });
+  ipcMain.handle('ai:cancelCopilotSignIn', () => cancelCopilotSignIn());
+  ipcMain.handle('ai:signOutCopilot', signOutOfCopilot);
+  ipcMain.handle('ai:openCopilotDevicePage', async (): Promise<FileOpResult> => {
+    try {
+      if (process.env.SOMA_TEST !== '1' || process.env.SOMA_TEST_NATIVE_UI === '1') await shell.openExternal(COPILOT_DEVICE_URL);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: `Could not open the browser. Open ${COPILOT_DEVICE_URL} directly.` };
+    }
+  });
   // Earlier conversations of the open model: the window gets ids, never files. Switching looks the file up again
   ipcMain.handle('ai:sessions', async () => {
     const s = ctl.session;
@@ -237,7 +284,12 @@ function registerIpc(ctl: ProjectController): void {
     if (!hit) return { ok: false, error: r.error ?? 'This conversation is no longer there.' };
     return s.ai.switchSession(hit.path);
   });
-  ipcMain.handle('ai:models', () => listModels());
+  ipcMain.handle('ai:models', async () => {
+    const copilot = copilotModels();
+    if (copilot.length && !aiAccounts().length) return { ok: true, models: copilot };
+    const pi = await listModels();
+    return pi.ok ? { ok: true, models: [...pi.models ?? [], ...copilot] } : pi;
+  });
   setCatalogRefresh(listModels);
   ipcMain.handle('ai:defaultModel', () => defaultModel());
   ipcMain.handle('ai:setDefaultModel', (_e, provider: unknown, id: unknown) => setDefaultModel(provider, id));
@@ -536,4 +588,4 @@ app.whenReady().then(async () => {
   });
   createWindow();
 });
-app.on('window-all-closed', () => { console.log('[soma] quit'); stopBridge(); stopWarm(); voice.shutdown(); app.quit(); });
+app.on('window-all-closed', () => { console.log('[soma] quit'); cancelCopilotSignIn(); stopBridge(); stopWarm(); voice.shutdown(); app.quit(); });

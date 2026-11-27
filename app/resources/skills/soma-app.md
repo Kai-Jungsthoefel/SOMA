@@ -133,6 +133,17 @@ part, a measurement or a markup into its input. A build that fails while it work
 itself. A dot on the tab shows its state: grey not set up, green ready, orange working, yellow waiting for you. When
 SOMA AI starts working or asks something while the agent area is collapsed, the area opens.
 
+### GitHub Copilot preview
+
+If **Sign in with GitHub Copilot** appears in **Settings > SOMA AI**, open it, copy the device code, and choose
+**Open GitHub**. Enter the code on GitHub and authorize the app with an account that has Copilot access. After sign-in,
+open a project and choose a GitHub Copilot model from the chat model picker or from **Settings > SOMA AI > Model**.
+The Settings choice applies to the open chat, not to new projects.
+
+Copilot answers text questions only in this preview. It cannot access project files, edit the model, use images, or run
+commands. Switching back to a Copilot model restores its separate conversation while the project stays open.
+For developer setup, see GitHub's [app registration guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app).
+
 ### Voice input
 
 The microphone next to **Add a picture** lets you speak to SOMA AI instead of typing. The first click asks which

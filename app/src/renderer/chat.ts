@@ -1,4 +1,4 @@
-import { accountLabel, CHATGPT_PROVIDER, EFFORT_LABEL, isEffort, RECOMMENDED_EFFORT, RECOMMENDED_MODEL, type AiAccount, type Effort } from '../shared/somaai';
+import { accountLabel, CHATGPT_PROVIDER, COPILOT_PROVIDER, EFFORT_LABEL, isEffort, RECOMMENDED_EFFORT, RECOMMENDED_MODEL, type AiAccount, type Effort } from '../shared/somaai';
 import type { AiEvent, AiExit, SomaApi } from '../shared/types';
 import { effortText, keyForm, searchMenu, showEffortMenu, showModelMenu } from './aiparts';
 import { icon } from './icons';
@@ -581,7 +581,8 @@ export class SomaChat {
     const more = el('button', { className: 'ibtn s', title: 'Sign-in' }, icon('more', 16));
     more.setAttribute('aria-label', 'Sign-in and more');
     more.addEventListener('click', () => this.openAccountMenu(more));
-    this.top.replaceChildren(el('span', { className: 'ai-safe' }, icon('shield', 13), 'Works with your permissions · ', details),
+    this.top.replaceChildren(el('span', { className: 'ai-safe' }, icon('shield', 13),
+      this.model?.provider === COPILOT_PROVIDER ? 'GitHub Copilot · text only · ' : 'Works with your permissions · ', details),
       el('span', { className: 'grow' }), past, fresh, more);
   }
 
@@ -608,7 +609,8 @@ export class SomaChat {
     this.input.disabled = locked;
     this.input.placeholder = this.phase === 'note' ? 'Read the note above first'
       : this.asking ? 'SOMA AI is waiting for your answer above'
-        : this.running ? 'Add something, SOMA AI reads it after the current step …' : 'Describe what you want, or add a sketch or photo …';
+        : this.model?.provider === COPILOT_PROVIDER ? 'Ask a CAD question (text only) …'
+          : this.running ? 'Add something, SOMA AI reads it after the current step …' : 'Describe what you want, or add a sketch or photo …';
     this.composer.classList.toggle('locked', locked);
     this.voice.setLocked(locked);
     this.renderStatus();
@@ -690,7 +692,7 @@ export class SomaChat {
     }
     const wantEffort = this.wantEffort ?? (want ? await this.savedEffort() : null);
     this.wantEffort = null;
-    if (wantEffort) await this.deps.api.ai.command({ type: 'set_thinking_level', level: wantEffort });
+    if (wantEffort && model.provider !== COPILOT_PROVIDER) await this.deps.api.ai.command({ type: 'set_thinking_level', level: wantEffort });
     // pi clamps the level to what the (maybe new) model supports: ask what it is now
     await this.readEffort();
     // Once, at the end: the chip never shows the model of the old sign-in for a moment
@@ -711,8 +713,10 @@ export class SomaChat {
    */
   async accountsChanged(provider?: string, refresh = true): Promise<void> {
     if (provider) this.useRecommended(provider);
+    const wasCopilot = this.model?.provider === COPILOT_PROVIDER;
     this.piUp = false;
     if (refresh) await this.show();
+    if (refresh && wasCopilot && this.phase === 'chat' && this.model?.provider !== COPILOT_PROVIDER) await this.reloadHistory();
   }
 
   /**
@@ -720,15 +724,29 @@ export class SomaChat {
    * continued conversation would keep its own model).
    */
   async useModel(provider: string, modelId: string): Promise<void> {
-    if (!this.piUp) { this.wantModel = { provider, modelId }; return; }
+    if (this.running) { this.deps.toast('Stop the current reply before changing models.', 'info'); return; }
+    if (!this.piUp) {
+      this.wantModel = { provider, modelId };
+      if (this.phase === 'chat') await this.ensureStarted();
+      return;
+    }
+    const backendChanged = (this.model?.provider === COPILOT_PROVIDER) !== (provider === COPILOT_PROVIDER);
     const s = await this.deps.api.ai.command({ type: 'set_model', provider, modelId });
     if (!s.ok) { this.deps.toast(s.error ?? 'The model could not be changed.', 'error'); return; }
     // pi clamps the level to what the new model supports and keeps the clamped one (off after a model that does not
     // think): the saved effort again, clamped anew
     const saved = await this.savedEffort();
-    if (saved) await this.deps.api.ai.command({ type: 'set_thinking_level', level: saved });
+    if (saved && provider !== COPILOT_PROVIDER) await this.deps.api.ai.command({ type: 'set_thinking_level', level: saved });
     await this.readEffort();
     this.setModel(obj(s.data));
+    if (backendChanged) await this.reloadHistory();
+  }
+
+  private async reloadHistory(): Promise<void> {
+    const r = await this.deps.api.ai.command({ type: 'get_messages' });
+    if (!r.ok) { this.deps.toast(r.error ?? 'Could not load the conversation.', 'error'); return; }
+    this.renderHistory(arr(obj(r.data).messages), await this.runTimes());
+    if (!this.list.childElementCount) this.renderWelcome();
   }
 
   /**
@@ -773,6 +791,7 @@ export class SomaChat {
 
   private setModel(m: Json): void {
     this.model = str(m.id) ? { provider: str(m.provider), id: str(m.id), name: str(m.name) || str(m.id) } : null;
+    if (this.phase === 'chat') this.renderTop();
     this.renderComposer();
   }
 
@@ -878,6 +897,7 @@ export class SomaChat {
     if (menus.isOpen(this.menu)) { menus.close(); return; }
     if (!(await this.ensureStarted())) return;
     const r = await this.deps.api.ai.command({ type: 'get_available_models' });
+    if (!r.ok) { this.deps.toast(r.error ?? 'Could not list models.', 'error'); return; }
     const models = arr(obj(r.data).models).map(obj).map((m) => ({ provider: str(m.provider), id: str(m.id), name: str(m.name) || str(m.id) }));
     showModelMenu(this.menu, this.modelBtn, models, this.model, (m) => void this.pickModel(m.provider, m.id));
   }
@@ -889,7 +909,7 @@ export class SomaChat {
   private async pickModel(provider: string, modelId: string): Promise<void> {
     await this.useModel(provider, modelId);
     // pi refused it (useModel said so): nothing to save
-    if (this.model?.provider !== provider || this.model.id !== modelId) return;
+    if (provider === COPILOT_PROVIDER || this.model?.provider !== provider || this.model.id !== modelId) return;
     const r =await this.deps.api.ai.setDefaultModel(provider, modelId).catch((e) => ({ ok: false, error: String(e) }));
     if (!r.ok) this.deps.toast(`The model is used in this conversation, but not saved for new ones: ${r.error ?? 'unknown error'}`, 'error');
   }

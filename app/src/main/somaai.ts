@@ -3,8 +3,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AiResult, AiStatus } from '../shared/types';
-import { userDataDir } from './paths';
+import { COPILOT_PROVIDER, type AiModel } from '../shared/somaai';
+import { aiDir } from './paths';
 import { terminalEnv } from './terminals';
+import { copilotModels } from './copilotauth';
+import { CopilotChat } from './copilotchat';
 
 /*
  * SOMA AI: the agent built into SOMA. It is pi (pi.dev, MIT), bundled with the app, so people without a coding agent of
@@ -29,7 +32,7 @@ const MAX_COMMAND = 40_000_000;
 const REQUEST_TIMEOUT_MS = 60_000;
 
 /** pi's own folder in the app data (PI_CODING_AGENT_DIR): sign-in (auth.json), settings, conversations. Not ~/.pi of the user. */
-export const aiDir = () => path.join(userDataDir(), 'somaai');
+export { aiDir } from './paths';
 /** Files of SOMA for pi: its addition to the system prompt and its own extension. */
 const aiResources = () => path.join(app.getAppPath(), 'resources', 'somaai');
 
@@ -241,6 +244,10 @@ export function setCatalogRefresh(fn: () => Promise<unknown>): void { refreshCat
  * conversation continues the last one of the model (pi keeps them per folder in aiDir()/sessions).
  */
 export class SomaAI {
+  private copilot?: CopilotChat;
+  private copilotSelected = false;
+  private copilotGen = 0;
+  private switchingModel = false;
   private child: ChildProcess | null = null;
   private gen = 0;
   private starting: Promise<AiResult> | null = null;
@@ -269,12 +276,23 @@ export class SomaAI {
   }
 
   status(): AiStatus {
-    return { available: !!piEntry() && !!guardDir(), running: !!this.child, version: piVersion() ?? undefined, error: this.lastError ?? undefined };
+    return { available: this.copilotSelected || (!!piEntry() && !!guardDir()), running: this.copilotSelected || !!this.child, version: piVersion() ?? undefined, error: this.lastError ?? undefined };
   }
 
+  get isCopilot(): boolean { return this.copilotSelected; }
+
   /** Starts pi if it is not running and waits until it answers. */
-  start(): Promise<AiResult> {
+  start(preferCopilot = false): Promise<AiResult> {
     if (this.disposed) return Promise.resolve({ ok: false, error: 'This model has been closed.' });
+    if (preferCopilot && !this.child && !this.starting && !this.copilotSelected) {
+      const first = copilotModels()[0];
+      if (first) this.activateCopilot(first);
+    }
+    if (this.copilotSelected && this.copilot) return Promise.resolve({ ok: true, data: this.copilot.state() });
+    return this.startPi();
+  }
+
+  private startPi(): Promise<AiResult> {
     if (this.child) return Promise.resolve({ ok: true });
     this.starting ??= this.launch().finally(() => { this.starting = null; });
     return this.starting;
@@ -359,7 +377,7 @@ export class SomaAI {
       p.resolve(rec.success ? { ok: true, data: rec.data } : { ok: false, error: String(rec.error ?? 'SOMA AI refused the request.') });
       return;
     }
-    if (!this.wc.isDestroyed()) this.wc.send('ai:event', { gen, record: rec });
+    if (!this.copilotSelected && !this.wc.isDestroyed()) this.wc.send('ai:event', { gen, record: rec });
   }
 
   private closed(gen: number, code: number | null, child: ChildProcess, startError?: string): void {
@@ -375,7 +393,7 @@ export class SomaAI {
     console.log(`[somaai] pi ended (code ${code})`);
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve({ ok: false, error: error ?? 'SOMA AI has stopped.' }); }
     this.pending.clear();
-    if (!this.wc.isDestroyed()) this.wc.send('ai:exit', { gen, code, error });
+    if (!this.copilotSelected && !this.wc.isDestroyed()) this.wc.send('ai:exit', { gen, code, error });
   }
 
   private request(cmd: Record<string, unknown>): Promise<AiResult> {
@@ -394,15 +412,60 @@ export class SomaAI {
 
   /** A command from the chat. Only the commands in COMMANDS, with an id from SOMA. */
   async command(cmd: unknown): Promise<AiResult> {
+    if (this.disposed) return { ok: false, error: 'This model has been closed.' };
     if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return { ok: false, error: 'Invalid request.' };
     const c = { ...(cmd as Record<string, unknown>) };
     if (typeof c.type !== 'string' || !COMMANDS.has(c.type)) return { ok: false, error: `Unknown request: ${String(c.type).slice(0, 40)}` };
     delete c.id;
     if (JSON.stringify(c).length > MAX_COMMAND) return { ok: false, error: 'The message is too large (images included).' };
+    if (c.type === 'set_model' && (c.provider === COPILOT_PROVIDER || this.copilotSelected)) return this.selectModel(c);
+    if (this.switchingModel && (c.type === 'prompt' || c.type === 'steer' || c.type === 'follow_up')) {
+      return { ok: false, error: 'Wait for the model switch to finish.' };
+    }
+    if (this.copilotSelected && this.copilot) return this.copilot.command(c);
     const started = await this.start();
     if (!started.ok) return started;
     if (c.type === 'prompt' || c.type === 'new_session') this.settleFresh();
     return this.request(c);
+  }
+
+  private activateCopilot(model: AiModel): void {
+    this.copilotGen = nextGen++;
+    this.copilot ??= new CopilotChat(model, (record) => {
+      if (this.copilotSelected && !this.disposed && !this.wc.isDestroyed()) this.wc.send('ai:event', { gen: this.copilotGen, record });
+    });
+    this.copilotSelected = true;
+  }
+
+  private async selectModel(c: Record<string, unknown>): Promise<AiResult> {
+    if (this.switchingModel || this.copilot?.busy) return { ok: false, error: 'Wait for the current reply or model switch to finish.' };
+    this.switchingModel = true;
+    try {
+      if (c.provider === COPILOT_PROVIDER) {
+        const model = copilotModels().find((m) => m.id === c.modelId);
+        if (!model) return { ok: false, error: 'This Copilot model is not available. Check your sign-in in Settings.' };
+        if (!this.copilotSelected && (this.child || this.starting)) {
+          if (this.starting) await this.starting;
+          if (this.child) {
+            const state = await this.request({ type: 'get_state' });
+            if (!state.ok || !state.data || typeof state.data !== 'object' || !('isStreaming' in state.data) || state.data.isStreaming) {
+              return { ok: false, error: 'Wait for the current SOMA AI reply before switching to Copilot.' };
+            }
+          }
+        }
+        if (this.disposed) return { ok: false, error: 'This model has been closed.' };
+        const selected = this.copilot ? await this.copilot.select(model) : { ok: true, data: model };
+        if (selected.ok && !this.copilotSelected) this.activateCopilot(model);
+        return selected;
+      }
+      const started = await this.startPi();
+      if (!started.ok) return started;
+      const r = await this.request(c);
+      if (r.ok) this.copilotSelected = false;
+      return r;
+    } finally {
+      this.switchingModel = false;
+    }
   }
 
   /**
@@ -410,6 +473,7 @@ export class SomaAI {
    * the start of a message in it, the end is the time its session entry was written.
    */
   async runTimes(): Promise<AiResult> {
+    if (this.copilotSelected) return { ok: true, data: {} };
     const started = await this.start();
     if (!started.ok) return started;
     const r = await this.request({ type: 'get_entries' });
@@ -423,10 +487,14 @@ export class SomaAI {
    * (listSessions for this model folder), never from the window.
    */
   async switchSession(sessionPath: string): Promise<AiResult> {
-    const started = await this.start();
+    if (this.copilot?.busy) return { ok: false, error: 'Wait for the Copilot reply or stop it first.' };
+    if (this.disposed) return { ok: false, error: 'This model has been closed.' };
+    const started = await this.startPi();
     if (!started.ok) return started;
     this.settleFresh();
-    return this.request({ type: 'switch_session', sessionPath });
+    const result = await this.request({ type: 'switch_session', sessionPath });
+    if (result.ok) this.copilotSelected = false;
+    return result;
   }
 
   /** Answer to a question of an extension (confirm, select, input). Only the fields pi knows. */
@@ -485,10 +553,18 @@ export class SomaAI {
 
   /** Like stop(), and waits until pi has really ended (at most `ms`), so the model folder is free. */
   stopAndWait(ms = 10000): Promise<void> {
-    if (!this.child) return Promise.resolve();
+    const copilot = this.stopCopilot();
+    if (!this.child) return copilot;
     const done = this.exited;
     this.stop();
-    return Promise.race([done, new Promise<void>((r) => setTimeout(r, ms))]);
+    return Promise.all([copilot, Promise.race([done, new Promise<void>((r) => setTimeout(r, ms))])]).then(() => undefined);
+  }
+
+  stopCopilot(): Promise<void> {
+    const chat = this.copilot;
+    this.copilotSelected = false;
+    this.copilot = undefined;
+    return chat?.stop() ?? Promise.resolve();
   }
 
   /**

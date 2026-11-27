@@ -32,7 +32,7 @@ useMockModel(ud, mock.port);
 const aiDir = path.join(ud, 'somaai');
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(path.join(aiDir, f), 'utf8')); } catch { return {}; } };
 
-const app = await startApp({ name: 'aichat', userData: ud, env: { NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' } });
+const app = await startApp({ name: 'aichat', userData: ud, env: { NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost', SOMA_COPILOT_CLIENT_ID: 'Iv23TestClient' } });
 const { ev } = app;
 const chat = () => ev(() => window.__t.chat());
 const dot = () => ev(() => document.querySelector('.ai-tab .ai-dot')?.dataset.state);
@@ -323,6 +323,8 @@ try {
   check('Settings > SOMA AI: both sign-ins, ChatGPT to add, the models of the sign-ins, the recommendation',
     JSON.stringify(ap.accounts.map((a) => a.provider).sort()) === '["anthropic","openrouter"]' && ap.text.includes('Sign in with ChatGPT') && ap.models > 5
     && ap.text.includes('we recommend') && ap.current?.provider === 'openrouter', JSON.stringify({ accounts: ap.accounts, models: ap.models, current: ap.current, err: ap.modelsError }));
+  check('Configured Copilot account preview appears in Settings without replacing the current chat provider',
+    ap.text.includes('Sign in with GitHub Copilot') && ap.current?.provider === 'openrouter', ap.current?.provider);
   check('… what the conversation of the open model used', /Messages\s+3 from you/.test(ap.text) && /Tokens\s+[\d.]+ k read/.test(ap.text), ap.text.slice(ap.text.indexOf('USAGE'), ap.text.indexOf('USAGE') + 200));
   await shot('settings-ai');
   // The model: chosen in the same menu with search, the open conversation takes it at once
@@ -341,8 +343,13 @@ try {
   await app.waitFor('effort saved', () => window.__t.settingsPages().ai.effort === 'xhigh', 10000);
   check('… choosing an effort there: saved for new conversations', readJson('settings.json').defaultThinkingLevel === 'xhigh', JSON.stringify(readJson('settings.json')));
   // A key added and removed there, the chat knows about it
-  await ev(() => { const s = document.querySelector('#st-ai .ai-keyrow select'); s.value = 'google'; s.dispatchEvent(new Event('change')); document.querySelector('#st-ai .ai-keyrow input').value = 'AIza-test-789'; });
-  await ev(() => [...document.querySelectorAll('#st-ai button')].find((b) => b.textContent === 'Save key').click());
+  await ev(() => {
+    const s = document.querySelector('#st-ai .ai-keyrow select');
+    s.value = 'google';
+    s.dispatchEvent(new Event('change'));
+    document.querySelector('#st-ai .ai-keyrow input').value = 'AIza-test-789';
+    [...document.querySelectorAll('#st-ai button')].find((b) => b.textContent === 'Save key').click();
+  });
   await app.waitFor('key added in Settings', () => window.__t.settingsPages().ai.accounts.some((a) => a.provider === 'google'), 20000);
   check('… an API key added there is in auth.json, the page lists it', readJson('auth.json').google?.key === 'AIza-test-789');
   await ev(() => document.querySelector('#st-ai [data-provider="google"] [data-act="signout"]').click());

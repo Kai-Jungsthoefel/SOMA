@@ -140,8 +140,10 @@ export interface AiResult { ok: boolean; error?: string; data?: unknown }
 export interface AiEvent { gen: number; record: Record<string, unknown> }
 /** pi has ended. `error` only when it ended on its own with an error, not when SOMA stopped it. */
 export interface AiExit { gen: number; code: number | null; error?: string }
-/** Result of "Sign in with ChatGPT". `cancelled`: the user stopped it. */
+/** Result of an account sign-in. `cancelled`: the user stopped it. */
 export interface AiSignInResult { ok: boolean; error?: string; cancelled?: boolean }
+/** The Copilot account preview, without credentials or model contents. */
+export interface CopilotAccountStatus { available: boolean; modelCount?: number; error?: string }
 
 /**
  * Voice input (main/voice.ts). `available`: the speech engine is part of this installation. `download`: the model is being
@@ -603,6 +605,12 @@ export interface SomaApi {
     signOut(provider: string): Promise<{ ok: boolean; error?: string }>;
     /** The sign-in page, as soon as it is known (a link in case the browser did not open). */
     onSignInUrl(cb: (url: string) => void): void;
+    copilotStatus(): Promise<CopilotAccountStatus>;
+    signInCopilot(): Promise<AiSignInResult>;
+    cancelCopilotSignIn(): Promise<void>;
+    signOutCopilot(): Promise<AiSignInResult>;
+    openCopilotDevicePage(): Promise<FileOpResult>;
+    onCopilotDeviceCode(cb: (code: string) => void): void;
     /** Models of the saved sign-ins, without a model open (Settings > SOMA AI). */
     models(): Promise<{ ok: boolean; models?: AiModel[]; error?: string }>;
     /** The model pi starts with, null when pi chooses. */

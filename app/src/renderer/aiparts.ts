@@ -1,4 +1,4 @@
-import { AI_KEY_PROVIDERS, EFFORT_LABEL, isRecommendedModel, RECOMMENDED_EFFORT, type AiModel, type Effort } from '../shared/somaai';
+import { AI_KEY_PROVIDERS, COPILOT_PROVIDER, EFFORT_LABEL, isRecommendedModel, RECOMMENDED_EFFORT, type AiModel, type Effort } from '../shared/somaai';
 import type { SomaApi } from '../shared/types';
 import { icon } from './icons';
 import { el, menuItem, menus } from './ui';
@@ -56,7 +56,8 @@ interface SearchMenuOptions { placeholder: string; empty: string; align?: 'left'
 export function showModelMenu(menu: HTMLElement, anchor: HTMLElement, models: AiModel[], current: { provider: string; id: string } | null,
   pick: (m: AiModel) => void, align: 'left' | 'right' = 'right'): void {
   const entry = (m: AiModel): MenuEntry => ({
-    label: m.name, sub: models.some((x) => x !== m && x.name === m.name) ? m.provider : undefined, find: `${m.name} ${m.id} ${m.provider}`,
+    label: m.name, sub: m.provider === COPILOT_PROVIDER ? 'GitHub Copilot · text only'
+      : models.some((x) => x !== m && x.name === m.name) ? m.provider : undefined, find: `${m.name} ${m.id} ${m.provider}`,
     on: current?.id === m.id && current?.provider === m.provider, onClick: () => pick(m),
   });
   const rec = models.filter((m) => isRecommendedModel(m.id)).map(entry);

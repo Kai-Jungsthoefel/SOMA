@@ -36,6 +36,9 @@ module.exports = {
     // Voice input (voice.ts): sherpa-onnx and the native part for this system (onnxruntime inside), N-API like node-pty
     'node_modules/sherpa-onnx-node/**',
     'node_modules/sherpa-onnx-*/**',
+    'node_modules/@microsoft/copilot-sdk*/**',
+    'node_modules/{koffi,lossless-json,vscode-jsonrpc}/**',
+    'node_modules/@koromix/koffi-*/**',
     '!node_modules/node-pty/{src,deps,scripts,third_party,typings}/**',
     '!node_modules/node-pty/build/**/*.{obj,pdb,lib,iobj,ipdb,tlog}',
     // SOMA AI (somaai.ts): pi runs as its own process from its bundle, which needs only these packages besides itself

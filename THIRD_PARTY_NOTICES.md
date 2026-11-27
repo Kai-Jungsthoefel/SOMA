@@ -25,6 +25,7 @@ Paths are relative to the installation folder (macOS: `SOMA.app/Contents`, where
 | node-pty | `resources/app/node_modules/node-pty/LICENSE`, winpty in `resources/app/dist/licenses/node-pty__winpty/` |
 | sherpa-onnx and ONNX Runtime (voice input) | `resources/app/node_modules/sherpa-onnx-node/` and `resources/app/node_modules/sherpa-onnx-<system>/`; Apache-2.0 and MIT texts at the upstream URLs below |
 | pi (SOMA AI) | `resources/app/resources/somaai/LICENSE-pi.txt`; the packages pi needs: their folders under `resources/app/node_modules/` and `resources/app/dist/licenses/` |
+| Microsoft Copilot SDK and native runtime (account preview) | `resources/app/node_modules/@microsoft/` and `resources/app/dist/licenses/`; native loader Koffi and other runtime dependencies ship under `resources/app/node_modules/` |
 | Python | `resources/python/LICENSE.txt` (Windows) or `resources/python/lib/python3.12/LICENSE.txt` |
 | Python packages | `resources/python/.../site-packages/<package>.dist-info/` (`LICENSE*`, `licenses/`), some inside the package folder |
 | gmsh | `resources/python/share/doc/gmsh/LICENSE.txt` |
@@ -68,6 +69,8 @@ sherpa-onnx, which ship as their package folders.
 | pi (@earendil-works/pi-coding-agent, with pi-ai, pi-agent-core, pi-tui, pi-codemode, pi-mcp compiled in), the agent of SOMA AI | 1.6.0 | MIT | https://github.com/earendil-works/pi | yes |
 | Packages compiled into the bundle of pi (provider SDKs such as openai, @anthropic-ai/sdk, @google/genai, @aws-sdk/*, and undici, yaml, diff …) | as in pi 1.6.0, see `dist/licenses` | MIT, Apache-2.0, BSD-3-Clause, ISC, BlueOak-1.0.0, Unlicense, 0BSD | see `dist/licenses` | yes |
 | @gotgenes/pi-permission-system | 42.0.2 | MIT | https://github.com/gotgenes/pi-packages | yes |
+| Microsoft Copilot SDK (`@microsoft/copilot-sdk` and platform-specific runtime packages) | 2.0.3 | MIT | https://github.com/microsoft/copilot-sdk | yes |
+| Koffi, lossless-json, vscode-jsonrpc (Copilot SDK runtime dependencies) | see `dist/licenses` | MIT | https://koffi.dev/, https://github.com/josdejong/lossless-json, https://github.com/microsoft/vscode-languageserver-node | yes |
 | jiti | 2.7.0 | MIT | https://github.com/unjs/jiti | yes |
 | typebox | 1.3.27 | MIT | https://github.com/sinclairzx81/typebox | yes |
 | zod | 4.6.7 | MIT | https://github.com/colinhacks/zod | yes |

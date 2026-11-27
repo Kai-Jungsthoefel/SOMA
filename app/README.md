@@ -56,6 +56,27 @@ npm run help:shots      # Bilder der Anleitung neu aufnehmen (resources/help/), 
 
 **Windows und Netzlaufwerk:** Liegt `node_modules` auf einem Netzlaufwerk, starten die sandboxed Prozesse von Electron nicht (`launch-failed`, Code 18, schwarzes Fenster). `npm start` und der Test nutzen deshalb automatisch eine lokale Kopie von Electron unter `%LOCALAPPDATA%\soma-dev\` (`scripts/electron-local.mjs`, einmalig rund 370 MB). Die App selbst darf auf dem Netzlaufwerk liegen. Eine installierte App muss lokal liegen, sonst zeigt sie eine Fehlermeldung.
 
+## GitHub Copilot account preview
+
+To show the developer-only account check in **Settings > SOMA AI**, use a separate [GitHub App registration](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app)
+with **Enable Device Flow** and **Expire user authorization tokens** selected. Leave webhooks off and start without
+adding repository permissions. Set `SOMA_COPILOT_CLIENT_ID` to the app's public Client ID in the environment that
+starts SOMA (the numeric App ID is not the Client ID). Do not supply a client secret or access token. Open Settings,
+start the sign-in, then use the displayed code to authorize the test app on GitHub with an account that has Copilot.
+
+This uses the [official Copilot SDK](https://docs.github.com/en/copilot/how-tos/copilot-sdk/setup/github-oauth)
+without using stored CLI credentials. SOMA saves the sign-in encrypted with system credential storage and asks you
+to sign in again after token expiry. Open a project, select a GitHub Copilot model in the chat model picker, and
+ask a text question. Copilot cannot see or edit project files, open images, or run commands in this preview. When
+you switch between Copilot and pi, each backend keeps its own conversation for the open project; the Copilot
+preview does not reopen earlier chats after closing a project.
+
+For an official release, register a separate GitHub App owned by the project and verify authorization with a
+Copilot user who does not own that app. Provide the project's public Client ID to the release build as a default,
+with `SOMA_COPILOT_CLIENT_ID` still available as a local development override. The current preview reads only the
+runtime environment; setting a CI variable alone will not embed it in the installed app. Build-time configuration
+and verification in a packaged build are follow-up work. Do not include a client secret, private key, or token.
+
 ## Installationspakete
 
 Jedes Betriebssystem baut sein eigenes Paket, die Python-Basisumgebung, CalculiX und das Git von dugite sind plattformabhängig. Die CI macht das für alle drei Systeme ([../.github/workflows/dist.yml](../.github/workflows/dist.yml), von Hand oder mit einem Tag `vX.Y.Z`, Pakete als Artefakte am Lauf, bei einem Tag zusätzlich als GitHub-Release, solange 0.x als Vorabversion). Lokal:

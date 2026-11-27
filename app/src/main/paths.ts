@@ -9,6 +9,7 @@ export function userDataDir(): string {
   return process.env.SOMA_USER_DATA || app.getPath('userData');
 }
 
+export const aiDir = () => path.join(userDataDir(), 'somaai');
 export const workspacesDir = () => path.join(userDataDir(), 'workspaces');
 /** Geöffnete Ordner (Ordner-Modus): Kennung des Modells → Pfad. Ihre Modelle liegen nicht unter workspaces/. */
 export const foldersFile = () => path.join(userDataDir(), 'folders.json');

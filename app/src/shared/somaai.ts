@@ -21,6 +21,7 @@ export const AI_KEY_PROVIDERS: AiKeyProvider[] = [
 
 /** "Sign in with ChatGPT" is pi's provider `openai` with its account login (OpenAI's flow for agents of other makers). */
 export const CHATGPT_PROVIDER = 'openai';
+export const COPILOT_PROVIDER = 'github-copilot';
 
 /** Model SOMA chooses after signing in, per provider. Providers without an entry keep pi's choice. */
 export const RECOMMENDED_MODEL: Record<string, string> = {
@@ -60,5 +61,6 @@ export interface AiAccount { provider: string; type: 'oauth' | 'api_key' }
 /** What people see as the name of a sign-in. */
 export function accountLabel(a: AiAccount): string {
   if (a.provider === CHATGPT_PROVIDER && a.type === 'oauth') return 'ChatGPT';
+  if (a.provider === COPILOT_PROVIDER) return 'GitHub Copilot';
   return AI_KEY_PROVIDERS.find((p) => p.id === a.provider)?.label ?? a.provider;
 }

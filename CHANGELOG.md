@@ -6,6 +6,10 @@ the version is bumped.
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in developer preview of GitHub Copilot sign-in in Settings > SOMA AI. Copilot models are available for text questions in the chat model picker; they cannot read or edit project files or run commands.
+
 ## [1.0.0] - 2026-11-22
 
 SOMA 1.0. It brings its own agent, SOMA AI, so you no longer need a coding agent to design with SOMA. Models made with 1.0 keep working in later versions, changes that break them only come with a new major version.
