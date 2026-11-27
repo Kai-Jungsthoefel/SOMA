@@ -3,7 +3,8 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AI_KEY_PROVIDERS, CHATGPT_PROVIDER, isEffort, RECOMMENDED_MODEL, type AiAccount, type Effort, type AiModel, type AiSession } from '../shared/somaai';
+import { AI_KEY_PROVIDERS, CHATGPT_PROVIDER, COPILOT_PROVIDER, isEffort, RECOMMENDED_MODEL, type AiAccount, type Effort, type AiModel, type AiSession } from '../shared/somaai';
+import { copilotModels } from './copilotauth';
 import type { AiSignInResult } from '../shared/types';
 import { aiDir, piIndex, piProcessEnv, readJson, writeJson } from './somaai';
 
@@ -17,6 +18,7 @@ import { aiDir, piIndex, piProcessEnv, readJson, writeJson } from './somaai';
 
 const authFile = () => path.join(aiDir(), 'auth.json');
 const settingsFile = () => path.join(aiDir(), 'settings.json');
+const copilotPreferenceFile = () => path.join(aiDir(), 'copilot-preference.json');
 const KNOWN = new Set([CHATGPT_PROVIDER, ...AI_KEY_PROVIDERS.map((p) => p.id)]);
 const SIGN_IN_MS = 15 * 60_000;
 
@@ -213,14 +215,35 @@ export async function listSessions(dir: string): Promise<{ ok: boolean; sessions
 
 /** The model pi starts with (settings.json), null when pi chooses. */
 export function defaultModel(): { provider: string; id: string } | null {
+  const copilot = preferredCopilotModel();
+  if (copilot) return { provider: copilot.provider, id: copilot.id };
   let s: Record<string, unknown>;
   try { s = readJson(settingsFile()); } catch { return null; }
   return typeof s.defaultProvider === 'string' && typeof s.defaultModel === 'string' ? { provider: s.defaultProvider, id: s.defaultModel } : null;
 }
 
+export function preferredCopilotModel(): AiModel | undefined {
+  try {
+    const { modelId } = readJson(copilotPreferenceFile());
+    return typeof modelId === 'string' ? copilotModels().find((m) => m.id === modelId) : undefined;
+  } catch {
+    console.warn('[somaai] Could not read the preferred Copilot model.');
+    return undefined;
+  }
+}
+
 /** Settings > SOMA AI: the model pi starts with. Only a model of a saved sign-in (as the list shows them). */
 export async function setDefaultModel(provider: unknown, id: unknown): Promise<{ ok: boolean; error?: string }> {
   if (typeof provider !== 'string' || typeof id !== 'string') return { ok: false, error: 'Unknown model.' };
+  if (provider === COPILOT_PROVIDER) {
+    if (!copilotModels().some((m) => m.id === id)) return { ok: false, error: 'This Copilot model is not available with your sign-in.' };
+    try {
+      writeJson(copilotPreferenceFile(), { modelId: id });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'The Copilot default model could not be saved.' };
+    }
+  }
   const list = await listModels();
   if (!list.ok) return { ok: false, error: list.error };
   if (!list.models?.some((m) => m.provider === provider && m.id === id)) return { ok: false, error: 'This model is not available with your sign-ins.' };
@@ -229,6 +252,7 @@ export async function setDefaultModel(provider: unknown, id: unknown): Promise<{
     s.defaultProvider = provider;
     s.defaultModel = id;
     writeJson(settingsFile(), s);
+    if (fs.existsSync(copilotPreferenceFile())) writeJson(copilotPreferenceFile(), {});
   } catch (e) { return { ok: false, error: `The model could not be saved: ${e instanceof Error ? e.message : String(e)}` }; }
   console.log(`[somaai] model for new conversations: ${provider}/${id}`);
   return { ok: true };

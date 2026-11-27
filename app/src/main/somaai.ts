@@ -284,10 +284,10 @@ export class SomaAI {
   get isCopilot(): boolean { return this.copilotSelected; }
 
   /** Starts pi if it is not running and waits until it answers. */
-  start(preferCopilot = false): Promise<AiResult> {
+  start(preferCopilot: boolean | AiModel = false): Promise<AiResult> {
     if (this.disposed) return Promise.resolve({ ok: false, error: 'This model has been closed.' });
     if (preferCopilot && !this.child && !this.starting && !this.copilotSelected) {
-      const first = copilotModels()[0];
+      const first = typeof preferCopilot === 'boolean' ? copilotModels()[0] : preferCopilot;
       if (first) this.activateCopilot(first);
     }
     if (this.copilotSelected && this.copilot) return Promise.resolve({ ok: true, data: this.copilot.state() });

@@ -204,11 +204,6 @@ export class AiPage implements SettingsPage {
   }
 
   private async pickModel(m: AiModel): Promise<void> {
-    if (m.provider === COPILOT_PROVIDER) {
-      if (this.deps.modelOpen()) await this.deps.useModel(m.provider, m.id);
-      else this.deps.toast('Open a project to select Copilot in the chat model picker.', 'info');
-      return;
-    }
     const r = await this.deps.api.ai.setDefaultModel(m.provider, m.id).catch((e) => ({ ok: false, error: String(e) }));
     if (!r.ok) { this.deps.toast(r.error ?? 'The model could not be changed.', 'error'); return; }
     this.current = { provider: m.provider, id: m.id };

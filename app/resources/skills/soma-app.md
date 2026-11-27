@@ -139,13 +139,14 @@ If **Set up GitHub Copilot** appears on the chat setup screen, it takes you to *
 Choose **Sign in with GitHub Copilot**, copy the device code, and choose
 **Open GitHub**. Enter the code on GitHub and authorize the app with an account that has Copilot access. After sign-in,
 open a project and choose a GitHub Copilot model from the chat model picker or from **Settings > SOMA AI > Model**.
-The Settings choice applies to the open chat, not to new projects.
+The choice applies to the open chat and is saved as the default for new projects while that model is available.
 
 Copilot can find the entry script and other Python files at the project's root or under `parts/`, read `AGENTS.md`,
 and list imported STEP files. It can propose small edits to existing Python sources. SOMA shows the exact replacement and
 requires approval before saving and rebuilding. A rebuild runs the Python script on your computer; approve only changes
 you trust. The preview cannot create source files, open imported assets, accept images, or run shell commands. Switching back to a Copilot
-model restores its separate conversation while the project stays open.
+model restores its separate conversation while the project stays open. Copilot warns before starting a new
+conversation that would discard it. The earlier-conversation menu shows pi conversations only.
 For developer setup, see GitHub's [app registration guide](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app).
 
 ### Voice input

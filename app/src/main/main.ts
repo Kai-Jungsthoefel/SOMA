@@ -23,7 +23,7 @@ import { fileOpBlockReason } from '../shared/editable';
 import type { AiResult, AiStatus, FileOpResult, LibraryResult, StorageClear } from '../shared/types';
 import { piEntry, setCatalogRefresh } from './somaai';
 import { allowMicrophone, fakeMicrophone, micAccess, Voice } from './voice';
-import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, saveApiKey, setDefaultEffort, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
+import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, preferredCopilotModel, saveApiKey, setDefaultEffort, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
 import { cancelCopilotSignIn, copilotAccountStatus, copilotModels, signInCopilot, signOutCopilot } from './copilotauth';
 import { COPILOT_PROVIDER, type AiAccount } from '../shared/somaai';
 import { COPILOT_DEVICE_URL } from './copilotdevice';
@@ -208,7 +208,7 @@ function registerIpc(ctl: ProjectController): void {
   // SOMA AI (somaai.ts): one pi process per open model, only reachable through the commands SomaAI allows
   const noModel: AiResult = { ok: false, error: 'No model is open.' };
   ipcMain.handle('ai:status', (): AiStatus => ctl.session?.ai.status() ?? { available: !!piEntry(), running: false });
-  ipcMain.handle('ai:start', () => ctl.session?.ai.start(!aiAccounts().length) ?? noModel);
+  ipcMain.handle('ai:start', () => ctl.session?.ai.start(preferredCopilotModel() ?? !aiAccounts().length) ?? noModel);
   ipcMain.handle('ai:command', async (_e, cmd: unknown) => {
     const ai = ctl.session?.ai;
     if (!ai) return noModel;

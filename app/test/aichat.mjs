@@ -377,6 +377,41 @@ try {
   await app.waitFor('set-up again', () => window.__t.chat().phase === 'setup', 20000);
   const left = Object.keys(readJson('auth.json'));
   check('Signing out removes the keys, after the last one the set-up shows again', !left.includes('anthropic') && !left.includes('openrouter'), JSON.stringify(left));
+  if (!(await ev(() => window.soma.ai.copilotStatus())).error) {
+    // A catalog-only fixture: these checks never decrypt a token or send a request to Copilot.
+    const priorDefault = await ev(() => window.soma.ai.defaultModel());
+    const credentialFile = path.join(aiDir, 'copilot-credential.json');
+    fs.writeFileSync(credentialFile, JSON.stringify({
+      clientId: 'Iv23TestClient', expiresAt: Date.now() + 60_000, encryptedToken: 'unused',
+      models: [{ id: 'auto', name: 'Auto' }, { id: 'fixture-sonnet', name: 'Fixture Sonnet' }],
+    }));
+    const selected = await ev(() => window.soma.ai.setDefaultModel('github-copilot', 'fixture-sonnet'));
+    check('Saving a Copilot default does not replace the pi model preference', selected.ok
+      && readJson('copilot-preference.json').modelId === 'fixture-sonnet'
+      && readJson('settings.json').defaultProvider !== 'github-copilot');
+    await ev(() => window.__t.showChat(true));
+    await app.waitFor('Chat starts with the saved Copilot default', () => window.__t.chat().model?.id === 'fixture-sonnet');
+    const controls = await ev(() => {
+      const pane = document.querySelector('.ai-pane');
+      const input = pane.querySelector('.ai-input');
+      input.value = 'Keep this draft.';
+      input.dispatchEvent(new Event('input'));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['test image'], 'sketch.png', { type: 'image/png' }));
+      input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+      return {
+        attachmentHidden: pane.querySelector('[aria-label="Add a picture"]').hidden,
+        pastLabel: !!pane.querySelector('[aria-label="Earlier pi conversations"]'),
+        imageCount: window.__t.chat().images,
+        draft: input.value,
+      };
+    });
+    check('Copilot hides picture controls, rejects picture paste without losing the draft, and labels pi-only history',
+      controls.attachmentHidden && controls.pastLabel && controls.imageCount === 0 && controls.draft === 'Keep this draft.', JSON.stringify(controls));
+    await ev(() => window.soma.ai.signOut('github-copilot'));
+    check('Removing the Copilot account restores the previous pi default',
+      JSON.stringify(await ev(() => window.soma.ai.defaultModel())) === JSON.stringify(priorDefault));
+  }
 } catch (e) {
   console.log('FEHLER Exception:', e.message);
   t.fail();

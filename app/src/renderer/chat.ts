@@ -3,7 +3,7 @@ import type { AiEvent, AiExit, SomaApi } from '../shared/types';
 import { effortText, keyForm, searchMenu, showEffortMenu, showModelMenu } from './aiparts';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
-import { el, fmtWhen, menuItem, menus } from './ui';
+import { ask, el, fmtWhen, menuItem, menus } from './ui';
 import { VoiceButton } from './voice';
 
 /*
@@ -245,6 +245,7 @@ export class SomaChat {
   private voice: VoiceButton;
   private menu: HTMLElement;
   private fileInput: HTMLInputElement;
+  private attachBtn: HTMLButtonElement;
 
   private phase: Phase = 'setup';
   private accounts: AiAccount[] = [];
@@ -319,9 +320,9 @@ export class SomaChat {
     this.status.hidden = true;
     this.fileInput = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', multiple: true });
     this.fileInput.hidden = true;
-    const attach = el('button', { className: 'ibtn s', title: 'Add a photo or a sketch (or paste or drop a picture)' }, icon('clip', 17));
-    attach.setAttribute('aria-label', 'Add a picture');
-    attach.addEventListener('click', () => this.fileInput.click());
+    this.attachBtn = el('button', { className: 'ibtn s', title: 'Add a photo or a sketch (or paste or drop a picture)' }, icon('clip', 17));
+    this.attachBtn.setAttribute('aria-label', 'Add a picture');
+    this.attachBtn.addEventListener('click', () => this.fileInput.click());
     this.modelBtn = el('button', { className: 'ai-model', title: 'Model. Recommended for the best results: Opus 5.5 or GPT-6.2 Astra' });
     this.modelBtn.addEventListener('click', () => void this.openModelMenu());
     this.effortBtn = el('button', { className: 'ai-model ai-effort', title: `Effort: how long SOMA AI thinks. Recommended for the best results: ${EFFORT_LABEL[RECOMMENDED_EFFORT]} or more` });
@@ -331,7 +332,7 @@ export class SomaChat {
     // Voice input (voice.ts): the text goes into the input where the cursor is
     this.voice = new VoiceButton({ api: deps.api, toast: deps.toast, insert: (text) => this.dictate(text) });
     this.composer = el('div', { className: 'ai-composer' }, this.chips, this.input,
-      el('div', { className: 'ai-row' }, attach, this.fileInput, this.voice.el, el('span', { className: 'grow' }), this.modelBtn, this.effortBtn, this.sendBtn));
+      el('div', { className: 'ai-row' }, this.attachBtn, this.fileInput, this.voice.el, el('span', { className: 'grow' }), this.modelBtn, this.effortBtn, this.sendBtn));
     this.menu = el('div', { className: 'menu ai-menu' });
     this.menu.hidden = true;
     this.menu.setAttribute('role', 'menu');
@@ -593,8 +594,9 @@ export class SomaChat {
     const fresh = el('button', { className: 'ibtn s', title: 'New conversation' }, icon('chatplus', 16));
     fresh.setAttribute('aria-label', 'New conversation');
     fresh.addEventListener('click', () => void this.newConversation());
-    const past = el('button', { className: 'ibtn s', title: 'Earlier conversations' }, icon('history', 16));
-    past.setAttribute('aria-label', 'Earlier conversations');
+    const historyLabel = this.model?.provider === COPILOT_PROVIDER ? 'Earlier pi conversations' : 'Earlier conversations';
+    const past = el('button', { className: 'ibtn s', title: historyLabel }, icon('history', 16));
+    past.setAttribute('aria-label', historyLabel);
     past.addEventListener('click', () => void this.openSessions(past));
     const more = el('button', { className: 'ibtn s', title: 'Sign-in' }, icon('more', 16));
     more.setAttribute('aria-label', 'Sign-in and more');
@@ -605,7 +607,8 @@ export class SomaChat {
   }
 
   private renderWelcome(): void {
-    const sugg = SUGGESTIONS.map((s) => {
+    const copilot = this.model?.provider === COPILOT_PROVIDER;
+    const sugg = SUGGESTIONS.filter((s) => !copilot || !s.attach).map((s) => {
       const b = el('button', { className: 'ai-sugg' }, icon(s.icon, 16), el('span', {}, s.text, s.sub ? el('span', { className: 'sub', textContent: s.sub }) : null));
       b.addEventListener('click', () => {
         this.input.value = s.text;
@@ -616,7 +619,8 @@ export class SomaChat {
     });
     this.list.replaceChildren(el('div', { className: 'ai-welcome' },
       el('h3', { textContent: 'What do you want to make?' }),
-      el('p', { textContent: 'Describe it in your own words, or add a photo of a sketch. SOMA AI writes the model and you see it on the left right away.' }),
+      el('p', { textContent: copilot ? 'Describe a model change. SOMA shows the proposed edit for approval before rebuilding.'
+        : 'Describe it in your own words, or add a photo of a sketch. SOMA AI writes the model and you see it on the left right away.' }),
       el('div', { className: 'ai-suggs' }, ...sugg)));
   }
 
@@ -625,6 +629,7 @@ export class SomaChat {
     this.composer.hidden = this.phase !== 'chat' && this.phase !== 'note';
     const locked = !chat || !!this.asking;
     this.input.disabled = locked;
+    this.attachBtn.hidden = this.model?.provider === COPILOT_PROVIDER;
     this.input.placeholder = this.phase === 'note' ? 'Read the note above first'
       : this.asking ? 'SOMA AI is waiting for your answer above'
         : this.model?.provider === COPILOT_PROVIDER ? 'Ask a CAD question or describe a model edit …'
@@ -670,6 +675,10 @@ export class SomaChat {
   }
 
   private async attach(files: File[]): Promise<void> {
+    if (this.model?.provider === COPILOT_PROVIDER) {
+      this.deps.toast('GitHub Copilot does not support pictures in SOMA yet.', 'info');
+      return;
+    }
     for (const f of files) {
       if (!f.type.startsWith('image/')) { this.deps.toast(`${f.name} is not a picture. Other files go into the model with Import.`, 'info'); continue; }
       if (f.size > MAX_IMAGE) { this.deps.toast(`${f.name} is larger than 8 MB.`, 'info'); continue; }
@@ -819,6 +828,10 @@ export class SomaChat {
     const message = [...this.notes.map((n) => n.text), typed].filter(Boolean).join('\n');
     if (!message && !this.images.length) return;
     if (!(await this.ensureStarted())) return;
+    if (this.model?.provider === COPILOT_PROVIDER && this.images.length) {
+      this.deps.toast('Remove the pictures or switch to a model that supports them. Your draft was kept.', 'info');
+      return;
+    }
     // Who sends wants to see the answer, also after scrolling up to read
     this.follow = true;
     const cmd: Json = { type: 'prompt', message: message || 'Here is a picture.' };
@@ -838,6 +851,15 @@ export class SomaChat {
   }
 
   private async newConversation(): Promise<void> {
+    if (this.model?.provider === COPILOT_PROVIDER && (this.running || this.list.querySelector('.ai-user'))) {
+      const generation = this.minGen;
+      const answer = await ask({
+        title: 'Start a new Copilot conversation?',
+        message: 'This will discard the current Copilot conversation. It will not appear in Earlier conversations.',
+        buttons: ['Discard and start new', 'Cancel'],
+      });
+      if (answer !== 0 || generation !== this.minGen || this.model?.provider !== COPILOT_PROVIDER) return;
+    }
     if (this.running) await this.stop();
     if (!(await this.ensureStarted())) return;
     const r = await this.deps.api.ai.command({ type: 'new_session' });
@@ -861,7 +883,7 @@ export class SomaChat {
     if (!r.ok) { this.deps.toast(r.error ?? 'The conversations could not be listed.', 'error'); return; }
     const now = str(obj(st?.data).sessionId);
     searchMenu(this.menu, anchor, [{
-      title: 'EARLIER CONVERSATIONS', scroll: true,
+      title: this.model?.provider === COPILOT_PROVIDER ? 'EARLIER PI CONVERSATIONS' : 'EARLIER CONVERSATIONS', scroll: true,
       entries: (r.sessions ?? []).map((s) => {
         const title = s.title || 'A picture without words';
         return {
@@ -927,7 +949,7 @@ export class SomaChat {
   private async pickModel(provider: string, modelId: string): Promise<void> {
     await this.useModel(provider, modelId);
     // pi refused it (useModel said so): nothing to save
-    if (provider === COPILOT_PROVIDER || this.model?.provider !== provider || this.model.id !== modelId) return;
+    if (this.model?.provider !== provider || this.model.id !== modelId) return;
     const r =await this.deps.api.ai.setDefaultModel(provider, modelId).catch((e) => ({ ok: false, error: String(e) }));
     if (!r.ok) this.deps.toast(`The model is used in this conversation, but not saved for new ones: ${r.error ?? 'unknown error'}`, 'error');
   }
