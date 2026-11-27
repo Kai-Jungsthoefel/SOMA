@@ -102,8 +102,8 @@ export class SectionTool {
     this.units = u;
     this.ui.unit.textContent = u;
     this.ui.value.title = u === 'in'
-      ? 'Enter a value or a calculation (1/4 + 0.1, 6 mm) and press Enter. Arrow keys: 0.1 in, with Shift 1 in, with Alt 0.01 in'
-      : 'Enter a value or a calculation (20 - 2.5, 1.5 in) and press Enter. Arrow keys: 1 mm, with Shift 10 mm, with Alt 0.1 mm';
+      ? 'Enter a value or a calculation (1/4 + 0.1, 1-1/2, 6 mm) and press Enter. Arrow keys: 0.1 in, with Shift 1 in, with Alt 0.01 in'
+      : 'Enter a value or a calculation (20 - 2.5, 1.5 in, 1-1/2 in) and press Enter. Arrow keys: 1 mm, with Shift 10 mm, with Alt 0.1 mm';
     this.render();
   }
 

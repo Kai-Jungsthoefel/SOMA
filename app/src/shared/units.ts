@@ -4,7 +4,7 @@
  * section). Parameters keep the unit the agent gave them (an inch pipe in a metric model stays in inches).
  *
  * Number fields (parameters, section) take small calculations and units: "20 - 2.5", "1.5 in" in a mm field,
- * "1/4 in", "3 mm" in an inch field. Parsed by hand, never with eval: the text comes from the user, the units from the
+ * "1/4 in", "3 mm" in an inch field, mixed numbers in inches ("1-1/2"). Parsed by hand, never with eval: the text comes from the user, the units from the
  * project.
  */
 
@@ -41,6 +41,11 @@ export function evalNumber(text: string, unit?: string | null): EvalResult {
   // "1,5" is 1.5, "1,000.5" is a thousands separator
   s = s.includes('.') ? s.replace(/(\d),(?=\d{3}\b)/g, '$1') : s.replace(/(\d),(\d)/g, '$1.$2');
   if (!s) return { ok: false, error: 'Enter a number.' };
+  // Mixed numbers as written in the US: "1-1/2" and "1 1/2" are 1½, not 1 − ½ (fasteners.py reads them the same way).
+  // Only for inches: in an inch field, or followed by an inch unit ("1-1/2 in" in a mm field). Elsewhere "20-1/2" stays
+  // 19.5, as anyone who works in mm means it. With spaces, "20 - 1/2" is always a subtraction
+  const mixed = field === MM_PER_INCH ? '' : '(?=\\s*(?:inch(?:es)?\\b|in\\b|["″]))';
+  s = s.replace(new RegExp(`(?<![\\d.,/])(\\d+)(?:-|\\s+)(\\d+)\\/(\\d+)(?![\\d.])${mixed}`, 'g'), '($1+$2/$3)');
   const tokens: string[] = [];
   const re = /\s*(\d+(?:\.\d*)?(?:e[+-]?\d+)?|\.\d+(?:e[+-]?\d+)?|[+\-*/()]|[a-zµ]+|["″'′])/giy;
   let m: RegExpExecArray | null;

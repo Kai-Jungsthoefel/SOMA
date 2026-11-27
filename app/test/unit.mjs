@@ -761,6 +761,11 @@ try {
       ['20 - 2.5', 'mm', 17.5], ['2 * (3 + 4)', 'mm', 14], ['-5 + 2', 'mm', -3], ['10 / 4', null, 2.5], ['1,5', 'mm', 1.5], ['1,000.5', 'mm', 1000.5],
       ['1.5 in', 'mm', 38.1], ['1.5in', 'mm', 38.1], ['1.5"', 'mm', 38.1], ['1/4 in', 'mm', 6.35], ['1 in + 3', 'mm', 28.4], ['2 x 3 mm', 'mm', 6],
       ['6.35 mm', 'in', 0.25], ['1 ft', 'in', 12], ['2 cm', 'mm', 20], ['10 mm / 2', 'mm', 5], ['−3', 'mm', -3], ['0.5 m', 'mm', 500],
+      // mixed numbers the US way, only in inches: 1-1/2 and 1 1/2 are 1.5 in an inch field or followed by an inch unit;
+      // in a mm field and with spaces around the minus it is a subtraction
+      ['1-1/2', 'in', 1.5], ['1-1/2 in', 'mm', 38.1], ['1 1/4"', 'mm', 31.75], ['1-1/2 inch', 'mm', 38.1], ['-1-1/2', 'in', -1.5],
+      ['2 x 1 1/2', 'in', 3], ['20 - 1/2', 'in', 19.5], ['3/4-1/2', 'in', 0.25], ['1.5-1/2', 'in', 1],
+      ['20-1/2', 'mm', 19.5], ['20 - 1/2', 'mm', 19.5], ['20-1/2 mm', 'mm', 19.5], ['20-1/2', null, 19.5],
     ];
     const bad = cases.filter(([t, u, want]) => v(t, u) !== want).map(([t, u, want]) => `${t} [${u}] = ${v(t, u)}, expected ${want}`);
     check('Number fields: calculations and units convert to the field\'s unit', !bad.length, bad.join(' | '));

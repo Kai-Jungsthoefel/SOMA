@@ -53,11 +53,14 @@ try {
   // Collect pi's records like the chat will. Questions are answered with "No" to see what is asked
   await ev(() => {
     window.__ai = { events: [], exits: [], asked: [] };
-    window.soma.ai.onEvent((e) => {
+    window.soma.ai.onEvent(async (e) => {
       window.__ai.events.push(e);
       const r = e.record;
+      if (r.type === 'agent_settled') window.__ai.settledAt ??= window.__ai.exits.length;
       if (r.type !== 'extension_ui_request' || !['select', 'confirm', 'input', 'editor'].includes(r.method)) return;
       window.__ai.asked.push({ method: r.method, title: String(r.title ?? ''), options: r.options ?? [] });
+      // In the middle of the run the user switches to inches: SOMA AI restarts only after its answer
+      if (String(r.title ?? '').includes('outside-copy')) await window.soma.settings.set({ viewer: { units: 'in' } });
       // A website is allowed until the model is closed (web_fetch), everything else gets "No"
       const site = (r.options ?? []).find((o) => /^Yes, allow .* until/.test(o));
       if (/surface : web_fetch/.test(String(r.title ?? '')) && site) { window.soma.ai.respond({ id: r.id, value: site }); return; }
@@ -87,7 +90,7 @@ try {
   const sys = (first.messages ?? []).filter((m) => m.role === 'system' || m.role === 'developer').map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n');
   check('pi got AGENTS.md of the model in its system prompt', sys.includes('Instructions for the coding agent'), `${sys.length} chars`);
   check('… and SOMA\'s addition (SOMA AI, plain words for non-programmers)', sys.includes('You are SOMA AI') && sys.includes('not a programmer'));
-  check('… and the user\'s units (Settings > Viewer > Units, default millimetres)', sys.includes('Units: the user works in millimetres'), sys.slice(sys.indexOf('Units:'), sys.indexOf('Units:') + 80));
+  check('… and no line about units for someone who works in millimetres (AGENTS.md covers inch parts)', !sys.includes('Units: the user works'),sys.slice(sys.indexOf('Units:'), sys.indexOf('Units:') + 80));
   const user = (first.messages ?? []).find((m) => m.role === 'user');
   check('The image reached the model', Array.isArray(user?.content) && user.content.some((c) => c.type === 'image_url'), JSON.stringify(user?.content?.map?.((c) => c.type)));
 
@@ -112,10 +115,22 @@ try {
   check('pi settings: SOMA\'s keys set, the chosen model kept', settings.defaultProjectTrust === 'never' && settings.defaultModel === 'mock-cad'
     && (process.platform !== 'win32' || /sh\.exe$/.test(settings.shellPath ?? '')), JSON.stringify(settings));
 
+  // Units changed during the run: pi ends only after the answer, without an error
+  await app.waitFor('restart after the answer', () => window.__ai.exits.length >= 1, 15000).catch(() => null);
+  const restarted = await ev(() => ({ exits: window.__ai.exits, settledAt: window.__ai.settledAt }));
+  check('Switching to inches during an answer does not break it off: pi restarts after it', restarted.settledAt === 0
+    && restarted.exits.length === 1 && !restarted.exits[0].error && step(7).text !== '(missing)', JSON.stringify(restarted));
+
+  const inch = await ev(() => window.soma.ai.command({ type: 'prompt', message: 'How thick is the lid?' }));
+  await app.waitFor('second run settled', () => window.__ai.events.filter((e) => e.record.type === 'agent_settled').length >= 2, 120000);
+  const last = mock.requests.at(-1) ?? {};
+  const sys2 = (last.messages ?? []).filter((m) => m.role === 'system' || m.role === 'developer').map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n');
+  check('The next message runs with the inch line in the system prompt', inch.ok && sys2.includes('Units: the user works in inches'), sys2.slice(sys2.indexOf('Units:'), sys2.indexOf('Units:') + 80));
+
   await ev(() => window.soma.ai.stop());
   st = await ev(() => window.soma.ai.status());
   const exits = await ev(() => window.__ai.exits);
-  check('Stop ends pi without an error', !st.running && exits.length === 1 && !exits[0].error, JSON.stringify({ st, exits }));
+  check('Stop ends pi without an error', !st.running && exits.length === 2 && !exits[1].error, JSON.stringify({ st, exits }));
 
   const again = await ev(() => window.soma.ai.start());
   const msgs = again.ok ? await ev(() => window.soma.ai.command({ type: 'get_messages' })) : again;
@@ -123,7 +138,7 @@ try {
   check('Starting again continues the conversation of the model', again.ok && count >= 2, `${count} messages`);
   const times = await ev(() => window.soma.ai.runTimes());
   const took = Object.values(times.data ?? {});
-  check('How long the finished task took, for "Worked for" in the history', times.ok && took.length === 1 && took[0] > 0, JSON.stringify(times));
+  check('How long the finished tasks took, for "Worked for" in the history', times.ok && took.length === 2 && took.every((x) => x > 0), JSON.stringify(times));
 
   // After "Load file" (marked in the model's state) a new conversation: the last one is about a later state of the model
   const id = await ev(() => window.__t.project().id);
@@ -141,10 +156,10 @@ try {
 
   const oldGen = (await ev(() => window.__ai.events.at(-1)?.gen)) ?? 0;
   await ev(() => window.soma.project.create());
-  await app.waitFor('pi of the old model ended', () => window.__ai.exits.length >= 2, 30000).catch(() => null);
+  await app.waitFor('pi of the old model ended', () => window.__ai.exits.length >= 3, 30000).catch(() => null);
   const exits2 = await ev(() => window.__ai.exits);
   st = await ev(() => window.soma.ai.status());
-  check('Leaving the model ends its pi (no error, nothing running in the new model)', exits2.length >= 2 && !exits2.at(-1).error && !st.running && exits2.at(-1).gen >= oldGen, JSON.stringify(exits2));
+  check('Leaving the model ends its pi (no error, nothing running in the new model)', exits2.length >= 3 && !exits2.at(-1).error && !st.running && exits2.at(-1).gen >= oldGen, JSON.stringify(exits2));
   // The old model folder is free again: renaming it works (Windows keeps folders in use by a process). A few seconds of
   // grace, the terminal of the old model ends asynchronously as well
   const moved = `${dir}-moved`;

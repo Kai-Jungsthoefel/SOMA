@@ -1,5 +1,5 @@
 import type { BuildStatus, ParamInfo, ParamResult, ParamState, ParamValue } from '../shared/types';
-import { evalNumber, lengthScale } from '../shared/units';
+import { evalNumber, lengthScale, MM_PER_INCH } from '../shared/units';
 import { icon } from './icons';
 import { el } from './ui';
 
@@ -336,7 +336,9 @@ export class ParamsPanel {
     inp.setAttribute('aria-label', p.label);
     if (isNum) inp.inputMode = p.kind === 'int' ? 'numeric' : 'decimal';
     if (isNum) {
-      const other = lengthScale(p.unit) ? `, a length in another unit (${p.unit === 'in' ? '6 mm' : '1.5 in'})` : '';
+      const other = !lengthScale(p.unit) ? ''
+        : lengthScale(p.unit) === MM_PER_INCH ? ', a mixed number (1-1/2) or a length in another unit (6 mm)'
+          : ', a length in another unit (1.5 in, 1-1/2 in)';
       inp.title = `A number or a calculation (20 - 2.5)${other}. Enter takes it, arrow keys step.`;
     }
     const parse = (): ParamValue | null => {

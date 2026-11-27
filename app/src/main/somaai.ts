@@ -38,13 +38,14 @@ export const aiDir = () => path.join(userDataDir(), 'somaai');
 const aiResources = () => path.join(app.getAppPath(), 'resources', 'somaai');
 
 /**
- * One line for pi's system prompt: which units the user works in. The model is always in mm, the setting says how the
- * user thinks and reads dimensions (E111). Agents in a terminal learn it from `soma build` (SOMA_UNITS).
+ * One line for pi's system prompt when the user works in inches. The model is always in mm, the setting says how the
+ * user thinks and reads dimensions (E111). In mm nothing is added: AGENTS.md already says how to handle inch parts.
+ * Agents in a terminal learn it from `soma build`.
  */
-export function unitsPrompt(units: DisplayUnits): string {
+export function unitsPrompt(units: DisplayUnits): string | null {
   return units === 'in'
     ? 'Units: the user works in inches (SOMA Settings > Viewer > Units). Dimensions they give without a unit are inches, and you answer with inches (mm in brackets where it helps). The model stays in mm: convert with 25.4. A parameter the user thinks of in inches gets unit="in" and its value in inches, converted to mm in the code before CadQuery.'
-    : 'Units: the user works in millimetres (SOMA Settings > Viewer > Units). Dimensions they give without a unit are millimetres. Dimensions they give in inches (a pipe, a thread, a part from a US drawing) stay inches where they come from: convert with 25.4 in the code, a parameter for such a value gets unit="in".';
+    : null;
 }
 
 /** Entry of pi for RPC mode, null when the installation lacks it. */
@@ -275,6 +276,10 @@ export class SomaAI {
   private stopping = false;
   /** The model is being left or closed: this SomaAI never starts pi again (a late request would land in its folder). */
   private disposed = false;
+  /** pi is working on an answer (agent_start until agent_settled). A restart waits for its end. */
+  private busy = false;
+  /** Why pi restarts as soon as the answer it is working on has ended, null when nothing waits. */
+  private restartAfter: string | null = null;
 
   /**
    * `fresh`: pi starts a new conversation instead of continuing the last one, until the person writes or picks one.
@@ -316,7 +321,8 @@ export class SomaAI {
     const prompt = path.join(aiResources(), 'system.md');
     if (fs.existsSync(prompt)) args.push('--append-system-prompt', prompt);
     // The user's units (Settings > Viewer > Units, E111): a changed setting restarts pi (main.ts settings:set)
-    args.push('--append-system-prompt', unitsPrompt(readSettings().settings.viewer.units));
+    const units = unitsPrompt(readSettings().settings.viewer.units);
+    if (units) args.push('--append-system-prompt', units);
 
     let child: ChildProcess;
     try {
@@ -328,6 +334,8 @@ export class SomaAI {
     this.stderr = '';
     this.lastError = null;
     this.stopping = false;
+    this.busy = false;
+    this.restartAfter = null;
     // 'exit', not 'close': a command pi started may still hold its output pipes (Windows), close would then wait for it.
     // release() can also end the wait (a process Windows does not let go of)
     this.exited = new Promise((resolve) => { this.endWait = resolve; child.once('exit', () => resolve()); });
@@ -385,6 +393,13 @@ export class SomaAI {
       return;
     }
     if (!this.wc.isDestroyed()) this.wc.send('ai:event', { gen, record: rec });
+    if (rec.type === 'agent_start') this.busy = true;
+    else if (rec.type === 'agent_settled') {
+      this.busy = false;
+      // After the record went to the chat: it closes the answer before the restart ends pi
+      const why = this.restartAfter;
+      if (why) this.restart(why);
+    }
   }
 
   private closed(gen: number, code: number | null, child: ChildProcess, startError?: string): void {
@@ -517,14 +532,21 @@ export class SomaAI {
   }
 
   /**
-   * A new sign-in or model: the next request starts a new pi right away. The old one ends in the background, there is
-   * no need to wait for it (unlike leaving the model, where the folder has to be free). Its end only goes into the log.
+   * A new sign-in or other units: the next request starts a new pi right away. The old one ends in the background, there
+   * is no need to wait for it (unlike leaving the model, where the folder has to be free). Its end only goes into the log.
+   * While pi is working on an answer, the restart waits for its end: changing a setting never breaks off an answer.
    */
-  restart(): void {
+  restart(why: string): void {
     const child = this.child;
     if (!child) return;
+    if (this.busy) {
+      this.restartAfter = why;
+      console.log(`[somaai] restart (${why}) waits until pi has finished its answer`);
+      return;
+    }
+    this.restartAfter = null;
     this.stop();
-    this.release(this.gen, child, 'restarted with a new sign-in');
+    this.release(this.gen, child, `restarted (${why})`);
   }
 
   /** For good: the model is left. Ends pi and refuses every later start. */

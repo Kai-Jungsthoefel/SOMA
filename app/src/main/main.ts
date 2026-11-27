@@ -336,7 +336,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('ai:stop', () => ctl.session?.ai.stopAndWait());
   // Sign-in (somaaiauth.ts) holds for the whole app. A running pi of the open model ends, the next message starts it
   // again with the new sign-in and model (the conversation continues)
-  const restartAi = <T extends { ok: boolean }>(r: T): T => { if (r.ok) ctl.session?.ai.restart(); return r; };
+  const restartAi = <T extends { ok: boolean }>(r: T): T => { if (r.ok) ctl.session?.ai.restart('new sign-in'); return r; };
   ipcMain.handle('ai:accounts', () => aiAccounts());
   ipcMain.handle('ai:saveKey', (_e, provider: unknown, key: unknown) => restartAi(saveApiKey(provider, key)));
   ipcMain.handle('ai:signIn', async (e, provider: unknown) => restartAi(await signIn(provider, (page) => {
@@ -446,8 +446,9 @@ function registerIpc(ctl: ProjectController): void {
     const units = readSettings().settings.viewer.units;
     try {
       const r = writeSettings(patch);
-      // SOMA AI has the units in its system prompt: the next message starts pi with the new ones, the conversation goes on
-      if (r.ok && r.settings.viewer.units !== units) ctl.session?.ai.restart();
+      // SOMA AI has the units in its system prompt: the next message starts pi with the new ones, the conversation goes on.
+      // An answer pi is working on ends first (restart waits for it)
+      if (r.ok && r.settings.viewer.units !== units) ctl.session?.ai.restart('other units');
       return r;
     } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e), ...readSettings() }; }
   });

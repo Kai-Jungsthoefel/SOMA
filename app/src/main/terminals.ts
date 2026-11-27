@@ -4,14 +4,15 @@ import * as pty from 'node-pty';
 import { logAgentStart } from './agents';
 import { bridgeEnv } from './bridge';
 import { envPaths } from './packages';
-import { gitCmdDir, pythonBinDirs, pythonEnv } from './paths';
+import { gitCmdDir, pythonBinDirs, pythonEnv, settingsFile } from './paths';
 import { readSettings } from './settings';
 
 /**
  * Umgebung fuer Terminals: vorn im PATH die Projektumgebung (E67, `python` sieht Basis und Zusatzpakete), dahinter die
  * Basisumgebung (`pip`, `soma`). PIP_PYTHON leitet jedes pip in die Projektumgebung, die Basis bleibt unverändert. Dazu
- * Adresse und Schluessel der App fuer `soma render` (E58). SOMA_UNITS: the user's units (Settings > Viewer, E111), `soma build`
- * reminds the agent when they are inches. It holds for terminals started after a change.
+ * Adresse und Schluessel der App fuer `soma render` (E58). SOMA_SETTINGS: the app's settings, `soma build` reads the
+ * user's units there at every call (Settings > Viewer, E111) and reminds the agent when they are inches, also in a
+ * terminal opened before a change. SOMA_UNITS is the fallback when the file cannot be read.
  */
 export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = pythonEnv({ SOMA_PROJECT: projectDir, ...bridgeEnv() });
@@ -25,6 +26,7 @@ export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
   if (git) front.push(git);
   env[key] = [...front, env[key] ?? ''].join(path.delimiter);
   env.SOMA_UNITS = readSettings().settings.viewer.units;
+  env.SOMA_SETTINGS = settingsFile();
   return env;
 }
 
