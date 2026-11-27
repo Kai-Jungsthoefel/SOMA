@@ -78,16 +78,20 @@ def build_lock(root, wait=None):
     Absturz bleibt also nichts haengen. Laesst sich die Sperrdatei nicht anlegen, wird ohne Sperre gebaut wie bisher."""
     wait = LOCK_WAIT_S if wait is None else wait
     geo = Path(root) / ".soma" / "geometry"  # in .gitignore und nie in der ZIP
+    # What the caller learns: since when (time.time()) it waited for another build, None when the lock was free
+    info = {"waited_since": None}
     try:
         geo.mkdir(parents=True, exist_ok=True)
         f = open(geo / "build.lock", "a+b")
     except OSError:
-        yield
+        yield info
         return
     try:
         t0 = time.monotonic()
         told = False
         while not _try_lock(f):
+            if info["waited_since"] is None:
+                info["waited_since"] = time.time()
             if not told:
                 print("Waiting for another build of this model to finish (the app or another terminal) ...", file=sys.stderr, flush=True)
                 told = True
@@ -96,7 +100,7 @@ def build_lock(root, wait=None):
                                  "soma build in a terminal). Build again once it has finished.", kind="BuildBusy")
             time.sleep(0.2)
         try:
-            yield
+            yield info
         finally:
             _unlock(f)
     finally:
@@ -342,12 +346,74 @@ def write_outputs(root, parts, project_name):
                 mesh_workers=meshing.n, notes=meshing.notes)
 
 
-def run_build(project_dir):
+# Folders whose files are not read by a build (results, caches, Git). In .soma/ only project.json and the installed
+# packages count, see _inputs_changed_since
+_NOT_INPUT = {".git", ".soma", "output", "renders", "__pycache__", ".venv", "venv", "env", "node_modules"}
+_MAX_INPUT_FILES = 20000
+
+
+def _inputs_changed_since(root, t):
+    """True when a file the build reads may have changed at or after `t` (time.time()), also when that cannot be told
+    (too many files, unreadable folder): then building again is the safe answer."""
+    def newer(p):
+        return p.stat().st_mtime >= t
+    try:
+        for f in (root / ".soma" / "project.json",):
+            if f.exists() and newer(f):
+                return True
+        # Packages installed into the model's environment (pip changes site-packages): its folders, not every file
+        env = root / ".soma" / "env"
+        if env.is_dir():
+            for d in [env, *env.glob("Lib/site-packages"), *env.glob("lib/python*/site-packages")]:
+                if newer(d):
+                    return True
+        n = 0
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in _NOT_INPUT] if Path(dirpath) == root else                 [d for d in dirnames if d not in ("__pycache__", ".git")]
+            if newer(Path(dirpath)):  # a file deleted or renamed in it
+                return True
+            for name in filenames:
+                n += 1
+                if n > _MAX_INPUT_FILES or newer(Path(dirpath) / name):
+                    return True
+    except OSError:
+        return True
+    return False
+
+
+def _reuse_waited_build(root, waited_since):
+    """After waiting for another build of this model (the app builds after every change, the agent runs `soma build`
+    right after): its result, if nothing it read changed since it started. Building the same code again would only
+    double the wait (issue #24: 2 x 110 s ran into the agent's time limit). None: build."""
+    try:
+        res = json.loads((root / ".soma" / "build.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    started, finished = res.get("started"), res.get("finished")
+    if res.get("format") != OUTPUT_FORMAT or not isinstance(started, (int, float)) or not isinstance(finished, (int, float)):
+        return None
+    # The build that ended while this one waited, not an older one
+    if finished < waited_since or started > finished:
+        return None
+    if res.get("status") == "ok" and not (root / "output" / "model.step").is_file():
+        return None
+    if _inputs_changed_since(root, started):
+        return None
+    res["reused"] = True
+    return res
+
+
+def run_build(project_dir, reuse=True):
     """Kompletter Build. Schreibt .soma/build.json und gibt das Ergebnis-Dict zurueck (status ok/error). Laeuft schon ein
-    Build dieses Modells, wartet er darauf (build_lock) und liest den Code erst danach, baut also den neuesten Stand."""
+    Build dieses Modells, wartet er darauf (build_lock) und liest den Code erst danach, baut also den neuesten Stand.
+    `reuse`: Hat sich seit dem Start des abgewarteten Builds nichts geaendert, dessen Ergebnis nehmen (`reused`: True)."""
     root = Path(project_dir).resolve()
     try:
-        with build_lock(root):
+        with build_lock(root) as lock:
+            if reuse and lock["waited_since"] is not None:
+                res = _reuse_waited_build(root, lock["waited_since"])
+                if res is not None:
+                    return res
             return _run_build(root)
     except BuildError as e:  # nur die Sperre. build.json bleibt die des anderen Builds, der noch laeuft
         return dict(status="error", format=OUTPUT_FORMAT, warnings=[], timings={},

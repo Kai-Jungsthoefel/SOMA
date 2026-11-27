@@ -25,8 +25,9 @@ add_part("Box", cq.Workplane().box(10, 10, 10))
 `;
 
 /** `soma build` im Hintergrund, Ergebnis als Promise mit Ausgaben und Exitcode. */
-function build(dir, env = {}) {
-  const child = spawn(PY, ['-m', 'soma', 'build', '--project', dir], { env: { ...ENV, ...env }, windowsHide: true });
+function build(dir, args = [], env = {}) {
+  if (!Array.isArray(args)) { env = args; args = []; } // build(dir, env)
+  const child = spawn(PY, ['-m', 'soma', 'build', '--project', dir, ...args], { env: { ...ENV, ...env }, windowsHide: true });
   let out = '', err = '';
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { err += d; });
@@ -80,6 +81,44 @@ try {
   check('build.json bleibt die des laufenden Builds', fs.readFileSync(path.join(soma, 'build.json'), 'utf8') === before);
   killTree(e.child.pid);
   await e.done;
+
+  // 4) Waiting for a build of the same code (the app builds after a change, the agent runs soma build right after):
+  // the second takes its result instead of building again (issue #24). --force and a change in between build again.
+  // This model notes its runs outside the project, so the note itself is no change
+  const runs = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-lock-runs-'));
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'soma-lock-reuse-'));
+  const ran = () => fs.readdirSync(runs).length;
+  const clearRuns = () => { for (const f of fs.readdirSync(runs)) fs.rmSync(path.join(runs, f)); };
+  try {
+    fs.writeFileSync(path.join(dir2, 'model.py'), MODEL.replace('Path(__file__).with_name(', 'Path(os.environ["RUNS"]).joinpath('));
+    const env = { RUNS: runs };
+    await build(dir2, env).done; // first build: output/ and .soma/ exist from now on
+    clearRuns();
+    const r1 = build(dir2, { ...env, SLEEP: '6' });
+    await until('build running', () => ran() >= 1);
+    const r2 = await build(dir2, env).done;
+    await r1.done;
+    check('Waiting for a build of the same code: its result is taken, the model runs once', r2.code === 0 && ran() === 1
+      && r2.out.includes('No file changed since the build that just finished') && r2.out.includes('Build ok: 1 part'), r2.out + r2.err);
+
+    clearRuns();
+    const f1 = build(dir2, { ...env, SLEEP: '6' });
+    await until('build running', () => ran() >= 1);
+    const f2 = await build(dir2, ['--force'], env).done;
+    await f1.done;
+    check('… soma build --force builds again', f2.code === 0 && ran() === 2 && !f2.out.includes('No file changed'), f2.out + f2.err);
+
+    clearRuns();
+    const c1 = build(dir2, { ...env, SLEEP: '6' });
+    await until('build running', () => ran() >= 1);
+    fs.writeFileSync(path.join(dir2, 'notes.txt'), 'changed while the first build ran');
+    const c2 = await build(dir2, env).done;
+    await c1.done;
+    check('… a file changed while the first build ran: built again', c2.code === 0 && ran() === 2 && !c2.out.includes('No file changed'), c2.out + c2.err);
+  } finally {
+    cleanup(runs);
+    cleanup(dir2);
+  }
 } catch (err) {
   console.log('ABBRUCH:', err.message);
   t.fail();

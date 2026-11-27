@@ -21,6 +21,9 @@ def _print_build(res, as_json, seconds):
         return
     from . import params
     line = params.summary(res.get("params"))
+    if res.get("reused"):
+        print("No file changed since the build that just finished (the app or another terminal): its result is used. "
+              "soma build --force builds again.")
     if res["status"] == "ok":
         n = len(res.get("parts", []))
         print(f"Build ok: {n} part(s), {seconds:.1f} s -> output/model.step")
@@ -68,7 +71,7 @@ def _foreign_shell_note(project):
 
 def cmd_build(args):
     from . import build
-    res = build.run_build(args.project)
+    res = build.run_build(args.project, reuse=not args.force)
     _print_build(res, args.json, time.perf_counter() - _STARTED)
     note = None if args.json else _foreign_shell_note(args.project)
     if note:
@@ -657,6 +660,8 @@ def main(argv=None):
     b = sub.add_parser("build", help="run model.py and write STEP, GLB and mapping")
     b.add_argument("--project", default=".", help="project folder (default: current folder)")
     b.add_argument("--json", action="store_true", help="print the result as JSON")
+    b.add_argument("--force", action="store_true",
+                   help="build even if another build of this model just finished and no file changed since it started")
     b.set_defaults(func=cmd_build)
 
     e = sub.add_parser("export", help="export single parts, or the whole model as one STEP file")
