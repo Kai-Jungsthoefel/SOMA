@@ -23,6 +23,8 @@ the version is bumped.
 
 ### Fixed
 
+- SOMA AI no longer forces Claude Opus 5.5 as the Copilot default when pi's signed-in model list does not include it.
+
 - `soma build` no longer builds the same code twice: when it waited for a build of the app (which builds after every change) and no file changed since that build started, it takes its result. Before, the wait doubled and an agent's time limit could stop it (issue #24). `soma build --force` builds again anyway.
 - The file tree highlights an image, STEP, mesh or video file you click, like a PDF, instead of keeping the last file highlighted. Going back to the model highlights the file open in the code again.
 

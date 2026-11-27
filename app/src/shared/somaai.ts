@@ -46,6 +46,16 @@ export const RECOMMENDED_MODEL: Record<string, string> = {
 /** The models the recommendation names, under every provider that offers them. */
 export const isRecommendedModel = (id: string) => /^(claude-opus-5-5|claude-opus-5\.5|gpt-6\.2-astra|anthropic\/claude-opus-5\.5|openai\/gpt-6\.2-astra)$/.test(id);
 
+/** Recommend only Copilot models confirmed by pi's account-specific OAuth catalog. */
+export function chooseCopilotDefault(credential: unknown, saved: unknown): string | undefined {
+  if (!credential || typeof credential !== 'object' || !('type' in credential) || credential.type !== 'oauth'
+      || !('availableModelIds' in credential) || !Array.isArray(credential.availableModelIds)) return undefined;
+  const ids = credential.availableModelIds;
+  if (!ids.every((id) => typeof id === 'string')) return undefined;
+  if (typeof saved === 'string' && ids.includes(saved)) return saved;
+  return [RECOMMENDED_MODEL[COPILOT_PROVIDER], 'claude-sonnet-5.5', 'claude-sonnet-5'].find((id) => ids.includes(id));
+}
+
 /**
  * Effort: pi's thinking levels, how long the model thinks before it answers. pi keeps the one for new conversations
  * in settings.json (defaultThinkingLevel, its own default "medium") and clamps it to what the model supports.
