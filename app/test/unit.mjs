@@ -626,6 +626,10 @@ try {
     S.DEFAULT_SETTINGS.build.timeLimit === 10 && S.applyPatch(S.DEFAULT_SETTINGS, { build: { timeLimit: 0 } }).settings?.build.timeLimit === 0
     && /timeLimit/.test(S.applyPatch(S.DEFAULT_SETTINGS, { build: { timeLimit: -5 } }).error ?? '') && /timeLimit/.test(S.applyPatch(S.DEFAULT_SETTINGS, { build: { timeLimit: 2.5 } }).error ?? '')
     && S.cleanSettings({ build: { timeLimit: 45 } }).settings.build.timeLimit === 45 && S.cleanSettings({ build: { timeLimit: 'x' } }).ignored.join() === 'build.timeLimit');
+  check('SOMA AI asks before websites by default; off is kept, anything but true/false is reported',
+    S.DEFAULT_SETTINGS.ai.askWeb === true && S.applyPatch(S.DEFAULT_SETTINGS, { ai: { askWeb: false } }).settings?.ai.askWeb === false
+    && /askWeb/.test(S.applyPatch(S.DEFAULT_SETTINGS, { ai: { askWeb: 'no' } }).error ?? '')
+    && S.cleanSettings({ viewer: {} }).settings.ai.askWeb === true && S.cleanSettings({ ai: { askWeb: 0 } }).ignored.join() === 'ai.askWeb');
   check('Belegungen: SOMA tauscht mit Umschalt/Strg wie OrbitControls, SolidWorks lässt links frei, Rhino zoomt mit Strg + rechts',
     S.navAction('soma', 'left', '') === 'rotate' && S.navAction('soma', 'left', 'ctrl') === 'pan' && S.navAction('soma', 'right', 'shift') === 'rotate'
     && S.navAction('solidworks', 'left', '') === null && S.navAction('solidworks', 'middle', 'ctrl') === 'pan' && S.navAction('rhino', 'right', 'ctrl') === 'zoom'

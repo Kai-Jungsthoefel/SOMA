@@ -121,6 +121,8 @@ export default function soma(pi: Pi): void {
     },
   });
 
+  // Whether SOMA asks before websites and libraries (Settings > SOMA AI). Fixed for this pi: a change restarts it
+  const askWeb = process.env.SOMA_WEB_ASK !== '0';
   // Websites the person allowed until the model is closed (one pi per open model, somaai.ts)
   const allowedSites = new Set<string>();
   let asking: Promise<unknown> = Promise.resolve();
@@ -133,6 +135,9 @@ export default function soma(pi: Pi): void {
    * waiting, the key may have been allowed meanwhile.
    */
   const allow = async (ctx: Ctx, signal: AbortSignal | undefined, key: string, facts: string[]): Promise<boolean> => {
+    // The person switched the question off (Settings > SOMA AI, somaai.ts sets SOMA_WEB_ASK). The rules of web_fetch
+    // (no local network, downloads only into the model folder) still apply
+    if (!askWeb) return true;
     if (allowedSites.has(key)) return true;
     if (!ctx.hasUI) throw new Error('Nobody can allow going online right now. Say what you need from the internet and why.');
     const turn = asking.then(async () => {
@@ -150,8 +155,8 @@ export default function soma(pi: Pi): void {
     name: 'web_fetch',
     label: 'Open a website',
     description: 'Read a web page as text, or download a file from the internet into the model folder. Use it for product '
-      + 'pages, data sheets and CAD downloads (STEP files of parts) instead of curl, wget or scripts: SOMA asks the person '
-      + 'once per website. Without `path` it returns the page as text with its links, the links to files (STEP, ZIP, PDF …) '
+      + `pages, data sheets and CAD downloads (STEP files of parts) instead of curl, wget or scripts${askWeb ? ': SOMA asks the person once per website' : ''}. `
+      + 'Without `path` it returns the page as text with its links, the links to files (STEP, ZIP, PDF …) '
       + 'and product data (price, part number) when the shop provides them. With `path` (e.g. "inputs/608zz.step") it saves '
       + 'the file there; existing files are never overwritten. Pages that build their content with JavaScript, need a '
       + 'sign-in or refuse programs cannot be read: then tell the person and ask them to download the file themselves.',
@@ -275,7 +280,7 @@ export default function soma(pi: Pi): void {
       + 'Search: give `query` with a few words or a number ("608 bearing", "nema 17", "4884"), optionally `library`. '
       + 'Download: give `library`, `file` exactly as the search listed it, and `path` inside the model folder (e.g. "inputs/608zz.step"). '
       + 'Prefer STEP. After a download, write the source line the result gives into NOTES.md (the licenses ask for it). '
-      + 'SOMA asks the person once per library.',
+      + (askWeb ? 'SOMA asks the person once per library.' : ''),
     parameters: Type.Object({
       query: Type.Optional(Type.String({ description: 'Search words. Leave out when downloading.' })),
       library: Type.Optional(Type.String({ description: `One of: ${LIBRARIES.map((l) => l.id).join(', ')}. Leave out to search all.` })),

@@ -119,8 +119,11 @@ function aiEnv(dir: string): NodeJS.ProcessEnv {
   const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
   const sh = windowsShell();
   if (sh) env[key] = [sh.bin, env[key] ?? ''].join(path.delimiter);
-  // SOMA_VERSION: web_fetch names SOMA AI with its version towards websites (resources/somaai/soma.ts)
-  return { ...piProcessEnv(env), PI_OFFLINE: '1', SOMA_VERSION: app.getVersion() };
+  // SOMA_VERSION: web_fetch names SOMA AI with its version towards websites (resources/somaai/soma.ts).
+  // SOMA_WEB_ASK=0: websites and parts libraries without the question per site (Settings > SOMA AI, read at each start;
+  // a changed setting restarts pi, main.ts settings:set)
+  const askWeb = readSettings().settings.ai.askWeb;
+  return { ...piProcessEnv(env), PI_OFFLINE: '1', SOMA_VERSION: app.getVersion(), SOMA_WEB_ASK: askWeb ? '1' : '0' };
 }
 
 /** Writes a JSON file of SOMA in pi's folder. One that is not valid JSON goes into a backup next to it first. */

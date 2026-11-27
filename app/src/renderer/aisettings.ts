@@ -1,10 +1,11 @@
 import { accountLabel, accountProvider, AI_ACCOUNT_PROVIDERS, EFFORT_LABEL, EFFORT_LEVELS, PI_DEFAULT_EFFORT, RECOMMENDED_EFFORT, type AiAccount, type AiModel, type Effort } from '../shared/somaai';
+import type { SettingsPatch, SettingsResult, SettingsState } from '../shared/settings';
 import type { AiSignInPage, AiStatus, SomaApi, VoiceStatus } from '../shared/types';
 import { VOICE_LANGUAGES, VOICE_MODEL } from '../shared/voice';
 import { effortText, keyForm, showEffortMenu, showModelMenu, signInCode } from './aiparts';
 import { icon } from './icons';
 import type { SettingsPage } from './settings';
-import { field, group, head } from './settingspages';
+import { field, group, head, toggle } from './settingspages';
 import { ask, el } from './ui';
 import { voiceSetup } from './voice';
 
@@ -32,6 +33,9 @@ interface AiPageDeps {
   showNote(): void;
   /** A model is open (its conversation has a usage). */
   modelOpen(): boolean;
+  /** The app's settings (ai.askWeb), written and applied by main.ts. */
+  settings(): SettingsState;
+  setSettings(patch: SettingsPatch): Promise<SettingsResult>;
 }
 
 /** "1.2 k", "3.4 M": token counts for people. */
@@ -294,16 +298,29 @@ export class AiPage implements SettingsPage {
     await this.refresh();
   }
 
+  /** The question before websites and parts libraries on or off. A running pi restarts after its answer (main.ts). */
+  private async setAskWeb(on: boolean): Promise<void> {
+    const r = await this.deps.setSettings({ ai: { askWeb: on } }).catch((e) => ({ ok: false, error: String(e) }));
+    if (!r.ok) this.deps.toast(`The setting was not changed: ${r.error ?? 'unknown error'}`, 'error');
+    else this.deps.toast(on ? 'SOMA AI asks again before it opens a website.' : 'SOMA AI opens websites without asking, from the next message on.');
+    this.render();
+  }
+
   private safety(): HTMLElement[] {
     const li = (ic: string, b: string, t: string) => el('li', {}, icon(ic, 14, 1.9), el('span', {}, el('b', { textContent: b }), ` ${t}`));
+    const askWeb = this.deps.settings().settings.ai.askWeb;
     const again = el('button', { className: 'btn sm', textContent: 'Show again' });
     again.dataset.act = 'note';
     again.addEventListener('click', () => { this.deps.showNote(); this.deps.toast('The chat shows the note again before you go on.'); });
     return [
       el('ul', { className: 'st-ai-rules' },
         li('folder', 'In the model’s folder', 'it reads, writes and runs commands without asking. Every step is in the History.'),
-        li('help', 'It asks first', 'before it works with files outside the model, opens a website (once per site), downloads something or installs software.'),
+        li('help', 'It asks first', askWeb
+          ? 'before it works with files outside the model, opens a website (once per site), downloads something or installs software.'
+          : 'before it works with files outside the model or installs software. Websites and parts libraries it opens without asking (below).'),
         li('shield', 'Never', 'going back in the History, reading sign-ins and keys, and commands known to be dangerous.')),
+      field('Ask before opening websites', 'SOMA AI asks once per website or parts library before it reads a page or downloads a file into the model. Switched off, it goes ahead and the chat shows each page it opens. Downloads still only go into the model’s folder.',
+        toggle('st-ai-askweb', askWeb, 'Ask before opening websites', (on) => void this.setAskWeb(on))),
       field('Note before the first message', 'The risks of working with SOMA AI, as the chat shows them before the first message.', again),
     ];
   }

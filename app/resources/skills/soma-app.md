@@ -158,12 +158,13 @@ catch everything: only give it files from sources you trust. What you type and t
 you signed in with.
 
 Settings > SOMA AI shows the sign-ins, the model and its effort, voice input, what the conversation of the open model
-used (tokens, and the cost with an API key) and the note about the risks again.
+used (tokens, and the cost with an API key), whether it asks before opening websites, and the note about the risks again.
 
 SOMA AI can look things up on the internet, for example a part to buy with its STEP model. It searches with the
 search of your provider (ChatGPT, OpenAI, Anthropic and Google Gemini have one; with an API key the provider may charge
 for each search) and reads web pages and downloads files into the model folder, usually `inputs/`. Before it opens a
-website it asks you. Shops that need a sign-in, refuse programs or only work in a browser it cannot read: then it gives
+website it asks you; to stop these questions, switch off **Ask before opening websites** in Settings > SOMA AI
+(it then opens websites and parts libraries right away, copying outside the model and installing software still ask). Shops that need a sign-in, refuse programs or only work in a browser it cannot read: then it gives
 you the link, and you download the file yourself and drag it into SOMA. Free CAD models of common parts (bearings, motors,
 profiles, Adafruit boards) it can take from open libraries; it notes where they came from and their license in
 `NOTES.md`.

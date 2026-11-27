@@ -34,6 +34,9 @@ const steps = [
   { tool: 'web_fetch', args: { url: `${site}/bearing` } },
   { tool: 'web_fetch', args: { url: `${site}/files/part.step`, path: 'inputs/part.step' } },
   { text: 'Done, the box is built.' },
+  // Second run, with the question before websites switched off (Settings > SOMA AI): pi was restarted for the inches
+  { tool: 'web_fetch', args: { url: `${site}/lid` } },
+  { text: 'The lid is 0.08 in thick.' },
 ];
 const mock = await startMockLlm(steps);
 useMockModel(ud, mock.port);
@@ -121,11 +124,19 @@ try {
   check('Switching to inches during an answer does not break it off: pi restarts after it', restarted.settledAt === 0
     && restarted.exits.length === 1 && !restarted.exits[0].error && step(7).text !== '(missing)', JSON.stringify(restarted));
 
+  // pi is not running now (restarted, starts with the next message): switching the question off ends nothing
+  const noAsk = await ev(() => window.soma.settings.set({ ai: { askWeb: false } }));
   const inch = await ev(() => window.soma.ai.command({ type: 'prompt', message: 'How thick is the lid?' }));
   await app.waitFor('second run settled', () => window.__ai.events.filter((e) => e.record.type === 'agent_settled').length >= 2, 120000);
   const last = mock.requests.at(-1) ?? {};
   const sys2 = (last.messages ?? []).filter((m) => m.role === 'system' || m.role === 'developer').map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n');
   check('The next message runs with the inch line in the system prompt', inch.ok && sys2.includes('Units: the user works in inches'), sys2.slice(sys2.indexOf('Units:'), sys2.indexOf('Units:') + 80));
+  const r2 = await results();
+  const asked2 = await ev(() => window.__ai.asked);
+  const fetchDesc = JSON.stringify((last.tools ?? []).find((x) => (x.function?.name ?? x.name) === 'web_fetch') ?? {});
+  check('Websites without asking (Settings > SOMA AI): the new pi opens the site with no question, its tool no longer promises one',
+    noAsk.ok && r2[8]?.tool === 'web_fetch' && !r2[8].error && r2[8].text.includes('Bearing 608') && asked2.length === 2 && !fetchDesc.includes('asks the person'),
+    JSON.stringify({ noAsk: noAsk.ok, r: r2[8], asked: asked2.length }).slice(0, 300));
 
   await ev(() => window.soma.ai.stop());
   st = await ev(() => window.soma.ai.status());

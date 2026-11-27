@@ -311,6 +311,8 @@ const aiPage = new AiPage($('st-ai'), {
   useEffort: (level) => chat.useEffort(level),
   showNote: () => chat.showNote(chatOn && !!project),
   modelOpen: () => !!project,
+  settings: () => appSettings,
+  setSettings: (patch) => changeSettings(patch),
 });
 
 // Einstellungen (E78, E81): Reiter General, Viewer, SOMA AI, Skills, Shortcuts, Speicher und Info, auch von der Startseite aus. Änderungen an den

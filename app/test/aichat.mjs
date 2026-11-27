@@ -354,6 +354,17 @@ try {
   await app.waitFor('key removed in Settings', () => !window.__t.settingsPages().ai.accounts.some((a) => a.provider === 'google'), 20000);
   ap = await aiPage();
   check('… and signed out there again', !readJson('auth.json').google && !(await ev(() => document.body.innerText)).includes('AIza-test-789'));
+  // The question before websites: on by default, the switch writes SOMA's settings.json and the safety list follows
+  const askWebOn = await ev(() => document.getElementById('st-ai-askweb')?.checked);
+  await ev(() => { const c = document.getElementById('st-ai-askweb'); c.checked = false; c.dispatchEvent(new Event('change')); });
+  await app.waitFor('websites without asking', () => window.__t.appSettings().settings.ai.askWeb === false
+    && document.getElementById('st-ai-askweb')?.checked === false, 10000).catch(() => {});
+  const appFile = JSON.parse(fs.readFileSync(path.join(ud, 'settings.json'), 'utf8'));
+  ap = await aiPage();
+  check('… "Ask before opening websites" on by default, switched off it is saved and the page says websites open without asking',
+    askWebOn === true && appFile.ai?.askWeb === false && ap.text.includes('opens without asking'), JSON.stringify({ askWebOn, ai: appFile.ai }));
+  await ev(() => document.getElementById('st-ai-askweb')?.scrollIntoView({ block: 'center' }));
+  await shot('settings-ai-safety');
   await ev(() => window.__t.closeSettings());
 
   // ---- Signing out ------------------------------------------------------------------------------------------------

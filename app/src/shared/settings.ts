@@ -31,6 +31,11 @@ export interface ViewerPrefs {
 export interface StartPrefs { tutorialCard: boolean; updateCheck: boolean }
 /** Building (issue #13): `timeLimit` in minutes after which a build is stopped, 0 means no limit (the user can still stop it). */
 export interface BuildPrefs { timeLimit: number }
+/**
+ * SOMA AI: `askWeb` false opens websites and parts libraries without the question per site (wish of the user,
+ * 2026-11-27: the question gets in the way). Copying outside the model, curl, wget and installing software still ask.
+ */
+export interface AiPrefs { askWeb: boolean }
 /** Known command line agents. The app installs nothing, it only detects them (E4). Others run in a plain terminal. */
 export const KNOWN_AGENTS = [
   { id: 'claude', label: 'Claude Code', command: 'claude' },
@@ -49,9 +54,9 @@ export type OpenTab = { kind: 'ai' } | { kind: 'terminal' } | { kind: 'agent'; a
 export interface OpenPrefs { tabs: OpenTab[]; front: number }
 export const MAX_OPEN_TABS = 3;
 export const OPEN_LIMITS = { command: 500, title: 40 };
-export interface AppSettings { viewer: ViewerPrefs; start: StartPrefs; build: BuildPrefs; open: OpenPrefs }
+export interface AppSettings { viewer: ViewerPrefs; start: StartPrefs; build: BuildPrefs; open: OpenPrefs; ai: AiPrefs }
 /** Änderung aus dem Renderer: nur die Werte, die sich ändern sollen. */
-export interface SettingsPatch { viewer?: Partial<ViewerPrefs>; start?: Partial<StartPrefs>; build?: Partial<BuildPrefs>; open?: Partial<OpenPrefs> }
+export interface SettingsPatch { viewer?: Partial<ViewerPrefs>; start?: Partial<StartPrefs>; build?: Partial<BuildPrefs>; open?: Partial<OpenPrefs>; ai?: Partial<AiPrefs> }
 /** `problem`: settings.json war nicht lesbar oder enthielt Unbekanntes, es gelten (teils) die Vorgaben. */
 export interface SettingsState { settings: AppSettings; problem?: string }
 export interface SettingsResult extends SettingsState { ok: boolean; error?: string; backup?: string | null }
@@ -64,6 +69,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   start: { tutorialCard: true, updateCheck: true },
   build: { timeLimit: 10 },
   open: { tabs: [{ kind: 'ai' }], front: 0 },
+  ai: { askWeb: true },
 };
 /**
  * The tabs in test mode without an `open` section in settings.json: as before this setting, SOMA AI and a terminal with
@@ -151,8 +157,9 @@ const isTabs = (v: unknown): v is OpenTab[] => Array.isArray(v) && v.length >= 1
   && v.filter((t) => t.kind === 'ai').length <= 1;
 const isFront = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < MAX_OPEN_TABS;
 const OPEN_CHECKS: { [K in keyof OpenPrefs]: (v: unknown) => boolean } = { tabs: isTabs, front: isFront };
+const AI_CHECKS: { [K in keyof AiPrefs]: (v: unknown) => boolean } = { askWeb: isBool };
 /** Bereiche der Einstellungen mit der Prüfung je Wert. */
-const SECTIONS: Record<keyof AppSettings, Record<string, (v: unknown) => boolean>> = { viewer: VIEWER_CHECKS, start: START_CHECKS, build: BUILD_CHECKS, open: OPEN_CHECKS };
+const SECTIONS: Record<keyof AppSettings, Record<string, (v: unknown) => boolean>> = { viewer: VIEWER_CHECKS, start: START_CHECKS, build: BUILD_CHECKS, open: OPEN_CHECKS, ai: AI_CHECKS };
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /**

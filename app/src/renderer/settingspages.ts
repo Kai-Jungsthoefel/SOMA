@@ -29,7 +29,7 @@ export function head(title: string, intro: string): HTMLElement[] {
   return [el('h2', { className: 'st-h2', textContent: title }), el('p', { className: 'st-lead', textContent: intro })];
 }
 
-function toggle(id: string, on: boolean, label: string, change: (on: boolean) => void): HTMLInputElement {
+export function toggle(id: string, on: boolean, label: string, change: (on: boolean) => void): HTMLInputElement {
   const c = el('input', { id, type: 'checkbox', className: 'switch', checked: on });
   c.setAttribute('aria-label', label);
   c.addEventListener('change', () => change(c.checked));

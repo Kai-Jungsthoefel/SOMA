@@ -443,12 +443,13 @@ function registerIpc(ctl: ProjectController): void {
   // Einstellungen der App (E81)
   ipcMain.handle('settings:get', () => readSettings());
   ipcMain.handle('settings:set', (_e, patch: unknown) => {
-    const units = readSettings().settings.viewer.units;
+    const before = readSettings().settings;
     try {
       const r = writeSettings(patch);
-      // SOMA AI has the units in its system prompt: the next message starts pi with the new ones, the conversation goes on.
-      // An answer pi is working on ends first (restart waits for it)
-      if (r.ok && r.settings.viewer.units !== units) ctl.session?.ai.restart('other units');
+      // SOMA AI has the units in its system prompt and the question before websites in its environment: the next message
+      // starts pi with the new ones, the conversation goes on. An answer pi is working on ends first (restart waits for it)
+      if (r.ok && r.settings.viewer.units !== before.viewer.units) ctl.session?.ai.restart('other units');
+      else if (r.ok && r.settings.ai.askWeb !== before.ai.askWeb) ctl.session?.ai.restart('websites asked or not');
       return r;
     } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e), ...readSettings() }; }
   });
