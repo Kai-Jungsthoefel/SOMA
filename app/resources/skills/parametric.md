@@ -83,6 +83,11 @@ When a parameter changes the number of holes or faces, "the third edge" or `>X[2
 
 - `label` in the user's words and language, saying what is measured ("Inner length", not "L"). `unit="mm"` or
   `"deg"`. `step` as fine as it matters: 0.1 mm for walls and fits, 1 mm for main dimensions, 5 or 15 deg for angles.
+- **Inches.** The model is in mm, but a value people know in inches stays in inches in the panel: an inch pipe or
+  thread in a metric model, or every length when the user works in inches (`soma build` says so). Then
+  `PIPE = param(0.75, "Pipe size", unit="in", step=0.125)` and convert once in the code: `PIPE_MM = PIPE * 25.4`.
+  `unit` is only the label, `param()` returns the number as written. The fields take "1.5 in" or "20 - 2.5" and
+  convert to their own unit.
 - `group` by function or part ("Housing", "Mounting", "Fit", "Motion"). The order in the code is the order in the
   panel, the most important first. `help` when the label is not enough ("Measured inside, the outer size adds 2 x wall").
 - **The constant name is the key in `parameters.json`.** Renaming a parameter leaves the user's value behind. If its

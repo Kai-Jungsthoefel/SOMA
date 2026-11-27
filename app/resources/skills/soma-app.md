@@ -217,7 +217,7 @@ asking; the replaced copy is kept in `.soma/component-backups/`.
 ![Tools above the viewer, here with a section](../help/tools.png)
 
 1. **Measure**: click a face or edge for its size, a second one for distance and angle. The values are exact.
-2. **Section**: cuts the model open along X, Y, Z or parallel to a face. Move the plane with the slider or type a value.
+2. **Section**: cuts the model open along X, Y, Z or parallel to a face. Move the plane with the slider or type a value, also a calculation (`20 - 2.5`) or a length with its unit (`1.5 in`).
 3. **Explode**: pulls the parts apart. Plays the disassembly step by step and can send the order to the agent. Reference parts stay in place: they are the surroundings the parts come out of.
 4. **Mark up**: draw on a picture of the view for the agent (see below).
 5. **Tool card**: settings of the active tool. The × closes the tool. None of the tools change the model.
@@ -239,7 +239,7 @@ Mark up is the quickest way to show the agent what you mean: draw an arrow, writ
 
 ![The sidebar](../help/sidebar.png)
 
-1. **Parameters**: values of the model you can change yourself, such as sizes, counts or angles. The model rebuilds right away. The agent decides which values appear here. The arrow next to a changed value brings back the agent's value.
+1. **Parameters**: values of the model you can change yourself, such as sizes, counts or angles. The model rebuilds right away. The agent decides which values appear here and in which unit, for example an inch pipe in a metric model. A field also takes a calculation such as `20 - 2.5` or a length in another unit such as `1.5 in` in a mm field, SOMA converts it. The arrow next to a changed value brings back the agent's value.
 2. **Files**: all files of the model. Click one to open it next to it.
 3. **Analysis**: results the agent calculated, such as strength (FEM), wall thickness, overhang or clearance. Click one to see it in color on the model, with its report. A `.soma` file keeps the analyses without their colored results (they are large): after opening one on another computer, the list shows them with their values as saved, and "Compute" calculates one again for the model as it is now.
 4. **Animation**: motion the agent made, for example an assembly sequence. Click one to play it in the viewer, "Make video" writes an MP4. Below are the videos of the model, sorted by folder; click a folder to collapse it (SOMA remembers this per model). Right-click a video to play, rename or delete it, show it in the file tree or in Explorer.
@@ -374,7 +374,7 @@ The folder itself is the model: there is no .soma file to save, and your files s
 
 1. **General**: the tabs of the agent area when a model opens, the start page (checking GitHub for new versions, the tutorial card) and the build time limit (10 minutes unless you change it, or no limit).
 2. **Tabs when a model opens**: up to three, the first one is in front. Each is SOMA AI, an empty terminal, one of the agents (Claude Code, OpenCode, Codex, Gemini CLI) or your own command, to start other agent harnesses or command line tools automatically. By default only SOMA AI opens.
-3. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, and decimal places of measurements.
+3. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, units (millimetres or inches) and decimal places of measurements. With inches, measuring, the selection and the section show inches, the model stays in millimetres and the agent learns that you work in inches.
 4. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search) and its effort, what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
 5. **Skills**: edit the built-in skills or write your own. They are available in every model. Models whose copy of the skill was not changed there take over your version.
 6. **Shortcuts**: all keys and mouse actions.

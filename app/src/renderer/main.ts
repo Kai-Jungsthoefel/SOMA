@@ -1,6 +1,7 @@
 import { affectsBuild } from '../shared/editable';
 import { DEFAULT_SETTINGS, KNOWN_AGENTS, openTabTitle, type OpenPrefs, type SettingsPatch, type SettingsResult, type SettingsState } from '../shared/settings';
 import type { AgentInfo, AnimEntry, BuildStatus, CadQueryImportResult, ModelComponent, DrawingEntry, DrawingList, ExportResult, FileNode, ImportResult, MeshExportOptions, ModelMap, PartMap, PreviewResult, ProjectInfo, ProjectListEntry, ResultEntry, SaveState, UpdateInfo } from '../shared/types';
+import { MM_PER_INCH } from '../shared/units';
 import { AnalysisPanel } from './analysispanel';
 import { AnimPanel, animKey, videoKey } from './animpanel';
 import { SOMA_VERSION } from '../shared/version';
@@ -104,6 +105,8 @@ async function readText(rel: string): Promise<string> {
 }
 
 const num = (v: number, digits = 1) => v.toLocaleString('en-US', { maximumFractionDigits: digits });
+/** Area of a clicked face in the selection card, in the units of the setting (E111). */
+const areaText = (a: number) => (appSettings.settings.viewer.units === 'in' ? `${num(a / MM_PER_INCH ** 2, 3)} in²` : `${num(a)} mm²`);
 const SURFACE: Record<string, string> = {
   PLANE: 'plane', CYLINDER: 'cylinder', CONE: 'cone', SPHERE: 'sphere', TORUS: 'torus', BSPLINE: 'freeform', BEZIER: 'freeform',
   REVOLUTION: 'surface of revolution', EXTRUSION: 'extruded surface', OFFSET: 'offset surface', OTHER: 'other',
@@ -249,6 +252,9 @@ function applySettings(): void {
   viewer.setNavigation(v.navigation, v.invertZoom);
   viewer.setProjection(v.projection);
   measureTool.setDecimals(v.decimals);
+  measureTool.setUnits(v.units);
+  sectionTool.setUnits(v.units);
+  if (selection) void renderSelection();
 }
 
 /** Darstellung beim Öffnen eines Modells (Menü „Display“). Danach gilt bis zum nächsten Modell, was der Nutzer dort umstellt. */
@@ -595,7 +601,7 @@ async function renderSelection(): Promise<void> {
   $('sel-name').title = p?.group ? `Group ${p.group}` : '';
   $('sel-swatch').style.background = p?.color ?? '';
   const bits = pick?.faceId != null
-    ? ['Face', surfaceName(pick.surface), ...(pick.area != null ? [`${num(pick.area)} mm²`] : [])]
+    ? ['Face', surfaceName(pick.surface), ...(pick.area != null ? [areaText(pick.area)] : [])]
     : pick?.cut ? ['Cut face', 'whole part'] : ['whole part'];
   $('info').textContent = bits.join(' · ');
   const peek = $('code');
@@ -630,7 +636,10 @@ function selectionText(): string | null {
   if (e?.file && e.line) { const { from, to } = lineRange(e); bits.push(`${e.file} ${to !== from ? 'lines' : 'line'} ${from}${to !== from ? '-' + to : ''}`); }
   const pk = selection.pick;
   if (pk?.faceId != null) {
-    bits.push(`clicked face: ${surfaceName(pk.surface)}${pk.area != null ? `, ${pk.area.toFixed(1)} mm²` : ''}, point (${pk.point.map((v) => v.toFixed(1)).join(', ')}) mm`);
+    const inch = appSettings.settings.viewer.units === 'in';
+    const area = pk.area != null ? `, ${pk.area.toFixed(1)} mm²${inch ? ` (${(pk.area / MM_PER_INCH ** 2).toFixed(3)} in²)` : ''}` : '';
+    const point = `(${pk.point.map((v) => v.toFixed(1)).join(', ')}) mm${inch ? ` = (${pk.point.map((v) => (v / MM_PER_INCH).toFixed(3)).join(', ')}) in` : ''}`;
+    bits.push(`clicked face: ${surfaceName(pk.surface)}${area}, point ${point}`);
   }
   return `[Selection: ${bits.join(', ')}] `;
 }
@@ -687,7 +696,7 @@ const measureTool = new MeasureTool({
 
 const sectionTool = new SectionTool({
   card: $('section-card'), button: $<HTMLButtonElement>('btn-section'), close: $<HTMLButtonElement>('btn-section-close'),
-  axes: $('section-axes'), label: $('section-label'), range: $<HTMLInputElement>('section-range'), value: $<HTMLInputElement>('section-value'),
+  axes: $('section-axes'), label: $('section-label'), range: $<HTMLInputElement>('section-range'), value: $<HTMLInputElement>('section-value'), unit: $('section-unit'),
   hint: $('section-hint'), flip: $<HTMLButtonElement>('btn-section-flip'), look: $<HTMLButtonElement>('btn-section-look'),
 }, { viewer });
 

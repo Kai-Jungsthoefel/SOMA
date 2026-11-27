@@ -110,6 +110,15 @@ try {
   await typeValue('WALL', '2,5');
   await built(b0, 'Wall 2,5');
   check('Komma wird gelesen: Wall 2.5 mm', vals().WALL === 2.5 && (await ps()).shown.WALL === '2.5 mm', JSON.stringify(vals()));
+  // E111: a length in another unit is converted to the field's unit, a calculation is worked out
+  b0 = await builds();
+  await typeValue('WALL', '0.1 in');
+  await built(b0, 'Wall 0.1 in');
+  check('"0.1 in" in a mm field: Wall 2.54 mm', vals().WALL === 2.54 && (await ps()).shown.WALL === '2.54 mm', JSON.stringify(vals()));
+  b0 = await builds();
+  await typeValue('WALL', '5 - 2.5');
+  await built(b0, 'Wall 5 - 2.5');
+  check('A calculation: "5 - 2.5" gives Wall 2.5 mm', vals().WALL === 2.5 && (await ps()).shown.WALL === '2.5 mm', JSON.stringify(vals()));
 
   b0 = await builds();
   await typeValue('WIDTH', '40.0');

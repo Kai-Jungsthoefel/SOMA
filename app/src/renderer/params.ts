@@ -1,4 +1,5 @@
 import type { BuildStatus, ParamInfo, ParamResult, ParamState, ParamValue } from '../shared/types';
+import { evalNumber, lengthScale } from '../shared/units';
 import { icon } from './icons';
 import { el } from './ui';
 
@@ -334,11 +335,23 @@ export class ParamsPanel {
     const inp = el('input', { id, className: isNum ? 'pm-num' : 'pm-text', type: 'text', value: shown, spellcheck: false, autocomplete: 'off', disabled: this.busy });
     inp.setAttribute('aria-label', p.label);
     if (isNum) inp.inputMode = p.kind === 'int' ? 'numeric' : 'decimal';
+    if (isNum) {
+      const other = lengthScale(p.unit) ? `, a length in another unit (${p.unit === 'in' ? '6 mm' : '1.5 in'})` : '';
+      inp.title = `A number or a calculation (20 - 2.5)${other}. Enter takes it, arrow keys step.`;
+    }
     const parse = (): ParamValue | null => {
       if (!isNum) return inp.value;
-      const n = Number(inp.value.trim().replace(',', '.'));
-      if (!inp.value.trim() || !Number.isFinite(n)) { this.deps.toast(`${p.label} needs a number, for example ${numText(p.default as number)}.`, 'error'); return null; }
-      if (p.kind === 'int' && !Number.isInteger(n)) { this.deps.toast(`${p.label} needs a whole number.`, 'error'); return null; }
+      // A number, a calculation ("20 - 2.5") or a length in another unit ("1.5 in" in a mm field), in the field's unit
+      const r = evalNumber(inp.value, p.unit);
+      if (!r.ok) {
+        const example = `for example ${numText(p.default as number)}${lengthScale(p.unit) ? ` or 20 - 2.5 or 1.5 ${p.unit === 'in' ? 'mm' : 'in'}` : ' or 20 - 2.5'}`;
+        this.deps.toast(`${p.label} needs a number${inp.value.trim() ? ` (${r.error.replace(/\.$/, '')})` : ''}, ${example}.`, 'error');
+        return null;
+      }
+      // Converted units land a hair off a whole number (25.4 x 5 / 25.4): round what only differs in the last digits
+      let n = Math.abs(r.value - Math.round(r.value)) < 1e-9 ? Math.round(r.value) : Number(r.value.toPrecision(12));
+      if (Object.is(n, -0)) n = 0;
+      if (p.kind === 'int' && !Number.isInteger(n)) { this.deps.toast(`${p.label} needs a whole number, ${numText(n)} is not one.`, 'error'); return null; }
       return n;
     };
     const apply = () => {

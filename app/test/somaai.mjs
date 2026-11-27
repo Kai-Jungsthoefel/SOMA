@@ -87,6 +87,7 @@ try {
   const sys = (first.messages ?? []).filter((m) => m.role === 'system' || m.role === 'developer').map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n');
   check('pi got AGENTS.md of the model in its system prompt', sys.includes('Instructions for the coding agent'), `${sys.length} chars`);
   check('… and SOMA\'s addition (SOMA AI, plain words for non-programmers)', sys.includes('You are SOMA AI') && sys.includes('not a programmer'));
+  check('… and the user\'s units (Settings > Viewer > Units, default millimetres)', sys.includes('Units: the user works in millimetres'), sys.slice(sys.indexOf('Units:'), sys.indexOf('Units:') + 80));
   const user = (first.messages ?? []).find((m) => m.role === 'user');
   check('The image reached the model', Array.isArray(user?.content) && user.content.some((c) => c.type === 'image_url'), JSON.stringify(user?.content?.map?.((c) => c.type)));
 

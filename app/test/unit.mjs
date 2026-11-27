@@ -751,6 +751,25 @@ try {
     srv.close();
   }
 
+  // Number fields (shared/units.ts, E111): calculations and lengths in another unit, converted to the field's unit
+  {
+    const uOut = path.join(tmp, 'units.mjs');
+    await build({ entryPoints: [path.join(APP, 'src', 'shared', 'units.ts')], outfile: uOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const { evalNumber } = await import(pathToFileURL(uOut).href);
+    const v = (text, unit) => { const r = evalNumber(text, unit); return r.ok ? +r.value.toFixed(6) : `ERR ${r.error}`; };
+    const cases = [
+      ['20 - 2.5', 'mm', 17.5], ['2 * (3 + 4)', 'mm', 14], ['-5 + 2', 'mm', -3], ['10 / 4', null, 2.5], ['1,5', 'mm', 1.5], ['1,000.5', 'mm', 1000.5],
+      ['1.5 in', 'mm', 38.1], ['1.5in', 'mm', 38.1], ['1.5"', 'mm', 38.1], ['1/4 in', 'mm', 6.35], ['1 in + 3', 'mm', 28.4], ['2 x 3 mm', 'mm', 6],
+      ['6.35 mm', 'in', 0.25], ['1 ft', 'in', 12], ['2 cm', 'mm', 20], ['10 mm / 2', 'mm', 5], ['−3', 'mm', -3], ['0.5 m', 'mm', 500],
+    ];
+    const bad = cases.filter(([t, u, want]) => v(t, u) !== want).map(([t, u, want]) => `${t} [${u}] = ${v(t, u)}, expected ${want}`);
+    check('Number fields: calculations and units convert to the field\'s unit', !bad.length, bad.join(' | '));
+    const errs = [['', 'mm'], ['abc', 'mm'], ['3 in', 'deg'], ['3 in', null], ['5 / 0', 'mm'], ['(2 + 3', 'mm'], ['2 + 3)', 'mm'], ['3 kg', 'mm'], ['2 +', 'mm']];
+    const notRefused = errs.filter(([t, u]) => typeof v(t, u) === 'number');
+    check('… nonsense, a length in a field that is no length, division by zero and open brackets are refused with a reason',
+      !notRefused.length && /not a length/.test(v('3 in', 'deg')) && /kg/.test(v('3 kg', 'mm')), notRefused.map(([t, u]) => `${t} [${u}] = ${v(t, u)}`).join(' | '));
+  }
+
   // Sign-in of SOMA AI (resources/somaai/signin.mjs) against a fake pi: what it answers to pi's questions and what it
   // reports. GitHub Copilot asks for an Enterprise domain (blank: github.com) and names a page with a code to type
   {

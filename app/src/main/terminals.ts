@@ -5,11 +5,13 @@ import { logAgentStart } from './agents';
 import { bridgeEnv } from './bridge';
 import { envPaths } from './packages';
 import { gitCmdDir, pythonBinDirs, pythonEnv } from './paths';
+import { readSettings } from './settings';
 
 /**
  * Umgebung fuer Terminals: vorn im PATH die Projektumgebung (E67, `python` sieht Basis und Zusatzpakete), dahinter die
  * Basisumgebung (`pip`, `soma`). PIP_PYTHON leitet jedes pip in die Projektumgebung, die Basis bleibt unverändert. Dazu
- * Adresse und Schluessel der App fuer `soma render` (E58).
+ * Adresse und Schluessel der App fuer `soma render` (E58). SOMA_UNITS: the user's units (Settings > Viewer, E111), `soma build`
+ * reminds the agent when they are inches. It holds for terminals started after a change.
  */
 export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = pythonEnv({ SOMA_PROJECT: projectDir, ...bridgeEnv() });
@@ -22,6 +24,7 @@ export function terminalEnv(projectDir: string): NodeJS.ProcessEnv {
   const git = gitCmdDir(); // das mitgelieferte Git hat Vorrang vor einem Git des Systems
   if (git) front.push(git);
   env[key] = [...front, env[key] ?? ''].join(path.delimiter);
+  env.SOMA_UNITS = readSettings().settings.viewer.units;
   return env;
 }
 

@@ -1,5 +1,6 @@
 import { BUILD_TIME_LIMITS, DECIMALS, KNOWN_AGENTS, MAX_OPEN_TABS, NAV_PRESETS, OPEN_LIMITS, navLegend, type AgentId, type NavPreset, type OpenTab, type Projection, type SettingsPatch, type SettingsResult, type SettingsState, type ViewerPrefs } from '../shared/settings';
 import type { AboutInfo, AgentInfo, ComponentInfo, SomaApi, StorageArea, StorageEntry, StorageStats } from '../shared/types';
+import { inchDigits, MM_PER_INCH, type DisplayUnits } from '../shared/units';
 import { icon } from './icons';
 import type { SettingsPage } from './settings';
 import { shortcutGroups } from './shortcuts';
@@ -244,7 +245,10 @@ export class ViewerPage implements SettingsPage {
       ...Array.from({ length: DECIMALS.max - DECIMALS.min + 1 }, (_, i) => el('option', { value: String(DECIMALS.min + i), textContent: String(DECIMALS.min + i) })));
     digits.value = String(v.decimals);
     digits.addEventListener('change', () => void this.change({ decimals: Number(digits.value) }));
-    const sample = (12.3456).toLocaleString('en-US', { minimumFractionDigits: v.decimals, maximumFractionDigits: v.decimals });
+    // The sample is the same length in the units chosen: 12.3456 mm, or the inch it rounds to with two more digits
+    const inch = v.units === 'in';
+    const d = inch ? inchDigits(v.decimals) : v.decimals;
+    const sample = `${(inch ? 12.3456 / MM_PER_INCH : 12.3456).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })} ${v.units}`;
 
     this.root.replaceChildren(el('div', { className: 'st-pg' },
       ...head('Viewer', 'How the 3D view responds to the mouse and what it shows when a model opens. Changes apply right away.'),
@@ -264,7 +268,10 @@ export class ViewerPage implements SettingsPage {
         field('Origin and axes', 'The display menu in the viewer changes these for the open model, until the next one opens.',
           toggle('st-axes', v.axes, 'Origin and axes', (on) => void this.change({ axes: on })))),
       group('Measurements',
-        field('Decimal places', `In the measurement card and at the measuring line, for example ${sample} mm. Text sent to the agent always has three decimals.`, digits)),
+        field('Units', 'Lengths in the measurement card, the selection and the section. The model stays in millimetres, nothing is rebuilt. Text sent to the agent gives millimetres, with inches added.',
+          segmented<DisplayUnits>('Units', [{ value: 'mm', label: 'Millimetres' }, { value: 'in', label: 'Inches' }], v.units,
+            (u) => void this.change({ units: u }))),
+        field('Decimal places', `In the measurement card and at the measuring line, for example ${sample}.${inch ? ' Inches show two more.' : ''} Text sent to the agent always has three decimals.`, digits)),
     ));
   }
 

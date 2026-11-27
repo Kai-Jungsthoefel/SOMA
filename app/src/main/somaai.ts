@@ -5,6 +5,8 @@ import path from 'node:path';
 import type { AiResult, AiStatus } from '../shared/types';
 import { userDataDir } from './paths';
 import { terminalEnv } from './terminals';
+import { readSettings } from './settings';
+import type { DisplayUnits } from '../shared/units';
 
 /*
  * SOMA AI: the agent built into SOMA. It is pi (pi.dev, MIT), bundled with the app, so people without a coding agent of
@@ -34,6 +36,16 @@ const REQUEST_TIMEOUT_MS = 60_000;
 export const aiDir = () => path.join(userDataDir(), 'somaai');
 /** Files of SOMA for pi: its addition to the system prompt and its own extension. */
 const aiResources = () => path.join(app.getAppPath(), 'resources', 'somaai');
+
+/**
+ * One line for pi's system prompt: which units the user works in. The model is always in mm, the setting says how the
+ * user thinks and reads dimensions (E111). Agents in a terminal learn it from `soma build` (SOMA_UNITS).
+ */
+export function unitsPrompt(units: DisplayUnits): string {
+  return units === 'in'
+    ? 'Units: the user works in inches (SOMA Settings > Viewer > Units). Dimensions they give without a unit are inches, and you answer with inches (mm in brackets where it helps). The model stays in mm: convert with 25.4. A parameter the user thinks of in inches gets unit="in" and its value in inches, converted to mm in the code before CadQuery.'
+    : 'Units: the user works in millimetres (SOMA Settings > Viewer > Units). Dimensions they give without a unit are millimetres. Dimensions they give in inches (a pipe, a thread, a part from a US drawing) stay inches where they come from: convert with 25.4 in the code, a parameter for such a value gets unit="in".';
+}
 
 /** Entry of pi for RPC mode, null when the installation lacks it. */
 export function piEntry(): string | null {
@@ -303,6 +315,8 @@ export class SomaAI {
     if (search) args.push('-e', search);
     const prompt = path.join(aiResources(), 'system.md');
     if (fs.existsSync(prompt)) args.push('--append-system-prompt', prompt);
+    // The user's units (Settings > Viewer > Units, E111): a changed setting restarts pi (main.ts settings:set)
+    args.push('--append-system-prompt', unitsPrompt(readSettings().settings.viewer.units));
 
     let child: ChildProcess;
     try {

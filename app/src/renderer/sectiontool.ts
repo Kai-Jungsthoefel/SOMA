@@ -1,3 +1,4 @@
+import { evalNumber, inchDigits, MM_PER_INCH, type DisplayUnits } from '../shared/units';
 import type { PlaneHit, Viewer } from './viewer';
 
 type Axis = 'x' | 'y' | 'z' | 'face';
@@ -16,12 +17,14 @@ interface Ui {
   /** Knöpfe mit `data-axis` (x, y, z, face). */
   axes: HTMLElement;
   label: HTMLElement; range: HTMLInputElement; value: HTMLInputElement; hint: HTMLElement;
+  /** Unit next to the field (mm or in, setting "Units"). */
+  unit: HTMLElement;
   flip: HTMLButtonElement; look: HTMLButtonElement;
 }
 interface Deps { viewer: Viewer }
 
 // Ohne Tausendertrennzeichen: Der Wert steht auch im Eingabefeld und muss sich wieder lesen lassen
-const num = (v: number, digits = 2) => (Math.abs(v) < 5e-4 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: 3, useGrouping: false }).replace(/^-/, '−');
+const num = (v: number, digits = 2) => (Math.abs(v) < 5e-4 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: Math.max(3, digits), useGrouping: false }).replace(/^-/, '−');
 /** Für den Agenten: Punkt als Dezimalzeichen, drei Stellen, kein „-0“. */
 const f3 = (v: number) => (Math.abs(v) < 5e-4 ? 0 : v).toFixed(3);
 const vec = (d: number[]) => `(${d.map((x) => +(Math.abs(x) < 5e-7 ? 0 : x).toFixed(4)).join(', ')})`;
@@ -50,6 +53,8 @@ export class SectionTool {
   private range: [number, number] = [0, 1];
   private picking = false;
   private note = '';
+  /** Lengths in the field and the hint (E111). The plane itself is in mm like the model. */
+  private units: DisplayUnits = 'mm';
 
   constructor(private ui: Ui, private deps: Deps) {
     ui.button.addEventListener('click', () => this.setActive(!this.active));
@@ -67,9 +72,9 @@ export class SectionTool {
       if (e.key === 'Enter') { e.preventDefault(); this.takeInput(); this.showValue(); ui.value.select(); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.showValue(); ui.value.blur(); }
       else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        // Pfeiltasten: 1 mm, mit Umschalt 10 mm, mit Alt 0,1 mm
+        // Pfeiltasten: 1 mm, mit Umschalt 10 mm, mit Alt 0,1 mm. In inches 0.1 in, 1 in and 0.01 in
         e.preventDefault();
-        const step = (e.shiftKey ? 10 : e.altKey ? 0.1 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+        const step = (e.shiftKey ? 10 : e.altKey ? 0.1 : 1) * (this.units === 'in' ? 0.1 * MM_PER_INCH : 1) * (e.key === 'ArrowUp' ? 1 : -1);
         this.setShown(this.shown() + step);
         this.showValue();
         ui.value.select();
@@ -90,6 +95,22 @@ export class SectionTool {
   }
 
   get isActive(): boolean { return this.active; }
+
+  /** Units of the field and the hint (setting "Units"). The plane stays where it is. */
+  setUnits(u: DisplayUnits): void {
+    if (u === this.units) return;
+    this.units = u;
+    this.ui.unit.textContent = u;
+    this.ui.value.title = u === 'in'
+      ? 'Enter a value or a calculation (1/4 + 0.1, 6 mm) and press Enter. Arrow keys: 0.1 in, with Shift 1 in, with Alt 0.01 in'
+      : 'Enter a value or a calculation (20 - 2.5, 1.5 in) and press Enter. Arrow keys: 1 mm, with Shift 10 mm, with Alt 0.1 mm';
+    this.render();
+  }
+
+  /** A length (mm) as text in the units shown, without the unit. */
+  private len(v: number): string {
+    return this.units === 'in' ? num(v / MM_PER_INCH, inchDigits(2)) : num(v);
+  }
 
   setActive(on: boolean): void {
     if (on === this.active) return;
@@ -181,15 +202,13 @@ export class SectionTool {
     this.apply();
   }
 
-  private showValue(): void { if (this.active) this.ui.value.value = num(this.shown()); }
+  private showValue(): void { if (this.active) this.ui.value.value = this.len(this.shown()); }
 
   private takeInput(): void {
-    // Komma als Dezimaltrenner weiter annehmen, neben einem Punkt ist es ein Tausendertrennzeichen
-    const s = this.ui.value.value.trim().replace(/\s/g, '').replace('−', '-');
-    const t = s.includes('.') ? s.replace(/,/g, '') : s.replace(',', '.');
-    const u = Number(t);
-    if (t === '' || !Number.isFinite(u)) { this.render(); return; }
-    this.setShown(u);
+    // A number, a calculation or a length with its unit ("20 - 2.5", "1.5 in"), in the units of the field
+    const r = evalNumber(this.ui.value.value, this.units);
+    if (!r.ok) { this.render(); return; }
+    this.setShown(this.units === 'in' ? r.value * MM_PER_INCH : r.value);
   }
 
   private updateRange(): void {
@@ -284,7 +303,7 @@ export class SectionTool {
     if (this.picking) hint = this.note || 'Click a planar face in the model. Escape cancels.';
     else if (faceMode && this.face!.drawing) hint = `As ${this.face!.name}, depth from its cutting plane.`;
     else if (faceMode) hint = `Parallel to a face of “${this.face!.name}”, depth from the face.`;
-    else hint = `Cut away: ${this.axis.toUpperCase()} ${this.removedSign() > 0 ? '>' : '<'} ${num(this.value)} mm`;
+    else hint = `Cut away: ${this.axis.toUpperCase()} ${this.removedSign() > 0 ? '>' : '<'} ${this.len(this.value)} ${this.units}`;
     ui.hint.textContent = hint;
     ui.hint.classList.toggle('warn', !!this.note);
   }

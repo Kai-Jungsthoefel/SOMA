@@ -1,5 +1,6 @@
 // Einstellungen der App (E81), gemeinsam für Hauptprozess und Renderer: Werte, Vorgaben und Prüfung.
 // Gespeichert in `<App-Daten>/settings.json`. Was dort fehlt oder nicht passt, gilt mit der Vorgabe und wird gemeldet.
+import { isDisplayUnits, type DisplayUnits } from './units';
 
 /** Mausbelegung des Viewers nach dem Vorbild bekannter CAD-Programme. `soma`: wie bisher (links drehen, rechts verschieben). */
 export type NavPreset = 'soma' | 'solidworks' | 'fusion' | 'onshape' | 'creo' | 'rhino';
@@ -23,6 +24,8 @@ export interface ViewerPrefs {
   axes: boolean;
   /** Nachkommastellen der Messwerte in der Oberfläche. Der Text für den Agenten hat immer drei. */
   decimals: number;
+  /** Lengths in the viewer (measuring, selection, section) in mm or inches (E111). The model stays in mm. */
+  units: DisplayUnits;
 }
 /** Startseite (E94): Karte „New to SOMA?“ mit dem Tutorial. „Got it“ blendet sie aus. `updateCheck`: auf GitHub nach einer neuen Version fragen. */
 export interface StartPrefs { tutorialCard: boolean; updateCheck: boolean }
@@ -57,7 +60,7 @@ export const DECIMALS = { min: 0, max: 4 };
 /** Choices for the build time limit in minutes, 0: no limit. Large models with many fillets or booleans can take a while. */
 export const BUILD_TIME_LIMITS = [5, 10, 20, 30, 60, 120, 0];
 export const DEFAULT_SETTINGS: AppSettings = {
-  viewer: { navigation: 'soma', invertZoom: false, projection: 'perspective', edges: true, wireframe: false, transparent: false, axes: false, decimals: 2 },
+  viewer: { navigation: 'soma', invertZoom: false, projection: 'perspective', edges: true, wireframe: false, transparent: false, axes: false, decimals: 2, units: 'mm' },
   start: { tutorialCard: true, updateCheck: true },
   build: { timeLimit: 10 },
   open: { tabs: [{ kind: 'ai' }], front: 0 },
@@ -128,7 +131,7 @@ const isProjection = (v: unknown): v is Projection => v === 'perspective' || v =
 const isDecimals = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= DECIMALS.min && v <= DECIMALS.max;
 const isBool = (v: unknown): v is boolean => typeof v === 'boolean';
 const VIEWER_CHECKS: { [K in keyof ViewerPrefs]: (v: unknown) => boolean } = {
-  navigation: isNav, invertZoom: isBool, projection: isProjection, edges: isBool, wireframe: isBool, transparent: isBool, axes: isBool, decimals: isDecimals,
+  navigation: isNav, invertZoom: isBool, projection: isProjection, edges: isBool, wireframe: isBool, transparent: isBool, axes: isBool, decimals: isDecimals, units: isDisplayUnits,
 };
 const START_CHECKS: { [K in keyof StartPrefs]: (v: unknown) => boolean } = { tutorialCard: isBool, updateCheck: isBool };
 // Any whole number of minutes up to a day is accepted (settings.json may be edited by hand), the interface offers BUILD_TIME_LIMITS

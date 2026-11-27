@@ -78,6 +78,25 @@ try {
   check('Eingabe mit Minuszeichen und Punkt: „−2.5" ergibt X = −2.5', near((await sec()).value, -2.5), String((await sec()).value));
   await setValue('−3,5');
   check('Ein Komma als Dezimaltrenner geht weiter: „−3,5" ergibt X = −3.5', near((await sec()).value, -3.5), String((await sec()).value));
+  await setValue('20 - 2.5');
+  check('A calculation: "20 - 2.5" gives X = 17.5', near((await sec()).value, 17.5), String((await sec()).value));
+  await setValue('0.5 in');
+  check('A length in inches: "0.5 in" gives X = 12.7 mm', near((await sec()).value, 12.7, 1e-6), String((await sec()).value));
+  await setValue('abc');
+  check('Nonsense changes nothing: X stays 12.7', near((await sec()).value, 12.7, 1e-6), String((await sec()).value));
+  // Units "Inches" (E111): the field and the hint in inches, the plane stays in mm
+  await ev(() => window.__t.changeSettings({ viewer: { units: 'in' } }));
+  await waitFor('inches', () => window.__t.section().text.includes(' in'), 10000);
+  s = await sec();
+  const fieldIn = await ev(() => document.getElementById('section-value').value);
+  check('Inches: field 0.5000, hint "X > 0.5000 in", unit next to the field', fieldIn === '0.5000' && s.text.includes('X > 0.5000 in')
+    && await ev(() => document.getElementById('section-unit').textContent) === 'in', `${fieldIn} | ${s.text.replace(/\s+/g, ' ')}`);
+  await setValue('1');
+  check('… "1" is 1 inch: X = 25.4 mm', near((await sec()).value, 25.4, 1e-6), String((await sec()).value));
+  await setValue('6 mm');
+  check('… "6 mm" in the inch field: X = 6 mm', near((await sec()).value, 6, 1e-6), String((await sec()).value));
+  await ev(() => window.__t.changeSettings({ viewer: { units: 'mm' } }));
+  await waitFor('millimetres', () => window.__t.section().text.includes(' mm'), 10000);
   await setValue('0');
 
   // 3) Blick auf den Schnitt: Kamera von der weggeschnittenen Seite (+X)

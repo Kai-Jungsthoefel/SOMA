@@ -69,6 +69,13 @@ def _foreign_shell_note(project):
     return note + (" Details: .soma/skills/shell-environment.md" if skill.is_file() else "")
 
 
+# The app's terminals and SOMA AI carry the user's units (SOMA_UNITS, Settings > Viewer > Units). The model stays in mm,
+# the reminder keeps the agent from reading a bare "2" as 2 mm for someone who measures in inches (discussion #22)
+INCH_NOTE = ("Note: the user works in inches (SOMA Settings > Viewer > Units). Dimensions they give without a unit are "
+             "inches. The model stays in mm: convert with 25.4. A parameter the user thinks of in inches gets "
+             "unit=\"in\" and its value in inches, convert it to mm before CadQuery.")
+
+
 def cmd_build(args):
     from . import build
     res = build.run_build(args.project, reuse=not args.force)
@@ -76,6 +83,8 @@ def cmd_build(args):
     note = None if args.json else _foreign_shell_note(args.project)
     if note:
         print(note)
+    if not args.json and os.environ.get("SOMA_UNITS") == "in":
+        print(INCH_NOTE)
     # Das Aufraeumen von OCP und vtk beim normalen Beenden kostet fast eine Sekunde und bringt nichts:
     # alle Dateien sind geschrieben und geschlossen, also Puffer leeren und sofort beenden
     sys.stdout.flush()

@@ -206,6 +206,17 @@ try {
   await waitPref('decimals', 1);
   mt = (await ev(() => window.__t.measure())).text;
   check('Eine Nachkommastelle: 40.0 × 30.0 × 5.0 mm', mt.includes('40.0 × 30.0 × 5.0 mm'), mt.replace(/\s+/g, ' ').slice(0, 60));
+  // Units (E111): inches with two more digits in the open measurement, the agent gets mm with inches added
+  await ev(() => document.querySelector('#st-viewer .st-seg[aria-label="Units"] button[data-value="in"]').click());
+  await waitPref('units', 'in');
+  mt = (await ev(() => window.__t.measure())).text;
+  const inchAgent = (await ev(() => window.__t.measure())).agentText ?? '';
+  check('Inches: the open measurement shows 1.575 × 1.181 × 0.197 in, the agent gets mm and in²', mt.includes('1.575 × 1.181 × 0.197 in')
+    && /area 1143\.451 mm² \(1\.772\d in²\)/.test(inchAgent) && fileSettings()?.viewer?.units === 'in', `${mt.replace(/\s+/g, ' ').slice(0, 80)} | ${inchAgent.slice(0, 120)}`);
+  await ev(() => document.querySelector('#st-viewer .st-seg[aria-label="Units"] button[data-value="mm"]').click());
+  await waitPref('units', 'mm');
+  mt = (await ev(() => window.__t.measure())).text;
+  check('… back to millimetres: 40.0 × 30.0 × 5.0 mm', mt.includes('40.0 × 30.0 × 5.0 mm'), mt.replace(/\s+/g, ' ').slice(0, 60));
   const bad = await ev(() => window.soma.settings.set({ viewer: { decimals: 9 } }));
   check('Ungültiger Wert (9 Nachkommastellen) wird abgelehnt, nichts geschrieben', !bad.ok && /decimals/.test(bad.error ?? '') && fileSettings()?.viewer?.decimals === 1, bad.error);
   // Build time limit (issue #13), under General: the select writes settings.json, the viewer settings stay

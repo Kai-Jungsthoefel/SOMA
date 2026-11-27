@@ -443,7 +443,13 @@ function registerIpc(ctl: ProjectController): void {
   // Einstellungen der App (E81)
   ipcMain.handle('settings:get', () => readSettings());
   ipcMain.handle('settings:set', (_e, patch: unknown) => {
-    try { return writeSettings(patch); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e), ...readSettings() }; }
+    const units = readSettings().settings.viewer.units;
+    try {
+      const r = writeSettings(patch);
+      // SOMA AI has the units in its system prompt: the next message starts pi with the new ones, the conversation goes on
+      if (r.ok && r.settings.viewer.units !== units) ctl.session?.ai.restart();
+      return r;
+    } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e), ...readSettings() }; }
   });
   ipcMain.handle('storage:stats', () => storageStats());
   ipcMain.handle('storage:open', async (_e, area: unknown): Promise<FileOpResult> => {

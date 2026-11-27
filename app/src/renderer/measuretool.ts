@@ -1,4 +1,5 @@
 import type { MeasureInfo, MeasurePrepared, MeasureResponse, MeasureResult, MeasureSource, MeasureSpan, PartMap } from '../shared/types';
+import { inchDigits, MM_PER_INCH, type DisplayUnits } from '../shared/units';
 import { icon } from './icons';
 import { el } from './ui';
 import type { MeasureMarks, ProbeHit, Viewer } from './viewer';
@@ -35,16 +36,24 @@ const what = (i: { kind: string; type: string }, inline = false) => (i.kind === 
   : inline ? `${KIND[i.kind].toLowerCase()} (${typeName(i.type)})` : `${KIND[i.kind]} · ${typeName(i.type)}`);
 /** Nachkommastellen der Werte in der Karte und an der Messlinie (Einstellung, E81). Der Text für den Agenten hat immer drei. */
 let digits = 2;
-const fix = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+/** Lengths in the card and at the line (setting "Units", E111). The text for the agent stays in mm, with inches added. */
+let units: DisplayUnits = 'mm';
+const fixTo = (v: number, d: number) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+/** A length (mm) as a number in the units shown, without the unit. */
+const fix = (v: number) => (units === 'in' ? fixTo(v / MM_PER_INCH, inchDigits(digits)) : fixTo(v, digits));
 /** Lage eines Punkts: „X 20.00 · Y −15.00 · Z 5.00“. */
 const coords = (p: number[]) => p.map((v, k) => `${'XYZ'[k]} ${minus(fix(Math.abs(v) < 5e-4 ? 0 : v))}`).join(' · ');
 const typeName = (t: string) => TYPE[t] ?? t.toLowerCase();
-const mm = (v: number) => `${fix(v)} mm`;
-const mm2 = (v: number) => `${fix(v)} mm²`;
+const mm = (v: number) => `${fix(v)} ${units}`;
+const mm2 = (v: number) => (units === 'in' ? `${fixTo(v / MM_PER_INCH ** 2, inchDigits(digits))} in²` : `${fixTo(v, digits)} mm²`);
 const deg = (v: number) => `${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}°`;
 const minus = (s: string) => s.replace(/^-/, '−');
 /** Für den Agenten: Punkt als Dezimalzeichen, drei Stellen, kein „-0“. */
 const f3 = (v: number) => (Math.abs(v) < 5e-4 ? 0 : v).toFixed(3);
+/** For the agent: a length in mm, with inches when the user sees inches (the agent answers in the user's units). */
+const agentLen = (v: number) => `${f3(v)} mm${units === 'in' ? ` (${(v / MM_PER_INCH).toFixed(4)} in)` : ''}`;
+const agentArea = (v: number) => `${f3(v)} mm²${units === 'in' ? ` (${(v / MM_PER_INCH ** 2).toFixed(4)} in²)` : ''}`;
+const agentPoint = (p: number[]) => `${vec(p.map((v) => +v.toFixed(3)))}${units === 'in' ? ` mm = ${vec(p.map((v) => +(v / MM_PER_INCH).toFixed(4)))} in` : ''}`;
 const vec = (d: number[]) => `(${d.map((x) => +(Math.abs(x) < 5e-7 ? 0 : x).toFixed(4)).join(', ')})`;
 
 /** Richtung in Worten: entlang einer Achse „+Z“, sonst die Komponenten. */
@@ -107,6 +116,14 @@ export class MeasureTool {
   setDecimals(n: number): void {
     if (n === digits) return;
     digits = n;
+    this.render();
+    if (this.result) this.drawMarks();
+  }
+
+  /** Units of the lengths shown (E111). An open measurement switches right away, nothing is measured again. */
+  setUnits(u: DisplayUnits): void {
+    if (u === units) return;
+    units = u;
     this.render();
     if (this.result) this.drawMarks();
   }
@@ -339,7 +356,7 @@ export class MeasureTool {
     const bb = withPart ? this.deps.part(i.part)?.bbox : undefined;
     if (bb) {
       const d = [0, 1, 2].map((k) => bb[1][k] - bb[0][k]);
-      rows.push(el('div', { className: 'mc-sep' }), this.row('Part (X × Y × Z)', d.map((v) => fix(v)).join(' × ') + ' mm'));
+      rows.push(el('div', { className: 'mc-sep' }), this.row('Part (X × Y × Z)', d.map((v) => fix(v)).join(' × ') + ` ${units}`));
     }
     return rows;
   }
@@ -353,22 +370,22 @@ export class MeasureTool {
     const desc = (i: MeasureInfo) => `part "${i.name ?? i.part}" ${what(i, true)}`;
     const facts = (i: MeasureInfo) => {
       const out: string[] = [];
-      if (i.kind === 'vertex' && i.point) return [`position ${vec(i.point.map((v) => +v.toFixed(3)))}`];
-      if (i.radius != null) out.push(`diameter ${f3(2 * i.radius)} mm`);
+      if (i.kind === 'vertex' && i.point) return [`position ${agentPoint(i.point)}`];
+      if (i.radius != null) out.push(`diameter ${agentLen(2 * i.radius)}`);
       if (i.axis) out.push(`axis ${vec(i.axis.dir)} through ${vec(i.axis.point)}`);
       if (i.normal) out.push(`normal ${vec(i.normal)}`);
       if (i.dir) out.push(`direction ${vec(i.dir)}`);
-      if (i.kind === 'edge' && i.length != null) out.push(`length ${f3(i.length)} mm`);
-      if (i.area != null) out.push(`area ${f3(i.area)} mm²`);
+      if (i.kind === 'edge' && i.length != null) out.push(`length ${agentLen(i.length)}`);
+      if (i.area != null) out.push(`area ${agentArea(i.area)}`);
       if (i.point) out.push(`clicked at ${vec(i.point.map((v) => +v.toFixed(3)))}`);
       return out;
     };
     if (!r.b || !r.pair) return `[Measurement: ${desc(r.a)}, ${facts(r.a).join(', ')}] `;
     const p = r.pair, main = this.primary(r)!;
-    const out = [`${main.label} ${f3(main.span.value)} mm`];
-    if (main.span !== p.min && Math.abs(main.span.value - p.min.value) > 5e-4) out.push(`shortest distance ${f3(p.min.value)} mm`);
+    const out = [`${main.label} ${agentLen(main.span.value)}`];
+    if (main.span !== p.min && Math.abs(main.span.value - p.min.value) > 5e-4) out.push(`shortest distance ${agentLen(p.min.value)}`);
     if (p.points && main.span === p.points) out.push(`dX ${f3(p.points.delta?.[0] ?? 0)}, dY ${f3(p.points.delta?.[1] ?? 0)}, dZ ${f3(p.points.delta?.[2] ?? 0)}`);
-    else if (p.points) out.push(`point to point ${f3(p.points.value)} mm (dX ${f3(p.points.delta?.[0] ?? 0)}, dY ${f3(p.points.delta?.[1] ?? 0)}, dZ ${f3(p.points.delta?.[2] ?? 0)})`);
+    else if (p.points) out.push(`point to point ${agentLen(p.points.value)} (dX ${f3(p.points.delta?.[0] ?? 0)}, dY ${f3(p.points.delta?.[1] ?? 0)}, dZ ${f3(p.points.delta?.[2] ?? 0)})`);
     if (p.angle != null) out.push(`angle ${p.angle.toFixed(1)}°`);
     return `[Measurement: ${desc(r.a)} and ${desc(r.b)}: ${out.join(', ')}] `;
   }

@@ -92,7 +92,9 @@ try {
   try {
     fs.writeFileSync(path.join(dir2, 'model.py'), MODEL.replace('Path(__file__).with_name(', 'Path(os.environ["RUNS"]).joinpath('));
     const env = { RUNS: runs };
-    await build(dir2, env).done; // first build: output/ and .soma/ exist from now on
+    const first = await build(dir2, { ...env, SOMA_UNITS: 'in' }).done; // first build: output/ and .soma/ exist from now on
+    check('In the terminals of a user who works in inches (SOMA_UNITS=in) soma build reminds the agent', first.code === 0
+      && first.out.includes('the user works in inches') && first.out.includes('convert with 25.4'), first.out);
     clearRuns();
     const r1 = build(dir2, { ...env, SLEEP: '6' });
     await until('build running', () => ran() >= 1);
