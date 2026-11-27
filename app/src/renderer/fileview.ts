@@ -19,6 +19,8 @@ interface Hooks {
   beforeShow(): void;
   busy(title: string, cancel: () => void): BusyHandle;
   toast(text: string, kind: 'ok' | 'info' | 'error'): void;
+  /** No file in the viewer any more (back to the model, version preview, project switch). */
+  closed(): void;
 }
 
 const base = (rel: string) => rel.split('/').pop() ?? rel;
@@ -113,7 +115,7 @@ export class FileView {
     const c = this.cur;
     this.ui.banner.hidden = !c;
     this.ui.viewer.classList.toggle('fileview', !!c);
-    if (!c) return;
+    if (!c) { this.hooks.closed(); return; }
     this.ui.title.textContent = `Viewing ${c.rel}`;
     this.ui.title.title = c.rel;
     this.ui.sub.textContent = isMesh(c.rel)

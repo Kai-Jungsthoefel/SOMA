@@ -96,7 +96,8 @@ export class Markup {
   /** Lage des offenen Textfelds in Pixeln der Zeichenfläche, damit es beim Zoomen mitwandert. */
   private input: { p: Pt; transform: string } | null = null;
 
-  constructor(private ui: Ui) {
+  /** `closed`: the drawing area was closed. */
+  constructor(private ui: Ui, private closed: () => void = () => {}) {
     this.color = css('--mk-orange') || '#f29a38';
     ui.tools.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((b) => b.addEventListener('click', () => this.setTool(b.dataset.tool as MarkTool)));
     ui.colorBtn.addEventListener('click', () => menus.toggle(ui.palette, ui.colorBtn));
@@ -168,12 +169,14 @@ export class Markup {
   /** Schließt die Zeichenfläche und verwirft die Zeichnung. */
   close(): void {
     if (menus.isOpen(this.ui.palette)) menus.close();
+    const wasOpen = !this.ui.layer.hidden;
     this.reset();
     this.bg = null;
     this.ui.layer.hidden = true;
     this.ui.viewer.classList.remove('marking');
     this.ui.canvas.width = 0; // Speicher des Bildes freigeben
     this.ui.canvas.height = 0;
+    if (wasOpen) this.closed();
   }
 
   private reset(): void {

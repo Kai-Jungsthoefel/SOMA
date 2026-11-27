@@ -15,6 +15,10 @@ the version is bumped.
 - Purchased parts: SOMA AI finds free CAD models of common parts in open libraries (FreeCAD parts library, CC-BY 3.0, and Adafruit CAD parts, MIT), downloads them into `inputs/` and notes source and license in `NOTES.md`. A new skill "Purchased parts" tells the agent where a part comes from (standard parts, open libraries, the manufacturer or shop, the data sheet with its dimension drawing, outside dimensions only as a last resort), what to do when a shop only works in a browser, and to note supplier, part number and price.
 - FreeCAD files (`.FCStd`) without FreeCAD: `import_assembly("inputs/bracket.FCStd")` in `model.py` brings in the objects that are visible in FreeCAD, with their names and colors, App::Part containers and groups as groups, like a STEP file. Only the geometry comes along, not the sketches and features. Objects that cannot be read (a damaged shape, a link to another file) are named in the build's warnings. Click an FCStd file in the file tree to look at it and measure it in the viewer. On the command line, `soma fcstd info` lists the parts of a file and `soma fcstd convert` writes it as a STEP file.
 
+### Fixed
+
+- The file tree highlights an image, STEP, mesh or video file you click, like a PDF, instead of keeping the last file highlighted. Going back to the model highlights the file open in the code again.
+
 ## [1.0.0] - 2026-11-22
 
 SOMA 1.0. It brings its own agent, SOMA AI, so you no longer need a coding agent to design with SOMA. Models made with 1.0 keep working in later versions, changes that break them only come with a new major version.

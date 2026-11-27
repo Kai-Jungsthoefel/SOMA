@@ -348,9 +348,11 @@ const files = new FileTree($('tab-files'), $('menu-ctx'), {
     if (TEXT_EXT.test(n.name) || isPdf(n.name) || isDxf(n.name)) void openCode(n.path);
     // Bilder (etwa Markierungen und Skizzen) öffnen auf der Zeichenfläche (E52), das Bildprogramm gibt es per Rechtsklick
     else if (IMAGE_EXT.test(n.name)) void markImage(n.path);
-    else if (VIDEO_EXT.test(n.name)) void videoView.open(n.path);
+    // Images, videos, STEP and mesh files show in the viewer, not in the code: the tree highlights them once they are shown,
+    // otherwise the last code file stays highlighted while clicking through a folder
+    else if (VIDEO_EXT.test(n.name)) void videoView.open(n.path).then(() => { if (videoView.current === n.path) files.setActive(n.path); });
     // STEP- und Netzdateien des Projekts im Viewer, schreibgeschützt wie die Vorschau eines alten Stands
-    else if (/\.(step|stp|fcstd|stl|3mf|amf|obj)$/i.test(n.name)) void fileView.open(n.path);
+    else if (/\.(step|stp|fcstd|stl|3mf|amf|obj)$/i.test(n.name)) void fileView.open(n.path).then(() => { if (fileView.rel === n.path) files.setActive(n.path); });
     else toast('The app has no view for this file type. Right-click: “Open with default app”.', 'info');
   },
   create: async (parent, name, dir) => {
@@ -777,7 +779,15 @@ const markup = new Markup({
   hint: $('mark-hint'), tools: $('mark-tools'), undo: $<HTMLButtonElement>('btn-mark-undo'), del: $<HTMLButtonElement>('btn-mark-delete'),
   blank: $<HTMLButtonElement>('btn-mark-blank'), grid: $<HTMLButtonElement>('btn-mark-grid'), colorBtn: $<HTMLButtonElement>('btn-mark-color'), colorSwatch: $('mark-color-sw'),
   palette: $('menu-mark-color'), custom: $<HTMLInputElement>('mark-color-custom'),
-});
+}, () => highlightViewed());
+
+/**
+ * Highlight in the file tree: the file that is in front. An image on the drawing area, then a video, then a STEP or mesh
+ * file in the viewer, otherwise the file open in the code. Called when one of them closes.
+ */
+function highlightViewed(): void {
+  files.setActive(markup.source ?? videoView.current ?? fileView.rel ?? code.activeFile);
+}
 
 /** Friert die Ansicht ein, wie sie gerade ist (auch als Vorschau eines alten Stands, nur ohne Auswahl). Ohne Modell: leere Fläche. */
 function startMarkup(): void {
@@ -808,6 +818,7 @@ async function markImage(rel: string): Promise<void> {
   // SVG ohne Größenangabe meldet 0: dann einfach in Viewergröße
   const view = $('viewer');
   await markSource(rel, img, img.naturalWidth || view.clientWidth, img.naturalHeight || view.clientHeight, false);
+  if (markup.source === rel) files.setActive(rel);
 }
 
 /** Von Bild zu Bild wechseln geht direkt. Nur eine angefangene Zeichnung wird nicht still verworfen. */
@@ -935,6 +946,7 @@ const videoView = new VideoView({
   readBinary: (rel) => api.fs.readBinary(rel), insert: (t) => insertToAgent(t), toast,
   markFrame: (label, c) => markSource(label, c, c.width, c.height),
   fileMenu: (rel, x, y) => files.menuFor(rel, x, y), load: store.get, save: store.set,
+  closed: () => highlightViewed(),
 });
 
 $('btn-mark').addEventListener('click', startMarkup);
@@ -1307,6 +1319,8 @@ const fileView = new FileView({
   beforeShow: () => versions.endPreview(),
   busy: (title, cancel) => busy.show(title, cancel),
   toast,
+  // Highlight in the tree goes back to the file open in the code
+  closed: () => highlightViewed(),
 });
 
 // ---- Projekt ----------------------------------------------------------------------------------------------------

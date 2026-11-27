@@ -22,6 +22,8 @@ interface Deps {
   /** Gemerkte Einstellungen des Benutzers (localStorage, darf fehlen). */
   load(key: string): string | null;
   save(key: string, value: string): void;
+  /** The player was closed. */
+  closed(): void;
 }
 
 /** Schritt für „Bild vor/zurück“: Videos von soma haben 30 Bilder je Sekunde. */
@@ -93,7 +95,9 @@ export class VideoView {
     this.ui.video.pause();
     this.ui.root.hidden = true;
     this.release();
+    const was = this.file;
     this.file = null;
+    if (was) this.d.closed();
   }
 
   private release(): void {
