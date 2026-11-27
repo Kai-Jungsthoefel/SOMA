@@ -5,7 +5,7 @@ import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/sea
 import { EditorState, type Extension } from '@codemirror/state';
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, keymap, lineNumbers } from '@codemirror/view';
 import { skillIdFrom, uniqueSkillId } from '../shared/skillname';
-import type { LibraryResult, LibrarySkill, LibraryState, LibraryText, SkillCheck, SkillMode, SkillSource, SomaApi } from '../shared/types';
+import type { LibraryResult, LibrarySkill, LibraryState, LibraryText, SkillCheck, SkillInfo, SkillMode, SkillSource, SomaApi } from '../shared/types';
 import { frontMatter, HIGHLIGHT } from './code';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
@@ -27,7 +27,8 @@ interface Deps {
   /** Die Bibliothek hat sich geändert: Panel „Skills“ des offenen Modells neu laden. */
   changed(): void;
   /** Stufe eines Skills im offenen Modell, null ohne Modell. */
-  modelMode(id: string): Promise<SkillMode | null>;
+  /** The skill in the open model (null: no model open). */
+  modelSkill(id: string): Promise<SkillInfo | null>;
   /** Die übrigen Reiter (settingspages.ts). */
   pages: Partial<Record<SettingsSection, SettingsPage>>;
 }
@@ -241,9 +242,8 @@ export class SettingsDialog {
     this.check = { errors: [], warnings: r.warnings ?? [] };
     this.render();
     this.deps.changed();
-    const inModel = await this.deps.modelMode(d.id).catch(() => null);
     const what = source === 'builtin' ? 'is the built-in version again' : 'saved';
-    const model = inModel && inModel !== 'off' ? ' The open model keeps its copy: switch the skill off and on there to take over this version.' : '';
+    const model = await this.modelNote(d.id, r);
     const kept = r.backup ? ` The file had been changed outside the app, that version is in the backup: ${r.backup}` : '';
     this.deps.toast(`“${this.titleOf(d.id)}” ${what}. New models get this version.${model}${kept}`, r.backup ? 'info' : 'ok');
     return true;
@@ -299,7 +299,7 @@ export class SettingsDialog {
     const lost = this.dirty ? ' Unsaved changes are lost.' : '';
     const i = await this.deps.choose(own
       ? { title: 'Delete skill', message: `Delete “${title}”?`, detail: `The file goes into the backup. Models that use the skill keep their copy.${lost}`, buttons: ['Delete', 'Cancel'] }
-      : { title: 'Reset skill', message: `Reset “${title}” to the built-in version?`, detail: `Your version goes into the backup. Models that use the skill keep their copy.${lost}`, buttons: ['Reset', 'Cancel'] });
+      : { title: 'Reset skill', message: `Reset “${title}” to the built-in version?`, detail: `Your version goes into the backup. Models take over the built-in version when they are opened, unless their copy was changed there.${lost}`, buttons: ['Reset', 'Cancel'] });
     if (i !== 0) return;
     let r: LibraryResult;
     try { r = await this.deps.library.remove(d.id); } catch (e) { r = { ok: false, error: errText(e), library: this.lib ?? { skills: [], ignored: [], dir: '' } }; }
@@ -311,7 +311,14 @@ export class SettingsDialog {
     this.doc = null;
     if (own) { this.render(); this.deps.toast(`“${title}” deleted.${kept}`); return; }
     await this.select(d.id);
-    this.deps.toast(`“${title}” is the built-in version again.${kept}`);
+    this.deps.toast(`“${title}” is the built-in version again.${await this.modelNote(d.id, r)}${kept}`);
+  }
+
+  /** What the change of a skill in the library did to the open model: its copy follows, unless it was changed there. */
+  private async modelNote(id: string, r: LibraryResult): Promise<string> {
+    if (r.modelUpdated?.length) return ' The open model uses it now.';
+    const s = await this.deps.modelSkill(id).catch(() => null);
+    return s && s.mode !== 'off' && s.changed ? ' The open model keeps its copy, which was changed there: “Take over” under Skills replaces it.' : '';
   }
 
   private async importFiles(): Promise<void> {
@@ -325,9 +332,10 @@ export class SettingsDialog {
     const ids = r.imported ?? [];
     const notes = r.warnings?.length ? ` ${r.warnings.join(' ')}` : '';
     const kept = r.backup ? ` The replaced version is in the backup: ${r.backup}` : '';
+    const model = r.modelUpdated?.length ? ` The open model now uses the new version of ${r.modelUpdated.map((t) => `“${t}”`).join(', ')}.` : '';
     if (ids.length) this.deps.changed();
     this.deps.toast(ids.length
-      ? `${ids.length === 1 ? `“${this.titleOf(ids[0])}”` : `${ids.length} skills`} imported. In a model, switch ${ids.length === 1 ? 'it' : 'them'} on under “Skills”.${notes}${kept}`
+      ? `${ids.length === 1 ? `“${this.titleOf(ids[0])}”` : `${ids.length} skills`} imported. In a model, switch ${ids.length === 1 ? 'it' : 'them'} on under “Skills”.${model}${notes}${kept}`
       : `Nothing imported.${notes}`, notes ? 'info' : 'ok');
     if (ids.length) await this.select(ids[0]);
   }

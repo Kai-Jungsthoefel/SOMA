@@ -388,6 +388,7 @@ function registerIpc(ctl: ProjectController): void {
   ipcMain.handle('skills:list', () => ctl.skills());
   ipcMain.handle('skills:set', (_e, id: unknown, mode: unknown) => ctl.setSkill(id, mode));
   ipcMain.handle('skills:configure', (_e, id: unknown, values: unknown) => ctl.configureSkill(id, values));
+  ipcMain.handle('skills:takeOver', (_e, id: unknown) => ctl.takeOverSkill(id));
   ipcMain.handle('skills:setDefault', (_e, id: unknown, mode: unknown) => ctl.setSkillDefault(id, mode));
 
   // Bibliothek der Skills in den Einstellungen (E78): unabhängig vom offenen Modell, also auch auf der Startseite
@@ -402,14 +403,14 @@ function registerIpc(ctl: ProjectController): void {
     if (typeof text !== 'string') throw new Error('No text.');
     const r = saveLibrarySkill(skillDirs(), String(id), text, typeof base === 'string' ? base : null, libraryBackupsDir());
     if (r.base !== undefined) setSkillBase(String(id), r.base);
-    return { id: String(id), backup: r.backup, warnings: r.warnings };
+    return { id: String(id), backup: r.backup, warnings: r.warnings, modelUpdated: ctl.refreshOpenSkills() };
   }));
   ipcMain.handle('library:create', (_e, title: unknown, from: unknown) =>
     libDo(() => ({ id: createLibrarySkill(skillDirs(), String(title ?? ''), typeof from === 'string' ? from : undefined) })));
   ipcMain.handle('library:remove', (_e, id: unknown) => libDo(() => {
     const backup = removeLibrarySkill(skillDirs(), String(id), libraryBackupsDir());
     setSkillBase(String(id), null);
-    return { id: String(id), backup };
+    return { id: String(id), backup, modelUpdated: ctl.refreshOpenSkills() };
   }));
   ipcMain.handle('library:import', () => libDo(async () => {
     const files = await chooseSkillFiles(win);
@@ -422,7 +423,7 @@ function registerIpc(ctl: ProjectController): void {
       return i === 0 ? 'replace' : i === 1 ? 'copy' : 'skip';
     });
     for (const [id, h] of Object.entries(r.bases)) setSkillBase(id, h);
-    return { id: r.ids[0], imported: r.ids, warnings: r.warnings, backup: r.backups[0] ?? null };
+    return { id: r.ids[0], imported: r.ids, warnings: r.warnings, backup: r.backups[0] ?? null, modelUpdated: ctl.refreshOpenSkills() };
   }));
   ipcMain.handle('library:setDefault', (_e, id: unknown, mode: unknown) => libDo(() => {
     const s = isSkillId(id) ? librarySkill(skillDirs(), id) : undefined;

@@ -13,6 +13,8 @@ export interface ProjectInfo {
   folder: boolean;
   /** Einstiegsdatei laut project.json (meist model.py). */
   entry: string;
+  /** Only right after opening: titles of the skills whose copy opening brought to the version of the app. */
+  skillsUpdated?: string[];
 }
 
 /** `saved`: Es gibt eine Modelldatei dazu (das Modell wurde mindestens einmal gespeichert). */
@@ -296,6 +298,8 @@ export interface LibraryResult {
   canceled?: boolean;
   /** Import: Kennungen der übernommenen Skills. */
   imported?: string[];
+  /** Titles of the skills whose copy in the open model now follows the changed library (copies nobody changed there). */
+  modelUpdated?: string[];
   library: LibraryState;
 }
 /** Bereich der App-Daten in den Einstellungen (E81). Der Renderer nennt nur die Kennung, den Ordner kennt der Hauptprozess. */
@@ -688,6 +692,8 @@ export interface SomaApi {
     set(id: string, mode: SkillMode): Promise<SkillResult>;
     /** Einstellungen ändern, null setzt auf den Standard zurück. Die Kopie eines eingeschalteten Skills wird neu geschrieben. */
     configure(id: string, values: Record<string, SkillValue | null>): Promise<SkillResult>;
+    /** A copy changed in the model takes over the version of the library (the changed one goes into the backup). */
+    takeOver(id: string): Promise<SkillResult>;
     /** Stufe für neue Modelle festlegen (für die ganze App, das offene Modell bleibt, wie es ist). */
     setDefault(id: string, mode: SkillMode): Promise<SkillResult>;
   };

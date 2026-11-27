@@ -313,6 +313,55 @@ try {
   check('Eigene Fassungen unter alter Kennung: umbenannt, eine vorhandene neue bleibt, die alte daneben auch', fs.readFileSync(path.join(renLib.user, '3d-printing.md'), 'utf8') === 'bearbeitet'
     && !fs.existsSync(path.join(renLib.user, '3d-druck.md')) && fs.readFileSync(path.join(renLib.user, 'sheet-metal.md'), 'utf8') === 'neu' && fs.existsSync(path.join(renLib.user, 'blech.md')));
 
+  // Opening a model updates skill copies nobody changed in it (refreshSkillCopies): known by their fingerprint, or as a
+  // past built-in version (resources/skill-history.br) for copies written before the fingerprints
+  const HIST = path.join(APP, 'resources', 'skill-history.br');
+  const { brotliDecompressSync } = await import('node:zlib');
+  const past = JSON.parse(brotliDecompressSync(fs.readFileSync(HIST)).toString('utf8'));
+  const lf = (t) => t.replace(/\r\n?/g, '\n');
+  const femText = fs.readFileSync(path.join(SKD.bundled, 'fem.md'), 'utf8');
+  const femNow = lf(femText);
+  const femOld = past.fem?.find((t) => t !== femNow && /\{\{safety\}\}/.test(t));
+  const germanOld = past['3d-druck']?.find((t) => t.includes('title: 3D-Druck'));
+  check('Past versions: all built-in skills, also under the old ids', shipped.every((s) => past[s.id]?.length) && !!femOld && !!germanOld, Object.keys(past).join(','));
+  const oldCopy = renderSkill(femOld, { safety: 3 }, 'demand');
+  check('Past version recognized: values of project.json, note of “On demand”, CRLF; a changed copy is not', oldCopy.includes('safety: 3 |') && SKM.matchesPastVersion(oldCopy, femOld, { safety: 3 })
+    && SKM.matchesPastVersion(oldCopy.replace(/\n/g, '\r\n'), femOld, { safety: 3 }) && SKM.matchesPastVersion(renderSkill(femOld, {}, 'always'), femOld)
+    && !SKM.matchesPastVersion(oldCopy.replace(/\n## /, '\nMy own rule.\n\n## '), femOld, { safety: 3 }) && !SKM.matchesPastVersion(oldCopy, femNow.replace(/\n## /, '\nNew rule.\n\n## '), { safety: 3 }));
+  // A value written into the copy by hand (not in the panel) is a change: updating would replace it with the one of project.json
+  const handValue = oldCopy.replace(/(\D)3(\D)/g, (all, a, b, off) => (off > oldCopy.indexOf('\n---', 4) ? `${a}4${b}` : all));
+  check('Past version with a value set by hand (differs from project.json): not recognized, in the header too', handValue !== oldCopy
+    && !SKM.matchesPastVersion(handValue, femOld, { safety: 3 }) && !SKM.matchesPastVersion(oldCopy, femOld, {})
+    && !SKM.matchesPastVersion(oldCopy.replace('safety: 3 |', 'safety: 4 |'), femOld, { safety: 3 })
+    && SKM.matchesPastVersion(oldCopy.replace('safety: 3 |', 'safety: 2 |'), femOld, { safety: 3 }), handValue.slice(0, 300));
+  const rfRoot = path.join(tmp, 'refresh-model');
+  const rfSkills = path.join(rfRoot, '.soma', 'skills');
+  fs.mkdirSync(rfSkills, { recursive: true });
+  const cncText = fs.readFileSync(path.join(SKD.bundled, 'cnc.md'), 'utf8');
+  const tolText = fs.readFileSync(path.join(SKD.bundled, 'tolerances.md'), 'utf8');
+  const cncChanged = renderSkill(cncText, {}, 'always').replace(/\n## /, '\nMy own rule.\n\n## ');
+  fs.writeFileSync(path.join(rfSkills, 'fem.md'), oldCopy);
+  fs.writeFileSync(path.join(rfSkills, 'cnc.md'), cncChanged);
+  fs.writeFileSync(path.join(rfSkills, 'tolerances.md'), renderSkill(tolText, {}, 'demand'));
+  fs.writeFileSync(path.join(rfSkills, 'laser.md'), 'written by the app from a version that is gone\n');
+  const rfBak = path.join(tmp, 'refresh-backup');
+  const rf = SKM.refreshSkillCopies(rfRoot, { ...SKD, history: HIST }, { always: ['cnc', 'laser'], demand: ['fem', 'tolerances'] },
+    { fem: { safety: 3 } }, { laser: SKM.copyStamp('written by the app from a version that is gone\r\n'), cnc: 'feedfeedfeedfeed' }, rfBak);
+  const rfText = (id) => fs.readFileSync(path.join(rfSkills, `${id}.md`), 'utf8');
+  const laserText = fs.readFileSync(path.join(SKD.bundled, 'laser.md'), 'utf8');
+  check('Refresh: past version and copy with its fingerprint updated (values kept), changed copy and current one left alone, backups',
+    rf.updated.join(',') === 'laser,fem' && rfText('fem') === renderSkill(femText, { safety: 3 }, 'demand') && rfText('laser') === renderSkill(laserText, {}, 'always')
+    && rfText('cnc') === cncChanged && rf.stamps.laser === SKM.copyStamp(rfText('laser')) && !('cnc' in rf.stamps) && fs.readdirSync(rfBak).length === 2, JSON.stringify(rf));
+  check('Refresh again: nothing left to do', !SKM.refreshSkillCopies(rfRoot, { ...SKD, history: HIST }, { always: ['cnc', 'laser'], demand: ['fem', 'tolerances'] },
+    { fem: { safety: 3 } }, rf.stamps, rfBak).updated.length);
+  const deRoot = path.join(tmp, 'refresh-old-id');
+  fs.mkdirSync(path.join(deRoot, '.soma', 'skills'), { recursive: true });
+  fs.writeFileSync(path.join(deRoot, '.soma', 'skills', '3d-druck.md'), renderSkill(germanOld, {}, 'demand'));
+  const de = SKM.refreshSkillCopies(deRoot, { ...SKD, history: HIST }, { always: [], demand: ['3d-druck'] }, null, null, rfBak);
+  check('Refresh: German copy under the old id (up to 0.5.0) gets the current version, under its id', de.updated.join(',') === '3d-druck'
+    && fs.readFileSync(path.join(deRoot, '.soma', 'skills', '3d-druck.md'), 'utf8') === renderSkill(fdmText, {}, 'demand'), JSON.stringify(de));
+  check('Refresh without the file of past versions: only fingerprints count', !SKM.refreshSkillCopies(deRoot, SKD, { always: [], demand: ['3d-druck'] }, null, null, rfBak).updated.length);
+
   // Dateien, die die App nicht liest, werden gemeldet, nicht umbenannt
   fs.writeFileSync(path.join(LIB.user, 'Meine Regeln.md'), '# X\n');
   fs.writeFileSync(path.join(LIB.user, 'notiz.txt'), 'x');

@@ -45,7 +45,7 @@ export const helpDir = () => path.join(app.getAppPath(), 'resources', 'help');
 /** Eigene und bearbeitete Skills des Nutzers (E78), gelten für die ganze App. */
 export const userSkillsDir = () => path.join(userDataDir(), 'skills');
 /** Beide Ordner der Bibliothek der Skills. */
-export const skillDirs = (): SkillDirs => ({ bundled: skillsDir(), user: userSkillsDir() });
+export const skillDirs = (): SkillDirs => ({ bundled: skillsDir(), user: userSkillsDir(), history: path.join(app.getAppPath(), 'resources', 'skill-history.br') });
 /** Sicherungen eigener Skills (gelöscht, zurückgesetzt, beim Import ersetzt oder außerhalb der App geändert). */
 export const libraryBackupsDir = () => path.join(backupsDir(), 'skills-library');
 

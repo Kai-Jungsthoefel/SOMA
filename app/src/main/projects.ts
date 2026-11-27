@@ -24,8 +24,10 @@ import { syncHelpImages } from './help';
 import { HELP_SKILL } from '../shared/help';
 import { previewComplete as previewReady, stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
 import {
-  agentsEntries, checkValue, cleanValues, copySkill, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, removeSkill, withMode, writeAgentsList, type SkillValues,
+  agentsEntries, checkValue, cleanValues, copySkill, copyStamps, isSkillId, isSkillMode, librarySkill, listSkills, modeOf, refreshSkillCopies, removeSkill, withMode, writeAgentsList,
+  type SkillValues,
 } from './skills';
+import { isNewerVersion } from '../shared/version';
 import { SomaAI } from './somaai';
 import { TerminalManager } from './terminals';
 import { watchProject } from './watcher';
@@ -199,6 +201,7 @@ export class ProjectController {
       try { refreshFolderSection(dir, readProjectJson(id)?.entry || 'model.py', backupsDir(), id); }
       catch (e) { console.error('[soma] Could not update the SOMA section in AGENTS.md:', e); }
     }
+    const skillsUpdated = this.refreshSkills(id, dir);
     syncHelpImages(dir, helpDir()); // Bilder der Anleitung (E83) fehlen nach dem Öffnen einer .soma-Datei oder sind von einer älteren App
     const anims = new AnimBuilder(dir, () => this.send('anim:changed'));
     const drawings = new DrawingBuilder(dir, () => this.send('drawings:changed'));
@@ -233,11 +236,41 @@ export class ProjectController {
     const installing = this.installPackages(session, !last);
     if (!installing && !last) builds.start('project opened');
     else if (!installing) void env.then(buildAnims);
-    const info = this.info();
+    const info: ProjectInfo = { ...this.info(), ...(skillsUpdated.length ? { skillsUpdated } : {}) };
     this.send('project:changed', info);
     // Erst nach project:changed: Das Fenster räumt beim Projektwechsel den Viewer leer und lädt danach das Modell
     if (last) builds.adopt(last);
     return info;
+  }
+
+  /**
+   * Skills of the model that nobody changed in it follow the library: after an update of the app or an edit in Settings
+   * (skills.ts, refreshSkillCopies). Returns the titles of the updated ones for a note in the window.
+   */
+  private refreshSkills(id: string, dir: string): string[] {
+    try {
+      const pj = readProjectJson(id);
+      const modes = readSkillModes(id);
+      // Saved by a newer app: this one would only bring older versions
+      if (!pj || !modes || isNewerVersion(pj.app_version)) return [];
+      const r = refreshSkillCopies(dir, skillDirs(), modes, pj.skill_settings, pj.skill_copies, skillBackupsDir(id));
+      if (!r.updated.length) return [];
+      updateProjectSkills(id, { copies: r.stamps });
+      // Name and occasion of a skill can change with its text
+      const warning = writeAgentsList(dir, agentsEntries(dir, skillDirs(), modes));
+      if (warning) console.warn('[soma]', warning);
+      console.log(`[project] skills updated to the version of the app: ${r.updated.join(', ')}`);
+      return r.updated.map((x) => librarySkill(skillDirs(), x)?.title ?? x);
+    } catch (e) {
+      console.error('[soma] Could not update the skills of the model:', e);
+      return [];
+    }
+  }
+
+  /** After a change in the library (Settings): the open model follows it as on opening. Titles of the updated skills. */
+  refreshOpenSkills(): string[] {
+    const s = this.session;
+    return s ? this.refreshSkills(s.id, s.dir) : [];
   }
 
   /**
@@ -1238,7 +1271,7 @@ export class ProjectController {
         : copySkill(s.dir, skillDirs(), skill, skillBackupsDir(s.id), values, mode, was === 'off' ? undefined : values);
       if (skill === HELP_SKILL && mode !== 'off') syncHelpImages(s.dir, helpDir());
       const next = withMode(modes, skill, mode);
-      updateProjectSkills(s.id, { modes: next });
+      updateProjectSkills(s.id, { modes: next, copies: { [skill]: mode === 'off' ? null : copyStamps(s.dir, [skill])[skill] ?? null } });
       const warning = writeAgentsList(s.dir, agentsEntries(s.dir, skillDirs(), next));
       return { ok: true, backup, ...(warning ? { warning } : {}), skills: list() };
     } catch (e) {
@@ -1273,7 +1306,30 @@ export class ProjectController {
       const modes = readSkillModes(s.id);
       const mode = modes ? modeOf(modes, skill) : 'off';
       const backup = mode !== 'off' ? copySkill(s.dir, skillDirs(), skill, skillBackupsDir(s.id), next, mode, prev) : null;
+      if (mode !== 'off') updateProjectSkills(s.id, { copies: { [skill]: copyStamps(s.dir, [skill])[skill] ?? null } });
       return { ok: true, backup, skills: list() };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
+    }
+  }
+
+  /**
+   * A copy that was changed in the model (so opening left it alone) takes over the version of the library, on request in
+   * the panel. The changed copy goes into the backup.
+   */
+  takeOverSkill(skill: unknown): SkillResult {
+    const s = this.need();
+    const list = () => this.skills();
+    const modes = readSkillModes(s.id);
+    if (!isSkillId(skill) || !librarySkill(skillDirs(), skill)) return { ok: false, error: 'Neither the app nor your own skills include this skill.', skills: list() };
+    if (!modes) return { ok: false, error: '.soma/project.json is missing or unreadable. Without it no skill can be updated.', skills: list() };
+    const mode = modeOf(modes, skill);
+    if (mode === 'off') return { ok: false, error: 'The skill is off in this model.', skills: list() };
+    try {
+      const backup = copySkill(s.dir, skillDirs(), skill, skillBackupsDir(s.id), this.skillValues(s.id, skill), mode);
+      updateProjectSkills(s.id, { copies: { [skill]: copyStamps(s.dir, [skill])[skill] ?? null } });
+      const warning = writeAgentsList(s.dir, agentsEntries(s.dir, skillDirs(), modes));
+      return { ok: true, backup, ...(warning ? { warning } : {}), skills: list() };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e), skills: list() };
     }

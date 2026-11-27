@@ -268,20 +268,62 @@ try {
   await ev(() => window.__t.showPanel('skills'));
   await waitFor('geändert erkannt', () => window.__t.skills().skills.find((x) => x.id === '3d-printing')?.changed === true, 10000);
   await ev(() => window.__t.openSkill('3d-printing'));
-  check('Geänderte Kopie: „weicht ab" in der Zeile und in der Karte', (await st()).text.includes('The copy differs from the current version') && ((await st()).detail ?? '').includes('differs from the current version of the skill'));
+  check('Changed copy: reported in the row and in the card, with “Take over current version”', (await st()).text.includes('Changed in this model')
+    && ((await st()).detail ?? '').includes('no longer follows the current version') && await ev(() => !!document.querySelector('#skill-detail .sk-take')));
+  await shot('skills-5-changed-copy');
+  // "Take over current version": the changed copy goes into the backup, the current version is written
+  await ev(() => document.querySelector('#skill-detail .sk-take').click());
+  await waitFor('taken over', () => window.__t.skills().skills.find((x) => x.id === '3d-printing')?.changed === false, 10000);
+  check('Take over: current version written, changed copy in the backup, toast', !(read('.soma/skills/3d-printing.md') ?? '').includes('Use PETG only.')
+    && fs.existsSync(bdir) && fs.readdirSync(bdir).length === 1 && (await ev(() => window.__t.toast())).text.includes('uses the current version again'), (await ev(() => window.__t.toast())).text);
+  // Changed again for the next steps
+  fs.appendFileSync(path.join(dir, '.soma', 'skills', '3d-printing.md'), '\n- Use PETG only.\n');
+  await ev(() => window.__t.showPanel('files'));
+  await ev(() => window.__t.showPanel('skills'));
+  await waitFor('changed again', () => window.__t.skills().skills.find((x) => x.id === '3d-printing')?.changed === true, 10000);
   await setVar('3d-printing', 'overhang', '55');
   await waitFor('Überhang 55', () => window.__t.skills().skills.find((x) => x.id === '3d-printing')?.vars.overhang === 55, 10000);
   let backups = fs.existsSync(bdir) ? fs.readdirSync(bdir) : [];
-  check('Einstellung an geänderter Kopie: Kopie in die Sicherung, neu geschrieben mit 55°', backups.length === 1 && fs.readFileSync(path.join(bdir, backups[0]), 'utf8').includes('Use PETG only.')
+  check('Einstellung an geänderter Kopie: Kopie in die Sicherung, neu geschrieben mit 55°', backups.length === 2 && backups.every((b) => fs.readFileSync(path.join(bdir, b), 'utf8').includes('Use PETG only.'))
     && !(read('.soma/skills/3d-printing.md') ?? '').includes('Use PETG only.') && (read('.soma/skills/3d-printing.md') ?? '').includes('up to 55°') && !(await skill('3d-printing')).changed
     && (await ev(() => window.__t.toast())).text.includes('backup'), backups.join(','));
   await setMode('3d-printing', 'off');
   backups = fs.existsSync(bdir) ? fs.readdirSync(bdir) : [];
-  check('Ausschalten: Kopie weg, unveränderte Kopie ohne neue Sicherung, Einstellungen bleiben', read('.soma/skills/3d-printing.md') === null && backups.length === 1
+  check('Ausschalten: Kopie weg, unveränderte Kopie ohne neue Sicherung, Einstellungen bleiben', read('.soma/skills/3d-printing.md') === null && backups.length === 2
     && settings()['3d-printing']?.overhang === 55, backups.join(','));
   check('AGENTS.md und project.json ohne 3D-Druck, Toleranzen bleibt', !(block() ?? '').includes('3d-printing') && always().includes('tolerances.md')
     && JSON.stringify(pj().skills) === '["design-workflow","cadquery","parametric","tolerances"]' && !(pj().skills_on_demand ?? []).includes('3d-printing'));
   check('Meldung nennt den laufenden Agenten', /is off\..*tell it/.test((await ev(() => window.__t.toast())).text), (await ev(() => window.__t.toast())).text);
+
+  // 5b) Opening updates copies nobody changed in the model: here a past built-in version of "Strength with FEM" (written
+  // by an older app, no fingerprint). A copy changed in the model (CadQuery) stays
+  const past = JSON.parse((await import('node:zlib')).brotliDecompressSync(fs.readFileSync(path.join(APP, 'resources', 'skill-history.br'))).toString('utf8'));
+  const femNow = fs.readFileSync(path.join(APP, 'resources', 'skills', 'fem.md'), 'utf8');
+  const femOld = past.fem.find((t) => t !== femNow && t.includes('{{safety}}')).replace(/\{\{safety\}\}/g, '2');
+  const cqBefore = read('.soma/skills/cadquery.md');
+  fs.writeFileSync(path.join(dir, '.soma', 'skills', 'fem.md'), femOld);
+  fs.writeFileSync(path.join(dir, '.soma', 'skills', 'cadquery.md'), `${cqBefore}\n- My own rule.\n`);
+  const pj0 = pj();
+  delete pj0.skill_copies;
+  fs.writeFileSync(path.join(dir, '.soma', 'project.json'), JSON.stringify(pj0, null, 2));
+  await ev((id) => window.soma.project.open(id), proj.id);
+  await waitFor('toast skills updated', () => window.__t.toast().text.includes('Skills updated to the current version'), 15000).catch(() => {});
+  check('Opening: past version updated (backup, fingerprint, toast), changed copy left alone', (await ev(() => window.__t.toast())).text.includes('Strength with FEM')
+    && read('.soma/skills/fem.md') !== femOld && (read('.soma/skills/fem.md') ?? '').includes('> **On demand:**') && typeof pj().skill_copies?.fem === 'string'
+    && fs.readdirSync(bdir).some((n) => n.endsWith('fem.md') && fs.readFileSync(path.join(bdir, n), 'utf8') === femOld)
+    && (read('.soma/skills/cadquery.md') ?? '').includes('My own rule.') && !pj().skill_copies?.cadquery, (await ev(() => window.__t.toast())).text);
+  fs.writeFileSync(path.join(dir, '.soma', 'skills', 'cadquery.md'), cqBefore);
+  // A model saved by a newer app keeps its skills: this app would only bring older versions
+  const femUpdated = read('.soma/skills/fem.md');
+  const pjText = read('.soma/project.json');
+  fs.writeFileSync(path.join(dir, '.soma', 'skills', 'fem.md'), femOld);
+  fs.writeFileSync(path.join(dir, '.soma', 'project.json'), JSON.stringify({ ...pj(), app_version: '99.0.0', skill_copies: {} }, null, 2));
+  await ev((id) => window.soma.project.open(id), proj.id);
+  await sleep(1500);
+  check('Opening a model of a newer app: skills left alone', read('.soma/skills/fem.md') === femOld);
+  fs.writeFileSync(path.join(dir, '.soma', 'skills', 'fem.md'), femUpdated);
+  fs.writeFileSync(path.join(dir, '.soma', 'project.json'), pjText);
+  await ev((id) => window.soma.project.open(id), proj.id);
 
   // 6) Datei eines aktiven Skills fehlt: gemeldet, nicht neu angelegt (E28)
   // Der Dateibaum ist dabei offen: Er folgt Änderungen in .soma/skills/ ohne Wechsel des Panels
@@ -459,20 +501,18 @@ try {
     return document.getElementById('skill-detail').innerText.includes('My skills · your own skill') && !!document.querySelector('#skill-detail [data-act="edit"]');
   }));
   await shot('skills-7-karte-eigener');
-  // „Edit“ in der Karte öffnet die Einstellungen beim Skill. Gespeichert gilt die neue Fassung erst nach Aus und Ein im Modell
+  // "Edit" in the card opens the settings at the skill. Saved, the open model follows at once: nobody changed its copy
   await ev(() => document.querySelector('#skill-detail [data-act="edit"]').click());
   await waitSel('welded-frames');
   await ev((t) => window.__t.settingsType(t), WF.replace(', {{gap}} gap', '').replace('\n- Tubes', '\n- Grind the welds.\n- Tubes'));
   await clickAct('save');
   await waitFor('gespeichert 2', () => !window.__t.settings().dirty && !window.__t.settings().busy, 10000);
-  await waitFor('Meldung mit Modell', () => window.__t.toast().text.includes('The open model keeps its copy'), 10000).catch(() => {});
-  check('Speichern bei eingeschaltetem Skill: Hinweis, dass das Modell seine Kopie behält, Kopie unverändert', (await ev(() => window.__t.toast())).text.includes('The open model keeps its copy')
-    && !(copyOf('welded-frames') ?? '').includes('Grind'), (await ev(() => window.__t.toast())).text);
+  await waitFor('toast with the model', () => window.__t.toast().text.includes('The open model uses it now.'), 10000).catch(() => {});
+  check('Saving a switched-on skill: the open model takes over the new version right away, with a note', (await ev(() => window.__t.toast())).text.includes('The open model uses it now.')
+    && (copyOf('welded-frames') ?? '').includes('- Grind the welds.'), (await ev(() => window.__t.toast())).text);
   await ev(() => window.__t.closeSettings());
-  await waitFor('Panel: Kopie weicht ab', () => window.__t.skills().skills.find((s) => s.id === 'welded-frames')?.changed, 10000);
-  await setMode('welded-frames', 'off');
-  await setMode('welded-frames', 'always');
-  check('Aus und wieder Ein übernimmt die neue Fassung', (copyOf('welded-frames') ?? '').includes('- Grind the welds.') && !(await skill2('welded-frames')).changed);
+  await waitFor('panel current', () => window.__t.skills().skills.find((s) => s.id === 'welded-frames')?.changed === false, 10000).catch(() => {});
+  check('Panel: the copy is the current version', !(await skill2('welded-frames')).changed);
 
   // Mitgelieferten bearbeiten: eigene Fassung in den App-Daten, Fingerabdruck in state.json, „Edited“ in der Liste
   await ev(() => window.__t.openSettings('3d-printing'));

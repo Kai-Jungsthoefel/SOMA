@@ -4,7 +4,7 @@ import path from 'node:path';
 import { SOMA_VERSION } from '../shared/version';
 import { resolveInside } from './files';
 import { skillBackupsDir, skillDirs, templateDir, workspacesDir } from './paths';
-import { BEGIN as SKILLS_BEGIN, END as SKILLS_END, applyDefaultSkills, writeAtomic } from './skills';
+import { BEGIN as SKILLS_BEGIN, END as SKILLS_END, applyDefaultSkills, copyStamps, writeAtomic } from './skills';
 import { API_VERSION, folderOf, getSkillDefaults, isProjectId, type ProjectJson } from './workspace';
 
 /**
@@ -216,7 +216,9 @@ export function applyFolder(plan: FolderPlan, backupRoot: string): { id: string;
     // Skills nach den Vorgaben (E46), nur beim ersten Einrichten. Ihre Liste kommt in den Abschnitt von AGENTS.md
     if (!old) {
       const skills = applyDefaultSkills(dir, skillDirs(), skillBackupsDir(id), getSkillDefaults());
-      pj = { ...pj, ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) };
+      const stamps = copyStamps(dir, [...skills.always, ...skills.demand]);
+      pj = { ...pj, ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}),
+        ...(Object.keys(stamps).length ? { skill_copies: stamps } : {}) };
     }
   }
   // Written once at the end, with the skills

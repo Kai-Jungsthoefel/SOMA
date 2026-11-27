@@ -229,6 +229,7 @@ const skills = new SkillsPanel({ list: $('skills-list'), sum: $('skills-sum'), d
   list: () => api.skills.list(),
   set: (id, mode) => api.skills.set(id, mode),
   configure: (id, values) => api.skills.configure(id, values),
+  takeOver: (id) => api.skills.takeOver(id),
   setDefault: (id, mode) => api.skills.setDefault(id, mode),
   open: (file) => void openCode(file),
   edit: (id) => void settings.open(id),
@@ -314,8 +315,8 @@ const settings = new SettingsDialog({
     if (/^(https?:|mailto:)/i.test(href)) void api.openUrl(href).then((r) => { if (!r.ok) toast(r.error ?? `${href} could not be opened.`, 'error'); });
     else toast('Only web links open from the preview of a skill.', 'info');
   },
-  changed: () => { if (project && skills.isLoaded) void skills.refresh(); },
-  modelMode: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id)?.mode ?? 'off' : null),
+  changed: () => { if (!project) return; if (skills.isLoaded) void skills.refresh(); filesDirty = true; void refreshSaveState(); },
+  modelSkill: async (id) => (project ? (await api.skills.list()).find((s) => s.id === id) ?? null : null),
   pages: { general: generalPage, viewer: viewerPage, keys: shortcutsPage, ai: aiPage, storage: storagePage, about: aboutPage },
 });
 // Hilfe (E83): Knopf in der Leiste und auf der Startseite, F1 überall außer in den Einstellungen
@@ -1358,6 +1359,8 @@ async function onProject(p: ProjectInfo): Promise<void> {
   code.reset();
   skills.reset();
   if (panel === 'skills') void skills.refresh();
+  // Opening brought skills nobody changed in the model to the version of the app (after an update or an edit in Settings)
+  if (p.skillsUpdated?.length) toast(`Skills updated to the current version: ${p.skillsUpdated.join(', ')}. The previous copies are in the backup.`, 'info');
   paramsPanel.reset();
   if (panel === 'params') void paramsPanel.refresh();
   if (codeOpen) void code.open(p.entry); // die Code-Spalte bleibt offen, dann nicht leer

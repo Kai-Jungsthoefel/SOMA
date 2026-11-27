@@ -134,6 +134,7 @@ const api: SomaApi = {
     list: () => ipcRenderer.invoke('skills:list'),
     set: (id, mode) => ipcRenderer.invoke('skills:set', id, mode),
     configure: (id, values) => ipcRenderer.invoke('skills:configure', id, values),
+    takeOver: (id) => ipcRenderer.invoke('skills:takeOver', id),
     setDefault: (id, mode) => ipcRenderer.invoke('skills:setDefault', id, mode),
   },
   library: {

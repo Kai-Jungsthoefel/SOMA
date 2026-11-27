@@ -6,7 +6,7 @@ import { SOMA_VERSION, isNewerVersion } from '../shared/version';
 import { runSoma } from './build';
 import { GitRepo } from './git';
 import { appStateFile, backupsDir, editBackupsDir, foldersFile, previewsDir, projectStateDir, skillBackupsDir, skillDirs, templateDir, thumbnailsDir, workspacesDir } from './paths';
-import { SKILLS_DIR, applyDefaultSkills, currentSkillId, isSkillId, isSkillMode, writeAtomic, type SkillDefaults, type SkillModes } from './skills';
+import { SKILLS_DIR, applyDefaultSkills, copyStamps, currentSkillId, isSkillId, isSkillMode, writeAtomic, type SkillDefaults, type SkillModes } from './skills';
 import { extractZip } from './zip';
 
 export const API_VERSION = 1;
@@ -27,6 +27,8 @@ export interface ProjectJson {
   skills_on_demand?: string[];
   /** Einstellungen der Skills je Kennung, nur vom Standard abweichende Werte (auch für ausgeschaltete Skills). */
   skill_settings?: Record<string, Record<string, number | string>>;
+  /** Fingerprint of each skill copy as the app wrote it (skills.ts, copyStamp): opening updates only unchanged copies. */
+  skill_copies?: Record<string, string>;
   /** Paketliste (E67), wenn nicht requirements.txt: im Ordner-Modus .soma/requirements.txt (packages.ts, env.py). */
   requirements?: string;
 }
@@ -117,6 +119,8 @@ export async function createProject(name = 'New model', prepare?: (dir: string, 
   const skills = applyDefaultSkills(dir, skillDirs(), skillBackupsDir(id), getSkillDefaults());
   const pj: ProjectJson = { id, name, api_version: API_VERSION, app_version: SOMA_VERSION, entry: 'model.py', main_output: 'output/model.step', created: new Date().toISOString(),
     ...(skills.always.length ? { skills: skills.always } : {}), ...(skills.demand.length ? { skills_on_demand: skills.demand } : {}) };
+  const stamps = copyStamps(dir, [...skills.always, ...skills.demand]);
+  if (Object.keys(stamps).length) pj.skill_copies = stamps;
   writeJson(path.join(dir, '.soma', 'project.json'), pj);
   writeJson(stateFile(id), { ...pj, app: {} } satisfies ProjectState);
   // Einmal bauen, bevor der Startcommit entsteht: So enthält auch der erste Stand eine output/model.step
@@ -178,7 +182,7 @@ export function readSkillModes(id: string): SkillModes | null {
 }
 
 /** Skills und ihre Einstellungen ins Projekt schreiben, in project.json und die App-Kopie (E27). Wirft, wenn project.json unlesbar ist. */
-export function updateProjectSkills(id: string, patch: { modes?: SkillModes; skill_settings?: ProjectJson['skill_settings'] }): void {
+export function updateProjectSkills(id: string, patch: { modes?: SkillModes; skill_settings?: ProjectJson['skill_settings']; copies?: Record<string, string | null> }): void {
   const file = path.join(projectDir(id), '.soma', 'project.json');
   const pj = readJson<ProjectJson>(file);
   if (!pj) throw new Error('.soma/project.json is missing or unreadable. Without it no skill can be recorded.');
@@ -188,12 +192,17 @@ export function updateProjectSkills(id: string, patch: { modes?: SkillModes; ski
   const next: ProjectJson = { ...pj, ...(patch.modes ? { skills: patch.modes.always, skills_on_demand: patch.modes.demand } : {}) };
   if (!next.skills_on_demand?.length) delete next.skills_on_demand;
   if (Object.keys(settings).length) next.skill_settings = settings; else delete next.skill_settings;
+  // Fingerprints of the copies: null removes one (copy removed), the others replace theirs
+  const copies: Record<string, string> = { ...(pj.skill_copies && typeof pj.skill_copies === 'object' ? pj.skill_copies : {}) };
+  for (const [k, v] of Object.entries(patch.copies ?? {})) { if (v == null) delete copies[k]; else copies[k] = v; }
+  if (Object.keys(copies).length) next.skill_copies = copies; else delete next.skill_copies;
   writeJson(file, next);
   const cur = readJson<ProjectState>(stateFile(id));
   if (cur) {
     const copy: ProjectState = { ...cur, skills: next.skills };
     if (next.skills_on_demand) copy.skills_on_demand = next.skills_on_demand; else delete copy.skills_on_demand;
     if (next.skill_settings) copy.skill_settings = next.skill_settings; else delete copy.skill_settings;
+    if (next.skill_copies) copy.skill_copies = next.skill_copies; else delete copy.skill_copies;
     writeJson(stateFile(id), copy);
   }
 }

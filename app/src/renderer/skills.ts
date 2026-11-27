@@ -6,6 +6,8 @@ interface Deps {
   list(): Promise<SkillInfo[]>;
   set(id: string, mode: SkillMode): Promise<SkillResult>;
   configure(id: string, values: Record<string, SkillValue | null>): Promise<SkillResult>;
+  /** A copy changed in the model takes over the current version. */
+  takeOver(id: string): Promise<SkillResult>;
   /** Stufe für neue Modelle (gilt für die App, E46, E55). */
   setDefault(id: string, mode: SkillMode): Promise<SkillResult>;
   /** Kopie im Projekt im Code zeigen (nur lesen). */
@@ -151,7 +153,7 @@ export class SkillsPanel {
   private row(s: SkillInfo): HTMLElement {
     const set = changedVars(s);
     const note = s.problems.length || s.changed
-      ? el('span', { className: 'warn', textContent: s.problems[0] ?? 'The copy differs from the current version' })
+      ? el('span', { className: 'warn', textContent: s.problems[0] ?? 'Changed in this model' })
       : set.length ? el('span', { className: 'cust', textContent: `${set.map((v) => shown(v)).join(' · ')} · customized` })
         : el('span', { textContent: s.summary });
     const open = el('button', { className: 'sk-open', title: `${s.title}: description, level and settings` }, el('b', { textContent: s.title }), note);
@@ -217,7 +219,12 @@ export class SkillsPanel {
         el('div', { className: 'sk-title' }, el('b', { textContent: s.title }), el('span', { className: 'c3', textContent: `${s.category || 'Other'}${SOURCE_NOTE[s.source ?? ''] ?? ''}` })), el('span', { className: 'grow' }), close),
       el('div', { className: 'sk-desc', textContent: s.summary }),
     ];
-    if (s.changed) kids.push(el('div', { className: 'sk-note', textContent: 'The copy in the project differs from the current version of the skill (Settings). Switching it off and on again takes over the current version, the previous one goes into the backup.' }));
+    if (s.changed) {
+      const take = el('button', { className: 'sk-take', textContent: 'Take over current version', disabled: this.busy.has(s.id) || s.mode === 'off' });
+      take.addEventListener('click', () => void this.takeOver(s));
+      kids.push(el('div', { className: 'sk-note' },
+        'The copy in this model was changed, so it no longer follows the current version of the skill. ', s.mode !== 'off' ? take : null));
+    }
     for (const p of s.problems) kids.push(el('div', { className: 'sk-warn', textContent: p }));
     kids.push(el('div', { className: 'sk-sec' }, el('div', { className: 'sk-h', textContent: 'For this model' }), this.modeSwitch(s),
       el('div', { className: 'c3 small', textContent: modeOf(s.mode).title })));
@@ -245,7 +252,7 @@ export class SkillsPanel {
       actions.append(view);
     }
     if (s.source) {
-      const edit = el('button', { className: 'btn sm', title: 'Edit the skill in the settings. Applies to new models, and here once the copy is taken over.' }, icon('pen', 14, 1.9), 'Edit');
+      const edit = el('button', { className: 'btn sm', title: 'Edit the skill in the settings. Applies to new models and to models whose copy was not changed.' }, icon('pen', 14, 1.9), 'Edit');
       edit.dataset.act = 'edit';
       edit.addEventListener('click', () => this.deps.edit(s.id));
       actions.append(edit);
@@ -289,6 +296,22 @@ export class SkillsPanel {
     const kept = r.backup ? ' The previous version in the project is in the backup.' : '';
     this.deps.toast(`“${s.title}”: ${what(now)}. `
       + (s.mode !== 'off' ? `Written to ${s.file}. “Send to agent” tells a running agent.${kept}` : 'Applies as soon as the skill is no longer off.'));
+  }
+
+  /** Replaces the copy changed in the model with the current version, the changed one goes into the backup. */
+  private async takeOver(s: SkillInfo): Promise<void> {
+    if (this.busy.has(s.id)) return;
+    this.busy.add(s.id);
+    this.render();
+    let r: SkillResult;
+    try { r = await this.deps.takeOver(s.id); } catch (e) { r = { ok: false, error: e instanceof Error ? e.message : String(e), skills: this.skills }; }
+    this.busy.delete(s.id);
+    this.skills = r.skills;
+    this.render();
+    if (!r.ok) { this.deps.toast(`“${s.title}” could not be updated: ${r.error ?? 'unknown error'}`, 'error'); return; }
+    this.deps.changed();
+    const kept = r.backup ? ' The changed copy is in the backup.' : '';
+    this.deps.toast(`“${s.title}” uses the current version again. “Send to agent” tells a running agent.${kept}${r.warning ? ` ${r.warning}` : ''}`, r.warning ? 'error' : 'ok');
   }
 
   private setVar(s: SkillInfo, v: SkillVar, value: SkillValue | null): Promise<void> {

@@ -1,6 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import type { SkillCheck, SkillInfo, SkillMode, SkillSource, SkillValue, SkillVar } from '../shared/types';
 import { backupText, resolveInside } from './files';
 
@@ -14,7 +15,9 @@ import { backupText, resolveInside } from './files';
  * Einstellungen: Ein Skill kann im Kopf Variablen erklären (`var overhang: 45 | ° | Max. Überhang | 20..80`) und im Text
  * Platzhalter verwenden (`{{overhang}}`). Der Nutzer stellt die Werte im Panel ein, sie stehen in `project.json`
  * (`skill_settings`). Die Kopie im Projekt enthält die eingesetzten Werte: Der Agent liest konkrete Zahlen.
- * Die Kopie bleibt, wie sie ist, auch wenn eine neuere App eine neuere Fassung mitbringt.
+ * Opening a model brings copies nobody changed in the model to the version of the library (refreshSkillCopies): after an
+ * update of the app, or after the user edited the skill in Settings. A changed copy stays and the panel offers the new
+ * version.
  *
  * Kategorien und Standard (E46): `category` ordnet den Skill im Panel unter eine Überschrift, `default:` gibt die Stufe bei
  * neuen Modellen vor (`always`, `on-demand` oder `off`, ohne Angabe Bei Bedarf). Der Nutzer kann das je Skill für die ganze
@@ -357,8 +360,11 @@ export function bundledSkills(dir: string): Map<string, Parsed> {
   return out;
 }
 
-/** Die beiden Ordner der Bibliothek: mitgeliefert (`resources/skills/`) und eigene des Nutzers (App-Daten). */
-export interface SkillDirs { bundled: string; user: string }
+/**
+ * Die beiden Ordner der Bibliothek: mitgeliefert (`resources/skills/`) und eigene des Nutzers (App-Daten). `history`: the
+ * past built-in versions (resources/skill-history.br, scripts/skill-history.mjs), to recognize unchanged older copies.
+ */
+export interface SkillDirs { bundled: string; user: string; history?: string }
 export type LibSkill = Parsed & { source: SkillSource };
 
 /** Alle Skills, die die App kennt. Eigene ersetzen mitgelieferte mit derselben Kennung. */
@@ -533,6 +539,118 @@ export function removeSkill(root: string, dirs: SkillDirs, id: string, backupDir
   const backup = b && ON_MODES.some((m) => norm(old) === renderSkill(b.text, values, m)) ? null : backupText(backupDir, relOf(id), old);
   fs.rmSync(abs, { force: true });
   return backup;
+}
+
+/**
+ * Fingerprint of a copy as the app wrote it (`skill_copies` in project.json). A copy that still has it was not changed in
+ * the model since, so a newer version of the skill may replace it.
+ */
+export const copyStamp = (text: string): string => createHash('sha256').update(norm(text), 'utf8').digest('hex').slice(0, 16);
+
+/** Fingerprints of the copies in the project (ids without a readable copy are left out). */
+export function copyStamps(root: string, ids: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const id of ids) { const c = projectCopy(root, id); if (c != null) out[id] = copyStamp(c); }
+  return out;
+}
+
+const pastCache = new Map<string, Record<string, string[]>>();
+
+/** Past built-in versions of a skill (under an old id also those of its successor). Unreadable file: none. */
+function pastVersions(file: string | undefined, id: string): string[] {
+  if (!file) return [];
+  let all = pastCache.get(file);
+  if (!all) {
+    all = {};
+    try {
+      const data = JSON.parse(zlib.brotliDecompressSync(fs.readFileSync(file)).toString('utf8')) as unknown;
+      if (data && typeof data === 'object') {
+        for (const [k, v] of Object.entries(data)) if (Array.isArray(v)) all[k] = v.filter((x): x is string => typeof x === 'string');
+      }
+    } catch (e) { console.error('[soma] Could not read the past versions of the skills:', e); }
+    pastCache.set(file, all);
+  }
+  const list = (k: string) => (Object.hasOwn(all, k) ? all[k] : []);
+  return currentSkillId(id) === id ? list(id) : [...list(id), ...list(currentSkillId(id))];
+}
+
+/** Text without what differs between copies of one version: quotes (the note of "On demand" changed over time), blank lines. */
+const loose = (t: string) => norm(t).split('\n').filter((l) => !/^\s*>/.test(l)).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Same value: numbers also with a comma or other digits (older apps), choices as text. */
+function sameValue(text: string, v: SkillValue): boolean {
+  const t = text.trim();
+  return typeof v === 'number' ? t !== '' && Number(t.replace(',', '.')) === v : t === String(v);
+}
+
+/**
+ * Whether `copy` is the past version `raw` as an older app wrote it into a model, with or without the note of "On demand",
+ * and with the values of `stored` (`skill_settings` of the skill in project.json). A value written into the copy by hand
+ * (by the user or the agent, not in the panel) makes it a changed copy: updating would lose it.
+ */
+export function matchesPastVersion(copy: string, raw: string, stored: unknown = {}): boolean {
+  // Slots: \u0001name\u0003 in the text, \u0002name\u0003 for the value of a setting in the header
+  let t = norm(raw);
+  const m = FRONT.exec(t);
+  if (m) {
+    t = m[0].replace(/^(var\s+([a-z][a-z0-9_]*):\s*)([^|\n]*?)(\s*(?:\||$))/gm, (_all, pre: string, name: string, _v: string, post: string) => `${pre}\u0002${name}\u0003${post}`)
+      + t.slice(m[0].length);
+  }
+  t = loose(t.replace(PLACEHOLDER, (_all, name: string) => `\u0001${name}\u0003`));
+  const slots: { name: string; head: boolean }[] = [];
+  const pattern = t.split(/([\u0001\u0002][a-z0-9_]+)\u0003/).map((part, i) => {
+    if (i % 2 === 0) return escapeRe(part);
+    slots.push({ name: part.slice(1), head: part[0] === '\u0002' });
+    return '([^\\n]*?)';
+  }).join('');
+  const hit = new RegExp(`^${pattern}$`).exec(loose(copy));
+  if (!hit) return false;
+  const vars = parseSkill('', raw).vars;
+  const want = effective(vars, cleanValues(vars, stored));
+  return slots.every((s, i) => {
+    const got = hit[i + 1];
+    if (!(s.name in want)) return got === `{{${s.name}}}`;
+    // The header of a copy kept its default in apps before the values were written there
+    const def = vars.find((v) => v.name === s.name)!.default;
+    return sameValue(got, want[s.name]) || (s.head && sameValue(got, def));
+  });
+}
+
+export interface CopyRefresh {
+  /** Skills whose copy was replaced by the version of the library. */
+  updated: string[];
+  /** New fingerprints of the replaced copies, for project.json. */
+  stamps: Record<string, string>;
+}
+
+/**
+ * On opening a model: copies of switched-on skills that differ from the library are replaced, if nobody changed them in
+ * the model. That is a copy with the fingerprint the app recorded (`stamps`) or one of the past built-in versions. The old
+ * copy goes into the backup first. A changed copy stays as it is (E28), the panel reports it and offers the new version.
+ */
+export function refreshSkillCopies(root: string, dirs: SkillDirs, modes: SkillModes, settings: unknown, stamps: unknown, backupDir: string): CopyRefresh {
+  const out: CopyRefresh = { updated: [], stamps: {} };
+  const known = stamps && typeof stamps === 'object' ? stamps as Record<string, unknown> : {};
+  const values = settings && typeof settings === 'object' ? settings as Record<string, unknown> : {};
+  for (const mode of ON_MODES) {
+    for (const id of modes[mode]) {
+      const b = librarySkill(dirs, id);
+      const copy = projectCopy(root, id);
+      if (!b || copy == null) continue;
+      const next = renderSkill(b.text, cleanValues(b.vars, values[id]), mode);
+      if (norm(copy) === next) continue;
+      const unchanged = (Object.hasOwn(known, id) && known[id] === copyStamp(copy)) || pastVersions(dirs.history, id).some((raw) => matchesPastVersion(copy, raw, values[id]));
+      if (!unchanged) continue;
+      try {
+        backupText(backupDir, relOf(id), copy);
+        writeAtomic(resolveInside(root, relOf(id)), next);
+        out.updated.push(id);
+        out.stamps[id] = copyStamp(next);
+      } catch (e) { console.error(`[soma] Could not update the skill “${id}” in the model:`, e); }
+    }
+  }
+  return out;
 }
 
 /** Eintrag in AGENTS.md: Pfad aus der Kennung, englischer Name, bei „Bei Bedarf“ der Anlass. */
