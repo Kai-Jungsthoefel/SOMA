@@ -19,6 +19,7 @@ the version is bumped.
 
 ### Fixed
 
+- `soma build` no longer builds the same code twice: when it waited for a build of the app (which builds after every change) and no file changed since that build started, it takes its result. Before, the wait doubled and an agent's time limit could stop it (issue #24). `soma build --force` builds again anyway.
 - The file tree highlights an image, STEP, mesh or video file you click, like a PDF, instead of keeping the last file highlighted. Going back to the model highlights the file open in the code again.
 
 ## [1.0.0] - 2026-11-22
