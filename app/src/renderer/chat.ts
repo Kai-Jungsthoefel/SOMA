@@ -149,6 +149,10 @@ export function stepWords(tool: string, args: Json): StepWords {
 
 /** Text of a tool result (content blocks). */
 const resultText = (result: unknown) => arr(obj(result).content).map((c) => str(obj(c).text)).join('\n');
+const toolFailed = (result: unknown, isError: unknown): boolean => {
+  const error = obj(obj(result).details).error;
+  return isError === true || error === true || (typeof error === 'string' && error.trim().length > 0);
+};
 
 /** The permission extension stopped the call: by a rule (`policy`) or because the user said no (`user`). */
 function stoppedBy(text: string): { by: 'policy' | 'user'; reason: string } | null {
@@ -966,7 +970,7 @@ export class SomaChat {
       case 'message_update': this.messageUpdate(obj(r.assistantMessageEvent)); break;
       case 'message_end': this.messageEnd(obj(r.message)); break;
       case 'tool_execution_start': this.toolStart(str(r.toolCallId), str(r.toolName), obj(r.args)); break;
-      case 'tool_execution_end': this.toolEnd(str(r.toolCallId), resultText(r.result), r.isError === true); break;
+      case 'tool_execution_end': this.toolEnd(str(r.toolCallId), resultText(r.result), toolFailed(r.result, r.isError)); break;
       case 'extension_ui_request': this.uiRequest(r); break;
       case 'compaction_start': this.quiet('info', 'The conversation is getting long. SOMA AI is summarizing the older part to keep going.'); break;
       case 'auto_retry_start': this.quiet('refresh', 'The AI service did not answer. SOMA AI tries again …'); break;
@@ -1211,7 +1215,7 @@ export class SomaChat {
     this.steps.clear();
     this.turnRows.clear();
     const results = new Map<string, { text: string; isError: boolean; details: Json }>();
-    for (const m of messages.map(obj)) if (m.role === 'toolResult') results.set(str(m.toolCallId), { text: resultText(m), isError: m.isError === true, details: obj(m.details) });
+    for (const m of messages.map(obj)) if (m.role === 'toolResult') results.set(str(m.toolCallId), { text: resultText(m), isError: toolFailed(m, m.isError), details: obj(m.details) });
     for (const m of messages.map(obj)) {
       if (m.role === 'user') { this.turnRows.clear(); this.append(this.userBubble(m.content)); }
       else if (m.role === 'assistant') {
