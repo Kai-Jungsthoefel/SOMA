@@ -27,7 +27,7 @@ import { fileOpBlockReason } from '../shared/editable';
 import type { AiResult, AiStatus, FileOpResult, ImportResult, LibraryResult, OpenResult, StorageClear } from '../shared/types';
 import { piEntry, setCatalogRefresh } from './somaai';
 import { allowMicrophone, fakeMicrophone, micAccess, Voice } from './voice';
-import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, saveApiKey, setDefaultEffort, setDefaultModel, signInChatGPT, signOut } from './somaaiauth';
+import { aiAccounts, cancelSignIn, defaultEffort, defaultModel, listModels, listSessions, saveApiKey, setDefaultEffort, setDefaultModel, signIn, signOut } from './somaaiauth';
 import { createProject, getLastProject, getSkillBases, getSkillDefaults, isProjectId, setSkillBase, setSkillDefault, sweepDiscarded } from './workspace';
 
 // App-Daten (Arbeitsordner, Caches) gehören auf die lokale Platte. Das Roaming-Profil (%APPDATA%) kann in Firmennetzen
@@ -339,9 +339,9 @@ function registerIpc(ctl: ProjectController): void {
   const restartAi = <T extends { ok: boolean }>(r: T): T => { if (r.ok) ctl.session?.ai.restart(); return r; };
   ipcMain.handle('ai:accounts', () => aiAccounts());
   ipcMain.handle('ai:saveKey', (_e, provider: unknown, key: unknown) => restartAi(saveApiKey(provider, key)));
-  ipcMain.handle('ai:signIn', async (e) => restartAi(await signInChatGPT((url) => {
-    if (!e.sender.isDestroyed()) e.sender.send('ai:signInUrl', url);
-    if (process.env.SOMA_TEST !== '1') void shell.openExternal(url);
+  ipcMain.handle('ai:signIn', async (e, provider: unknown) => restartAi(await signIn(provider, (page) => {
+    if (!e.sender.isDestroyed()) e.sender.send('ai:signInPage', page);
+    if (process.env.SOMA_TEST !== '1') void shell.openExternal(page.url);
   })));
   ipcMain.handle('ai:cancelSignIn', () => cancelSignIn());
   ipcMain.handle('ai:signOut', (_e, provider: unknown) => restartAi(signOut(provider)));

@@ -1,7 +1,7 @@
-import { accountLabel, CHATGPT_PROVIDER, EFFORT_LABEL, EFFORT_LEVELS, PI_DEFAULT_EFFORT, RECOMMENDED_EFFORT, type AiAccount, type AiModel, type Effort } from '../shared/somaai';
-import type { AiStatus, SomaApi, VoiceStatus } from '../shared/types';
+import { accountLabel, accountProvider, AI_ACCOUNT_PROVIDERS, EFFORT_LABEL, EFFORT_LEVELS, PI_DEFAULT_EFFORT, RECOMMENDED_EFFORT, type AiAccount, type AiModel, type Effort } from '../shared/somaai';
+import type { AiSignInPage, AiStatus, SomaApi, VoiceStatus } from '../shared/types';
 import { VOICE_LANGUAGES, VOICE_MODEL } from '../shared/voice';
-import { effortText, keyForm, showEffortMenu, showModelMenu } from './aiparts';
+import { effortText, keyForm, showEffortMenu, showModelMenu, signInCode } from './aiparts';
 import { icon } from './icons';
 import type { SettingsPage } from './settings';
 import { field, group, head } from './settingspages';
@@ -50,8 +50,9 @@ export class AiPage implements SettingsPage {
   /** Effort for new conversations, null: pi's default. */
   private effort: Effort | null = null;
   private usage: { stats: Json; provider: string } | null = null;
-  private signing = false;
-  private signInUrl = '';
+  /** Provider of the running sign-in, and its page as soon as pi names it. */
+  private signing: string | null = null;
+  private signInPage: AiSignInPage | null = null;
   private seq = 0;
   private menu: HTMLElement;
   private voice: VoiceStatus | null = null;
@@ -62,7 +63,7 @@ export class AiPage implements SettingsPage {
     this.menu.hidden = true;
     this.menu.setAttribute('role', 'menu');
     document.body.append(this.menu);
-    deps.api.ai.onSignInUrl((url) => { this.signInUrl = url; if (this.signing) this.render(); });
+    deps.api.ai.onSignInPage((page) => { this.signInPage = page; if (this.signing) this.render(); });
     deps.api.voice.onStatus((s) => {
       const was = this.voice?.download?.phase;
       this.voice = s;
@@ -114,15 +115,15 @@ export class AiPage implements SettingsPage {
     return { stats: obj(stats.data), provider: String(obj(obj(state?.data).model).provider ?? '') };
   }
 
-  private async signIn(): Promise<void> {
-    this.signing = true;
-    this.signInUrl = '';
+  private async signIn(provider: string): Promise<void> {
+    this.signing = provider;
+    this.signInPage = null;
     this.render();
-    const r = await this.deps.api.ai.signIn().catch((e) => ({ ok: false, error: String(e), cancelled: false }));
-    this.signing = false;
+    const r = await this.deps.api.ai.signIn(provider).catch((e) => ({ ok: false, error: String(e), cancelled: false }));
+    this.signing = null;
     if (r.ok) {
-      this.deps.toast('Signed in with ChatGPT.');
-      await this.deps.accountsChanged(CHATGPT_PROVIDER);
+      this.deps.toast(`Signed in with ${accountProvider(provider)?.label ?? provider}.`);
+      await this.deps.accountsChanged(provider);
     } else if (!r.cancelled) this.deps.toast(`Signing in did not work: ${r.error ?? 'unknown reason'}`, 'error');
     await this.refresh();
   }
@@ -168,22 +169,28 @@ export class AiPage implements SettingsPage {
 
   private signInRows(): HTMLElement[] {
     const rows: HTMLElement[] = [];
-    if (!this.accounts.some((a) => a.provider === CHATGPT_PROVIDER && a.type === 'oauth')) {
+    for (const p of AI_ACCOUNT_PROVIDERS) {
+      if (this.accounts.some((a) => a.provider === p.id && a.type === 'oauth')) continue;
       let control: HTMLElement;
-      if (this.signing) {
+      let extra: HTMLElement | null = null;
+      if (this.signing === p.id) {
+        const page = this.signInPage;
         const cancel = el('button', { className: 'btn sm', textContent: 'Cancel' });
         cancel.addEventListener('click', () => void this.deps.api.ai.cancelSignIn());
         const again = el('button', { className: 'lnk' }, 'Open the page again', icon('openext', 12, 2));
-        again.hidden = !this.signInUrl;
-        again.addEventListener('click', () => { if (this.signInUrl) void this.deps.api.openUrl(this.signInUrl); });
+        again.hidden = !page;
+        again.addEventListener('click', () => { if (page) void this.deps.api.openUrl(page.url); });
         control = el('div', { className: 'st-ai-wait' }, el('span', { className: 'spin' }, icon('spin', 14, 2.4)), el('span', { textContent: 'Waiting for the browser …' }), again, cancel);
+        // GitHub's device flow: the code to type on the page, SOMA cannot fill it in there
+        if (page?.code) extra = el('div', { className: 'st-ai-code' }, el('span', { textContent: 'Type this code on the GitHub page:' }), signInCode(page.code, this.deps.toast));
       } else {
-        const b = el('button', { className: 'btn sm acc', textContent: 'Sign in with ChatGPT' });
-        b.dataset.act = 'chatgpt';
-        b.addEventListener('click', () => void this.signIn());
+        const b = el('button', { className: 'btn sm acc', textContent: `Sign in with ${p.label}`, disabled: !!this.signing });
+        b.dataset.act = p.id === 'openai' ? 'chatgpt' : p.id;
+        b.addEventListener('click', () => void this.signIn(p.id));
         control = b;
       }
-      rows.push(field('ChatGPT', 'Uses your ChatGPT Plus or Pro plan. Opens your browser to sign in.', control));
+      const how = p.code ? 'Opens GitHub in your browser, where you type a code SOMA shows here.' : 'Opens your browser to sign in.';
+      rows.push(field(p.label, `Uses ${p.plan}. ${how}`, control, extra));
     }
     const key = el('div', { className: 'st-ai-key' }, ...keyForm({
       api: this.deps.api, toast: this.deps.toast,
@@ -326,7 +333,7 @@ export class AiPage implements SettingsPage {
 
   state() {
     return {
-      text: this.root.innerText, accounts: this.accounts, models: this.models?.length ?? null, current: this.current, effort: this.effort, signing: this.signing,
+      text: this.root.innerText, accounts: this.accounts, models: this.models?.length ?? null, current: this.current, effort: this.effort, signing: !!this.signing,
       usage: !!this.usage, modelsError: this.modelsError, voice: this.voice,
     };
   }

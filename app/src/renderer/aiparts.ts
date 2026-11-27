@@ -4,9 +4,18 @@ import { icon } from './icons';
 import { el, menuItem, menus } from './ui';
 
 /*
- * Parts of SOMA AI that the chat (chat.ts) and Settings > SOMA AI (aisettings.ts) both show: the form for an API key
- * and the model menu with its search. One place, so both look and behave the same.
+ * Parts of SOMA AI that the chat (chat.ts) and Settings > SOMA AI (aisettings.ts) both show: the form for an API key,
+ * the code of GitHub's device flow and the model menu with its search. One place, so both look and behave the same.
  */
+
+/** The code to type on GitHub's sign-in page (GitHub Copilot), large and with a copy button. */
+export function signInCode(code: string, toast: (text: string, kind?: 'ok' | 'info' | 'error') => void): HTMLElement {
+  const copy = el('button', { className: 'btn sm' }, icon('copy', 13, 2), 'Copy code');
+  copy.addEventListener('click', () => void navigator.clipboard.writeText(code).then(
+    () => toast('Code copied. Paste it on the GitHub page.'),
+    (e) => toast(`The code could not be copied: ${e instanceof Error ? e.message : String(e)}`, 'error')));
+  return el('div', { className: 'ai-code' }, el('code', { textContent: code }), copy);
+}
 
 interface KeyFormDeps {
   api: SomaApi;

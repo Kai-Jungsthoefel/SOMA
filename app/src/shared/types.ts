@@ -155,8 +155,10 @@ export interface AiResult { ok: boolean; error?: string; data?: unknown }
 export interface AiEvent { gen: number; record: Record<string, unknown> }
 /** pi has ended. `error` only when it ended on its own with an error, not when SOMA stopped it. */
 export interface AiExit { gen: number; code: number | null; error?: string }
-/** Result of "Sign in with ChatGPT". `cancelled`: the user stopped it. */
+/** Result of "Sign in with ChatGPT" or "with GitHub Copilot". `cancelled`: the user stopped it. */
 export interface AiSignInResult { ok: boolean; error?: string; cancelled?: boolean }
+/** The sign-in page of a running sign-in. `code`: GitHub's device flow, the code the user types on that page. */
+export interface AiSignInPage { url: string; code?: string }
 
 /**
  * Voice input (main/voice.ts). `available`: the speech engine is part of this installation. `download`: the model is being
@@ -631,12 +633,12 @@ export interface SomaApi {
     /** Saved sign-ins (shared/somaai.ts), never their secrets. */
     accounts(): Promise<AiAccount[]>;
     saveKey(provider: string, key: string): Promise<{ ok: boolean; error?: string }>;
-    /** "Sign in with ChatGPT": opens the sign-in page in the browser, ends when signed in, failed or cancelled. */
-    signIn(): Promise<AiSignInResult>;
+    /** Account sign-in (shared/somaai.ts AI_ACCOUNT_PROVIDERS): opens the sign-in page in the browser, ends when signed in, failed or cancelled. */
+    signIn(provider: string): Promise<AiSignInResult>;
     cancelSignIn(): Promise<void>;
     signOut(provider: string): Promise<{ ok: boolean; error?: string }>;
-    /** The sign-in page, as soon as it is known (a link in case the browser did not open). */
-    onSignInUrl(cb: (url: string) => void): void;
+    /** The sign-in page, as soon as it is known (a link in case the browser did not open), with the code to type for Copilot. */
+    onSignInPage(cb: (page: AiSignInPage) => void): void;
     /** Models of the saved sign-ins, without a model open (Settings > SOMA AI). */
     models(): Promise<{ ok: boolean; models?: AiModel[]; error?: string }>;
     /** The model pi starts with, null when pi chooses. */

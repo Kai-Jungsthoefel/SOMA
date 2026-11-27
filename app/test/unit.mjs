@@ -751,6 +751,26 @@ try {
     srv.close();
   }
 
+  // Sign-in of SOMA AI (resources/somaai/signin.mjs) against a fake pi: what it answers to pi's questions and what it
+  // reports. GitHub Copilot asks for an Enterprise domain (blank: github.com) and names a page with a code to type
+  {
+    const fakePi = path.join(tmp, 'fakepi.mjs');
+    fs.writeFileSync(fakePi, `export const ModelRuntime = { create: async () => ({ async login(provider, type, io) {
+      const asked = [];
+      asked.push(await io.prompt({ type: 'select', message: 'Method', options: [{ id: 'browser' }, { id: 'device' }] }));
+      if (provider === 'github-copilot') asked.push(await io.prompt({ type: 'text', message: 'GitHub Enterprise URL/domain (blank for github.com)' }));
+      io.notify({ type: 'device_code', userCode: 'AB12-CD34', verificationUri: 'https://github.com/login/device' });
+      io.notify({ type: 'progress', message: JSON.stringify({ provider, type, asked }) });
+    } }) };\n`);
+    const { spawnSync } = await import('node:child_process');
+    const run = spawnSync(process.execPath, [path.join(APP, 'resources', 'somaai', 'signin.mjs'), fakePi, path.join(tmp, 'auth.json'), 'github-copilot', 'dev-1'], { encoding: 'utf8', input: '', timeout: 20000 });
+    const lines = run.stdout.trim().split('\n').map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+    const asked = JSON.parse(lines.find((l) => l.info)?.info ?? '{}');
+    check('Copilot sign-in: the first method, a blank Enterprise domain (github.com), oauth', run.status === 0 && asked.provider === 'github-copilot' && asked.type === 'oauth'
+      && JSON.stringify(asked.asked) === '["browser",""]', run.stdout + run.stderr);
+    check('… the page and the code to type there go to SOMA, then ok', lines.some((l) => l.url === 'https://github.com/login/device' && l.code === 'AB12-CD34') && lines.at(-1).ok === true, run.stdout);
+  }
+
   // part_library of SOMA AI (resources/somaai/partlib.ts): file lists of open CAD libraries, search, download address
   const plOut = path.join(tmp, 'partlib.mjs');
   await build({ entryPoints: [path.join(APP, 'resources', 'somaai', 'partlib.ts')], outfile: plOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });

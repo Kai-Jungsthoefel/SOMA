@@ -108,12 +108,14 @@ SOMA AI is the agent built into SOMA, for everyone who does not use a coding age
 it shows what it does in plain words instead of code.
 
 The first time, its tab asks for a sign-in. **Sign in with ChatGPT** uses your ChatGPT Plus or Pro plan and opens your
-browser. Or paste an **API key** from Anthropic (Claude), OpenAI, Google Gemini, OpenRouter or OpenCode (Zen or Go),
-billed per use by the provider. **How do I get a key?** opens the page of the provider. The sign-in stays on this
-computer. For the best results we recommend Opus 5.5 (Claude, with an API key) or GPT-6.2 Astra (with ChatGPT), with
-High effort or more. The model list also brings models that came out after your version of SOMA (it
-loads the newest list from pi.dev, the maker of the agent behind SOMA AI). Before
-the first message, a note names the risks, **Got it** starts the chat.
+browser. **Sign in with GitHub Copilot** uses your GitHub Copilot plan and the models it includes: SOMA opens GitHub's
+page and shows a code, type it there and allow access. After signing in, SOMA turns on the Copilot models your plan
+offers but that are still off in your GitHub settings. Or paste an **API key** from Anthropic (Claude), OpenAI, Google
+Gemini, OpenRouter or OpenCode (Zen or Go), billed per use by the provider. **How do I get a key?** opens the page of
+the provider. The sign-in stays on this computer. For the best results we recommend Opus 5.5 (Claude, with an API key)
+or GPT-6.2 Astra (with ChatGPT), with High effort or more. The model list also brings models that came out after your
+version of SOMA (it loads the newest list from pi.dev, the maker of the agent behind SOMA AI). Before the first
+message, a note names the risks, **Got it** starts the chat.
 
 ![SOMA AI](../help/chat.png)
 

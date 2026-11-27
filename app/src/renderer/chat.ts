@@ -1,6 +1,6 @@
-import { accountLabel, CHATGPT_PROVIDER, EFFORT_LABEL, isEffort, RECOMMENDED_EFFORT, RECOMMENDED_MODEL, type AiAccount, type Effort } from '../shared/somaai';
-import type { AiEvent, AiExit, SomaApi } from '../shared/types';
-import { effortText, keyForm, searchMenu, showEffortMenu, showModelMenu } from './aiparts';
+import { accountLabel, accountProvider, CHATGPT_PROVIDER, COPILOT_PROVIDER, EFFORT_LABEL, isEffort, RECOMMENDED_EFFORT, RECOMMENDED_MODEL, type AiAccount, type Effort } from '../shared/somaai';
+import type { AiEvent, AiExit, AiSignInPage, SomaApi } from '../shared/types';
+import { effortText, keyForm, searchMenu, showEffortMenu, showModelMenu, signInCode } from './aiparts';
 import { icon } from './icons';
 import { renderMarkdown } from './markdown';
 import { el, fmtWhen, menuItem, menus } from './ui';
@@ -296,7 +296,8 @@ export class SomaChat {
   private images: Attachment[] = [];
   private showing: Promise<void> | null = null;
   private showAgain = false;
-  private signInUrl = '';
+  /** The running sign-in: its provider, and its page as soon as pi names it. */
+  private signing: { provider: string; page: AiSignInPage | null } | null = null;
   /**
    * After a new sign-in: its recommended model, set once pi runs. A continued conversation keeps the model it had,
    * the new default in pi's settings alone would not change it.
@@ -388,7 +389,7 @@ export class SomaChat {
     });
     deps.api.ai.onEvent((e) => this.onEvent(e));
     deps.api.ai.onExit((e) => this.onExit(e));
-    deps.api.ai.onSignInUrl((url) => { this.signInUrl = url; if (this.phase === 'signing') this.renderSigning(); });
+    deps.api.ai.onSignInPage((page) => { if (this.signing) this.signing.page = page; if (this.phase === 'signing') this.renderSigning(); });
     this.renderComposer();
   }
 
@@ -497,7 +498,9 @@ export class SomaChat {
     this.setPhase('setup');
     this.top.replaceChildren();
     const chatgpt = el('button', { className: 'btn primary', textContent: 'Sign in with ChatGPT' });
-    chatgpt.addEventListener('click', () => void this.signIn());
+    chatgpt.addEventListener('click', () => void this.signIn(CHATGPT_PROVIDER));
+    const copilot = el('button', { className: 'btn sm', textContent: 'Sign in with GitHub Copilot' });
+    copilot.addEventListener('click', () => void this.signIn(COPILOT_PROVIDER));
     const key = keyForm({ api: this.deps.api, toast: this.deps.toast, saved: (provider) => this.accountsChanged(provider) });
     const term = el('button', { className: 'btn sm', textContent: 'Open a terminal' });
     term.addEventListener('click', () => this.deps.openTerminal());
@@ -514,6 +517,10 @@ export class SomaChat {
         el('p', { textContent: 'Uses your ChatGPT Plus or Pro plan. No extra cost, your plan’s limits apply.' }),
         el('div', { className: 'acts' }, chatgpt, el('span', { className: 'c3 small', textContent: 'Opens your browser' }))),
       el('div', { className: 'ai-opt' },
+        el('h4', {}, icon('chat', 16), 'Sign in with GitHub Copilot'),
+        el('p', { textContent: 'Uses your GitHub Copilot plan, with the models it includes. No extra cost, your plan’s limits apply.' }),
+        el('div', { className: 'acts' }, copilot, el('span', { className: 'c3 small', textContent: 'Opens GitHub, where you type a code' }))),
+      el('div', { className: 'ai-opt' },
         el('h4', {}, icon('apikey', 16), 'Use an API key'),
         el('p', { textContent: 'Pay per use, billed by the provider. Works with Claude, OpenAI, Google Gemini, OpenRouter and OpenCode (Zen or Go).' }),
         ...key),
@@ -526,13 +533,14 @@ export class SomaChat {
     this.emitState();
   }
 
-  private async signIn(): Promise<void> {
-    this.signInUrl = '';
+  private async signIn(provider: string): Promise<void> {
+    this.signing = { provider, page: null };
     this.setPhase('signing');
     this.renderSigning();
-    const r = await this.deps.api.ai.signIn().catch((e) => ({ ok: false, error: String(e), cancelled: false }));
+    const r = await this.deps.api.ai.signIn(provider).catch((e) => ({ ok: false, error: String(e), cancelled: false }));
+    this.signing = null;
     this.setPhase('setup');
-    if (r.ok) { this.deps.toast('Signed in with ChatGPT.'); await this.accountsChanged(CHATGPT_PROVIDER); return; }
+    if (r.ok) { this.deps.toast(`Signed in with ${accountProvider(provider)?.label ?? provider}.`); await this.accountsChanged(provider); return; }
     this.renderSetup(this.accounts.length > 0);
     if (!r.cancelled) this.deps.toast(`Signing in did not work: ${r.error ?? 'unknown reason'}`, 'error');
   }
@@ -544,14 +552,21 @@ export class SomaChat {
       // Nothing was running any more: back to where the chat is
       if (this.phase !== 'signing') void this.show();
     });
+    const page = this.signing?.page ?? null;
+    const p = accountProvider(this.signing?.provider ?? '');
     const again = el('button', { className: 'lnk' }, 'Open the sign-in page again', icon('openext', 12, 2));
-    again.hidden = !this.signInUrl;
-    again.addEventListener('click', () => { if (this.signInUrl) void this.deps.api.openUrl(this.signInUrl); });
+    again.hidden = !page;
+    again.addEventListener('click', () => { if (page) void this.deps.api.openUrl(page.url); });
+    // GitHub's device flow: SOMA cannot fill the code in on GitHub's page, the user types it there
+    const lead = p?.code
+      ? 'SOMA opened GitHub’s sign-in page. Type the code below there and allow access, then come back here. This window updates by itself.'
+      : `SOMA opened the sign-in page of ${p?.label ?? 'the provider'}. Allow SOMA AI there, then come back here. This window updates by itself.`;
     this.top.replaceChildren();
     this.panel.replaceChildren(el('div', { className: 'ai-setup' },
       el('span', { className: 'ai-mark' }, icon('chat', 26, 1.8)),
       el('h3', { textContent: 'Finish signing in in your browser' }),
-      el('p', { className: 'lead', textContent: 'SOMA opened the sign-in page of ChatGPT. Allow SOMA AI there, then come back here. This window updates by itself.' }),
+      el('p', { className: 'lead', textContent: lead }),
+      page?.code ? signInCode(page.code, this.deps.toast) : null,
       el('div', { className: 'ai-wait' }, ico('spin', 16, 2.4), el('span', { textContent: 'Waiting for the browser …' })),
       el('div', { className: 'acts' }, cancel, again)));
     this.emitState();

@@ -3,8 +3,8 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AI_KEY_PROVIDERS, CHATGPT_PROVIDER, isEffort, RECOMMENDED_MODEL, type AiAccount, type Effort, type AiModel, type AiSession } from '../shared/somaai';
-import type { AiSignInResult } from '../shared/types';
+import { accountProvider, AI_ACCOUNT_PROVIDERS, AI_KEY_PROVIDERS, isEffort, RECOMMENDED_MODEL, type AiAccount, type Effort, type AiModel, type AiSession } from '../shared/somaai';
+import type { AiSignInPage, AiSignInResult } from '../shared/types';
 import { aiDir, piIndex, piProcessEnv, readJson, writeJson } from './somaai';
 
 /*
@@ -13,11 +13,13 @@ import { aiDir, piIndex, piProcessEnv, readJson, writeJson } from './somaai';
  * - API key: written into auth.json in pi's format ({ type: 'api_key', key }), as pi's own `/login` does.
  * - ChatGPT: pi's own login (ModelRuntime.login, as `pi auth login openai`) in resources/somaai/signin.mjs. pi names
  *   the sign-in page, SOMA opens it in the browser and waits until pi has the token from its callback on 127.0.0.1.
+ * - GitHub Copilot: the same with `github-copilot`, GitHub's device flow: pi names the page and a code, the user types
+ *   the code there, pi polls GitHub until it is confirmed.
  */
 
 const authFile = () => path.join(aiDir(), 'auth.json');
 const settingsFile = () => path.join(aiDir(), 'settings.json');
-const KNOWN = new Set([CHATGPT_PROVIDER, ...AI_KEY_PROVIDERS.map((p) => p.id)]);
+const KNOWN = new Set([...AI_ACCOUNT_PROVIDERS.map((p) => p.id), ...AI_KEY_PROVIDERS.map((p) => p.id)]);
 const SIGN_IN_MS = 15 * 60_000;
 
 /** The saved sign-ins SOMA offers (others in auth.json stay as they are and are not shown). */
@@ -85,11 +87,13 @@ function deviceId(): string {
 let signing: { child: ChildProcess; cancelled: boolean } | null = null;
 
 /**
- * "Sign in with ChatGPT" through resources/somaai/signin.mjs (pi's SDK over pipes, see there). `onUrl` gets the
- * sign-in page as soon as pi names it, the caller opens it (not in tests). Ends when pi has saved the token, failed,
- * or the user cancels.
+ * "Sign in with ChatGPT" or "with GitHub Copilot" through resources/somaai/signin.mjs (pi's SDK over pipes, see there).
+ * `onPage` gets the sign-in page (and for Copilot the code to type there) as soon as pi names it, the caller opens it
+ * (not in tests). Ends when pi has saved the token, failed, or the user cancels.
  */
-export function signInChatGPT(onUrl: (url: string) => void): Promise<AiSignInResult> {
+export function signIn(provider: unknown, onPage: (page: AiSignInPage) => void): Promise<AiSignInResult> {
+  const p = typeof provider === 'string' ? accountProvider(provider) : undefined;
+  if (!p) return Promise.resolve({ ok: false, error: 'Unknown provider.' });
   if (signing) return Promise.resolve({ ok: false, error: 'A sign-in is already running.' });
   const index = piIndex();
   const helper = path.join(app.getAppPath(), 'resources', 'somaai', 'signin.mjs');
@@ -98,12 +102,12 @@ export function signInChatGPT(onUrl: (url: string) => void): Promise<AiSignInRes
   try { fs.mkdirSync(aiDir(), { recursive: true }); id = deviceId(); }
   catch (e) { return Promise.resolve({ ok: false, error: `SOMA AI could not write its settings: ${e instanceof Error ? e.message : String(e)}` }); }
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [helper, index, authFile(), CHATGPT_PROVIDER, id], {
+    const child = spawn(process.execPath, [helper, index, authFile(), p.id, id], {
       cwd: aiDir(), env: piProcessEnv(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
     });
     const me = { child, cancelled: false };
     signing = me;
-    console.log('[somaai] sign-in with ChatGPT started');
+    console.log(`[somaai] sign-in with ${p.label} started`);
     const timer = setTimeout(() => cancelSignIn(), SIGN_IN_MS);
     let error = '';
     let buf = '';
@@ -113,10 +117,11 @@ export function signInChatGPT(onUrl: (url: string) => void): Promise<AiSignInRes
       for (let i = buf.indexOf('\n'); i >= 0; i = buf.indexOf('\n')) {
         const line = buf.slice(0, i).trim();
         buf = buf.slice(i + 1);
-        let m: { url?: unknown; error?: unknown };
+        let m: { url?: unknown; code?: unknown; error?: unknown };
         try { m = JSON.parse(line) as typeof m; } catch { continue; }
-        // Only web addresses go to the browser
-        if (typeof m.url === 'string' && /^https:\/\//.test(m.url)) onUrl(m.url);
+        // Only web addresses go to the browser, only a short code of letters and digits to the window
+        const code = typeof m.code === 'string' && /^[A-Z0-9-]{4,24}$/i.test(m.code) ? m.code : undefined;
+        if (typeof m.url === 'string' && /^https:\/\//.test(m.url)) onPage({ url: m.url, code });
         if (typeof m.error === 'string') error = m.error;
       }
     });
@@ -129,14 +134,14 @@ export function signInChatGPT(onUrl: (url: string) => void): Promise<AiSignInRes
       settled = true;
       clearTimeout(timer);
       if (signing === me) signing = null;
-      if (code === 0 && aiAccounts().some((a) => a.provider === CHATGPT_PROVIDER && a.type === 'oauth')) {
-        try { useProvider(CHATGPT_PROVIDER); } catch { /* the model choice stays pi's */ }
-        console.log('[somaai] signed in with ChatGPT');
+      if (code === 0 && aiAccounts().some((a) => a.provider === p.id && a.type === 'oauth')) {
+        try { useProvider(p.id); } catch { /* the model choice stays pi's */ }
+        console.log(`[somaai] signed in with ${p.label}`);
         resolve({ ok: true });
       } else if (me.cancelled || error === 'cancelled') resolve({ ok: false, cancelled: true });
       else {
         const why = (error || stderr.trim().split(/\r?\n/).slice(-2).join(' ') || 'Signing in did not work.').slice(0, 400);
-        console.log(`[somaai] sign-in with ChatGPT failed (code ${code}): ${why}`);
+        console.log(`[somaai] sign-in with ${p.label} failed (code ${code}): ${why}`);
         resolve({ ok: false, error: why });
       }
     };

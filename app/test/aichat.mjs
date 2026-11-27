@@ -65,7 +65,7 @@ try {
   await ev(() => window.__t.showChat(true));
   await app.waitFor('set-up', () => window.__t.chat().phase === 'setup', 20000);
   const setup = await ev(() => [...document.querySelectorAll('.ai-pane button')].map((b) => b.textContent.trim()));
-  check('Without a sign-in: set-up with ChatGPT, API key and terminal', setup.includes('Sign in with ChatGPT') && setup.includes('Save key') && setup.includes('Open a terminal'), setup.join(' | '));
+  check('Without a sign-in: set-up with ChatGPT, GitHub Copilot, API key and terminal', setup.includes('Sign in with ChatGPT') && setup.includes('Sign in with GitHub Copilot') && setup.includes('Save key') && setup.includes('Open a terminal'), setup.join(' | '));
   check('Dot on the tab: grey (not set up)', (await dot()) === 'off', await dot());
   await shot('setup');
 
@@ -320,8 +320,8 @@ try {
   await ev(() => window.__t.settingsShow('ai'));
   await app.waitFor('models in Settings', () => window.__t.settingsPages().ai.models !== null && window.__t.settingsPages().ai.usage, 60000);
   let ap = await aiPage();
-  check('Settings > SOMA AI: both sign-ins, ChatGPT to add, the models of the sign-ins, the recommendation',
-    JSON.stringify(ap.accounts.map((a) => a.provider).sort()) === '["anthropic","openrouter"]' && ap.text.includes('Sign in with ChatGPT') && ap.models > 5
+  check('Settings > SOMA AI: both sign-ins, ChatGPT and GitHub Copilot to add, the models of the sign-ins, the recommendation',
+    JSON.stringify(ap.accounts.map((a) => a.provider).sort()) === '["anthropic","openrouter"]' && ap.text.includes('Sign in with ChatGPT') && ap.text.includes('Sign in with GitHub Copilot') && ap.models > 5
     && ap.text.includes('we recommend') && ap.current?.provider === 'openrouter', JSON.stringify({ accounts: ap.accounts, models: ap.models, current: ap.current, err: ap.modelsError }));
   check('… what the conversation of the open model used', /Messages\s+3 from you/.test(ap.text) && /Tokens\s+[\d.]+ k read/.test(ap.text), ap.text.slice(ap.text.indexOf('USAGE'), ap.text.indexOf('USAGE') + 200));
   await shot('settings-ai');
