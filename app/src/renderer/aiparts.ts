@@ -56,7 +56,7 @@ interface SearchMenuOptions { placeholder: string; empty: string; align?: 'left'
 export function showModelMenu(menu: HTMLElement, anchor: HTMLElement, models: AiModel[], current: { provider: string; id: string } | null,
   pick: (m: AiModel) => void, align: 'left' | 'right' = 'right'): void {
   const entry = (m: AiModel): MenuEntry => ({
-    label: m.name, sub: m.provider === COPILOT_PROVIDER ? 'GitHub Copilot · text only'
+    label: m.name, sub: m.provider === COPILOT_PROVIDER ? 'GitHub Copilot · CAD preview'
       : models.some((x) => x !== m && x.name === m.name) ? m.provider : undefined, find: `${m.name} ${m.id} ${m.provider}`,
     on: current?.id === m.id && current?.provider === m.provider, onClick: () => pick(m),
   });

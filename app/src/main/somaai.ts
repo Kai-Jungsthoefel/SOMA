@@ -8,6 +8,7 @@ import { aiDir } from './paths';
 import { terminalEnv } from './terminals';
 import { copilotModels } from './copilotauth';
 import { CopilotChat } from './copilotchat';
+import type { copilotCad } from './copilotcad';
 
 /*
  * SOMA AI: the agent built into SOMA. It is pi (pi.dev, MIT), bundled with the app, so people without a coding agent of
@@ -266,7 +267,8 @@ export class SomaAI {
    * `fresh`: pi starts a new conversation instead of continuing the last one, until the person writes or picks one.
    * After "Load file" the last conversation is about a later state of the model than the folder now has.
    */
-  constructor(private readonly wc: WebContents, private readonly dir: string, private fresh = false, private readonly onFresh: () => void = () => {}) {}
+  constructor(private readonly wc: WebContents, private readonly dir: string, private readonly cad: ReturnType<typeof copilotCad>,
+    private fresh = false, private readonly onFresh: () => void = () => {}) {}
 
   /** The person wrote or picked a conversation: from now on pi continues it, also after a restart of SOMA. */
   private settleFresh(): void {
@@ -433,7 +435,7 @@ export class SomaAI {
     this.copilotGen = nextGen++;
     this.copilot ??= new CopilotChat(model, (record) => {
       if (this.copilotSelected && !this.disposed && !this.wc.isDestroyed()) this.wc.send('ai:event', { gen: this.copilotGen, record });
-    });
+    }, this.cad);
     this.copilotSelected = true;
   }
 
@@ -500,7 +502,9 @@ export class SomaAI {
   /** Answer to a question of an extension (confirm, select, input). Only the fields pi knows. */
   respond(res: unknown): void {
     const r = (res && typeof res === 'object' ? res : {}) as Record<string, unknown>;
-    if (typeof r.id !== 'string' || r.id.length > 200 || !this.child?.stdin?.writable) return;
+    if (typeof r.id !== 'string' || r.id.length > 200) return;
+    if (this.copilotSelected) { this.copilot?.respond(r.id, r.confirmed === true && r.cancelled !== true); return; }
+    if (!this.child?.stdin?.writable) return;
     const out: Record<string, unknown> = { type: 'extension_ui_response', id: r.id };
     if (r.cancelled === true) out.cancelled = true;
     else if (typeof r.confirmed === 'boolean') out.confirmed = r.confirmed;

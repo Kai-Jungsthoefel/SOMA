@@ -67,7 +67,10 @@ start the sign-in, then use the displayed code to authorize the test app on GitH
 This uses the [official Copilot SDK](https://docs.github.com/en/copilot/how-tos/copilot-sdk/setup/github-oauth)
 without using stored CLI credentials. SOMA saves the sign-in encrypted with system credential storage and asks you
 to sign in again after token expiry. Open a project, select a GitHub Copilot model in the chat model picker, and
-ask a text question. Copilot cannot see or edit project files, open images, or run commands in this preview. When
+ask a CAD question or request an edit. Copilot can list and read the active entry and Python files in the project
+root or `parts/`, read `AGENTS.md`, and list STEP assets in `inputs/`. SOMA reviews each exact Python replacement
+before saving and requesting a build, which executes the Python script locally. The preview does not create files,
+open assets, accept images, or invoke shell commands. When
 you switch between Copilot and pi, each backend keeps its own conversation for the open project; the Copilot
 preview does not reopen earlier chats after closing a project.
 

@@ -499,8 +499,8 @@ export class SomaChat {
         el('p', { textContent: 'Uses your ChatGPT Plus or Pro plan. No extra cost, your plan’s limits apply.' }),
         el('div', { className: 'acts' }, chatgpt, el('span', { className: 'c3 small', textContent: 'Opens your browser' }))),
       copilot ? el('div', { className: 'ai-opt' },
-        el('h4', {}, icon('chat', 16), 'GitHub Copilot (text-only preview)'),
-        el('p', { textContent: 'Use your GitHub Copilot subscription to ask CAD questions. This preview can’t read or edit your model or run commands.' }),
+        el('h4', {}, icon('chat', 16), 'GitHub Copilot (CAD preview)'),
+        el('p', { textContent: 'Use your GitHub Copilot subscription to inspect project sources and propose edits. SOMA asks before applying an edit and rebuilding.' }),
         el('div', { className: 'acts' }, copilot, el('span', { className: 'c3 small', textContent: 'Opens Settings' }))) : null,
       el('div', { className: 'ai-opt' },
         el('h4', {}, icon('apikey', 16), 'Use an API key'),
@@ -600,7 +600,7 @@ export class SomaChat {
     more.setAttribute('aria-label', 'Sign-in and more');
     more.addEventListener('click', () => this.openAccountMenu(more));
     this.top.replaceChildren(el('span', { className: 'ai-safe' }, icon('shield', 13),
-      this.model?.provider === COPILOT_PROVIDER ? 'GitHub Copilot · text only · ' : 'Works with your permissions · ', details),
+      this.model?.provider === COPILOT_PROVIDER ? 'GitHub Copilot · edits require approval · ' : 'Works with your permissions · ', details),
       el('span', { className: 'grow' }), past, fresh, more);
   }
 
@@ -627,7 +627,7 @@ export class SomaChat {
     this.input.disabled = locked;
     this.input.placeholder = this.phase === 'note' ? 'Read the note above first'
       : this.asking ? 'SOMA AI is waiting for your answer above'
-        : this.model?.provider === COPILOT_PROVIDER ? 'Ask a CAD question (text only) …'
+        : this.model?.provider === COPILOT_PROVIDER ? 'Ask a CAD question or describe a model edit …'
           : this.running ? 'Add something, SOMA AI reads it after the current step …' : 'Describe what you want, or add a sketch or photo …';
     this.composer.classList.toggle('locked', locked);
     this.voice.setLocked(locked);
@@ -1385,7 +1385,9 @@ export class SomaChat {
       : options.slice(0, 4).map((o) => [o, () => done({ value: o }, o)] as const);
     for (const [label, fn] of buttons) { const b = el('button', { className: 'btn', textContent: label }); b.addEventListener('click', fn); acts.append(b); }
     card.append(el('h4', {}, icon('help', 18), el('span', { textContent: title || 'SOMA AI asks' })));
-    if (message) card.append(el('div', { className: 'in', textContent: message }));
+    if (message) card.append(id.startsWith('copilot-')
+      ? el('pre', { className: 'ai-det', textContent: message })
+      : el('div', { className: 'in', textContent: message }));
     card.append(acts);
     this.asking = id;
     this.closers.set(id, () => { card.classList.add('done'); acts.replaceChildren(el('span', { className: 'c3 small', textContent: 'Not answered: SOMA AI stopped.' })); });

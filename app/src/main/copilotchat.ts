@@ -1,4 +1,4 @@
-import type { CopilotClient, CopilotSession } from '@microsoft/copilot-sdk';
+import type { CopilotClient, CopilotSession, Tool, ToolInvocation } from '@microsoft/copilot-sdk';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -6,6 +6,7 @@ import type { AiModel } from '../shared/somaai';
 import type { AiResult } from '../shared/types';
 import { copilotModels, openSignedInCopilotClient } from './copilotauth';
 import { aiDir } from './paths';
+import type { copilotCad } from './copilotcad';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -15,7 +16,7 @@ type Message = {
   errorMessage?: string;
 };
 
-/** Text-only preview. The SDK gets neither the model folder nor tools; only explicitly sent text leaves SOMA. */
+/** The SDK works outside the project; only SOMA's explicit CAD tools can access its source files. */
 export class CopilotChat {
   private sessionId = randomUUID();
   private messages: Message[] = [];
@@ -23,8 +24,10 @@ export class CopilotChat {
   private session?: CopilotSession;
   private turn?: { cancelled: boolean; done?: Promise<void> };
   private selection: AiModel;
+  private approval?: { id: string; resolve: (approved: boolean) => void };
 
-  constructor(model: AiModel, private readonly emit: (record: Record<string, unknown>) => void) { this.selection = model; }
+  constructor(model: AiModel, private readonly emit: (record: Record<string, unknown>) => void,
+    private readonly cad: ReturnType<typeof copilotCad>) { this.selection = model; }
 
   get busy(): boolean { return !!this.turn; }
   get model(): AiModel { return this.selection; }
@@ -70,7 +73,7 @@ export class CopilotChat {
         if (!copilotModels().some((m) => m.id === this.model.id)) return { ok: false, error: 'Your GitHub Copilot sign-in has expired. Sign in again in Settings > SOMA AI.' };
         this.submit(c.message);
         return { ok: true };
-      default: return { ok: false, error: 'The Copilot text preview does not support this action.' };
+      default: return { ok: false, error: 'The Copilot CAD preview does not support this action.' };
     }
   }
 
@@ -93,15 +96,16 @@ export class CopilotChat {
       if (!this.session) {
         const workingDirectory = path.join(aiDir(), 'copilot-runtime', 'text-preview');
         fs.mkdirSync(workingDirectory, { recursive: true });
+        const definitions = this.tools();
         this.session = await this.client.createSession({
           workingDirectory, model: this.model.id, enableConfigDiscovery: false,
-          tools: { availableTools: [] },
+          tools: { definitions, availableTools: definitions.map((tool) => tool.name) },
           permissions: { onRequest: () => ({ kind: 'denied-by-rules', rules: [] }) },
           instructions: { skipCustomInstructions: true },
           git: { enableHostGitOperations: false },
           github: { telemetryEnabled: false },
           state: { enableCrossSessionStore: false },
-          systemMessage: { mode: 'append', content: 'You are answering a CAD design question in SOMA. This chat is text-only. You cannot see or edit the project, run commands, or use tools. Do not claim you performed those actions.' },
+          systemMessage: { mode: 'append', content: 'You are working on a CadQuery model in SOMA. Use soma_list_project to find its source files and instructions, then soma_read_model to inspect the relevant files. Use soma_edit_model for a small exact replacement in a Python source file; SOMA asks the user to approve it and requests a rebuild. Do not claim the rebuild succeeded without evidence. Do not retry a declined edit. You cannot access arbitrary files or run shell commands.' },
         });
       }
       if (turn.cancelled) return;
@@ -127,8 +131,66 @@ export class CopilotChat {
   private async abort(): Promise<void> {
     if (!this.turn) return;
     this.turn.cancelled = true;
+    this.approval?.resolve(false);
     try { await this.session?.abort(); }
     catch { console.warn('[somaai] Copilot did not acknowledge the abort.'); }
+  }
+
+  respond(id: string, confirmed: boolean): void {
+    if (this.approval?.id === id) this.approval.resolve(confirmed);
+  }
+
+  private confirmEdit(detail: string, signal?: AbortSignal): Promise<boolean> {
+    if (this.approval || this.turn?.cancelled || signal?.aborted) return Promise.resolve(false);
+    const id = `copilot-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const cancel = () => finish(false);
+      const finish = (approved: boolean) => {
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', cancel);
+        this.approval = undefined;
+        resolve(approved);
+      };
+      const timeout = setTimeout(cancel, 80_000);
+      this.approval = { id, resolve: finish };
+      signal?.addEventListener('abort', cancel, { once: true });
+      this.emit({ type: 'extension_ui_request', id, method: 'confirm', title: 'Apply and rebuild Copilot’s model edit?',
+        message: `Approving saves this Python change and runs the script on your computer. Approve only code you trust.\n\n${detail}` });
+    });
+  }
+
+  private tools(): Tool[] {
+    const list = 'soma_list_project', read = 'soma_read_model', edit = 'soma_edit_model';
+    const pathArg = { type: 'string', description: 'Project-relative path from soma_list_project. Omit for the active entry script.' };
+    const arg = (args: unknown, key: string) =>
+      args && typeof args === 'object' && key in args ? Reflect.get(args, key) as unknown : undefined;
+    const run = async (invocation: ToolInvocation, action: () => unknown) => {
+      const { toolCallId, toolName } = invocation;
+      this.emit({ type: 'tool_execution_start', toolCallId, toolName });
+      let result: unknown;
+      try {
+        if (!this.turn || this.turn.cancelled || invocation.signal?.aborted) throw new Error('The Copilot turn has stopped.');
+        result = await action();
+      } catch (e) {
+        result = { ok: false, message: e instanceof Error ? e.message : 'SOMA could not perform the CAD action.' };
+      }
+      const failed = !!result && typeof result === 'object' && 'ok' in result && result.ok === false;
+      this.emit({ type: 'tool_execution_end', toolCallId, isError: failed,
+        result: { content: [{ type: 'text', text: toolName === read && !failed ? 'Read a project file.' : JSON.stringify(result) }] } });
+      return result;
+    };
+    return [
+      { name: list, description: 'List the active entry, project Python sources, AGENTS.md, and imported STEP filenames.',
+        skipPermission: true, handler: (_args, invocation) => run(invocation, () => this.cad.list()) },
+      { name: read, description: 'Read a listed Python source or AGENTS.md. Imported assets are listed only.',
+        skipPermission: true, parameters: { type: 'object', properties: { path: pathArg }, additionalProperties: false },
+        handler: (args, invocation) => run(invocation, () => this.cad.read(arg(args, 'path'))) },
+      { name: edit, description: 'Propose replacing one exact, unique snippet in a listed Python source and rebuilding after user approval.',
+        skipPermission: true, parameters: { type: 'object', properties: { path: pathArg, before: { type: 'string' }, after: { type: 'string' } }, required: ['before', 'after'], additionalProperties: false },
+        handler: (args, invocation) => run(invocation, () => this.cad.replace(arg(args, 'before'), arg(args, 'after'),
+          (detail) => this.confirmEdit(detail, invocation.signal),
+          () => !!this.turn && !this.turn.cancelled && !invocation.signal?.aborted, arg(args, 'path'))) },
+    ];
   }
 
   private async closeSession(): Promise<void> {

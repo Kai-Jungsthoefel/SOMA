@@ -8,7 +8,7 @@ the version is bumped.
 
 ### Added
 
-- Opt-in developer preview of GitHub Copilot sign-in in Settings > SOMA AI. Copilot models are available for text questions in the chat model picker; they cannot read or edit project files or run commands.
+- Opt-in developer preview of GitHub Copilot sign-in in Settings > SOMA AI, also linked from the chat setup screen. Copilot can find and edit the model's Python entry and part sources after approval, then rebuild. No shell tool is available.
 
 ## [1.0.0] - 2026-11-22
 

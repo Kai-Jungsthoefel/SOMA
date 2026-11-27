@@ -198,8 +198,8 @@ export class AiPage implements SettingsPage {
       }));
     }
     const description = this.copilotCode ? 'Enter this code on GitHub to authorize SOMA.'
-      : error ?? (modelCount === undefined ? 'Developer preview: text chat only, without access to your model files or tools.'
-        : `Connected. ${modelCount} models available in the chat model picker. Copilot can answer questions but cannot access model files or tools.`);
+      : error ?? (modelCount === undefined ? 'CAD preview: Copilot can read project sources and propose edits for approval.'
+        : `Connected. ${modelCount} models available in the chat model picker. Copilot can edit project sources and rebuild with your approval.`);
     return field('GitHub Copilot', description, actions);
   }
 

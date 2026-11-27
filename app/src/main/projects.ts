@@ -11,6 +11,7 @@ import { affectsAnimation } from '../shared/editable';
 import { AnimBuilder, listResults, readAnimList, rerunResult, samePath, unbuiltAnimFiles, writeResultsIndex } from './animations';
 import { DrawingBuilder, isDrawingFile, readDrawingList } from './drawings';
 import { resolveInside } from './files';
+import { copilotCad } from './copilotcad';
 import { BuildManager, buildIsStale, currentBuild, newestSourceMtime, runSoma, validBuild } from './build';
 import { checkRequest, RenderService, type RenderRequest } from './render';
 import { choose, chooseCadQueryScript, chooseEntryScript, chooseExportTarget, chooseFolder, choosePath, documentsDir, trashItem } from './dialogs';
@@ -19,7 +20,7 @@ import { GitRepo, type GitStatus } from './git';
 import { MeasureService } from './measure';
 import { ensureEnv, envIsCurrent, installMissing, missingPackages } from './packages';
 import { checkParamValue, isParamValue, readUserParams, writeUserParams } from './params';
-import { backupsDir, helpDir, previewsDir, skillBackupsDir, skillDirs, userDataDir } from './paths';
+import { backupsDir, editBackupsDir, helpDir, previewsDir, skillBackupsDir, skillDirs, userDataDir } from './paths';
 import { syncHelpImages } from './help';
 import { HELP_SKILL } from '../shared/help';
 import { previewComplete as previewReady, stepPreview, storeBuildAsPreview, type StepStamp } from './previews';
@@ -164,7 +165,8 @@ export class ProjectController {
     if (folder && !fs.existsSync(dir)) throw new Error(`The folder no longer exists: ${dir}. Open it again with “Open folder” at its new place.`);
     const builds = new BuildManager(dir);
     const terminals = new TerminalManager(this.wc, dir);
-    const ai = new SomaAI(this.wc, dir, !!getAppState(id).aiFresh, () => patchAppState(id, { aiFresh: false }));
+    const cad = copilotCad(dir, readProjectJson(id)?.entry || 'model.py', editBackupsDir(id), () => builds.start('Copilot model edit'));
+    const ai = new SomaAI(this.wc, dir, cad, !!getAppState(id).aiFresh, () => patchAppState(id, { aiFresh: false }));
     const git = new GitRepo(dir);
     // Ältere Projekte: Zwischenergebnisse auch aus den Commits des Agenten heraushalten. Im Ordner-Modus gehört das Repository
     // dem Nutzer, dort hält .soma/.gitignore die Zwischenergebnisse heraus

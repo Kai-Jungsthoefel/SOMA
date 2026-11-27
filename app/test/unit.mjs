@@ -15,6 +15,53 @@ try {
   const deviceOut = path.join(tmp, 'copilotdevice.mjs');
   await build({ entryPoints: [path.join(APP, 'src', 'main', 'copilotdevice.ts')], outfile: deviceOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
   const { authorizeCopilotDevice } = await import(pathToFileURL(deviceOut).href);
+  const cadOut = path.join(tmp, 'copilotcad.mjs');
+  await build({ entryPoints: [path.join(APP, 'src', 'main', 'copilotcad.ts')], outfile: cadOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+  const { copilotCad } = await import(pathToFileURL(cadOut).href);
+  const cadRoot = path.join(tmp, 'copilot-model');
+  const cadBackup = path.join(tmp, 'copilot-backup');
+  fs.mkdirSync(cadRoot);
+  const entry = path.join(cadRoot, 'model.py');
+  fs.writeFileSync(entry, 'WIDTH = 40\n');
+  let rebuilds = 0;
+  const cad = copilotCad(cadRoot, 'model.py', cadBackup, () => rebuilds++);
+  const declined = await cad.replace('40', '50', async () => false, () => true);
+  check('Declining a Copilot edit leaves the source untouched and does not build',
+    !declined.ok && fs.readFileSync(entry, 'utf8') === 'WIDTH = 40\n' && rebuilds === 0 && !fs.existsSync(cadBackup));
+  const accepted = await cad.replace('40', '50', async (detail) => detail.includes('Replace:\n40\n\nWith:\n50'), () => true);
+  check('Approving a Copilot edit backs up the original, saves the replacement and requests one build',
+    accepted.ok && fs.readFileSync(entry, 'utf8') === 'WIDTH = 50\n' && rebuilds === 1 &&
+    fs.readFileSync(path.join(cadBackup, fs.readdirSync(cadBackup)[0]), 'utf8') === 'WIDTH = 40\n');
+  const staleEdit = await cad.replace('50', '60', async () => {
+    fs.writeFileSync(entry, 'WIDTH = 55\n');
+    return true;
+  }, () => true).then(() => '', (e) => e.message);
+  check('A concurrent edit is not overwritten after Copilot approval',
+    /changed during review/.test(staleEdit) && fs.readFileSync(entry, 'utf8') === 'WIDTH = 55\n' && rebuilds === 1);
+  let deniedPath = false;
+  try { copilotCad(cadRoot, '../outside.py', cadBackup, () => {}).read(); }
+  catch (error) { deniedPath = /no traversal/.test(error.message); }
+  check('Copilot cannot use a traversal path as its model entry', deniedPath);
+  fs.mkdirSync(path.join(cadRoot, 'parts'));
+  fs.mkdirSync(path.join(cadRoot, 'inputs'));
+  fs.writeFileSync(path.join(cadRoot, 'parts', 'body.py'), 'THICKNESS = 2\n');
+  fs.writeFileSync(path.join(cadRoot, 'inputs', 'reference.step'), 'step test asset');
+  fs.writeFileSync(path.join(cadRoot, 'AGENTS.md'), 'Model instructions.');
+  fs.writeFileSync(path.join(cadRoot, '.env'), 'PRIVATE=test-secret');
+  const inventory = cad.list();
+  const editedPart = await cad.replace('THICKNESS = 2', 'THICKNESS = 3', async (detail) =>
+    detail.startsWith('File: parts/body.py\n'), () => true, 'parts/body.py');
+  check('Copilot can find, read and edit a part source without modifying the entry',
+    inventory.sources.includes('parts/body.py') && inventory.instructions.includes('AGENTS.md') &&
+    inventory.assets.includes('inputs/reference.step') && !JSON.stringify(inventory).includes('.env') &&
+    cad.read('parts/body.py').source === 'THICKNESS = 3\n' && cad.read('AGENTS.md').source === 'Model instructions.' &&
+    editedPart.ok && fs.readFileSync(entry, 'utf8') === 'WIDTH = 55\n' && rebuilds === 2);
+  const deniedInstructions = await cad.replace('Model', 'Other', async () => true, () => true, 'AGENTS.md').then(() => false, () => true);
+  const deniedReads = ['inputs/reference.step', '.env', 'parts/../model.py'].map((rel) => {
+    try { cad.read(rel); return false; } catch { return true; }
+  });
+  check('Copilot cannot edit instructions or read listed STEP assets, hidden files or traversal paths',
+    deniedInstructions && deniedReads.every(Boolean) && rebuilds === 2);
   const device = { device_code: 'd'.repeat(40), user_code: 'ABCD-1234', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 5 };
   const pauses = [], posted = [], codes = [];
   const replies = [device, { error: 'authorization_pending' }, { error: 'slow_down', interval: 12 }, { access_token: 'ghu_fake', expires_in: 28800 }];
