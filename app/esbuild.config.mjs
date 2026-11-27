@@ -6,8 +6,13 @@ import path from 'node:path';
 // Versionsnummer von SOMA (E68) aus package.json, für alle Teile gleich (src/shared/version.ts)
 const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const common = { bundle: true, sourcemap: true, logLevel: 'info', target: 'es2022', define: { __SOMA_VERSION__: JSON.stringify(version) } };
+const copilotClientId = process.env.SOMA_COPILOT_BUILD_CLIENT_ID?.trim() ?? '';
+if (copilotClientId && !/^[A-Za-z0-9.]{1,100}$/.test(copilotClientId)) {
+  throw new Error('SOMA_COPILOT_BUILD_CLIENT_ID must be a public GitHub App Client ID.');
+}
 await Promise.all([
   build({ ...common, entryPoints: ['src/main/main.ts'], outfile: 'dist/main/main.js', platform: 'node', format: 'cjs',
+          define: { ...common.define, __SOMA_COPILOT_CLIENT_ID__: JSON.stringify(copilotClientId) },
           external: ['electron', 'node-pty', 'dugite', 'sherpa-onnx-node', '@microsoft/copilot-sdk'] }),
   // Speech recognition for voice input (voice.ts) in its own utility process. sherpa-onnx loads its native part from
   // its package folder, so it stays outside the bundle

@@ -76,9 +76,10 @@ preview does not reopen earlier chats after closing a project.
 
 For an official release, register a separate GitHub App owned by the project and verify authorization with a
 Copilot user who does not own that app. Provide the project's public Client ID to the release build as a default,
-with `SOMA_COPILOT_CLIENT_ID` still available as a local development override. The current preview reads only the
-runtime environment; setting a CI variable alone will not embed it in the installed app. Build-time configuration
-and verification in a packaged build are follow-up work. Do not include a client secret, private key, or token.
+with `SOMA_COPILOT_CLIENT_ID` still available as a local runtime override. Set the GitHub Actions repository variable
+`SOMA_COPILOT_CLIENT_ID`; the packaging workflow passes it as `SOMA_COPILOT_BUILD_CLIENT_ID` so the app build embeds
+the public ID. For local packaging, set `SOMA_COPILOT_BUILD_CLIENT_ID` before running `npm run dist`. If neither value
+is configured, Copilot stays hidden. Do not include a client secret, private key, or token.
 
 ## Installationspakete
 

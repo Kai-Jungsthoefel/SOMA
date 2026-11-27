@@ -8,7 +8,9 @@ import { authorizeCopilotDevice } from './copilotdevice';
 import { aiDir } from './paths';
 
 const credentialPath = () => path.join(aiDir(), 'copilot-credential.json');
-const clientId = () => process.env.SOMA_COPILOT_CLIENT_ID?.trim() ?? '';
+declare const __SOMA_COPILOT_CLIENT_ID__: string | undefined;
+const clientId = () => process.env.SOMA_COPILOT_CLIENT_ID?.trim()
+  ?? (typeof __SOMA_COPILOT_CLIENT_ID__ === 'string' ? __SOMA_COPILOT_CLIENT_ID__ : '');
 const configured = () => /^[A-Za-z0-9.]{1,100}$/.test(clientId());
 let attempt: AbortController | undefined;
 

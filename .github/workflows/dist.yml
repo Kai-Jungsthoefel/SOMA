@@ -84,6 +84,7 @@ jobs:
         working-directory: app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          SOMA_COPILOT_BUILD_CLIENT_ID: ${{ vars.SOMA_COPILOT_CLIENT_ID }}
         run: |
           npm run dist
           df -h . || true
