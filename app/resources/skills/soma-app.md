@@ -242,7 +242,7 @@ Mark up is the quickest way to show the agent what you mean: draw an arrow, writ
 3. **Analysis**: results the agent calculated, such as strength (FEM), wall thickness, overhang or clearance. Click one to see it in color on the model, with its report. A `.soma` file keeps the analyses without their colored results (they are large): after opening one on another computer, the list shows them with their values as saved, and "Compute" calculates one again for the model as it is now.
 4. **Animation**: motion the agent made, for example an assembly sequence. Click one to play it in the viewer, "Make video" writes an MP4. Below are the videos of the model, sorted by folder; click a folder to collapse it (SOMA remembers this per model). Right-click a video to play, rename or delete it, show it in the file tree or in Explorer.
 5. **Drawings**: all technical drawings of the model in one view, next to the viewer (no sidebar). See "Drawings" below.
-6. **Skills**: rule sets for the agent, such as 3D printing, CNC or tolerances. Off, On demand (the agent reads them when the topic comes up) or Always.
+6. **Skills**: rule sets for the agent, such as 3D printing, CNC or tolerances. Off, On demand (the agent reads them when the topic comes up) or Always. Each one switched on is a copy in the model (`.soma/skills/`). When SOMA brings a newer version (after an update, or after you edited the skill in Settings), opening the model updates the copy, the old one goes into the backup. A copy that was changed in the model stays as it is: "Take over current version" in its card replaces it.
 7. **Help**: this guide (F1).
 8. **Settings**: see below.
 
@@ -374,7 +374,7 @@ The folder itself is the model: there is no .soma file to save, and your files s
 2. **Tabs when a model opens**: up to three, the first one is in front. Each is SOMA AI, an empty terminal, one of the agents (Claude Code, OpenCode, Codex, Gemini CLI) or your own command, to start other agent harnesses or command line tools automatically. By default only SOMA AI opens.
 3. **Viewer**: mouse buttons like in your CAD program, zoom direction, perspective or orthographic, display when a model opens, and decimal places of measurements.
 4. **SOMA AI**: sign in and out, the model SOMA AI thinks with (with a search) and its effort, what the conversation of the open model used, what SOMA AI may do, and the note about its risks again.
-5. **Skills**: edit the built-in skills or write your own. They are available in every model.
+5. **Skills**: edit the built-in skills or write your own. They are available in every model. Models whose copy of the skill was not changed there take over your version.
 6. **Shortcuts**: all keys and mouse actions.
 7. **Storage**: how much space SOMA's data takes, and clearing the preview cache.
 8. **About**: versions, components and the agents found, and the folders of SOMA including its logs.
