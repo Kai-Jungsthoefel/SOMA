@@ -71,6 +71,10 @@ try {
   check('Configured Copilot is discoverable from chat setup, between ChatGPT and API keys',
     setup.includes('Set up GitHub Copilot') && setup.indexOf('Sign in with ChatGPT') < setup.indexOf('Set up GitHub Copilot')
       && setup.indexOf('Set up GitHub Copilot') < setup.indexOf('Save key'));
+  const copilotSetup = await ev(() => [...document.querySelectorAll('.ai-pane .ai-opt')]
+    .find((card) => card.querySelector('h4')?.textContent === 'GitHub Copilot')?.textContent ?? '');
+  check('Copilot setup describes editing and rebuilding with approval',
+    /approve a proposed edit, SOMA applies it and rebuilds the model/.test(copilotSetup));
   await click('Set up GitHub Copilot');
   await app.waitFor('Copilot sign-in in SOMA AI settings', () =>
     document.querySelector('#st-ai')?.getBoundingClientRect().width > 0
