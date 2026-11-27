@@ -43,9 +43,18 @@ SHEETS = []    # Blaetter des laufenden Zeichnungsskripts, drawrun.py sammelt si
 _PARTS = None  # Bauteile aus dem Build (Liste wie registry.REGISTRY), gesetzt von drawrun.py
 
 # Papierformate nach ISO 5457 als (kurze, lange) Seite
-SIZES = {"A4": (210, 297), "A3": (297, 420), "A2": (420, 594), "A1": (594, 841), "A0": (841, 1189)}
+SIZES = {"A4": (210, 297), "A3": (297, 420), "A2": (420, 594), "A1": (594, 841), "A0": (841, 1189),
+         # ANSI/ASME Y14.1 sizes for inch drawings (8.5 x 11 in ... 34 x 44 in). Frame and title block stay ISO 5457 and
+         # ISO 7200: the 180 mm title block fits even ANSI A in portrait (186 mm inside the frame)
+         "ANSI A": (215.9, 279.4), "ANSI B": (279.4, 431.8), "ANSI C": (431.8, 558.8), "ANSI D": (558.8, 863.6),
+         "ANSI E": (863.6, 1117.6)}
+PORTRAIT = ("A4", "ANSI A")  # standard sizes in portrait unless landscape=True, the others in landscape
 # Bevorzugte Maßstäbe nach ISO 5455, andere meldet die Prüfung nur als Hinweis
 ISO_SCALES = [50, 20, 10, 5, 2, 1, 1 / 2, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100, 1 / 200, 1 / 500, 1 / 1000]
+# Inch drawings also use the binary scales of US practice (half, quarter, eighth size)
+INCH_SCALES = [4, 1 / 4, 1 / 8, 1 / 16]
+MM_PER_INCH = 25.4
+UNITS = ("mm", "in")
 # Blickrichtung (vom Teil zum Betrachter) und die Richtung im Modell, die auf dem Blatt nach oben zeigt. Wie in der App
 # und in soma.anim: front schaut von -Y, left von -X. top hat +Y oben, bottom -Y (Projektionsmethode 1 und 3 gleich)
 VIEWS = {
@@ -88,10 +97,10 @@ FONT = "DejaVuSans.ttf"  # liegt matplotlib bei, damit die PDF auf jedem Rechner
 TITLE_LABELS = {
     "en": dict(owner="Owner", title="Title", drawn="Drawn by", date="Date", number="Drawing number", revision="Rev.",
                material="Material", tolerance="General tolerances", scale="Scale", size="Size", projection="Projection",
-               sheet="Sheet"),
+               sheet="Sheet", inches="DIMENSIONS IN INCHES"),
     "de": dict(owner="Firma", title="Benennung", drawn="Gezeichnet", date="Datum", number="Zeichnungsnummer",
                revision="Index", material="Werkstoff", tolerance="Allgemeintoleranzen", scale="Maßstab", size="Format",
-               projection="Projektion", sheet="Blatt"),
+               projection="Projektion", sheet="Blatt", inches="MASSE IN ZOLL"),
 }
 
 
@@ -172,6 +181,15 @@ def num(v, dec=2):
     if "." in s:  # Nullen nur hinter dem Komma streichen, sonst wird aus 130 mit dec=0 "13"
         s = s.rstrip("0").rstrip(".")
     return "0" if s in ("-0", "") else s
+
+
+def num_in(mm, dec=3):
+    """Millimetres as inches the way ASME Y14.5 writes them: fixed decimals, no leading zero. 6.35 -> ".250",
+    38.1 -> "1.500"."""
+    s = f"{float(mm) / MM_PER_INCH:.{max(0, int(dec))}f}"
+    if s.startswith("-") and float(s) == 0:
+        s = s[1:]
+    return re.sub(r"^(-?)0\.", r"\1.", s)
 
 
 _FONTS_READY = False
@@ -876,10 +894,12 @@ class View:
                    apart horizontally than vertically, else "v"
         text       None: the measured value. "<>" stands for it, e.g. "Ø<> H7" (diameter seen from the side),
                    "<> ±0.1", "2x <>"
-        tol        0.1 for ±0.1 or (0.1, -0.05) for +0.1/-0.05 in small text after the value
+        tol        0.1 for ±0.1 or (0.1, -0.05) for +0.1/-0.05 in small text after the value, in the units of the
+                   sheet: on Sheet(units="in") tol=0.005 is ±.005 in
         text_at    optional point on the sheet for the text instead of the middle
 
-        Across a break of the view the dimension shows the full length of the model."""
+        Model points are mm, offset and text_at are mm on the sheet, also on an inch sheet (only the dimension text is
+        in inches there). Across a break of the view the dimension shows the full length of the model."""
         file, line = _where()
         a, b = np.array(self.pt(p1)), np.array(self.pt(p2))
         (u1, v1), (u2, v2) = self._model_uv(p1), self._model_uv(p2)
@@ -952,8 +972,14 @@ class View:
         text = "<>" if text is None else text
         if measured is not None and abs(measured - shown) > 1e-6:
             # Ueber eine Unterbrechung misst ezdxf die verkuerzte Strecke, deshalb der Wert aus dem Modell
-            text = text.replace("<>", num(measured))
-        return dict(text=text, dimstyle="ISO", override={"dimlfac": 1.0 / self.scale}, dxfattribs={"layer": "DIM"})
+            text = text.replace("<>", self.sheet._fmt(measured))
+        override = {"dimlfac": 1.0 / self.scale}
+        if self.sheet.units == "in":
+            # The sheet and the model stay mm, only the shown value is inches: ASME Y14.5 with three fixed decimals and
+            # no leading zero (.250, 1.500), the same for tolerances. Angles have their own settings and stay degrees
+            override = {"dimlfac": 1.0 / (self.scale * MM_PER_INCH), "dimdec": 3, "dimzin": 4, "dimtdec": 3,
+                        "dimtzin": 4}
+        return dict(text=text, dimstyle="ISO", override=override, dxfattribs={"layer": "DIM"})
 
     def _finish(self, dim, kind, measured, text, tol, text_at, points, file, line, radius=None):
         if tol is not None:
@@ -1024,8 +1050,13 @@ class Sheet:
     of the model in one file.
 
     name        unique name, also the file name
-    size        "A4" (portrait), "A3", "A2", "A1", "A0" (landscape) or (width, height) in mm
+    size        "A4" (portrait), "A3", "A2", "A1", "A0" (landscape), "ANSI A" (8.5 x 11 in, portrait), "ANSI B",
+                "ANSI C", "ANSI D", "ANSI E" (landscape) or (width, height) in mm
     scale       scale of the views unless a view sets its own: "1:2", "2:1", 1
+    units       "mm" or "in": the unit of the dimension values. "in" shows lengths, diameters and radii in inches with
+                three decimals and no leading zero (ASME Y14.5: .250, 1.500), tol= is then in inches too, and the title
+                block says DIMENSIONS IN INCHES. Angles stay degrees, a typed text= stays as it is. Everything else is
+                still mm: model points, and positions, offsets and sizes on the sheet (paper space)
     landscape   True/False to override the orientation of a standard size
     title, number, material, author, date, tolerance, owner, revision, sheet
                 fields of the title block. date: default today. tolerance e.g. "ISO 2768-m"
@@ -1037,9 +1068,9 @@ class Sheet:
     coordinates (mm). Layers: VISIBLE, HIDDEN, TANGENT, CENTER, PHANTOM, THIN, HATCH, CUT, DIM, TEXT, FRAME, TITLE.
     Dimension style "ISO", text style "ISO"."""
 
-    def __init__(self, name, size="A3", scale=1, *, landscape=None, title=None, number=None, material=None,
-                 author=None, date=None, tolerance=None, owner=None, revision=None, sheet="1/1", projection="first",
-                 language="en", titleblock=True, frame=True):
+    def __init__(self, name, size="A3", scale=1, *, units="mm", landscape=None, title=None, number=None,
+                 material=None, author=None, date=None, tolerance=None, owner=None, revision=None, sheet="1/1",
+                 projection="first", language="en", titleblock=True, frame=True):
         self.file, self.line = _where()
         setup_fonts()
         if not isinstance(name, str) or not name.strip():
@@ -1049,11 +1080,12 @@ class Sheet:
         if any(s.id == self.id for s in SHEETS):
             raise ValueError(f"There is already a sheet named {name!r} (names must be unique, also as file names)")
         if isinstance(size, str):
-            key = size.strip().upper()
+            # "ANSI B", "ansi-b", "ANSI_B" and "ANSIB" all mean the same sheet
+            key = re.sub(r"^ANSI[\s_-]*", "ANSI ", size.strip().upper())
             if key not in SIZES:
                 raise ValueError(f"size must be one of {', '.join(SIZES)} or (width, height) in mm, not {size!r}")
             short, long_ = SIZES[key]
-            land = (key != "A4") if landscape is None else bool(landscape)
+            land = (key not in PORTRAIT) if landscape is None else bool(landscape)
             self.width, self.height = (long_, short) if land else (short, long_)
             self.size = key
         else:
@@ -1067,7 +1099,10 @@ class Sheet:
             raise ValueError(f"projection must be \"first\", \"third\" or None, not {projection!r}")
         if language not in TITLE_LABELS:
             raise ValueError(f"language must be one of {', '.join(TITLE_LABELS)}, not {language!r}")
+        if units not in UNITS:
+            raise ValueError(f"units must be \"mm\" or \"in\" (the unit of the dimension values), not {units!r}")
         self.projection = projection
+        self.units = units
         self._dims, self.views, self._labels = [], [], []
         # Fuer die Pruefung: Linien der Beschriftung (Hinweislinien, Schnittverlauf, Mittellinien ...), Tabellen und
         # Felder des Schriftfelds
@@ -1087,7 +1122,16 @@ class Sheet:
                           revision=revision, material=material, tolerance=tolerance, scale=fmt_scale(self.scale),
                           size=self.size, sheet=sheet)
             self.titleblock = self._title_block(fields, TITLE_LABELS[language])
+        elif units == "in":
+            # Without the title block the note stands in the lower right corner of the drawing area, a title block of
+            # the agent's own goes elsewhere or covers it (the check reports the overlap)
+            x1, y0 = self.area[2], self.area[1]
+            self.text(TITLE_LABELS[language]["inches"], (x1 - 2, y0 + 2), align="right", _what="The note DIMENSIONS IN INCHES")
         SHEETS.append(self)
+
+    def _fmt(self, mm):
+        """A length as the dimensions of this sheet show it: mm like num(), inches like num_in()."""
+        return num_in(mm) if self.units == "in" else num(mm)
 
     # -- Dokument
 
@@ -1158,6 +1202,15 @@ class Sheet:
                         self._fields.append(dict(key=key, caption=lab[key], text=str(val), entities=e if isinstance(e, list) else [e],
                                                  cell=(x, y, x + cw, y + h - 3.2)))
                 x += cw
+            y += h
+        if self.units == "in":
+            # ISO 7200 has no field for the unit, so an inch sheet gets one more row on top: the note belongs to the
+            # title block (the check keeps views off it) and is where a reader of a US drawing looks for it
+            h = 7.0
+            msp.add_lwpolyline([(x0, y), (x1, y), (x1, y + h), (x0, y + h)], close=True, dxfattribs={"layer": "TITLE"})
+            e = self.text(lab["inches"], (x0 + 1.5, y + (h - TEXT_HEIGHT) / 2), layer="TITLE", _check=False)
+            self._fields.append(dict(key="units", caption=lab["inches"], text=lab["inches"], entities=[e],
+                                     cell=(x0, y, x1, y + h)))
             y += h
         msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y), (x0, y)], close=True,
                            dxfattribs={"layer": "FRAME", "lineweight": THICK})

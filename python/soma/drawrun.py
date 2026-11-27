@@ -442,22 +442,29 @@ def check(sheet):
                         "view.center_mark() or view.centerline() first.", d["file"], d["line"], _pt_box(q))
         t = d["text"]
         if t is not None and "<>" not in t:
-            nums = [float(x.replace(",", ".")) for x in re.findall(r"\d+(?:[.,]\d+)?", t)]
-            value = round(d["value"], 2)
-            if nums and not any(abs(x - value) < 0.005 for x in nums):
-                add(f"{what}: the text \"{t}\" differs from the measured {drawing.num(d['value'])}. Use \"<>\" for the "
+            if d["kind"] != "angle" and sheet.units == "in":
+                # Inch texts like ".250" have no digit before the point
+                nums = [float(x.replace(",", ".")) for x in re.findall(r"\d*[.,]?\d+", t)]
+                value, eps, shown = round(d["value"] / drawing.MM_PER_INCH, 3), 0.0005, sheet._fmt(d["value"])
+            else:
+                nums = [float(x.replace(",", ".")) for x in re.findall(r"\d+(?:[.,]\d+)?", t)]
+                value, eps, shown = round(d["value"], 2), 0.005, drawing.num(d["value"])
+            if nums and not any(abs(x - value) < eps for x in nums):
+                add(f"{what}: the text \"{t}\" differs from the measured {shown}. Use \"<>\" for the "
                     "measured value.", d["file"], d["line"], tbox or dbox)
 
     scales = sorted({v.scale for v in sheet.views} | {sheet.scale})
+    preferred = drawing.ISO_SCALES + (drawing.INCH_SCALES if sheet.units == "in" else [])
     for s in scales:
-        if not any(abs(s - iso) / iso < 1e-6 for iso in drawing.ISO_SCALES):
+        if not any(abs(s - iso) / iso < 1e-6 for iso in preferred):
             add(f"Scale {drawing.fmt_scale(s)} is not a preferred scale of ISO 5455 (1:2, 1:5, 1:10, 2:1, 5:1 ...).",
                 sheet.file, sheet.line)
     return warn
 
 
 def _dim_label(d):
-    val = drawing.num(d["value"])
+    # As the sheet shows it: inches on an inch sheet (angles are degrees on every sheet)
+    val = d["view"].sheet._fmt(d["value"]) if d["kind"] != "angle" else drawing.num(d["value"])
     if d["kind"] == "diameter":
         val = "Ø" + val
     elif d["kind"] == "radius":
@@ -736,6 +743,8 @@ def _entry(root, sheet, warnings, px):
                  line=d["line"], file=_rel(d["file"], root) if d["file"] else None, **_dim_3d(d)) for d in sheet._dims]
     return dict(id=sheet.id, name=sheet.name, file=_rel(sheet.file, root) if sheet.file else None, line=sheet.line,
                 size=sheet.size, width=sheet.width, height=sheet.height, scale=drawing.fmt_scale(sheet.scale),
+                # Unit of the dimension texts and labels; values (value) and everything on the sheet stay mm
+                units=sheet.units,
                 area=[round(x, 2) for x in sheet.area], titleblock=[round(x, 2) for x in sheet.titleblock] if sheet.titleblock else None,
                 pdf=rel(root / OUT_DIR / f"{sheet.id}.pdf"), dxf=rel(root / OUT_DIR / f"{sheet.id}.dxf"),
                 png=rel(root / CACHE_DIR / f"{sheet.id}.png"), png_size=list(px), views=views, dims=dims,
@@ -845,7 +854,8 @@ def info_text(entry):
     e = entry
     x0, y0, x1, y1 = e["area"]
     lines = [f"Drawing \"{e['name']}\" ({e['file']} line {e['line']}): {e['size']}, {drawing.num(e['width'])} x "
-             f"{drawing.num(e['height'])} mm, scale {e['scale']}",
+             f"{drawing.num(e['height'])} mm, scale {e['scale']}"
+             + (", dimensions in inches (positions on the sheet in mm)" if e.get("units") == "in" else ""),
              f"Files: {e['pdf']}, {e['dxf']}; picture {e['png']} ({e['png_size'][0]} x {e['png_size'][1]} px)",
              f"Drawing area inside the frame: x {drawing.num(x0)} to {drawing.num(x1)}, y {drawing.num(y0)} to {drawing.num(y1)} mm"
              + (f"; title block x {drawing.num(e['titleblock'][0])} to {drawing.num(e['titleblock'][2])}, y "

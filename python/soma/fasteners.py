@@ -19,6 +19,14 @@ return a moved copy, for example so that a screw moves with its part into anothe
 
 Dimensions come from the tables of bd_warehouse (Apache 2.0, see data/fasteners/QUELLE.md), partly nominal, partly
 maximum values. Threads are not modelled: the shank and the bore of the nut have the nominal diameter.
+
+Inch screws: only socket head cap screws to ASME B18.3 (the tables have no inch nuts, washers or other heads).
+Size and length are inch, as they are sold; every number the object returns is mm, like the model:
+
+    s = Screw("ASME B18.3", "1/4-20 x 3/4", at=(0, 0, 10))   # or "#10-32", "1/4" (UNC), length=0.75 or "3/4"
+    s.d, s.length, s.head_diameter                           # 6.35, 19.05, 9.525 (mm)
+    plate = plate.cut(s.clearance_hole())                    # clearance hole from the inch table, tap_hole() too
+    lengths("ASME B18.3", "1/4-20")                          # standard lengths in inches
 """
 import copy
 import csv
@@ -72,7 +80,14 @@ SCREWS = {
                    col="din931", head="hex", cols=("k", "s")),
     "iso4026": dict(name="ISO 4026", title="Socket set screw with flat point", table="setscrew_parameters.csv",
                     col="iso4026", head="set", cols=("s", "t")),
+    # Inch: size, length and table values in inches, converted to mm for the geometry
+    "asmeb183": dict(name="ASME B18.3", title="Socket head cap screw, inch", table="socket_head_cap_parameters.csv",
+                     col="asme_b18.3", head="socket", cols=("dk", "k", "s", "t"), inch=True),
 }
+
+# Unified coarse thread (UNC, ASME B1.1): the thread a size without "-TPI" means. #0 has only the fine thread 80.
+UNC_TPI = {"#1": 64, "#2": 56, "#3": 48, "#4": 40, "#5": 40, "#6": 32, "#8": 32, "#10": 24, "#12": 24, "1/4": 20,
+           "5/16": 18, "3/8": 16, "7/16": 14, "1/2": 13, "9/16": 12, "5/8": 11, "3/4": 10, "7/8": 9, "1": 8}
 NUTS = {
     "iso4032": dict(name="ISO 4032", title="Hex nut", table="hex_nut_parameters.csv", col="iso4032", shape="hex"),
     "iso4033": dict(name="ISO 4033", title="Hex nut, high", table="hex_nut_parameters.csv", col="iso4033", shape="hex"),
@@ -183,7 +198,11 @@ def _parse_size(size, length, kind):
         raise ValueError(f"{kind}: give the size as text, e.g. \"M3\" or \"M3x10\", not {size!r}")
     m = _SIZE.match(size)
     if not m:
-        raise ValueError(f"{kind}: cannot read the size {size!r}. Expected e.g. \"M3\" or \"M3x10\"")
+        hint = ""
+        if re.match(r"^\s*(#\s*\d|\d+/\d|\d+\s*-\s*\d)", size):
+            hint = (". Inch sizes exist only for socket head cap screws: Screw(\"ASME B18.3\", \"1/4-20 x 3/4\"). "
+                    "The tables have no inch nuts, washers or inserts")
+        raise ValueError(f"{kind}: cannot read the size {size!r}. Expected e.g. \"M3\" or \"M3x10\"{hint}")
     d = _num(m.group(1))
     if m.group(2):
         from_size = _num(m.group(2))
@@ -199,6 +218,11 @@ def _split_designation(standard, size):
         m = re.match(r"^\s*(.*?)\s+(M\s*\d.*)$", standard, re.IGNORECASE)
         if m:
             return m.group(1), m.group(2)
+        # "ASME B18.3 1/4-20 x 3/4": only split where the first part is an inch standard ("ISO 7380-1" stays whole)
+        for m in re.finditer(r"\s+(?=#|\d)", standard):
+            head = re.sub(r"[\s_.-]", "", standard[:m.start()].lower())
+            if SCREWS.get(ALIASES.get(head, head), {}).get("inch"):
+                return standard[:m.start()].strip(), standard[m.end():]
     return standard, size
 
 
@@ -219,9 +243,15 @@ def _length_range(spec, d):
 
 
 def lengths(standard, size):
-    """Standard lengths of a screw in mm, e.g. lengths("ISO 4762", "M3") -> [5, 6, 8, 10, 12, 16, 20, 25, 30]."""
+    """Standard lengths of a screw in mm, e.g. lengths("ISO 4762", "M3") -> [5, 6, 8, 10, 12, 16, 20, 25, 30].
+    Inch screws in inches: lengths("ASME B18.3", "1/4-20") -> [0.75, 0.875, 1.0, ...]."""
     key = _norm_standard(standard, SCREWS, "Screw")
     spec = SCREWS[key]
+    if spec.get("inch"):
+        # The table's shortest lengths ("short", 1.5 in for 1/4-20) are above sizes that are common in catalogs, so only
+        # its longest length limits the series. The series itself starts at 3/4 in.
+        row, _ = _parse_inch(size, None, spec)
+        return [x for x in _inch_lengths(spec["col"]) if x <= row[3]["long"] + 1e-9]
     d, _ = _parse_size(size, None, spec["name"])
     short, long_ = _length_range(spec, d)
     series = _nominal_lengths().get(spec["col"], [])
@@ -229,12 +259,14 @@ def lengths(standard, size):
 
 
 def pick_length(standard, size, min_length, max_length=None):
-    """Shortest standard length that is at least `min_length` (and at most `max_length`, if given)."""
+    """Shortest standard length that is at least `min_length` (and at most `max_length`, if given).
+    In mm, for inch screws (ASME B18.3) in inches, like lengths()."""
     options = lengths(standard, size)
     fitting = [x for x in options if x >= min_length - 1e-9 and (max_length is None or x <= max_length + 1e-9)]
     if not fitting:
         span = f"{_fmt(min_length)} to {_fmt(max_length)}" if max_length is not None else f"of at least {_fmt(min_length)}"
-        raise ValueError(f"{standard} {size}: no standard length {span} mm. Standard lengths: "
+        unit = "in" if SCREWS[_norm_standard(standard, SCREWS, "Screw")].get("inch") else "mm"
+        raise ValueError(f"{standard} {size}: no standard length {span} {unit}. Standard lengths: "
                          + ", ".join(_fmt(x) for x in options))
     return fitting[0]
 
@@ -273,6 +305,154 @@ def _drill_mm(code):
     """Bohrergroesse der Tabelle in mm: Nummern ("#21") und Buchstaben ("F") sind Zollbohrer. Anderes (die Tabelle
     nennt bei M10 "M14", groesser als der Einsatz) gilt als unbekannt."""
     return _drills().get(code.strip())
+
+
+# --- Zoll --------------------------------------------------------------------------------------------------------------
+# The inch rows of the tables write sizes as "#10" (screw gauge), "1/4", "1 1/8" or "1-3/4" and values as decimals,
+# fractions ("3/16", "1 1/32") or drill codes ("#7", "F", only in the hole tables).
+
+_FRACTION = re.compile(r"^(?:(\d+)[\s-]+)?(\d+)/(\d+)$")
+
+
+def _inch_number(text):
+    """"0.375", "3/16", "1 1/32", "1-1/2" -> inches, otherwise None."""
+    text = text.strip()
+    m = _FRACTION.match(text)
+    if m:
+        return (int(m.group(1)) if m.group(1) else 0) + int(m.group(2)) / int(m.group(3))
+    try:
+        return _num(text)
+    except ValueError:
+        return None
+
+
+def _inch_size(label):
+    """Nominal diameter in inches: "#10" -> 0.190 (0.060 + 0.013 * N, ASME B1.1), "1/4" -> 0.25, "1" -> 1.0."""
+    label = label.strip()
+    m = re.match(r"^#\s*(\d+)$", label)
+    return 0.060 + 0.013 * int(m.group(1)) if m else _inch_number(label)
+
+
+def _inch_hole(code):
+    """Hole diameter of the hole tables in inches: drill codes ("#7", "F") or a size ("17/64", "0.221")."""
+    code = code.strip()
+    mm = _drill_mm(code)
+    return mm / INCH if mm is not None else _inch_number(code)
+
+
+def _fmt_in(x):
+    """Inches as they are written: 0.75 -> "3/4", 1.5 -> "1-1/2", 2.0 -> "2", 0.3 -> "0.3"."""
+    n = round(x * 64)
+    if n <= 0 or abs(x * 64 - n) > 1e-6:
+        return _fmt(round(x, 4))
+    whole, rest = divmod(n, 64)
+    if not rest:
+        return str(whole)
+    g = math.gcd(rest, 64)
+    frac = f"{rest // g}/{64 // g}"
+    return f"{whole}-{frac}" if whole else frac
+
+
+def _inch_label(d_in):
+    """Name of a diameter: 0.19 -> "#10", 0.25 -> "1/4"."""
+    for n in range(13):
+        if abs(0.060 + 0.013 * n - d_in) < 1e-6:
+            return f"#{n}"
+    return _fmt_in(d_in)
+
+
+@functools.cache
+def _inch_rows(table, col, cols):
+    """Inch rows with values for every column in `cols`: [(diameter label, d in inches, TPI, {column: inches})]."""
+    out = []
+    for key, row in _table(table):
+        m = re.match(r"^(#\d+|[\d/ ]+?)-(\d+)$", key)
+        if not m:
+            continue
+        vals = {c: _inch_number(row.get(f"{col}:{c}", "")) for c in cols}
+        if all(v is not None for v in vals.values()):
+            d_in = _inch_size(m.group(1))
+            out.append((_inch_label(d_in), d_in, int(m.group(2)), vals))
+    return out
+
+
+_INCH_SIZE = re.compile(r"^\s*(#\s*\d+|\d+/\d+|\d*\.\d+|\d+)\s*(?:\"|in\b)?\s*(?:-\s*(\d+))?\s*(?:[xX×*]\s*(.+?))?\s*$")
+_INCH_LENGTH = re.compile(r"^\s*(\d+(?:\.\d+)?|\.\d+|(?:\d+[\s-]+)?\d+/\d+)\s*(?:\"|in|inch|inches)?\s*$")
+
+
+def _inch_length(value, kind):
+    """Length of an inch screw in inches: a number (1.5) or text ("1-1/2", "1 1/2", "3/4", "0.75 in")."""
+    if isinstance(value, numbers.Real) and not isinstance(value, bool):
+        return float(value)
+    m = _INCH_LENGTH.match(value) if isinstance(value, str) else None
+    if not m:
+        raise ValueError(f"{kind}: cannot read the length {value!r}. Inch lengths: 0.75, \"3/4\" or \"1-1/2\" (inches)")
+    return _inch_number(m.group(1))
+
+
+def _parse_inch(size, length, spec):
+    """"1/4-20 x 3/4", "#10-32", "1/4" (UNC) -> (row of the table, length in inches or None)."""
+    kind = spec["name"]
+    example = "e.g. \"1/4-20 x 3/4\" or \"#10-32\""
+    if not isinstance(size, str):
+        raise ValueError(f"{kind}: give the size as text, {example}, not {size!r}")
+    m = _INCH_SIZE.match(size)
+    if not m:
+        hint = " ASME B18.3 is an inch standard, for metric sizes use ISO 4762" if re.match(r"^\s*M\s*\d", size, re.I) else ""
+        raise ValueError(f"{kind}: cannot read the size {size!r}. Expected {example}.{hint}")
+    d_in = _inch_size(m.group(1).replace(" ", ""))
+    rows = _inch_rows(spec["table"], spec["col"], spec["cols"] + ("long",))
+    available = ", ".join(f"{r[0]}-{r[2]}" for r in rows)
+    same = [r for r in rows if abs(r[1] - d_in) < 1e-6]
+    if not same:
+        raise ValueError(f"{kind}: size {m.group(1)} is not in the table. Available: {available}")
+    label = same[0][0]
+    if m.group(2):
+        found = [r for r in same if r[2] == int(m.group(2))]
+        if not found:
+            raise ValueError(f"{kind}: {label}-{m.group(2)} is not in the table. For {label}: "
+                             + ", ".join(f"{r[0]}-{r[2]}" for r in same))
+    else:  # ohne Gangzahl: die einzige vorhandene, sonst UNC
+        found = same if len({r[2] for r in same}) == 1 else [r for r in same if r[2] == UNC_TPI.get(label)]
+        if not found:
+            raise ValueError(f"{kind}: give the thread for {label}, e.g. " + ", ".join(f"\"{r[0]}-{r[2]}\"" for r in same))
+    if m.group(3):
+        from_size = _inch_length(m.group(3), kind)
+        if length is not None and abs(_inch_length(length, kind) - from_size) > 1e-9:
+            raise ValueError(f"{kind}: length given twice with different values ({size!r} and length={length!r})")
+        length = from_size
+    elif length is not None:
+        length = _inch_length(length, kind)
+    return found[0], length
+
+
+@functools.cache
+def _inch_lengths(screw_type):
+    """Standard lengths in inches. The table rounds to two places (0.88): snapped to 1/16 where that is meant."""
+    with _open("nominal_screw_lengths.csv") as f:
+        for row in csv.DictReader(f):
+            if row["Screw_Type"].strip() == screw_type and row["Unit"].strip() == "in":
+                vals = [_num(x) for x in row["Nominal_Sizes"].split(",") if x.strip()]
+                vals = [round(v * 16) / 16 if abs(v - round(v * 16) / 16) < 0.006 else v for v in vals]
+                return sorted(set(vals))
+    return []
+
+
+def _inch_hole_lookup(table, label, tpi, column, what):
+    """Hole of the inch rows of the clearance or tap drill table in mm."""
+    d_in = _inch_size(label)
+    for key, row in _table(table):
+        if key.startswith("M"):
+            continue
+        k = key if tpi is None else (key.rsplit("-", 1)[0] if key.rsplit("-", 1)[-1] == str(tpi) else None)
+        if k is None:
+            continue
+        size = _inch_size(k)
+        if size is not None and abs(size - d_in) < 1e-6:
+            val = _inch_hole(row.get(column, ""))
+            if val is not None:
+                return val * INCH
+    raise ValueError(f"The table has no {what} for {label}" + (f"-{tpi}" if tpi else ""))
 
 
 # --- Lage --------------------------------------------------------------------------------------------------------------
@@ -546,7 +726,10 @@ class Screw(_Part):
     """Screw without thread. Screw("ISO 4762", "M3x10", at=(x, y, z)) or Screw("ISO 4762", "M3", 10, at=...).
 
     standard      "ISO 4762" (socket head), "ISO 7380" (button head), "ISO 10642" (countersunk), "ISO 4017", "ISO 4014",
-                  "DIN 931" (hex head), "ISO 4026" (set screw)
+                  "DIN 931" (hex head), "ISO 4026" (set screw), "ASME B18.3" (socket head, inch)
+    size, length  metric: "M3x10" or "M3" with length=10 (mm). Inch (ASME B18.3): "1/4-20 x 3/4", "#10-32 x 1/2" or
+                  "1/4-20" with length=0.75 or "3/4" (inches); without "-20" the coarse thread (UNC). The object's
+                  numbers (d, length, head_diameter, clearance(), point(), sunk) are mm, also for inch screws
     at            seat of the underside of the head (countersunk screw, set screw: the top), (x, y, z) or cq.Location
     direction     from the seat into the material, default "-Z"
     on            part the screw sits on: the seat is searched for along `direction`
@@ -561,21 +744,26 @@ class Screw(_Part):
         self.standard_key = _norm_standard(standard, SCREWS, "Screw")
         spec = SCREWS[self.standard_key]
         self.standard = spec["name"]
-        self.d, length = _parse_size(size, length, spec["name"])
-        if length is None:
-            raise ValueError(f"{spec['name']} M{_fmt(self.d)}: the length is missing, e.g. \"M{_fmt(self.d)}x10\". "
-                             f"Standard lengths: {', '.join(_fmt(x) for x in lengths(standard, size))}")
-        if length <= 0:
-            raise ValueError(f"{spec['name']}: the length must be greater than 0")
-        self.dims = _lookup(spec["table"], spec["col"], spec["cols"], self.d, spec["name"])
-        self.length = length
+        self.inch = bool(spec.get("inch"))
         self.head = spec["head"]
-        self.pitch = COARSE_PITCH.get(self.d, 0.1 * self.d)
-        if check_length:
-            options = lengths(standard, f"M{_fmt(self.d)}")
-            if options and not any(abs(length - x) < 1e-9 for x in options):
-                raise ValueError(f"{self.designation}: {_fmt(length)} mm is not a standard length. Standard lengths: "
-                                 f"{', '.join(_fmt(x) for x in options)}. Non-standard length: check_length=False")
+        if self.inch:
+            self._init_inch(spec, size, length, check_length)
+        else:
+            self.d, length = _parse_size(size, length, spec["name"])
+            self.size = f"M{_fmt(self.d)}"
+            if length is None:
+                raise ValueError(f"{spec['name']} M{_fmt(self.d)}: the length is missing, e.g. \"M{_fmt(self.d)}x10\". "
+                                 f"Standard lengths: {', '.join(_fmt(x) for x in lengths(standard, size))}")
+            if length <= 0:
+                raise ValueError(f"{spec['name']}: the length must be greater than 0")
+            self.dims = _lookup(spec["table"], spec["col"], spec["cols"], self.d, spec["name"])
+            self.length = length
+            self.pitch = COARSE_PITCH.get(self.d, 0.1 * self.d)
+            if check_length:
+                options = lengths(standard, f"M{_fmt(self.d)}")
+                if options and not any(abs(length - x) < 1e-9 for x in options):
+                    raise ValueError(f"{self.designation}: {_fmt(length)} mm is not a standard length. Standard lengths: "
+                                     f"{', '.join(_fmt(x) for x in options)}. Non-standard length: check_length=False")
         if self.head == "set" and length < self.dims["t"]:
             raise ValueError(f"{self.designation}: shorter than the depth of the hex socket ({_fmt(self.dims['t'])} mm)")
         sink = _sink(sunk, spec["name"])
@@ -586,8 +774,37 @@ class Screw(_Part):
             zs = self.head_height + sink if sink is not None else 0.0
         self._place(at, direction, on, angle, zs)
 
+    def _init_inch(self, spec, size, length, check_length):
+        """Inch screw: size and length in inches, the table values converted to mm."""
+        name = spec["name"]
+        row, length_in = _parse_inch(size, length, spec)
+        label, d_in, tpi, vals = row
+        self.size, self.tpi = f"{label}-{tpi}", tpi
+        if length_in is None:
+            raise ValueError(f"{name} {self.size}: the length is missing (inches), e.g. \"{self.size} x 1\". "
+                             f"Standard lengths: {', '.join(_fmt_in(x) for x in lengths(name, self.size))}")
+        if length_in <= 0:
+            raise ValueError(f"{name}: the length must be greater than 0")
+        self.length_in = length_in
+        self.d, self.length, self.pitch = d_in * INCH, length_in * INCH, INCH / tpi
+        self.dims = {c: vals[c] * INCH for c in spec["cols"]}
+        if check_length:
+            options = lengths(name, self.size)
+            if options and not any(abs(length_in - x) < 0.01 for x in options):
+                hint = " Non-standard length: check_length=False"
+                if length_in > options[-1]:
+                    hint = (f" Inch screws take the length in inches ({_fmt(length_in)} mm would be "
+                            f"{_fmt(round(length_in / INCH, 3))} in).{hint}")
+                elif length_in < options[0]:
+                    hint = (f" The table lists nothing shorter than {_fmt_in(options[0])} in. For a shorter screw your "
+                            "supplier has: check_length=False")
+                raise ValueError(f"{self.designation}: {_fmt_in(length_in)} in is not a standard length in the table. "
+                                 f"Standard lengths (in): {', '.join(_fmt_in(x) for x in options)}.{hint}")
+
     @property
     def designation(self):
+        if self.inch:
+            return f"{self.standard} {self.size} x {_fmt_in(self.length_in)}"
         return f"{self.standard} M{_fmt(self.d)}x{_fmt(self.length)}"
 
     @property
@@ -620,15 +837,24 @@ class Screw(_Part):
 
     @property
     def lengths(self):
-        return lengths(self.standard, f"M{_fmt(self.d)}")
+        """Standard lengths: mm, for inch screws inches."""
+        return lengths(self.standard, self.size)
 
     def clearance(self, fit="medium"):
-        """Diameter of the clearance hole to ISO 273: fit "fine", "medium" or "coarse"."""
+        """Diameter of the clearance hole in mm, to ISO 273: fit "fine", "medium" or "coarse". Inch screws: the
+        table's close, normal and loose fit (drill sizes in inches, converted)."""
+        if self.inch:
+            if fit not in FITS:
+                raise ValueError(f"fit must be one of {tuple(FITS)} (close, normal, loose), not {fit!r}")
+            return _inch_hole_lookup("clearance_hole_sizes.csv", self.size.split("-")[0], None, FITS[fit],
+                                     "clearance hole")
         return _clearance(self.d, fit)
 
     @property
     def tap_drill(self):
-        """Tap drill diameter for the coarse thread."""
+        """Tap drill diameter in mm for the coarse thread (inch screws: for their thread, e.g. 1/4-20: #7)."""
+        if self.inch:
+            return _inch_hole_lookup("tap_hole_sizes.csv", self.size.rsplit("-", 1)[0], self.tpi, "Soft", "tap drill hole")
         return _tap_drill(self.d)
 
     def _local(self):
