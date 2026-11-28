@@ -24,6 +24,7 @@ const steps = [
   { tool: 'bash', args: { command: 'soma build' } },
   { tool: 'bash', args: { command: 'cp model.py ../outside.py' } },
   { tool: 'bash', args: { command: 'git reset --hard HEAD' } },
+  { tool: 'web_search', args: { query: '608 bearing STEP model' } },
   { text: 'Done, the lid is **2 mm** thicker now.' },
   { status: 401, message: 'invalid x-api-key' },
 ];
@@ -202,6 +203,8 @@ try {
   check('Steps in plain words: build done', labels[0] === 'ok: Built the model', labels[0]);
   check('… copy out of the folder: not allowed by the user', /^denied: You did not allow this/.test(labels[1] ?? ''), labels[1]);
   check('… going back in the history: stopped by SOMA, said for people (the agent\'s reason under Details)', /^stopped: SOMA stopped this: going back in the history\./.test(labels[2] ?? ''), labels[2]);
+  check('Web search that returns an error in its result is shown as failed',
+    labels[3] === 'fail: The web search did not work' && toolResults().some((text) => text.includes('does not support native web search')), labels[3]);
   check('Nothing was copied out of the model folder', !fs.existsSync(path.join(dir, '..', 'outside.py')));
   check('The message went with the chip text', st.user.length === 1 && st.user[0].text.includes('[Part: Lid · top face]') && st.user[0].text.includes('Make the lid thicker.') && st.chips.length === 0, JSON.stringify(st.user));
   const md = await ev(() => document.querySelector('.ai-msg .md strong')?.textContent);
@@ -242,7 +245,7 @@ try {
   await ev(() => window.__t.showChat(true));
   await app.waitFor('history', () => window.__t.chat().user.length === 3, 60000);
   st = await chat();
-  check('After a model switch the conversation of the model is back, steps grouped as before', JSON.stringify(st.rows.map((r) => [r.state, r.count])) === '[["ok",2],["ok",1],["denied",1],["stopped",1]]',
+  check('After a model switch the conversation of the model is back, steps grouped as before', JSON.stringify(st.rows.map((r) => [r.state, r.count])) === '[["ok",2],["ok",1],["denied",1],["stopped",1],["fail",1]]',
     JSON.stringify(st.rows.map((r) => [r.state, r.count])));
   check('… and the questions with their answers', st.quiet.some((x) => x.includes('SOMA AI asked: Which material? You answered: Wood, actually'))
     && st.quiet.some((x) => x.includes('SOMA AI asked: What should the lid have? You answered: Hinge, Label recess'))
@@ -286,7 +289,9 @@ try {
   await ev(() => document.querySelector('.ai-menu .mi').click());
   await app.waitFor('earlier conversation back', () => window.__t.chat().user.length === 3, 30000);
   st = await chat();
-  check('… a click brings it back: messages, steps and its model', st.user.length === 3 && st.rows.length === 4 && st.model?.id === 'mock-cad', JSON.stringify({ user: st.user.length, rows: st.rows.length, model: st.model?.id }));
+  check('… a click brings it back: messages, failed search step and its model',
+    st.user.length === 3 && st.rows.length === 5 && st.rows.at(-1)?.state === 'fail' && st.model?.id === 'mock-cad',
+    JSON.stringify({ user: st.user.length, rows: st.rows, model: st.model?.id }));
 
   // ---- Another sign-in: the conversation stays (the set-up has its own place) ----------------------------------
   const menu = async (item) => {
