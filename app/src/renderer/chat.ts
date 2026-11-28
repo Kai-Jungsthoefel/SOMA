@@ -241,6 +241,9 @@ export function plainProblem(msg: string): Problem {
   if (/overloaded|\b5\d\d\b|unavailable|timed? ?out/i.test(msg)) {
     return { kind: 'info', icon: 'alert', title: 'The AI service is not answering right now', text: 'This usually passes in a few minutes.', action: 'retry' };
   }
+  if (/model_not_supported|requested model is not supported/i.test(msg)) {
+    return { kind: 'warn', icon: 'alert', title: 'This model is not available', text: 'Choose another model from the model menu below.' };
+  }
   if (/no model|model not found|unknown model/i.test(msg)) {
     return { kind: 'warn', icon: 'alert', title: 'SOMA AI has no model to work with', text: 'Choose a sign-in, or pick another model below.', action: 'setup' };
   }
@@ -758,7 +761,10 @@ export class SomaChat {
    * (main.ts), the next start takes the new sign-in. `provider`: just signed in, its recommended model is chosen.
    */
   async accountsChanged(provider?: string, refresh = true): Promise<void> {
-    if (provider) this.useRecommended(provider);
+    if (provider === COPILOT_PROVIDER) {
+      const chosen = await this.deps.api.ai.defaultModel();
+      this.wantModel = chosen?.provider === provider ? { provider, modelId: chosen.id } : null;
+    } else if (provider) this.useRecommended(provider);
     this.piUp = false;
     if (refresh) await this.show();
   }

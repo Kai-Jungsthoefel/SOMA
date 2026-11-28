@@ -778,6 +778,18 @@ try {
   // Sign-in of SOMA AI (resources/somaai/signin.mjs) against a fake pi: what it answers to pi's questions and what it
   // reports. GitHub Copilot asks for an Enterprise domain (blank: github.com) and names a page with a code to type
   {
+    const modelsOut = path.join(tmp, 'somaai-models.mjs');
+    await build({ entryPoints: [path.join(APP, 'src', 'shared', 'somaai.ts')], outfile: modelsOut, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    const { chooseCopilotDefault } = await import(pathToFileURL(modelsOut).href);
+    const oauth = (availableModelIds) => ({ type: 'oauth', availableModelIds });
+    check('Copilot recommends Opus only when the account lists it and preserves an available saved choice',
+      chooseCopilotDefault(oauth(['claude-sonnet-5.5', 'claude-opus-5.5'])) === 'claude-opus-5.5'
+      && chooseCopilotDefault(oauth(['claude-sonnet-5.5', 'claude-opus-5.5']), 'claude-sonnet-5.5') === 'claude-sonnet-5.5');
+    check('A saved or recommended Opus unavailable to Copilot falls back to an entitled Sonnet',
+      chooseCopilotDefault(oauth(['claude-sonnet-5.5']), 'claude-opus-5.5') === 'claude-sonnet-5.5');
+    check('Missing, empty, or malformed Copilot availability does not force a default model',
+      [undefined, [], ['claude-opus-5.5', null]].every((ids) => chooseCopilotDefault(oauth(ids), 'claude-opus-5.5') === undefined));
+
     const fakePi = path.join(tmp, 'fakepi.mjs');
     fs.writeFileSync(fakePi, `export const ModelRuntime = { create: async () => ({ async login(provider, type, io) {
       const asked = [];

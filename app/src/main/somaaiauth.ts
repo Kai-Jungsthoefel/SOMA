@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { accountProvider, AI_ACCOUNT_PROVIDERS, AI_KEY_PROVIDERS, isEffort, RECOMMENDED_MODEL, type AiAccount, type Effort, type AiModel, type AiSession } from '../shared/somaai';
+import { accountProvider, AI_ACCOUNT_PROVIDERS, AI_KEY_PROVIDERS, chooseCopilotDefault, COPILOT_PROVIDER, isEffort, RECOMMENDED_MODEL, type AiAccount, type Effort, type AiModel, type AiSession } from '../shared/somaai';
 import type { AiSignInPage, AiSignInResult } from '../shared/types';
 import { aiDir, piIndex, piProcessEnv, readJson, writeJson } from './somaai';
 
@@ -32,12 +32,19 @@ export function aiAccounts(): AiAccount[] {
   });
 }
 
+function selectProvider(s: Record<string, unknown>, provider: string, auth: Record<string, unknown>): void {
+  const id = provider === COPILOT_PROVIDER
+    ? chooseCopilotDefault(auth[provider], s.defaultProvider === provider ? s.defaultModel : undefined)
+    : RECOMMENDED_MODEL[provider];
+  s.defaultProvider = provider;
+  if (id) s.defaultModel = id;
+  else delete s.defaultModel;
+}
+
 /** After signing in, pi starts with the recommended model of that provider, or its own choice there. */
 function useProvider(provider: string): void {
   const s = readJson(settingsFile());
-  s.defaultProvider = provider;
-  if (RECOMMENDED_MODEL[provider]) s.defaultModel = RECOMMENDED_MODEL[provider];
-  else delete s.defaultModel;
+  selectProvider(s, provider, provider === COPILOT_PROVIDER ? readJson(authFile()) : {});
   writeJson(settingsFile(), s);
 }
 
@@ -68,7 +75,7 @@ export function signOut(provider: unknown): { ok: boolean; error?: string } {
     if (s.defaultProvider === provider) {
       // Another sign-in, if there is one, takes over
       const next = aiAccounts()[0]?.provider;
-      if (next) { s.defaultProvider = next; if (RECOMMENDED_MODEL[next]) s.defaultModel = RECOMMENDED_MODEL[next]; else delete s.defaultModel; }
+      if (next) selectProvider(s, next, data);
       else { delete s.defaultProvider; delete s.defaultModel; }
       writeJson(settingsFile(), s);
     }

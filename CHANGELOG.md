@@ -19,12 +19,11 @@ the version is bumped.
 - Number fields in the Parameters panel and the section take calculations (`20 - 2.5`, `2 * (3 + 4)`) and lengths in another unit: `1.5 in` in a mm field becomes 38.1, `6 mm` in an inch field 0.2362. Mixed numbers in inches are read the US way: `1-1/2` and `1 1/2` are 1.5 in an inch field, `1-1/2 in` works in a mm field. The tooltip of the field lists what it takes.
 - Technical drawings in inches: `Sheet(..., units="in")` dimensions lengths, diameters, radii and tolerances in inches with three decimals and no leading zero as in ASME Y14.5 (`.250`, `1.500`), and the title block says DIMENSIONS IN INCHES. ANSI sheet sizes A to E next to the ISO ones. The Drawings view shows a clicked dimension in the drawing's units.
 - Standard parts: inch socket head cap screws to ASME B18.3 (#0 to 1 in, UNC and UNF), e.g. `Screw("ASME B18.3", "1/4-20 x 3/4", at=...)`, with matching clearance holes, counterbores and tap holes. Size and length in inches, the geometry stays in mm. `pick_length` for inch screws takes the unit of the minimum length (`unit="mm"` for one from the geometry) and returns inches.
-- Sign in to SOMA AI with GitHub Copilot (issue #25): "Sign in with GitHub Copilot" in the set-up of SOMA AI and in Settings > SOMA AI opens GitHub and shows a code to type there. The models of your Copilot plan appear in the model menu, Claude Opus 5.5 is chosen when your plan has it.
+- Sign in to SOMA AI with GitHub Copilot (issue #25): "Sign in with GitHub Copilot" in the set-up of SOMA AI and in Settings > SOMA AI opens GitHub and shows a code to type there. The models of your Copilot plan appear in the model menu, Claude Opus 5.5 is chosen when your plan has it, otherwise Claude Sonnet. A model your plan does not offer gets a clear message instead of an error.
 
 ### Fixed
 
 - SOMA AI shows tool errors such as failed web searches as failed steps, including in reopened conversations.
-
 - `soma build` no longer builds the same code twice: when it waited for a build of the app (which builds after every change) and no file changed since that build started, it takes its result. Before, the wait doubled and an agent's time limit could stop it (issue #24). `soma build --force` builds again anyway.
 - The file tree highlights an image, STEP, mesh or video file you click, like a PDF, instead of keeping the last file highlighted. Going back to the model highlights the file open in the code again.
 
